@@ -15,7 +15,7 @@ import { isAbsolute, relative, resolve, sep, join, dirname } from "node:path";
 import { performance } from "node:perf_hooks";
 import { writeSnapshotFile } from "./snapshot-file.js";
 import { importColdLocalizationTarget } from "./localization-cold-import.js";
-import { Context, Effect, Metric, Result, Schema } from "effect";
+import { Context, Effect, Metric, Option, Result, Schema } from "effect";
 import {
 	LocalizationError,
 	LocalizationEvidence,
@@ -35,6 +35,10 @@ import {
 import { SnapshotStoreError } from "./snapshot-store.js";
 import { SharedIndex, sharedIndexNodeLayer, sharedIndexDirectory } from "./shared-index.js";
 import { SnapshotFormatError } from "./snapshot-format.js";
+import {
+	LocalizationImportSession,
+	localizationImportLayer
+} from "./localization-import-session.js";
 
 export {
 	decodeLocalizationSnapshot,
@@ -262,6 +266,8 @@ const importFile = Effect.fn("LocalizationSnapshot.importFile")(function* (
 			}
 		};
 	}
+	const indexLayer =
+		(yield* localizationImportLayer(storeOptions())) ?? sharedIndexNodeLayer(storeOptions());
 	const existing = (hash: string) =>
 		Effect.scoped(
 			Effect.gen(function* () {
@@ -274,7 +280,7 @@ const importFile = Effect.fn("LocalizationSnapshot.importFile")(function* (
 				}
 				return record.bytes;
 			})
-		).pipe(Effect.provide(sharedIndexNodeLayer(storeOptions())), Effect.result);
+		).pipe(Effect.provide(indexLayer), Effect.result);
 	let contentHash: string;
 	let snapshotBytes: number;
 	let parsed = false;
@@ -454,7 +460,7 @@ const importFile = Effect.fn("LocalizationSnapshot.importFile")(function* (
 						cached?.key
 					);
 					return { bytes: layer.bytes, ...writer.metrics() };
-				}).pipe(Effect.provide(sharedIndexNodeLayer(storeOptions())));
+				}).pipe(Effect.provide(indexLayer));
 				return { hash: content.hash, parsed: true, bytes: bytes.bytes, shared: bytes };
 			})
 		);
@@ -596,13 +602,17 @@ export const importLocalizationTarget = Effect.fn("LocalizationSnapshot.importTa
 		projectKey: actualRoot,
 		targetKey: target.name
 	};
+	const indexLayer =
+		(yield* localizationImportLayer(configuration)) ?? sharedIndexNodeLayer(configuration);
+	const session = yield* Effect.serviceOption(LocalizationImportSession);
+	const selectedFiles = Option.isSome(session) ? session.value.files : undefined;
 	const empty = yield* Effect.scoped(
 		Effect.gen(function* () {
 			const index = yield* (yield* SharedIndex).inspect();
 			return index.segments.length === 0 && Object.keys(index.layers).length === 0;
 		})
 	).pipe(
-		Effect.provide(sharedIndexNodeLayer(configuration)),
+		Effect.provide(indexLayer),
 		Effect.catch((cause) =>
 			cause instanceof SnapshotStoreError && cause.code === "missing"
 				? Effect.succeed(true)
@@ -612,6 +622,7 @@ export const importLocalizationTarget = Effect.fn("LocalizationSnapshot.importTa
 	const sourceAccess = yield* LocalizationImportSource;
 	const present =
 		empty &&
+		selectedFiles === undefined &&
 		sourceAccess === nodeSource &&
 		(yield* io("target", async () => {
 			for (const file of coldRequests) {
@@ -639,7 +650,7 @@ export const importLocalizationTarget = Effect.fn("LocalizationSnapshot.importTa
 			return fileRequest;
 		});
 		const result = yield* Effect.scoped(importColdLocalizationTarget(preparedRequests)).pipe(
-			Effect.provide(sharedIndexNodeLayer(configuration)),
+			Effect.provide(indexLayer),
 			Effect.result
 		);
 		if (Result.isSuccess(result))
@@ -664,6 +675,7 @@ export const importLocalizationTarget = Effect.fn("LocalizationSnapshot.importTa
 			});
 			return;
 		}
+		if (selectedFiles !== undefined && !selectedFiles.includes(relativePath)) return;
 		const fileRequest: LocalizationFileImportRequest = {
 			projectRoot: request.projectRoot,
 			cacheRoot: request.cacheRoot,

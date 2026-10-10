@@ -1,4 +1,5 @@
 import { open, type FileHandle } from "node:fs/promises";
+import { readSync } from "node:fs";
 import { isUtf8 } from "node:buffer";
 import * as zlib from "node:zlib";
 import { Schema } from "effect";
@@ -218,6 +219,8 @@ function blockForId(starts: Uint32Array, id: number) {
 export interface SnapshotFileReader {
 	readonly directory: SnapshotDirectory;
 	readonly load: (name: string) => Promise<Uint8Array | Uint32Array>;
+	/** Positioned reads on this generation's pinned handle, for the synchronous query API. */
+	readonly loadSync: (name: string) => Uint8Array | Uint32Array;
 	readonly strings: (domain: string, ids: readonly number[]) => Promise<string[]>;
 	readonly domain: (domain: string) => Promise<SnapshotLoadedDomain>;
 	readonly verify: () => Promise<void>;
@@ -292,6 +295,28 @@ export async function openSnapshotFile(
 				codecOptions
 			);
 		};
+		const loadSync = (name: string) => {
+			const value = entry(name);
+			const stored = new Uint8Array(snapshotAligned(value.storedLength));
+			for (let offset = 0; offset < stored.length; ) {
+				const count = readSync(
+					handle.fd,
+					stored,
+					offset,
+					stored.length - offset,
+					value.offset + offset
+				);
+				snapshotCheck(count > 0, name, "File truncated during positioned read");
+				options.onRead?.(count);
+				offset += count;
+			}
+			checkPadding(value, stored);
+			return decodeSnapshotSection(
+				value,
+				unpack(value, stored.subarray(0, value.storedLength)),
+				readOptions
+			);
+		};
 		const indexes = new Map<string, Uint32Array>();
 		const domainEntries = new Map<string, SnapshotEntry[]>();
 		for (const value of directory.entries.values())
@@ -340,6 +365,7 @@ export async function openSnapshotFile(
 		return {
 			directory,
 			load,
+			loadSync,
 			async strings(domain, ids) {
 				const first = entry(`${domain}.b0`);
 				const starts = await index(domain);

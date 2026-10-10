@@ -140,7 +140,7 @@ function addTextOccurrence(options: {
 	});
 }
 
-function textOccurrenceFromExtraction(options: {
+export function textOccurrenceFromExtraction(options: {
 	readonly occurrence: SavedAssetTextOccurrence;
 	readonly packageFile: string;
 }): TextOccurrence {

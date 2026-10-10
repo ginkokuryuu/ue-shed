@@ -27,6 +27,8 @@ import {
 import { finishJoinedTarget } from "./joined-target-marks.js";
 import { incrementJoinedTarget } from "./joined-target-incremental.js";
 import { comparePackageTextPathBytes } from "./package-text-order.js";
+import { joinedQueryColumns } from "./joined-query-columns.js";
+import { StringArena } from "./shared-string-codec.js";
 
 const noteMetadata = Schema.decodeUnknownOption(
 	Schema.fromJsonString(
@@ -96,7 +98,7 @@ export const refreshJoinedTarget = Effect.fn("JoinedTarget.refresh")(function* (
 			.sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))
 	);
 	const key =
-		"joined-v5:" +
+		"joined-v7:" +
 		createHash("sha256")
 			.update(
 				JSON.stringify([
@@ -121,7 +123,7 @@ export const refreshJoinedTarget = Effect.fn("JoinedTarget.refresh")(function* (
 	}
 	const reader = yield* store.open();
 	let incrementalFallback: string | undefined;
-	if (!input.force && root.active.joined?.startsWith("joined-v5:")) {
+	if (!input.force && root.active.joined?.startsWith("joined-v7:")) {
 		const incremental = yield* incrementJoinedTarget(
 			input,
 			key,
@@ -178,7 +180,12 @@ export const refreshJoinedTarget = Effect.fn("JoinedTarget.refresh")(function* (
 		c.property,
 		c.row,
 		...(manifest.columns.path
-			? [manifest.columns.path, manifest.columns.notes!, manifest.columns.metadata!]
+			? [
+					manifest.columns.path,
+					manifest.columns.notes!,
+					manifest.columns.metadata!,
+					manifest.columns.source!
+				]
 			: []),
 		...[manifest, ...archives].flatMap((file) =>
 			file.columns["source-extra"] ? [file.columns["source-extra"]!] : []
@@ -291,8 +298,7 @@ export const refreshJoinedTarget = Effect.fn("JoinedTarget.refresh")(function* (
 			: 0);
 	const order = Uint32Array.from({ length: occurrenceCount }, (_, row) => row);
 	order.sort((a, b) => compareOccurrence(a, b) || emissionOrder(a, b));
-	// A saved unit can contribute to several gathered identities. This pass groups raw units;
-	// the split-identity STOP regression records its remaining line-scoped findings mismatch.
+	// Raw membership preserves saved identity. Query facts below use only this line's slice.
 	const rawOrder = Uint32Array.from(order);
 	const rawCompare = (a: number, b: number) =>
 		compareUnit(c, a, b, empty) ||
@@ -302,35 +308,16 @@ export const refreshJoinedTarget = Effect.fn("JoinedTarget.refresh")(function* (
 	rawOrder.sort((a, b) => rawCompare(a, b) || emissionOrder(a, b));
 	const unit = new Uint32Array(occurrenceCount),
 		next = new Uint32Array(occurrenceCount).fill(absent);
-	const unitOrigins = new Uint8Array(occurrenceCount),
-		unitEditing = new Uint8Array(occurrenceCount),
-		unitNotes = new Uint8Array(occurrenceCount),
-		unitProblems = new Uint8Array(occurrenceCount);
+	const visibleOccurrence = new Uint8Array(occurrenceCount);
 	for (let start = 0; start < rawOrder.length; ) {
 		let end = start + 1;
 		const first = rawOrder[start]!;
 		while (end < rawOrder.length && rawCompare(first, rawOrder[end]!) === 0) end++;
-		let length = 0;
-		const sources = new Set<number>();
 		for (let i = start; i < end; i++) {
 			const occurrence = rawOrder[i]!;
 			unit[occurrence] = first;
 			if (i + 1 < end) next[occurrence] = rawOrder[i + 1]!;
-			unitOrigins[first]! |=
-				1 << (c.location[occurrence] === 2 ? 0 : c.location[occurrence] === 1 ? 1 : 2);
-			unitEditing[first]! |= c.editable[occurrence] ? 1 : 2;
-			if (c.notes[occurrence] !== empty && strings.string(c.notes[occurrence]!).trim() !== "")
-				unitNotes[first] = 1;
-			if (length < 40 && !sources.has(c.source[occurrence]!)) {
-				const bytes = strings.bytes(c.source[occurrence]!);
-				length +=
-					(sources.size ? 1 : 0) +
-					(bytes.length >= 120 ? 40 : bytes.toString("utf8").length);
-				sources.add(c.source[occurrence]!);
-			}
 		}
-		if (length >= 40 || c.identity[first]! >= 2 || c.key[first] === empty)
-			unitProblems[first] = 32;
 		start = end;
 	}
 	const m = manifest.columns,
@@ -376,6 +363,8 @@ export const refreshJoinedTarget = Effect.fn("JoinedTarget.refresh")(function* (
 			"namespace",
 			"key",
 			"source",
+			"source_words",
+			"source_visible",
 			"occ_start",
 			"occ_end",
 			"manifest_start",
@@ -401,6 +390,7 @@ export const refreshJoinedTarget = Effect.fn("JoinedTarget.refresh")(function* (
 			)
 		)
 	);
+	const visibleLine = new Uint8Array(count);
 	const cursors = culture.map(() => ({ archive: 0, po: 0 }));
 	const columns: JoinedColumns = {
 		line,
@@ -568,19 +558,60 @@ export const refreshJoinedTarget = Effect.fn("JoinedTarget.refresh")(function* (
 			coverageReasons = 0,
 			origins = 0,
 			editing = 0,
-			notes = 0;
+			notes = 0,
+			visible = false,
+			emptyProblems = 0;
 		for (let i = os; i < oe; i++) {
 			const occurrence = order[i]!,
 				pkg = packages.packageRow[occurrence]!;
 			const representative = unit[occurrence]!;
-			origins |= unitOrigins[representative]!;
-			editing |= unitEditing[representative]!;
-			notes |= unitNotes[representative]!;
 			if (!rowUnits.has(representative)) {
 				rowUnits.add(representative);
+				const members: number[] = [],
+					values = new Set<number>();
+				let length = 0,
+					searchable = false;
 				for (let member = representative; member !== absent; member = next[member]!) {
-					rowFolders.add(packageFolders[packages.packageRow[member]!]!);
-					rowFiles.add(packageFiles[packages.packageRow[member]!]!);
+					// Mirrors localizationLineUnits: unresolved identities and references retain
+					// their contexts; resolved text contributes only to its gathered identity.
+					if (
+						c.identity[member] === 0 &&
+						c.key[member] !== empty &&
+						(namespacesByOccurrence[member] !== ns || keys[member] !== keyId)
+					)
+						continue;
+					members.push(member);
+					const source = c.source[member]!;
+					if (!values.has(source)) {
+						const value = strings.string(source);
+						length += (values.size ? 1 : 0) + value.length;
+						searchable ||= value.trim() !== "";
+						values.add(source);
+					}
+				}
+				const problems =
+					length >= 40 ||
+					c.identity[representative]! >= 2 ||
+					c.key[representative] === empty
+						? 32
+						: 0;
+				emptyProblems |= problems;
+				if (searchable) {
+					visible = true;
+					line.problems![row]! |= problems;
+					for (const member of members) {
+						visibleOccurrence[member] = 1;
+						origins |=
+							1 << (c.location[member] === 2 ? 0 : c.location[member] === 1 ? 1 : 2);
+						editing |= c.editable[member] ? 1 : 2;
+						if (
+							c.notes[member] !== empty &&
+							strings.string(c.notes[member]!).trim() !== ""
+						)
+							notes = 1;
+						rowFolders.add(packageFolders[packages.packageRow[member]!]!);
+						rowFiles.add(packageFiles[packages.packageRow[member]!]!);
+					}
 				}
 			}
 			if (authored && c.identity[occurrence] === 1 && c.key[occurrence] !== empty) continue;
@@ -601,6 +632,9 @@ export const refreshJoinedTarget = Effect.fn("JoinedTarget.refresh")(function* (
 					)[coverage - 2]!
 				);
 		}
+		if (!visible) line.problems![row]! |= emptyProblems;
+		visibleLine[row] = Number(visible);
+		if (oe - os > 1) line.problems![row]! |= 32;
 		if (ns === absent)
 			reasons |= reasonBit(
 				hasReference ? "string_table_namespace_unavailable" : "unresolved_identity"
@@ -610,6 +644,10 @@ export const refreshJoinedTarget = Effect.fn("JoinedTarget.refresh")(function* (
 		if (sources.size > 1) reasons |= reasonBit("conflicting_source");
 		line.source![row] =
 			sources.values().next().value ?? (first === absent ? empty : m.source![first]!);
+		const initialSource = strings.string(line.source![row]!);
+		line.source_visible![row] = Number(initialSource.trim() !== "");
+		line.source_words![row] =
+			initialSource.trim() === "" ? 0 : initialSource.trim().split(/\s+/u).length;
 		if (sources.size > 1) {
 			const occurrenceRows = order.slice(os, oe);
 			const unitStrings = new Map<number, string>();
@@ -639,6 +677,8 @@ export const refreshJoinedTarget = Effect.fn("JoinedTarget.refresh")(function* (
 			for (const i of occurrenceRows)
 				if (!authored || c.identity[i] !== 1) orderedSources.add(c.source[i]!);
 			const value = [...orderedSources].map((id) => strings.string(id)).join(" ");
+			line.source_visible![row] = Number(value.trim() !== "");
+			line.source_words![row] = value.trim() === "" ? 0 : value.trim().split(/\s+/u).length;
 			snapshotCheck(
 				Buffer.byteLength(value) <= 1024 ** 2,
 				"join.source",
@@ -803,23 +843,20 @@ export const refreshJoinedTarget = Effect.fn("JoinedTarget.refresh")(function* (
 				line.split_unit![row] = 1;
 				line.split_unit![unitFirstLine[representative]!] = 1;
 			} else unitFirstLine[representative] = row;
-			if (line.occ_end![row]! - line.occ_start![row]! > 1)
-				unitProblems[representative]! |= 32;
-			if (line.reasons![row]! & reasonBit("conflicting_source"))
-				unitProblems[representative]! |= 2;
 			if (c.identity[occurrence] === 1) continue;
 			const source = c.source[occurrence]!,
 				previous = sourceFirst[source]!;
 			if (previous === absent) sourceFirst[source] = row;
 			else if (previous !== row) {
-				unitProblems[representative]! |= 32;
+				if (visibleOccurrence[occurrence] || !visibleLine[row]) line.problems![row]! |= 32;
 				for (let j = line.occ_start![previous]!; j < line.occ_end![previous]!; j++)
-					if (c.source[order[j]!] === source) unitProblems[unit[order[j]!]!]! |= 32;
+					if (
+						c.source[order[j]!] === source &&
+						(visibleOccurrence[order[j]!] || !visibleLine[previous])
+					)
+						line.problems![previous]! |= 32;
 			}
 		}
-	for (let row = 0; row < count; row++)
-		for (let i = line.occ_start![row]!; i < line.occ_end![row]!; i++)
-			line.problems![row]! |= unitProblems[unit[order[i]!]!]!;
 	const folderIds = new Uint32Array(folderValues.length);
 	for (let start = 0; start < folderValues.length; start += 8192)
 		folderIds.set(
@@ -831,6 +868,59 @@ export const refreshJoinedTarget = Effect.fn("JoinedTarget.refresh")(function* (
 		(id) => folderIds[id]!
 	);
 	const marks = yield* finishJoinedTarget(input, columns, reader, writer);
+	yield* strings.need([c.namespace, c.key]);
+	const queryColumns = joinedQueryColumns({
+		packages,
+		line,
+		order,
+		rawOrder,
+		representative: unit,
+		next,
+		packageFiles,
+		empty
+	});
+	const lineIds = new StringArena(256 * 1024, count);
+	const rawIdStarts = queryColumns["query.raw.id_starts"]!;
+	const rawIdValues = queryColumns["query.raw.id_utf8"]!;
+	const rawIdBytes = Buffer.from(
+		rawIdValues.buffer,
+		rawIdValues.byteOffset,
+		rawIdValues.byteLength
+	);
+	for (let start = 0; start < count; start += 8192) {
+		const end = Math.min(count, start + 8192);
+		const namespaces = yield* writer.strings(Array.from(line.namespace!.subarray(start, end)));
+		const keys = yield* writer.strings(Array.from(line.key!.subarray(start, end)));
+		for (let row = start; row < end; row++) {
+			const sliceStart = queryColumns["query.line.starts"]![row]!;
+			const hasUnits = sliceStart !== queryColumns["query.line.starts"]![row + 1];
+			const raw = queryColumns["query.slice.raw"]![sliceStart]!;
+			const identity =
+				hasUnits && keys[row - start] === ""
+					? `unresolved:${rawIdBytes.toString("utf8", rawIdStarts[raw], rawIdStarts[raw + 1])}`
+					: JSON.stringify([namespaces[row - start], keys[row - start]]);
+			lineIds.add(Buffer.from(`${input.target.name}:${identity}`));
+		}
+	}
+	const packedLineIds = lineIds.finish();
+	snapshotCheck(
+		packedLineIds.bytes.length <= 0xffffffff,
+		"query.ids",
+		"Line ID bytes exceed u32 range"
+	);
+	const lineIdValues = new Uint32Array(Math.ceil(packedLineIds.bytes.length / 4));
+	new Uint8Array(lineIdValues.buffer).set(packedLineIds.bytes);
+	queryColumns["query.line.id_utf8"] = lineIdValues;
+	queryColumns["query.line.id_starts"] = Uint32Array.from(packedLineIds.offsets);
+	const lineId = (row: number) =>
+		packedLineIds.bytes.toString(
+			"utf8",
+			packedLineIds.offsets[row],
+			packedLineIds.offsets[row + 1]
+		);
+	queryColumns["query.line.order"] = Uint32Array.from({ length: count }, (_, row) => row).sort(
+		(left, right) => lineId(left).localeCompare(lineId(right))
+	);
 	const sourceColumns: SnapshotSourceColumn[] = [];
 	const aliases: Record<string, string> = {};
 	const identical = new Map<string, { name: string; bytes: Buffer }[]>();
@@ -864,13 +954,21 @@ export const refreshJoinedTarget = Effect.fn("JoinedTarget.refresh")(function* (
 		);
 	for (let ci = 0; ci < culture.length; ci++)
 		for (const [name, values] of Object.entries(culture[ci]!)) add(`c${ci}.${name}`, values);
+	for (const [name, values] of Object.entries(queryColumns))
+		add(
+			name,
+			values,
+			name.endsWith(".sources") ? "source" : name.endsWith(".files") ? "paths" : undefined
+		);
 	add("occurrence.rows", order);
 	add("manifest.rows", mo);
 	add("facet.folders", folderColumn, "paths");
 	add("facet.files", fileRows.subarray(0, fileCount), "paths");
 	add(
 		"line.folder",
-		Uint32Array.from(line.folder_start!, (start) => folderColumn[start]!),
+		Uint32Array.from(line.folder_start!, (start, row) =>
+			start === line.folder_end![row] ? empty : folderColumn[start]!
+		),
 		"paths"
 	);
 	const meta = new TextEncoder().encode(

@@ -64,6 +64,9 @@ export * from "./package-text-columns.js";
 export * from "./package-text-layer.js";
 export * from "./package-text-cold.js";
 export { refreshJoinedTarget, type JoinedTargetInput } from "./joined-target.js";
+export * from "./index-builder.js";
+export * from "./index-refresh.js";
+export { columnarTextCorpusQuery } from "./columnar-query.js";
 export {
 	openJoinedTarget,
 	hydrateJoinedTarget,

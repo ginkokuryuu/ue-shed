@@ -10,12 +10,13 @@
 
 ## Status
 
-- **State**: STOPPED at Phase 6 on a new findings mismatch for a saved identity split across
-  gathered lines. Source order is fixed; the original 20 equality/regression tests and saved
-  583,507-line 1× comparison pass. The new case incorrectly marks both short gathered sources
-  as findings because the columns use the whole saved unit's combined length. The first STOP
-  condition applies. Reader v1.8 and gather rule v1.9 are unchanged; hosts still use the corpus
-  path and Phases 6–7 are incomplete. See the latest Phase 5/6 evidence below.
+- **State**: STOP at Phase 6: source fidelity for a lone UTF-16 surrogate. The current UTF-8
+  dictionary replaces a schema-valid `"\ud800"` with U+FFFD; the existing JSON parser and
+  object oracle preserve it. The fixed findings/facet regressions and saved 583,507-line
+  oracle recheck pass. A column query, shared refresh and injectable TypeScript builder are
+  implemented in the library; hosts still use the corpus path and measurements are pending.
+  Phases 6–7 remain incomplete. Reader v1.8 and gather rule v1.9 are unchanged. See the latest
+  Phase 6 evidence below.
 - **Priority**: P1
 - **Effort**: XL
 - **Risk**: HIGH. This replaces how every Game Text and localization host holds its data, and adds
@@ -832,7 +833,7 @@ that target belong to different identities; its prior 583,507-line equality coul
 this source-order defect. This comparison is oracle verification, not a default-heap host query
 measurement. Raw results: `test-results/codex/phase6-final-order-1x.json` and `.log`.
 
-### Phase 6: stopped on findings for split gathered identities
+### Phase 6: stopped on findings for split gathered identities (historical, resolved below)
 
 The first STOP condition now applies to a different same-input case. Two complete packages share
 saved identity `UI [literal] / T`. The property occurrence strips the package namespace and gathers
@@ -874,3 +875,216 @@ adoption omission; the unchanged Game Text e2e scenarios fail all three stale UI
 These failures are separate from the new semantic STOP, and no full-verification claim is made.
 No real project, retained-input regeneration, commit, push, branch switch or stash was used.
 **Phase 6 is incomplete; resolve the gathered-slice findings mismatch before host adoption.**
+
+### Phase 6 continuation: differential fuzz and gathered-slice facts
+
+Recorded 2026-10-11, Windows / Node 24.21.0. Before changing the findings calculation,
+`node scripts/fuzz-columnar-join.ts 10000` tested seeds 0–9,999 against the original
+event-built corpus, Phase 1 join comparator and `textCorpusQuery`. One test failed, exposing
+ten distinct differing column fields in 520.47 s. The discovery run completed instead of
+stopping on the first differing seed. It retained each first failing input as generic JSON
+under `test-results/codex/phase6-fuzz`; bounded greedy shrinking removed packages, occurrences
+and localization entries while preserving the chosen mismatch (at most 80 comparisons).
+Four small, schema-validated persisted-store reproductions are retained in
+`scripts/test-fixtures/columnar-join`. All four failed before the production fix.
+
+The Mulberry32 generator depends only on its seed. Each input has 2–20 packages, 1–40
+occurrences and 1–4 cultures. It mixes repeated saved identities inside and across packages,
+equal/conflicting sources, property/DataTable versus String Table gathered slices, String
+Table references, package namespace markers, keyless and unresolved identities, partial and
+not-gatherable packages, review flags/fingerprints, old/new key candidates, project-root token
+filters, excluded L10N and outside paths, duplicate/conflicting manifest/archive/PO identities,
+empty translations and sources, 39/40/41-character sources, longer sources, LF and U+2028.
+The oracle consumes the original records in native package emission order, never package-layer
+hydration. The candidate uses the production package columns, localization parser/columns,
+columnar join and bounded hydration. The normal suite tests 2,000 fixed seeds. The standalone
+script accepts a seed count and first seed for longer local runs.
+
+The fast storage adapter changes only persistence: it runs the production column producers,
+global ID remapping, snapshot-directory codec and readers without per-seed filesystem root
+publication/fsync. Eight representative seeds also run through the real persisted store,
+including seeds 4, 5 and 198 that first exposed the defects. Localization parsing still uses
+the real streaming builder and bounded temporary spill files in the fast lane.
+
+Every join field uses the Phase 1 oracle rules. Query summary, search pages, counts, facets,
+grouping, culture scopes, focus and localization focus compare recursively on every returned
+field. Requests include text and translation searches, both edit capabilities, missing notes,
+each review lens, path/file scopes, four groupings and a small page. Facts, reasons and flags
+use the Phase 1 set comparison; source/comment order and every other array remain exact.
+Problem and origin/editing/notes column membership is checked independently against oracle
+filters. **This query comparison currently covers the hydrated query, not the future host
+column query; the migrated implementation must be added before claiming Phase 6 complete.**
+
+The ten field differences reduce to three root causes:
+
+| Defect                                                                                         | First seed | Fixed reproduction / behavior                                                                     |
+| ---------------------------------------------------------------------------------------------- | ---------: | ------------------------------------------------------------------------------------------------- |
+| An empty-source saved unit contributes origins, editability and notes to a visible joined line |          4 | `empty-source-facets.json`: only searchable slices contribute query facets                        |
+| Raw-unit origins, capabilities, notes and findings leak between separate gathered identities   |          5 | `split-facets.json` and `split-conflicting-findings.json`: each line uses its matching slice      |
+| Two individually short gathered sources are classified using the raw unit's combined length    |        198 | `split-short-findings.json`, plus the former `.fails` test: each slice uses its own source length |
+
+Finding membership now measures each gathered slice's distinct source values, excluding other
+gathered lines from the raw saved unit. Duplicate-source membership follows its occurrence's
+slice rather than propagating to every line containing the unit. Facets use only searchable
+slice occurrences. Existing all-empty stored rows retain their legacy problem derivation,
+although search omits those rows. No behavior of the documented object oracle changed;
+`.changeset/gathered-slice-query-facts.md` records the index correction. Joined cache keys are
+`joined-v6` so old derived facts are rebuilt; reader v1.8 and gather rule v1.9 are unchanged.
+
+An additional `hidden-source-facets.json` regression checks an all-empty saved row. Such rows
+have no query file/folder facets; the inspector now checks coverage against faceted rows and
+the primary folder stores the empty ID, rather than the next row's folder. The fuzz lane also
+runs the index's structural inspector before comparing the join and queries.
+
+The expanded post-fix local run tested the same 10,000 seeds plus all eight persisted checks:
+**9 tests passed / 0 failed**, 679.06 s end to end (676.40 s tests), zero differing fields.
+The fixed persisted regressions and all Phase 5 fixture/tiny/source-order/split-findings tests
+passed together: **25 passed / 0 failed**, 44.26 s end to end. The saved 1× recheck matched
+**583,507 / 583,507 lines, zero differences**, 683.00 s for comparison / 696.72 s end to end;
+peak pre-GC V8 heap 7,478.2 MiB and OS RSS 8,875.9 MiB (the permitted 16,384 MiB oracle heap,
+not a default-heap host query measurement). The remaining command ledger follows below.
+No generated inputs or retained
+oracle were regenerated, and no real project was read.
+
+Host migration, shared refresh, write invalidation and default-heap CLI/Workbench measurements
+remain outstanding. The resolved findings STOP does not justify stopping that work. The
+Data Authoring adoption failure and three stale Game Text e2e expectations remain separately
+identified pre-existing failures, not new results of the commands above.
+
+### Phase 6 continuation: column query, builder service and UTF-16 STOP
+
+Recorded 2026-10-11, Windows / Node 24.21.0 and 26.11.1. The owner directed the future
+default build into Rust. `GameTextIndexBuilder` now exposes the existing import, package
+refresh and joined refresh signatures, dictionary intern/compaction and a scoped build
+session. `typeScriptIndexBuilderLayer` is the correctness oracle/fallback. The selected
+backend owns the writer lease, preventing a future native builder from reacquiring a
+TypeScript-held lock. No TypeScript build-speed optimization was attempted.
+
+The new library refresh service depends on this builder and a package inventory/event source;
+it imports selected localization files, refreshes selected packages, hashes review state and
+publishes the join within one lease. It returns a pinned generation and column query.
+Its persisted integration test checks builder injection, unchanged-input reuse, selected PO
+refresh, package refresh, review invalidation and old-generation readers. The production
+Project Index inventory adapter and host wiring are still outstanding.
+
+The query implementation uses numeric package/join/localization columns behind
+`TextCorpusQuery`, plus bounded displayed-line hydration through an Effect cache. It covers
+summary, search, counts, culture scopes, problems, filters, facets, grouping, cursor pages,
+focus, localization focus/lines and explicit exports. The joined cache key is now `joined-v7`
+for private query projections; public schema shapes, reader version and gather rule are
+unchanged. Some facet/group scans still decode labels and focus lookup still scans IDs;
+performance acceptance and query telemetry are not complete.
+
+The first full-gate attempt on the new query code found seven new Effect architecture
+violations: scattered synchronous runtime exits and an unnamed session operation. These
+are separate from the pre-existing adoption failure. The synchronous Node IO/query bridge
+is now isolated in `joined-query-node.ts`, with one named adapter entry in the architecture
+checker and cleanup ownership documented in `docs/engineering/effect.md`. The session helper
+uses `Effect.fn`. The focused Effect architecture gate passes; the full gate and differential
+checks are rerun after this adapter refactor.
+
+After that refactor, the source pool adds explicit LF/U+2028 and paired-astral strings
+at 39/40/41 UTF-16 code units. The final longer run on Node 26 tests **5,000 seeds plus
+eight persisted checks**, with all fixture/tiny, regression, refresh and snapshot tests:
+**136 passed, 0 unexpected failures, 2 expected UTF-16 failures**, **656.06 s** end to end,
+zero differing fields (`phase6-stop-final-fuzz-node26.log` and
+`phase6-fuzz/run-v26.11.1-0-5000.json`). This is the final expanded generator and actual
+column-query implementation, not just hydrated queries. Reports now retain per-runtime,
+first-seed and seed-count filenames alongside the last-run ledger.
+The final normal set on Node 24 uses the same expanded pool: **2,000 seeds plus eight
+persisted checks**, **136 passed, 0 unexpected failures, 2 expected UTF-16 failures**,
+**315.64 s**, zero differing fields (`phase6-stop-final-fuzz-node24.log` and
+`phase6-fuzz/run-v24.21.0-0-2000.json`). Final unwrapped assertions still fail exactly the
+two surrogate reproductions on each Node version. Final precommit passes all six stages,
+including **43 architecture tests / 0 failures**. The seven initial architecture violations
+are resolved; the full-gate rerun is recorded separately in the measurement ledger.
+The final `pnpm check` passes the preceding native/WASM, package builds, type, Effect
+architecture, license, StyleX, architecture, release and packed-consumer stages, then
+fails only the known Data Authoring adoption build omission:
+`packages/protocol/src/index.ts:163`, missing `./editor-foreground-responsiveness.js` in the
+materialized consumer. There are no additional TypeScript diagnostics. Totals before that
+stage are **356 Rust passed / 0 failed / 4 ignored**, **43 architecture passed / 0 failed**,
+**42 release passed / 0 failed**, and **20 packed tarballs / 0 failures**. The protocol export
+and adoption manifest are unchanged from HEAD. Full-gate lint/format/contracts/whole-suite
+tests do not run after the adoption failure; final precommit and targeted runs supply their
+separate checks. This is not a full-gate pass (`phase6-stop-full-check-fixed.log`).
+
+The differential harness now exercises this actual column query as well as the original
+event query and hydrated comparison. It compares every recursive output field, adds export
+metadata and full localization lines, cycles all nine filter fields, tests review/key-change
+filters, localization cursors and opened asset groups. Discovery retains every distinct
+differing field instead of stopping at its first seed. Shrinking is bounded to 80 comparisons
+per output family/seed; both the normal test and the local shrink script print the reduced
+JSON and save it. The normal suite remains 2,000 fixed seeds; the local script accepts longer
+runs. The generator uses valid Unicode including U+2028. Lone surrogate cases below are
+separate fixed reproductions, so a clean randomized run does not assert those cases pass.
+
+Before the adapter refactor and source-pool expansion, a local run used seeds 0–4,999 plus eight persisted checks against the
+column query: **9 tests passed / 0 failed**, **716.29 s** end to end, and zero differing
+fields (`phase6-column-query-fuzz-5000.log`). The earlier
+10,000-seed runs on Node 24 and Node 26 covered the join and hydrated query. They are
+reported separately rather than overstating the number of final column-query seeds.
+The final Node 26 run adds the normal 2,000 column-query seeds and eight persisted checks
+to the fixture/tiny, regression, builder-refresh and snapshot suites: **136 passed,
+0 unexpected failures, 2 expected UTF-16 failures**, 248.56 s end to end. The same targeted
+checks on Node 24, separately from its 5,000-seed run, are **127 passed, 0 unexpected
+failures, 2 expected UTF-16 failures**, 32.51 s. Both unwrapped surrogate assertions fail
+on both versions (**0 passed / 2 failed** each).
+`phase6-fuzz/latest.json` records the last completed run. Per-runtime/count reports retain
+the final expanded runs independently, so a later normal-suite run does not erase their evidence.
+
+Additional findings during implementation:
+
+| Defect                                                                                                    | Resolution / fixed evidence                                                                                                                             |
+| --------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Asset grouping used package emission order for a joined line's first file                                 | Preserve sorted saved-unit ID order; `asset-group-unit-order.json`, first exposed by seed 0                                                             |
+| Incremental query projection updated a String Table reference's own source when its authored line changed | Update a projection only when its own member occurrence changed; full-column incremental/full rebuild equality test passes                              |
+| New source-word projection read a manifest string segment before loading it                               | Include manifest sources in the bounded string request; fixture/tiny tests pass                                                                         |
+| Export oracle adapter emitted excluded packages in hash-shard order                                       | Correct the test adapter to native path byte order; `excluded-package-order.json`. This was an adapter false positive, not a production behavior change |
+
+The original combined-source findings, gathered-slice facts and empty-source facet defects
+remain fixed, with individual persisted tests and the former findings `.fails` test passing.
+The Phase 1 event oracle and its deterministic behavior have not been changed.
+
+**STOP: source fidelity for a lone UTF-16 surrogate.** Two minimal schema-validated fixtures
+are retained: `lone-utf16-source.json` (two packages, one saved occurrence, one culture) and
+`lone-utf16-localization.json` (the same ordinary saved source plus an escaped lone surrogate
+in manifest/archive JSON). The object join retains `"\ud800"`; dictionary encoding through
+`Buffer.from(value, "utf8")` irreversibly changes it to U+FFFD. The latter reproduction fails
+the existing localization importer/parser equality assertion before joining. The former
+differs in `join.source`, localization lines, focus and raw/localized exports. This is also
+a collision with a literal U+FFFD value, not just presentation.
+
+The documented A64 format contains validated UTF-8 and has no exceptional-code-unit
+representation. Neither a gathered-line fix nor query reconstruction can recover the lost
+code unit. Preserving it requires an explicit storage encoding/version and native-builder
+alignment; rejecting or replacing it would change today's accepted input/observable output.
+The native worktree's own Unicode audit independently identifies the same issue, including
+its JSON parser's rejection of escaped unpaired surrogates. No native worktree was modified.
+This is the plan's first listed STOP condition and the brief's instruction to stop when a public contract
+field cannot be served from the index. Both fixed cases remain explicit `.fails` tests;
+they must become ordinary passing tests when representation is resolved.
+
+The saved 1× oracle recheck earlier in this continuation remains **583,507/583,507 lines,
+zero differences**. It predates the new private query projection; it is not a final equality
+claim for this revision. Latest fixture/tiny checks, fuzz results and command counts are
+recorded in the measurement ledger below. No retained input or saved oracle was regenerated.
+
+Neither CLI nor headless Workbench hosts have migrated. The extension, production write
+invalidation, query telemetry and the product `NODE_OPTIONS` note consequently remain
+outstanding. There are no Phase 6 host benchmarks to claim:
+
+| Measurement, both CLI and headless Workbench   | 1× target    | 10× target  | Result             |
+| ---------------------------------------------- | ------------ | ----------- | ------------------ |
+| First query after cold build / warm index      | Record both  | Record both | Not measured: STOP |
+| Count / filter / facet / page / search / focus | ≤100 ms each | ≤1 s each   | Not measured: STOP |
+| Peak query V8 heap at default Node heap        | ≤128 MiB     | ≤256 MiB    | Not measured: STOP |
+| No-change refresh                              | ≤5 s         | ≤30 s       | Not measured: STOP |
+| One package + one PO refresh                   | ≤10 s        | ≤60 s       | Not measured: STOP |
+
+Any future cold-build and refresh numbers must be labeled **TypeScript builder; native
+builder pending**. The prior oracle comparison is a correctness measurement under the
+permitted 16 GiB oracle cap, never a default-heap host query measurement. No 10× host run,
+real-project read, retained regeneration, commit, push, branch switch or stash occurred.
+The Data Authoring adoption failure and three stale Game Text e2e expectations are separately
+identified pre-existing failures. **Phase 6 is incomplete.**

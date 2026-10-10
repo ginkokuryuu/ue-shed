@@ -244,6 +244,44 @@ node --import tsx scripts/benchmark-localization-import.ts --project test-result
 node --import tsx scripts/benchmark-localization-import.ts --project test-results/game-text-scale/project-10x-final --cache test-results/game-text-scale/a64-accepted-10x --output test-results/game-text-scale/a64-accepted-cold-10x.json --mode shared --select cold
 ```
 
+## Library build and query boundary (Phase 6 in progress)
+
+`GameTextIndexBuilder` is the injectable build capability. Its import, package refresh and
+joined refresh methods retain the existing TypeScript functions' inputs, result statistics
+(read, parsed/reused and published), typed failures and scoped requirements. It also exposes
+dictionary intern/compaction and `withSession`. The selected backend owns the writer lease;
+a future native layer must not reacquire a lock already held by a TypeScript caller.
+`typeScriptIndexBuilderLayer` remains the oracle and fallback. Native default selection and
+production host adoption are pending.
+
+The library `GameTextIndexRefresh` service composes those operations with an injected
+`GameTextIndexSource` inventory/event adapter. It imports selected localization files,
+refreshes package signatures/text, reads review state and publishes the joined target under
+one lease, then returns a pinned reader and the existing `TextCorpusQuery` contract. The
+production Project Index inventory adapter remains unfinished. The persisted service test
+checks unchanged reuse, selected file/package changes, review invalidation and readers
+retaining their earlier generation.
+
+Joined key `joined-v7` adds private query projections. `query.raw` and `query.slice` contain
+numeric representatives, memberships, source/file ID vectors and offsets, flags, visibility
+and character/word counts. Raw and line identifiers have packed UTF-8 arenas plus numeric
+offsets and order vectors. `line.source_words` and `line.source_visible` complete the line
+projection. Overlay metadata can associate a query field with its own patch-row vector;
+line/culture fields retain the common `patch.rows`. Equal physical columns still alias.
+A native joined publisher must produce these projections before serving this query reader.
+
+The synchronous API uses the same pinned Node handles and codecs through `layerSync`,
+`stringsSync` and `bytesSync`; the one runtime boundary is documented in
+[Effect composition](effect.md#composition-roots-and-exits). Displayed line hydration uses
+a 64-entry Effect cache. Production query telemetry, bounded facet-label scans, host wiring
+and default-heap acceptance measurements remain incomplete.
+
+**Source-fidelity STOP:** the existing parser accepts an escaped lone UTF-16 surrogate, while
+the validated UTF-8 dictionary replaces it with U+FFFD. Exact reconstruction requires a
+shared TypeScript/native representation decision; it cannot be repaired by a query or
+gathered-line transformation. Two explicit failing fixtures retain the evidence. See the
+[plan](../../plans/057-game-text-compact-index.md#phase-6-continuation-column-query-builder-service-and-utf-16-stop).
+
 ## Snapshot format measurements
 
 The opt-in `scripts/benchmark-game-text-snapshot.ts` runs one child at a time with the Phase 1

@@ -8,6 +8,31 @@ import { SharedStringFiles } from "./shared-string-file.js";
 import { sortColdStrings } from "./shared-string-sort.js";
 
 describe("cold external string sort", () => {
+	it("synchronous query strings read cold blocks and share the bounded asynchronous cache", async () => {
+		const root = await mkdtemp(join(tmpdir(), "ue-shed-query-strings-"));
+		const writer = await new SharedStringFiles(root, []).open();
+		const values = Array.from({ length: 500 }, (_, row) => `${row}: first\u2028second é 😀`);
+		const ids = await writer.intern("source", values);
+		const reader = await new SharedStringFiles(root, writer.segments).open();
+		try {
+			const selected = [ids[0]!, ids[67]!, ids[499]!, ids[0]!];
+			expect(reader.stringsSync(selected)).toEqual([
+				values[0],
+				values[67],
+				values[499],
+				values[0]
+			]);
+			const loaded = reader.blocksLoaded;
+			expect(await reader.strings(selected)).toEqual(reader.stringsSync(selected));
+			expect(reader.blocksLoaded).toBe(loaded);
+			expect(() => reader.stringsSync([-1])).toThrow("Invalid shared ID");
+		} finally {
+			await reader.close();
+			await writer.close();
+			await rm(root, { recursive: true, force: true });
+		}
+		expect(() => reader.stringsSync([0])).toThrow("Shared string scope is closed");
+	});
 	it("scans packed bytes with entry bounds and folds Unicode only when needed", async () => {
 		const root = await mkdtemp(join(tmpdir(), "ue-shed-domain-scan-"));
 		const files = await new SharedStringFiles(root, []).open();

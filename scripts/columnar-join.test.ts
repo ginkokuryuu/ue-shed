@@ -67,7 +67,11 @@ import type { LocalizationJoin } from "../packages/game-text/src/localization-sc
 import { u32 } from "../packages/game-text/src/joined-target-input.ts";
 import { textProblems } from "../packages/game-text/src/text-problems.ts";
 import { expectLocalizationImportMatchesParser } from "./localization-import-oracle.test-support.ts";
-import { gatheredTextGroups } from "../packages/game-text/src/gathered-text.ts";
+import {
+	gatheredTextGroups,
+	localizationLineUnits
+} from "../packages/game-text/src/gathered-text.ts";
+import { hasSearchableSource } from "../packages/game-text/src/search.ts";
 import {
 	textFileLabel,
 	textFolderLabel,
@@ -108,7 +112,8 @@ const expectProblemOracle = (
 			const line = actual.lines[row]!;
 			const ids = new Set(line.origin.kind === "corpus" ? line.origin.unitIds : []);
 			const signals: TextReviewSignal[] = [];
-			const groups = [...gatheredTextGroups(corpus).values()].map((group) => ({
+			const groups = [...gatheredTextGroups(corpus)].map(([key, group]) => ({
+				key,
 				units: group.units,
 				count: group.units.reduce((sum, unit) => sum + unit.occurrences.length, 0),
 				sources: new Set(
@@ -124,9 +129,17 @@ const expectProblemOracle = (
 					(source) => groups.filter((group) => group.sources.has(source)).length > 1
 				)
 			);
-			for (const unit of corpus.units.filter((unit) => ids.has(unit.id))) {
-				const grouped = groups.filter((group) =>
-					group.units.some((slice) => slice.id === unit.id)
+			for (const unit of localizationLineUnits(
+				line,
+				new Map(corpus.units.map((unit) => [unit.id, unit]))
+			).filter((unit) => ids.has(unit.id))) {
+				const grouped = groups.filter(
+					(group) =>
+						group.units.some((slice) => slice.id === unit.id) &&
+						group.key ===
+							(line.identity
+								? JSON.stringify([line.identity.namespace, line.identity.key])
+								: `unresolved:${unit.id}`)
 				);
 				if (unit.identity.status === "unresolved") signals.push("unresolved");
 				if (
@@ -183,10 +196,9 @@ const expectFacetOracle = Effect.fn("JoinOracle.facets")(function* (
 	for (let row = 0; row < page.lines.length; row++) {
 		const line = page.lines[row]!,
 			oracle = join.lines.find((candidate) => candidate.id === line.id)!;
-		const occurrences =
-			oracle.origin.kind === "corpus"
-				? oracle.origin.unitIds.flatMap((id) => units.get(id)!.occurrences)
-				: [];
+		const occurrences = localizationLineUnits(oracle, units)
+			.filter(hasSearchableSource)
+			.flatMap((unit) => unit.occurrences);
 		const expectedFiles = new Set(
 			(oracle.origin.kind === "evidence"
 				? oracle.manifest.map((entry) => entry.path)
@@ -208,7 +220,7 @@ const expectFacetOracle = Effect.fn("JoinOracle.facets")(function* (
 				)
 			)
 		).toEqual(expectedFolders);
-		if (occurrences.length) {
+		if (oracle.origin.kind === "corpus") {
 			const origins = occurrences.reduce(
 				(bits, item) =>
 					bits |
@@ -355,7 +367,7 @@ describe("conflicting source order regression", () => {
 	});
 });
 
-describe("STOP: split saved identity findings", () => {
+describe("split saved identity findings regression", () => {
 	let findings: readonly { id: string; oracle: boolean; columnar: boolean }[];
 	beforeAll(async () => {
 		await withJoinCache(async (cache) => {
@@ -462,11 +474,10 @@ describe("STOP: split saved identity findings", () => {
 			);
 			expect(findings).toHaveLength(2);
 			expect(findings.map((line) => line.oracle)).toEqual([false, false]);
-			expect(findings.map((line) => line.columnar)).toEqual([true, true]);
+			expect(findings.map((line) => line.columnar)).toEqual([false, false]);
 		});
 	});
-	// Setup must succeed independently: only the known equality defect is expected to fail.
-	it.fails("findings match each gathered slice rather than the whole saved unit", () => {
+	it("findings match each gathered slice rather than the whole saved unit", () => {
 		expect(findings.map(({ id, columnar }) => ({ id, finding: columnar }))).toEqual(
 			findings.map(({ id, oracle }) => ({ id, finding: oracle }))
 		);
@@ -589,8 +600,9 @@ describe("columnar join", () => {
 					equal: true,
 					differenceCount: 0
 				});
-				for (const [name, values] of Object.entries(full.values))
+				for (const [name, values] of Object.entries(full.values)) {
 					expect(incremental.values[name], name).toEqual(values);
+				}
 				expect(incremental.census).toEqual(full.census);
 			}
 			const collect = Effect.gen(function* () {

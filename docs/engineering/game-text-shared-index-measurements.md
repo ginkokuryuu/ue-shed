@@ -1,12 +1,18 @@
 # Shared Game Text index measurements
 
 Source order is fixed, with independent fixture/tiny/targeted and saved 1× equality re-runs.
-Phase 6 is stopped on a new findings mismatch for split gathered identities. See the
-[continuation evidence](#phase-6-continuation-source-order-fixed-new-findings-stop).
+The split gathered-identity findings mismatch is fixed. The subsequent 10,000-seed differential
+run and eight persisted-store checks passed. The new column query is also compared to the
+event oracle. An isolated persisted reproduction now exposes loss of a lone UTF-16 surrogate
+in the UTF-8 dictionary, including through the existing localization JSON parser: Phase 6 is
+stopped on source fidelity. See the latest
+[plan evidence](../../plans/057-game-text-compact-index.md#phase-6-continuation-column-query-builder-service-and-utf-16-stop).
+Host migration and its default-heap measurements remain outstanding; no Phase 6 performance
+acceptance is claimed. TypeScript builder; native builder pending.
 
 Phase 5 adds the joined layer, saved-oracle equality and bounded incremental refresh; its
 measurements and command ledger follow the retained Phase 3/4 evidence below. Hosts and the
-production query migration remain Phase 6 work.
+production host query migration remain Phase 6 work.
 
 The following opening measurements are the retained **Phase 3** baseline, recorded
 2026-10-10, Windows / Node 26.11.1. Cold import, ordinary PO refresh and size targets
@@ -904,3 +910,114 @@ and the requested host suites supply their separately reported checks, not a ful
 
 Final evidence updates are included in the changed-file formatting and whitespace checks.
 **Phase 6 is incomplete.**
+
+## Phase 6 continuation: column query and UTF-16 fidelity STOP
+
+Recorded 2026-10-11, Windows. The detailed design, defects and unfinished host work are in
+[the latest plan evidence](../../plans/057-game-text-compact-index.md#phase-6-continuation-column-query-builder-service-and-utf-16-stop).
+This continuation adds the injectable `GameTextIndexBuilder`, TypeScript fallback, shared
+library refresh and an opt-in column query. Production hosts are not migrated. Query
+performance is not accepted. **TypeScript builder; native builder pending.**
+
+The column query is compared recursively with today's event-built `textCorpusQuery`,
+including exports, metadata, counts, facets, all filter fields, grouping, culture/review/key
+scopes, cursor pages and focus. Eight selected seeds also use the persisted index. Fixed
+reproductions cover each prior join defect and the asset-group first-file ordering defect.
+Excluded-package export order was corrected in the test oracle adapter; neither the saved
+oracle nor the object join was altered.
+
+Two additional persisted fixtures expose the same unresolved UTF-16 representation defect.
+`"\ud800"` becomes U+FFFD during UTF-8 dictionary encoding. The existing localization JSON
+parser preserves it. Joined source, line focus and exports cannot recover the lost code unit.
+Both regressions are explicit expected failures; unwrapped assertions fail on both Node
+versions. This is a current semantic STOP, separate from the known adoption and e2e failures.
+
+The earlier saved 1× comparison is **583,507/583,507 lines, zero differences**, 696.72 s
+end to end, and predates the private column query projections. It used the permitted oracle
+heap and is not a Phase 6 host query measurement. Latest fixture/tiny equality is tested in
+the targeted suite below; a new saved-scale comparison is not claimed after STOP.
+
+Commands below use `vitest run --config vitest.node.config.ts`. `fuzz` means
+`scripts/columnar-join-fuzz.test.ts`; `regressions` means
+`scripts/columnar-join-regressions.test.ts`. The long local entry point is
+`node scripts/fuzz-columnar-join.ts [seed-count] [first-seed]`. Normal CI defaults to
+2,000 seeds. `UE_SHED_JOIN_FUZZ_SEEDS` selects longer runs without changing the test.
+The unwrapped STOP command is
+`node --import tsx test-results/codex/phase6-utf16-assertion.ts`.
+
+| Command / coverage                                                                                    | Runtime      | Passed | Failed                                         | Evidence                                         |
+| ----------------------------------------------------------------------------------------------------- | ------------ | -----: | ---------------------------------------------- | ------------------------------------------------ |
+| Original discovery, 10,000 seeds, event join/hydrated query                                           | Node 24.21.0 |      0 | 1, ten differing fields                        | `phase6-fuzz-discovery.log`                      |
+| Original final clean, 10,000 seeds + eight persisted                                                  | Node 24.21.0 |      9 | 0                                              | `phase6-fuzz-after-slice-fix.log`, 679.06 s      |
+| Original final clean, 10,000 seeds + eight persisted                                                  | Node 26.11.1 |      9 | 0                                              | `phase6-fuzz-final-node26.log`, 640.60 s         |
+| Builder, incremental/full projection equality and Phase 5 fixtures/tiny, before final query expansion | Node 24.21.0 |     49 | 0                                              | `phase6-builder-targeted-final.log`, 35.56 s     |
+| Column query, 2,000 seeds + eight persisted, before export expansion                                  | Node 24.21.0 |      9 | 0                                              | `phase6-column-query-fuzz-2000.log`, 303.01 s    |
+| Export expansion, 100 seeds + eight persisted, regressions, refresh, string sorting                   | Node 24.21.0 |     16 | 3, excluded-package adapter ordering; resolved | `phase6-column-query-export-smoke.log`, 132.80 s |
+| Corrected export expansion, same coverage                                                             | Node 24.21.0 |     19 | 0                                              | `phase6-column-query-export-fixed.log`, 24.29 s  |
+| Current numeric query, 100 seeds + eight persisted, six regressions and refresh                       | Node 24.21.0 |     16 | 0                                              | `phase6-column-query-numeric-smoke.log`, 21.80 s |
+| Final expanded column query, 5,000 seeds + eight persisted                                            | Node 24.21.0 |      9 | 0, zero differing fields                       | `phase6-column-query-fuzz-5000.log`, 716.29 s    |
+| Unwrapped persisted UTF-16 STOP assertions                                                            | Node 24.21.0 |      0 | 2                                              | `phase6-utf16-assertion-node24.log`              |
+| Unwrapped persisted UTF-16 STOP assertions                                                            | Node 26.11.1 |      0 | 2                                              | `phase6-utf16-assertion-node26.log`              |
+
+Final targeted coverage means `scripts/columnar-join.test.ts`, `regressions`,
+`packages/game-text/src/index-refresh.test.ts`, and the `shared-index`, `shared-string-codec`,
+`shared-string-sort`, `snapshot-file`, `snapshot-format` and `snapshot-store` test files in
+`packages/game-text/src`. Fuzz counts for each run are explicit below.
+
+The first full-gate attempt on this revision stopped at seven new Effect architecture
+violations, before adoption. They are fixed by isolating the synchronous Node query bridge
+in `joined-query-node.ts` and naming the localization session helper. The focused
+`pnpm effect:architecture` rerun passes (`phase6-stop-effect-architecture-fixed.log`).
+These were new failures, not the known adoption failure. Subsequent targeted and full-gate
+results are recorded separately. The generator now also includes explicit LF/U+2028 and
+paired-astral sources at 39/40/41 UTF-16 code units; earlier seed runs used the smaller pool.
+
+| Final command                                                                                | Runtime      |                                           Passed | Failed / expected failures                               | Evidence                                          |
+| -------------------------------------------------------------------------------------------- | ------------ | -----------------------------------------------: | -------------------------------------------------------- | ------------------------------------------------- |
+| Final targeted coverage                                                                      | Node 24.21.0 |                                              127 | 0 unexpected; 2 expected failures                        | `phase6-stop-targeted-node24.log`, 32.51 s        |
+| Final targeted coverage + 2,000 column-query seeds and eight persisted checks                | Node 26.11.1 |                                              136 | 0 unexpected; 2 expected failures                        | `phase6-stop-targeted-node26.log`, 248.56 s       |
+| Targeted after adapter refactor, 2,000 seeds + eight persisted, before source-pool expansion | Node 24.21.0 |                                              136 | 0 unexpected; 2 expected failures                        | `phase6-stop-targeted-fixed-node24.log`, 307.27 s |
+| Final expanded targeted coverage, 5,000 column-query seeds + eight persisted                 | Node 26.11.1 |                                              136 | 0 unexpected; 2 expected failures; zero differing fields | `phase6-stop-final-fuzz-node26.log`, 656.06 s     |
+| Final expanded targeted coverage, 2,000 column-query seeds + eight persisted                 | Node 24.21.0 |                                              136 | 0 unexpected; 2 expected failures; zero differing fields | `phase6-stop-final-fuzz-node24.log`, 315.64 s     |
+| Final unwrapped UTF-16 STOP assertions                                                       | Node 24.21.0 |                                                0 | 2                                                        | `phase6-utf16-assertion-final-node24.log`         |
+| Final unwrapped UTF-16 STOP assertions                                                       | Node 26.11.1 |                                                0 | 2                                                        | `phase6-utf16-assertion-final-node26.log`         |
+| `pnpm run check:precommit`, before adapter refactor                                          | Node 24.21.0 |       43 architecture tests; all six stages pass | 0                                                        | `phase6-stop-precommit.log`                       |
+| First full `pnpm check`, before adapter refactor                                             | Node 24.21.0 | 356 Rust tests; 4 ignored; preceding stages pass | 7 new architecture violations; resolved                  | `phase6-stop-full-check.log`                      |
+| `pnpm effect:architecture`, after adapter refactor                                           | Node 24.21.0 |                                      Gate passes | 0                                                        | `phase6-stop-effect-architecture-fixed.log`       |
+| Final `pnpm run check:precommit`                                                             | Node 24.21.0 |       43 architecture tests; all six stages pass | 0                                                        | `phase6-stop-precommit-fixed.log`                 |
+
+| Measurement, CLI and headless Workbench        | 1× target    | 10× target  | Result at both scales |
+| ---------------------------------------------- | ------------ | ----------- | --------------------- |
+| First query after cold build / warm index      | Record both  | Record both | Not measured: STOP    |
+| Count / filter / facet / page / search / focus | ≤100 ms each | ≤1 s each   | Not measured: STOP    |
+| Peak query heap, default heap                  | ≤128 MiB     | ≤256 MiB    | Not measured: STOP    |
+| No-change refresh                              | ≤5 s         | ≤30 s       | Not measured: STOP    |
+| One package + one PO refresh                   | ≤10 s        | ≤60 s       | Not measured: STOP    |
+
+UE 5.7 and UE 5.8 localization-process checks have not been rerun on this library-only
+revision: native reader/fixture/codegen and production apply/sync paths were not changed.
+The earlier source-order continuation recorded passing process checks separately on
+UE 5.7.4 and UE 5.8.3; these remain historical evidence, not verification of a host migration.
+The complete host suites, component and e2e suites likewise have not been rerun for a
+migration that has not happened. The three stale Game Text e2e expectations remain
+pre-existing failures. **Phase 6 is incomplete.**
+
+Final full-gate rerun: `pnpm check` on Node 24.21.0 passes the native/WASM checks, package
+builds, typecheck, Effect architecture, license, StyleX, architecture and release gates,
+then packed consumers. Counts are **356 Rust passed / 0 failed / 4 ignored**, **43
+architecture passed / 0 failed**, **42 release passed / 0 failed**, and **20 tarballs /
+0 failures**. It fails one stage, the pre-existing Data Authoring adoption build:
+`src/index.ts:163`, TS2307 for missing `./editor-foreground-responsiveness.js` in the copied
+protocol package. This is its only TypeScript diagnostic. Neither the protocol export nor
+the adoption manifest changed in this pass. Evidence: `phase6-stop-full-check-fixed.log`.
+The later full-gate lint, format, contracts and whole-repository test stages do not execute;
+final precommit and the separately reported targeted runs are their own checks.
+
+| Final broad command                                  | Runtime      | Passed                                                     | Failed                                 |
+| ---------------------------------------------------- | ------------ | ---------------------------------------------------------- | -------------------------------------- |
+| `pnpm check`                                         | Node 24.21.0 | 356 Rust, 43 architecture, 42 release; 20 packed consumers | 1 known adoption stage; 4 Rust ignored |
+| Full `pnpm check` on Node 26                         | Node 26.11.1 | Not run                                                    | Not run                                |
+| `pnpm test:localization-processes`, current revision | UE 5.7.4     | Not run: STOP before write-path migration                  | Not run                                |
+| `pnpm test:localization-processes`, current revision | UE 5.8.3     | Not run: STOP before write-path migration                  | Not run                                |
+
+Final changed-file formatting and `git diff --check` include these evidence updates.

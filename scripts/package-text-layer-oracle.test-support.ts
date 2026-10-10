@@ -14,6 +14,7 @@ import {
 	type PackageTextInventoryEntry
 } from "../packages/game-text/src/package-text-layer.ts";
 import { compareTextCandidateCorpora } from "./package-text-oracle.test-support.ts";
+import { comparePackageTextPathBytes } from "../packages/game-text/src/package-text-order.ts";
 
 /** Independent path-ordered reader events; never hydrate the join oracle from its input layer. */
 export function candidateCorpusFromEvents(input: {
@@ -27,9 +28,10 @@ export function candidateCorpusFromEvents(input: {
 			.filter((entry) => entry.selected)
 			.map((entry) => resolve(input.projectRoot, entry.entry.path))
 	);
-	const excluded = selection
-		.filter((entry) => !entry.selected)
-		.map((entry) => relative(input.projectRoot, resolve(input.projectRoot, entry.entry.path)));
+	const excluded = input.inventory
+		.filter((entry) => !selected.has(resolve(input.projectRoot, entry.path)))
+		.map((entry) => relative(input.projectRoot, resolve(input.projectRoot, entry.path)))
+		.sort((left, right) => comparePackageTextPathBytes(Buffer.from(left), Buffer.from(right)));
 	return textCorpusWithExcludedPackages(
 		textCorpusFromExtractionEvents({
 			projectRoot: input.projectRoot,
@@ -56,10 +58,11 @@ export const comparePackageTextLayerWithEvents = Effect.fn("PackageText.layerOra
 				.filter((entry) => entry.selected)
 				.map((entry) => resolve(input.projectRoot, entry.entry.path))
 		);
-		const excluded = selection
-			.filter((entry) => !entry.selected)
-			.map((entry) =>
-				relative(input.projectRoot, resolve(input.projectRoot, entry.entry.path))
+		const excluded = input.inventory
+			.filter((entry) => !selected.has(resolve(input.projectRoot, entry.path)))
+			.map((entry) => relative(input.projectRoot, resolve(input.projectRoot, entry.path)))
+			.sort((left, right) =>
+				comparePackageTextPathBytes(Buffer.from(left), Buffer.from(right))
 			);
 		const events = input.events
 			.filter((event) => event.event !== "text_summary")

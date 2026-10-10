@@ -32,6 +32,7 @@ export const JoinedTargetMeta = Schema.Struct({
 	generation: Schema.String,
 	base: Schema.optionalKey(Schema.String),
 	patches: Schema.optionalKey(Schema.Record(Schema.String, Schema.String)),
+	patchRows: Schema.optionalKey(Schema.Record(Schema.String, Schema.String)),
 	input: Schema.Struct({
 		projectRoot: Schema.String,
 		target: LocalizationTarget,
@@ -78,7 +79,7 @@ export const readJoinedTarget = Effect.fn("JoinedTarget.read")(function* (
 		let values = patched.get(name);
 		if (!values) {
 			values = (yield* u32(baseLayer, meta.aliases[name] ?? name)).slice();
-			const rows = yield* u32(rawLayer, "patch.rows"),
+			const rows = yield* u32(rawLayer, meta.patchRows?.[name] ?? "patch.rows"),
 				replacements = yield* u32(rawLayer, patch);
 			snapshotCheck(rows.length === replacements.length, patch, "Patch lengths differ");
 			for (let i = 0; i < rows.length; i++) {
@@ -396,7 +397,8 @@ export const inspectJoinedTarget = Effect.fn("JoinedTarget.inspect")(function* (
 		...Object.keys(meta.patches ?? {})
 	])) {
 		const values = yield* u32(layer, name);
-		snapshotCheck(values.length === meta.count, name, "Incomplete logical column");
+		if (name.startsWith("line.") || /^c\d+\./u.test(name))
+			snapshotCheck(values.length === meta.count, name, "Incomplete logical column");
 		if (record.stringColumns[meta.aliases[name] ?? name])
 			for (const id of values) snapshotCheck(id < limit, name, "ID outside dictionary");
 	}
@@ -494,6 +496,12 @@ export const inspectJoinedTarget = Effect.fn("JoinedTarget.inspect")(function* (
 	const fileStart = yield* u32(layer, "line.file_start"),
 		fileEnd = yield* u32(layer, "line.file_end"),
 		files = yield* u32(layer, "facet.files");
+	const origins = yield* u32(layer, "line.origins"),
+		editing = yield* u32(layer, "line.editing");
+	const facetedLines = origins.reduce(
+		(count, bits, row) => count + Number(Boolean(bits || editing[row])),
+		0
+	);
 	let fileCoveredLines = 0;
 	for (let row = 0; row < meta.count; row++) {
 		snapshotCheck(
@@ -508,7 +516,7 @@ export const inspectJoinedTarget = Effect.fn("JoinedTarget.inspect")(function* (
 			seen.add(files[index]!);
 		}
 	}
-	snapshotCheck(fileCoveredLines === meta.count, "join.files", "Incomplete file facets");
+	snapshotCheck(fileCoveredLines === facetedLines, "join.files", "Incomplete file facets");
 	const fs = yield* u32(layer, "line.folder_start"),
 		fe = yield* u32(layer, "line.folder_end"),
 		folders = yield* u32(layer, "facet.folders");
@@ -530,7 +538,7 @@ export const inspectJoinedTarget = Effect.fn("JoinedTarget.inspect")(function* (
 		}
 	}
 	snapshotCheck(
-		coveredLines === meta.count,
+		coveredLines === facetedLines,
 		"join.folders",
 		"Facet coverage does not sum to lines"
 	);

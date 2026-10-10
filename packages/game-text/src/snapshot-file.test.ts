@@ -54,6 +54,19 @@ async function damage(path: string, offset: number, bytes = new Uint8Array([255]
 }
 
 describe("file-backed lazy sections", () => {
+	it("synchronous sections use pinned handles and verify corruption and scope lifetime", async () => {
+		const { path } = await fixture();
+		const reader = await openSnapshotFile(path);
+		const entry = reader.directory.entries.get("line.source")!;
+		try {
+			expect(reader.loadSync("line.source")).toEqual(await reader.load("line.source"));
+			await damage(path, entry.offset);
+			expect(() => reader.loadSync("line.source")).toThrow(SnapshotFormatError);
+		} finally {
+			await reader.close();
+		}
+		expect(() => reader.loadSync("line.source")).toThrow("Reader scope is closed");
+	});
 	it("writes prepared A64 byte frames once and verifies their persisted checksum", async () => {
 		const raw = Buffer.from("bounded frame ".repeat(1000)),
 			data = zstdCompressSync(raw),

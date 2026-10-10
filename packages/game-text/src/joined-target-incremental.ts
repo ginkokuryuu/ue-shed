@@ -230,6 +230,14 @@ export const incrementJoinedTarget = Effect.fn("JoinedTarget.increment")(functio
 			if (sources.size !== 1 || reasons & reasonBit("conflicting_source"))
 				return fallback("source-conflict");
 			source = [...sources][0]!;
+			const value = sourceText.get(source)!;
+			const wasVisible = (yield* u32(layer, "line.source_visible"))[row]!;
+			if (Number(value.trim() !== "") !== wasVisible) return fallback("source-visibility");
+			set(
+				"line.source_words",
+				row,
+				value.trim() === "" ? 0 : value.trim().split(/\s+/u).length
+			);
 			structural &= ~stateBit("changed_since_gather");
 			if (
 				line.manifest_start![row] !== line.manifest_end![row] &&
@@ -337,32 +345,127 @@ export const incrementJoinedTarget = Effect.fn("JoinedTarget.increment")(functio
 		if (translationProblem) problems |= 16;
 		set("line.problems", row, problems || 64);
 	}
+	if (packageLines.size) {
+		const starts = yield* u32(layer, "query.line.starts");
+		const rawRows = yield* u32(layer, "query.slice.raw");
+		for (const lineRow of packageLines)
+			for (let sliceRow = starts[lineRow]!; sliceRow < starts[lineRow + 1]!; sliceRow++) {
+				for (const [kind, queryRow] of [
+					["raw", rawRows[sliceRow]!],
+					["slice", sliceRow]
+				] as const) {
+					const prefix = `query.${kind}.`;
+					const members = yield* u32(layer, prefix + "members");
+					const memberStart = (yield* u32(layer, prefix + "member_start"))[queryRow]!;
+					const memberEnd = (yield* u32(layer, prefix + "member_end"))[queryRow]!;
+					let source: number | undefined;
+					for (let offset = memberStart; offset < memberEnd; offset++)
+						if (packageChanges.has(members[offset]!))
+							source = packageChanges.get(members[offset]!);
+					// A String Table reference shares its gathered line, but keeps its own source.
+					if (source === undefined) continue;
+					const value = sourceText.get(source)!;
+					const sourceStart = (yield* u32(layer, prefix + "source_start"))[queryRow]!;
+					const sourceEnd = (yield* u32(layer, prefix + "source_end"))[queryRow]!;
+					if (sourceEnd - sourceStart !== 1) return fallback("query-source-shape");
+					set(prefix + "sources", sourceStart, source);
+					set(prefix + "characters", queryRow, value.length);
+					set(
+						prefix + "words",
+						queryRow,
+						value.trim().split(/\s+/u).filter(Boolean).length
+					);
+				}
+			}
+		// Duplicate-source lenses need exact frequencies even when a long-text finding stays set.
+		// Recompute with typed columns: no decoded source, unit or line objects are retained.
+		const last = reader.manifest.segments.at(-1);
+		const frequencies = new Uint32Array(last ? last.start + last.count : 0);
+		const lastLine = new Uint32Array(frequencies.length);
+		const sliceLines = yield* u32(layer, "query.slice.line");
+		const sliceIdentities = yield* u32(layer, "query.slice.identity");
+		const sliceStart = yield* u32(layer, "query.slice.source_start");
+		const sliceEnd = yield* u32(layer, "query.slice.source_end");
+		const sliceSources = yield* u32(layer, "query.slice.sources");
+		const replacements = hot.get("query.slice.sources");
+		for (let row = 0; row < sliceLines.length; row++) {
+			if (sliceIdentities[row] === 1) continue;
+			const line = sliceLines[row]! + 1;
+			for (let offset = sliceStart[row]!; offset < sliceEnd[row]!; offset++) {
+				const source = replacements?.get(offset) ?? sliceSources[offset]!;
+				if (lastLine[source] === line) continue;
+				lastLine[source] = line;
+				frequencies[source]!++;
+			}
+		}
+		const dirtySources = new Set([...oldSources, ...newSources]);
+		for (const kind of ["raw", "slice"]) {
+			const prefix = `query.${kind}.`;
+			const identities = yield* u32(layer, prefix + "identity");
+			const starts = yield* u32(layer, prefix + "source_start");
+			const ends = yield* u32(layer, prefix + "source_end");
+			const sources = yield* u32(layer, prefix + "sources");
+			const flags = yield* u32(layer, prefix + "signals");
+			const edits = hot.get(prefix + "sources");
+			for (let row = 0; row < flags.length; row++) {
+				if (identities[row] === 1) continue;
+				let dirty = false,
+					duplicate = false;
+				for (let offset = starts[row]!; offset < ends[row]!; offset++) {
+					const source = edits?.get(offset) ?? sources[offset]!;
+					dirty ||= dirtySources.has(sources[offset]!) || dirtySources.has(source);
+					duplicate ||= frequencies[source]! > 1;
+				}
+				const updated = (flags[row]! & ~2) | (duplicate ? 2 : 0);
+				if (dirty && updated !== flags[row]) set(prefix + "signals", row, updated);
+			}
+		}
+		for (const edits of hot.values())
+			if (edits.size > 8192) return fallback("query-overlay-bound");
+	}
 	const priorRows = meta.patches
 		? yield* u32(previous.rawLayer, "patch.rows")
 		: new Uint32Array();
 	const rows = Uint32Array.from(new Set([...priorRows, ...affected])).sort();
 	if (rows.length > 8192) return fallback("overlay-bound");
 	const fields = new Set([...Object.keys(meta.patches ?? {}), ...hot.keys()]),
-		patches: Record<string, string> = {};
+		patches: Record<string, string> = {},
+		patchRows: Record<string, string> = {};
 	const columns: SnapshotSourceColumn[] = [
 		{ name: "patch.rows", kind: "u32", load: async () => rows }
 	];
 	for (const field of fields) {
 		const current = yield* u32(layer, field),
 			edits = hot.get(field);
-		const values = Uint32Array.from(rows, (row) => edits?.get(row) ?? current[row]!);
+		const fieldRows = field.startsWith("query.")
+			? Uint32Array.from(
+					new Set([
+						...(meta.patches?.[field]
+							? yield* u32(previous.rawLayer, meta.patchRows?.[field] ?? "patch.rows")
+							: []),
+						...(edits?.keys() ?? [])
+					])
+				).sort()
+			: rows;
+		if (fieldRows.length > 8192) return fallback("query-overlay-bound");
+		const values = Uint32Array.from(fieldRows, (row) => edits?.get(row) ?? current[row]!);
 		const name = `patch.${columns.length}`;
 		patches[field] = name;
+		if (field.startsWith("query.")) {
+			patchRows[field] = `${name}.rows`;
+			columns.push({ name: `${name}.rows`, kind: "u32", load: async () => fieldRows });
+		}
+		const sourceColumn = field === "line.source" || field.endsWith(".sources");
 		columns.push({
 			name,
-			kind: field === "line.source" ? "stringIds" : "u32",
-			...(field === "line.source" ? { domain: "source" } : undefined),
+			kind: sourceColumn ? "stringIds" : "u32",
+			...(sourceColumn ? { domain: "source" } : undefined),
 			load: async () => values
 		});
 	}
 	const base = meta.base ?? reader.manifest.active.joined!;
 	const bytes = new TextEncoder().encode(
-		JSON.stringify({ ...meta, input, dependencies, base, patches })
+		JSON.stringify({ ...meta, input, dependencies, base, patches, patchRows })
 	);
 	snapshotCheck(bytes.length <= 16 * 1024 ** 2, "join.meta", "Metadata exceeds bound");
 	columns.push({ name: "join.meta", kind: "bytes", load: async () => bytes });

@@ -12,7 +12,9 @@ export default defineProject({
 			"scripts/package-text-reader.test.ts",
 			"scripts/package-text-record.test.ts",
 			"scripts/package-text-layer.test.ts",
-			"scripts/columnar-join.test.ts"
+			"scripts/columnar-join.test.ts",
+			"scripts/columnar-join-fuzz.test.ts",
+			"scripts/columnar-join-regressions.test.ts"
 		],
 		name: "node"
 	}

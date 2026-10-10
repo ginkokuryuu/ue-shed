@@ -27,6 +27,10 @@ const catalogOwned = new Set([
 ]);
 
 const approvedRuntimeExits = new Set([
+	// The Node index adapter preserves the published synchronous TextCorpusQuery API over
+	// scoped pinned file handles and Effect.Cache. It rejects async work; hosts keep their
+	// existing Effect runtimes and never perform a runtime exit in query/focus handlers.
+	"packages/game-text/src/joined-query-node.ts",
 	// Node worker messages are foreign callbacks; the target scope owns and terminates the pool.
 	"packages/game-text/src/localization-import-worker.ts",
 	// The browser worker is a foreign entrypoint; each read's scope terminates its runtime.

@@ -84,6 +84,13 @@ export const sharedIndexDirectory = (options: SnapshotStoreOptions) =>
 	snapshotStoreDirectory(configuration(options));
 
 export interface SharedIndexReader {
+	/** Optional for non-Node storage adapters; synchronous bounded query hydration. */
+	readonly stringsSync?: (ids: readonly number[]) => string[];
+	readonly bytesSync?: (id: number) => Uint8Array;
+	readonly layerSync?: (name: string) => {
+		readonly directory: SnapshotReader["directory"];
+		readonly section: (name: string) => Uint8Array | Uint32Array;
+	};
 	readonly packedSegment: (segment: number) => Effect.Effect<PackedStrings, Failure>;
 	readonly manifest: SharedIndexManifest;
 	readonly metrics: () => {
@@ -304,10 +311,52 @@ export function sharedIndexNodeLayer(options: SnapshotStoreOptions) {
 						)
 					};
 				});
+				const layerSync: NonNullable<SharedIndexReader["layerSync"]> = (name) => {
+					const key = manifest.active[name] ?? name,
+						record = manifest.layers[key];
+					snapshotCheck(active, name, "Shared reader scope is closed");
+					if (!record)
+						throw new SnapshotStoreError({
+							operation: "layer",
+							code: "missing",
+							message: "Layer is absent.",
+							recovery: "Import this input."
+						});
+					const file = layers.get(key)!;
+					const end = manifest.segments[record.segmentCount - 1];
+					const maximumId = end ? end.start + end.count : 0;
+					return {
+						directory: file.directory,
+						section: (name) => {
+							snapshotCheck(active, name, "Shared reader scope is closed");
+							const cached = columns.get(`${key}:${name}`);
+							if (cached) return cached;
+							const loading = performance.now();
+							const values = file.loadSync(name);
+							const loaded = performance.now();
+							decodeLayerIds(values, record, name);
+							const validating = performance.now();
+							if (record.stringColumns[name])
+								for (const id of values)
+									snapshotCheck(
+										id < maximumId,
+										name,
+										"Shared ID outside layer dependency"
+									);
+							columnTimings.columnLoadMs += loaded - loading;
+							columnTimings.idDecodeMs += validating - loaded;
+							columnTimings.idValidateMs += performance.now() - validating;
+							columns.set(`${key}:${name}`, values);
+							return values;
+						}
+					};
+				};
 				return {
 					packedSegment: Effect.fn("SharedIndex.packedSegment")((segment: number) =>
 						boundary("segment", () => files.packedSegment(segment))
 					),
+					stringsSync: (ids: readonly number[]) => files.stringsSync(ids),
+					bytesSync: (id: number) => files.bytesSync(id),
 					manifest,
 					metrics: () => ({
 						readBytes: files.readBytes,
@@ -316,6 +365,7 @@ export function sharedIndexNodeLayer(options: SnapshotStoreOptions) {
 						...files.cacheMetrics()
 					}),
 					layer,
+					layerSync,
 					strings: Effect.fn("SharedIndex.strings")((ids: readonly number[]) =>
 						boundary("strings", () => files.strings(ids))
 					),
@@ -1572,6 +1622,12 @@ async function readLayerColumn(
 	const loading = onTiming ? performance.now() : 0;
 	const values = await reader.load(name);
 	const loaded = onTiming ? performance.now() : 0;
+	decodeLayerIds(values, record, name);
+	onTiming?.({ columnLoadMs: loaded - loading, idDecodeMs: performance.now() - loaded });
+	return values;
+}
+
+function decodeLayerIds(values: Uint8Array | Uint32Array, record: SharedLayerRecord, name: string) {
 	if (record.stringColumns[name] && record.idEncoding === "delta32") {
 		snapshotCheck(values instanceof Uint32Array, name, "Invalid ID column kind");
 		let previous = 0;
@@ -1581,8 +1637,6 @@ async function readLayerColumn(
 			values[row] = previous;
 		}
 	}
-	onTiming?.({ columnLoadMs: loaded - loading, idDecodeMs: performance.now() - loaded });
-	return values;
 }
 
 /** Explicit retirement after readers have opened handles; interrupted candidates are also disposable. */

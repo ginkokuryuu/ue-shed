@@ -293,6 +293,16 @@ export class SharedStringFiles {
 			"front",
 			"Invalid index kinds"
 		);
+		return this.saveIndex(segment, fences, offsets, frames, masks);
+	}
+	private saveIndex(
+		segment: number,
+		fences: Uint8Array,
+		offsets: Uint32Array,
+		frames: Uint32Array,
+		masks: Uint32Array
+	) {
+		const reader = this.files[segment]!;
 		const block = decodeStringBlock(fences),
 			arena = new StringArena();
 		for (let i = 0; i < block.count; i++) arena.add(block.bytes(i));
@@ -329,9 +339,103 @@ export class SharedStringFiles {
 					"Unsorted fences"
 				);
 		}
-		index = { fences: keys, offsets, frames, masks };
+		const index = { fences: keys, offsets, frames, masks };
 		this.indexes.set(segment, index);
 		return index;
+	}
+	private indexSync(segment: number) {
+		snapshotCheck(!this.closed, "front", "Shared string scope is closed");
+		const cached = this.indexes.get(segment);
+		if (cached) return cached;
+		const reader = this.files[segment]!;
+		const load = (name: string) => {
+			this.indexReadBytes += reader.directory.entries.get(name)?.storedLength ?? 0;
+			return reader.loadSync(name);
+		};
+		const fences = load("front.fences"),
+			offsets = load("front.offsets"),
+			frames = load("front.frames"),
+			masks = load("front.masks");
+		snapshotCheck(
+			fences instanceof Uint8Array &&
+				offsets instanceof Uint32Array &&
+				frames instanceof Uint32Array &&
+				masks instanceof Uint32Array,
+			"front",
+			"Invalid index kinds"
+		);
+		return this.saveIndex(segment, fences, offsets, frames, masks);
+	}
+	private blockSync(segment: number, block: number) {
+		const index = this.indexSync(segment);
+		snapshotCheck(block >= 0 && block < index.offsets.length, "front", "Invalid block ID");
+		const frame = index.frames[block]!,
+			key = `${segment}:${frame}`;
+		let bytes = this.frames.get(key);
+		if (!bytes) {
+			const loaded = this.files[segment]!.loadSync(`front.b${frame}`);
+			snapshotCheck(loaded instanceof Uint8Array, "front", "Invalid frame");
+			bytes = Buffer.from(loaded.buffer, loaded.byteOffset, loaded.byteLength);
+			this.blocksLoaded++;
+			if (this.frameBytes + bytes.length > 32 * 1024 ** 2) {
+				this.frames.clear();
+				this.frameBytes = 0;
+			}
+			this.frames.set(key, bytes);
+			this.frameBytes += bytes.length;
+		}
+		const start = index.offsets[block]!,
+			end = index.frames[block + 1] === frame ? index.offsets[block + 1]! : bytes.length;
+		snapshotCheck(start < end && end <= bytes.length, "front", "Invalid block bounds");
+		const payload = bytes.subarray(start, end);
+		snapshotCheck(
+			payload[0] === Math.min(64, this.segments[segment]!.count - block * 64),
+			"front",
+			"Block count differs"
+		);
+		return payload;
+	}
+	/** Bounded A64 reads share caches, verification and the generation's existing handles. */
+	stringsSync(ids: readonly number[]): string[] {
+		return ids.map((id) => this.bytesSync(id).toString("utf8"));
+	}
+	/** A selected UTF-8 value for byte predicates; backed by the bounded decoded-block cache. */
+	bytesSync(id: number): Buffer {
+		snapshotCheck(!this.closed, "strings", "Shared string scope is closed");
+		const starts = this.segments.map((segment) => segment.start);
+		snapshotCheck(
+			Number.isInteger(id) && id >= 0 && id < this.count,
+			"strings",
+			"Invalid shared ID"
+		);
+		const segment = containing(starts, id),
+			block = (id - starts[segment]!) >>> 6,
+			key = `${segment}:${block}`;
+		let values = this.decoded.get(key);
+		if (!values) {
+			this.decodedMisses++;
+			const cursor = a64Cursor(this.blockSync(segment, block)),
+				arena = new StringArena(1024, 64);
+			for (let value = cursor.next(); value; value = cursor.next()) arena.add(value);
+			values = arena.finish();
+			const size = values.bytes.buffer.byteLength + values.offsets.buffer.byteLength;
+			if (size <= 32 * 1024 ** 2) {
+				while (this.decodedBytes + size > 32 * 1024 ** 2) {
+					const oldest = this.decoded.keys().next().value!,
+						entry = this.decoded.get(oldest)!;
+					this.decodedBytes -=
+						entry.bytes.buffer.byteLength + entry.offsets.buffer.byteLength;
+					this.decoded.delete(oldest);
+				}
+				this.decoded.set(key, values);
+				this.decodedBytes += size;
+			}
+		} else {
+			this.decodedHits++;
+			this.decoded.delete(key);
+			this.decoded.set(key, values);
+		}
+		return stringBytes(values, (id - starts[segment]!) & 63);
 	}
 	private async block(segment: number, block: number) {
 		const index = await this.index(segment);
