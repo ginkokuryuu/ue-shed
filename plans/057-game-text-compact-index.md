@@ -1380,3 +1380,16 @@ architecture tests; and the Effect architecture check. The Game Text tarball con
 protocol and Node adapter. The full packed-consumer release gate and Unreal runtime lanes were not
 rerun for this search-adapter change. Library and Workbench builds pass. This follow-up is included
 in [PR #62](https://github.com/ue-shed/ue-shed/pull/62).
+
+### Integration with current main
+
+The merge retains Game Text package-extraction types alongside the saved-world package-error
+type added on `main`; the only manual Rust conflict resolution combines those imports. The
+generic fixture's gather-candidate audit now asserts all three baseline decoder gaps: two curve
+properties in the animation fixture and one opaque value. Candidate extraction excludes these
+non-gatherable packages, retains zero gaps and matches the full text corpus.
+
+Rust formatting and Clippy pass. Native IO checks pass 104 tests with one intentional ignored
+test. The focused protocol, saved-world, package-record/layer/reader and refresh suite passes
+78 tests across six files after rerunning the updated reader expectation. All six pre-commit
+stages pass after rebuilding package outputs for the incoming saved-world schema.

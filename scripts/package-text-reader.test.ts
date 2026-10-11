@@ -49,11 +49,19 @@ it.each(packageTextFixtureProjects)(
 		expect(compareTextCorpora({ ...actual, units: expected.units }, actual).equal).toBe(true);
 		expect(clauses.textPropertyBeyondFlag).toBe(0);
 		if (project === "fixtures/unreal-project") {
-			expect(expected.coverage.unsupportedTextProperties).toBe(1);
+			expect(expected.coverage.unsupportedTextProperties).toBe(3);
 			expect(actual.coverage.unsupportedTextProperties).toBe(0);
 			expect(gapsMovedToExcluded).toContainEqual(
 				expect.objectContaining({
+					packageFile: expect.stringContaining("A_Native.uasset"),
+					propertyPath: "LegacyCurveData.FloatCurves",
+					coverageGapCounts: expect.objectContaining({ property_decoder_rejected: 2 })
+				})
+			);
+			expect(gapsMovedToExcluded).toContainEqual(
+				expect.objectContaining({
 					propertyPath: "OpaqueValue.Value",
+					coverageGapCounts: expect.objectContaining({ property_decoder_rejected: 1 }),
 					message: expect.stringContaining("Excluded because Unreal does not gather it")
 				})
 			);

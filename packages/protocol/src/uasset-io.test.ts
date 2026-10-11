@@ -67,6 +67,7 @@ describe("uasset IO protocol v1", () => {
 					"valid/extract-text-summary-result-event.json",
 					"valid/extract-texture-record-result-event.json",
 					"valid/saved-world-result-event.json",
+					"valid/saved-world-2-0-result-event.json",
 					"valid/partial-completed-event.json",
 					"valid/project-index-status-request.json",
 					"valid/project-index-refresh-request.json",
@@ -107,7 +108,11 @@ describe("uasset IO protocol v1", () => {
 					"invalid/project-index-query-oversize-limit.json",
 					"invalid/project-index-page-unbounded.json",
 					"invalid/project-index-count-empty-filters.json",
-					"invalid/project-index-dictionary-page-negative-index.json"
+					"invalid/project-index-dictionary-page-negative-index.json",
+					"invalid/saved-world-unknown-actor-decode.json",
+					"invalid/saved-world-unsupported-minor.json",
+					"invalid/saved-world-unsupported-major.json",
+					"invalid/saved-world-negative-minor.json"
 				]) {
 					const value = yield* Effect.promise(() => fixture(name));
 					const decoded =
