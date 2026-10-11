@@ -41,6 +41,7 @@ import {
 	type LocalizationTargetsResult,
 	type TextCorpus,
 	type TextCorpusQuery,
+	type GameTextIndexRefreshResult,
 	type TextCorpusSearchRequest,
 	type TextCorpusSearchResult
 } from "@ue-shed/game-text";
@@ -103,6 +104,7 @@ export const makeGameTextLocalization = Effect.fn("Workbench.GameText.localizati
 				readonly evidence: LocalizationTargetEvidence;
 				readonly review: LocalizationReviewSnapshot | undefined;
 				readonly model: TextCorpusQuery;
+				readonly search: GameTextIndexRefreshResult["search"];
 				readonly result: LocalizationTargetResult;
 		  }
 		| undefined
@@ -223,14 +225,16 @@ export const makeGameTextLocalization = Effect.fn("Workbench.GameText.localizati
 			model = indexed.success.query,
 			review = indexed.success.review;
 		const evidence = indexed.success.evidence;
-		const textCounts = model.search({
-			query: "",
-			capability: "all",
-			lens: "all",
-			withoutNotes: false,
-			pageSize: 1,
-			localization: { target: name }
-		});
+		const textCounts = yield* indexed.success
+			.search({
+				query: "",
+				capability: "all",
+				lens: "all",
+				withoutNotes: false,
+				pageSize: 1,
+				localization: { target: name }
+			})
+			.pipe(Effect.orDie);
 		const result: LocalizationTargetResult = {
 			status: "ready",
 			target: {
@@ -246,6 +250,7 @@ export const makeGameTextLocalization = Effect.fn("Workbench.GameText.localizati
 			corpus,
 			join,
 			model,
+			search: indexed.success.search,
 			result,
 			evidence,
 			review
@@ -275,7 +280,10 @@ export const makeGameTextLocalization = Effect.fn("Workbench.GameText.localizati
 				!cached.join.cultures.includes(request.localization.culture))
 		)
 			return { status: "not_ready" };
-		return { status: "ready", page: cached.model.search(request) };
+		const page = yield* cached.search(request).pipe(Effect.orDie);
+		if ((yield* current(request.localization.target)) !== cached)
+			return { status: "not_ready" };
+		return { status: "ready", page };
 	});
 	const focus = Effect.fn("Workbench.GameText.localization.focus")(function* (
 		request: LocalizationFocusRequest

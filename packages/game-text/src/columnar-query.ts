@@ -1,7 +1,7 @@
-import { Cache, Effect, Schema } from "effect";
+import { Cache, Duration, Effect, Exit, Schema } from "effect";
 import { runJoinedQuery } from "./joined-query-node.js";
 import { QueryPlaces } from "./query-places.js";
-import { encodeWtf8 } from "./wtf8.js";
+import { encodeWtf8, decodeWtf8 } from "./wtf8.js";
 import type { TextCorpusQuery } from "./query.js";
 import { JoinedQueryData, querySignals, type JoinedQueryProjection } from "./joined-query-data.js";
 import type { JoinedTargetReader } from "./joined-target-reader.js";
@@ -60,8 +60,13 @@ const origins = (mask: number) => TEXT_ORIGIN_KINDS.filter((_, bit) => mask & (1
 export function columnarTextCorpusQuery(
 	joined: JoinedTargetReader,
 	scannedAt?: string,
-	projection?: JoinedQueryProjection
+	projection?: JoinedQueryProjection,
+	checkInterrupted?: () => void
 ): TextCorpusQuery {
+	let visited = 0;
+	const checkpoint = () => {
+		if (checkInterrupted && (++visited & 255) === 0) checkInterrupted();
+	};
 	const data = new JoinedQueryData(joined, projection),
 		target = joined.meta.input.target;
 	const c = (name: string) => data.column(name);
@@ -248,21 +253,22 @@ export function columnarTextCorpusQuery(
 	const prepareTextSearch = (wanted: readonly string[]) => {
 		const key = JSON.stringify(wanted);
 		if (sourceQuery !== key) {
-			sourceQuery = key;
 			asciiTerms = wanted.every((term) => /^[\x00-\x7f]*$/u.test(term))
 				? wanted.map((term) => Buffer.from(term))
 				: undefined;
 			const last = joined.reader.manifest.segments.at(-1);
 			sourceCache = asciiTerms?.length
-				? (data.searchSourceBytes(asciiTerms) ??
+				? (data.searchSourceBytes(asciiTerms, checkInterrupted) ??
 					new Uint8Array(last ? last.start + last.count : 0))
 				: new Uint8Array(last ? last.start + last.count : 0);
+			sourceQuery = key;
 		}
 	};
 	const textMatches = (id: number, wanted: readonly string[]) => {
+		checkpoint();
 		if (!sourceCache[id]) {
-			const bytes = asciiTerms && data.sourceBytes(id);
-			if (bytes) {
+			const bytes = data.sourceBytes(id);
+			if (bytes && asciiTerms) {
 				const value = Buffer.from(bytes.buffer, bytes.byteOffset, bytes.byteLength);
 				if (asciiTerms!.every((term) => value.indexOf(term) >= 0)) {
 					sourceCache[id] = 1;
@@ -273,7 +279,9 @@ export function columnarTextCorpusQuery(
 					return false;
 				}
 			}
-			const value = data.strings([id])[0]!.toLocaleLowerCase();
+			// Sources are already expanded into a compact arena. Reopening the shared string
+			// dictionary here can repeatedly inflate evicted blocks for every new search term.
+			const value = (bytes ? decodeWtf8(bytes) : data.strings([id])[0]!).toLocaleLowerCase();
 			sourceCache[id] = wanted.every((term) => value.includes(term)) ? 1 : 2;
 		}
 		return sourceCache[id] === 1;
@@ -460,6 +468,7 @@ export function columnarTextCorpusQuery(
 					? problemsFor(scope)
 					: undefined;
 			for (const row of order) {
+				checkpoint();
 				if (
 					!sourceVisible[row] ||
 					(lineStarts[row] !== lineStarts[row + 1] && !lineSavedVisible[row])
@@ -476,6 +485,7 @@ export function columnarTextCorpusQuery(
 			return result.subarray(0, count);
 		}
 		for (const row of order) {
+			checkpoint();
 			if (!selection) {
 				if (eligible("raw", row, request, true, wanted)) result[count++] = row;
 				continue;
@@ -567,9 +577,8 @@ export function columnarTextCorpusQuery(
 			lines: request.lines
 		});
 	const matchedRows = runJoinedQuery(
-		Cache.make({
-			capacity: 16,
-			lookup: (key: string) =>
+		Cache.makeWith(
+			(key: string) =>
 				Effect.sync(() =>
 					matchRows(
 						Schema.decodeUnknownSync(TextCorpusSearchRequest)({
@@ -577,8 +586,12 @@ export function columnarTextCorpusQuery(
 							pageSize: 1
 						})
 					)
-				)
-		})
+				),
+			{
+				capacity: 16,
+				timeToLive: (exit) => (Exit.isSuccess(exit) ? Duration.infinity : Duration.zero)
+			}
+		)
 	);
 	const matching = (request: Request): Uint32Array =>
 		runJoinedQuery(Cache.get(matchedRows, matchingKey(request)));
@@ -596,6 +609,7 @@ export function columnarTextCorpusQuery(
 		const wanted = terms(request.query);
 		prepareTextSearch(wanted);
 		for (const row of rawOrder) {
+			checkpoint();
 			if (!eligible("raw", row, baseRequest, true, wanted)) continue;
 			const flags = raw.signals![row]!,
 				editing = raw.editing![row]!,
@@ -900,6 +914,7 @@ export function columnarTextCorpusQuery(
 		const fileStarts = request.localization ? lineFiles.starts : raw.file_start!;
 		const fileEnds = request.localization ? lineFiles.starts.subarray(1) : raw.file_end!;
 		for (const row of rows) {
+			checkpoint();
 			stamp++;
 			const flags = raw.signals![row]!;
 			const mask = request.localization
@@ -946,6 +961,7 @@ export function columnarTextCorpusQuery(
 		const ends = request.localization ? lineFiles.starts.subarray(1) : raw.file_end!;
 		let stamp = 0;
 		for (const row of rows) {
+			checkpoint();
 			stamp++;
 			const flags = raw.signals![row]!,
 				mask = request.localization
@@ -1037,6 +1053,7 @@ export function columnarTextCorpusQuery(
 			const editingColumn = c("line.editing"),
 				notesColumn = c("line.notes");
 			for (const row of matched) {
+				checkpoint();
 				const flags = lineFlags(row),
 					editing = editingColumn[row]!;
 				if (editing & 1) counts.editable++;
@@ -1086,6 +1103,7 @@ export function columnarTextCorpusQuery(
 				reviewed = false;
 			const tracksReview = joined.meta.input.review?.target === target.name;
 			for (const row of matched) {
+				checkpoint();
 				for (let ti = 0; ti < indices.length; ti++) {
 					const columns = cultureColumns[indices[ti]!]!,
 						position = ti * stateSize + columns.state![row]!;
@@ -1404,9 +1422,8 @@ export function columnarTextCorpusQuery(
 		return page;
 	};
 	const pageCounts = runJoinedQuery(
-		Cache.make({
-			capacity: 16,
-			lookup: (key: string) =>
+		Cache.makeWith(
+			(key: string) =>
 				Effect.sync(() =>
 					prepareCounts({
 						...Schema.decodeUnknownSync(TextCorpusSearchRequest)({
@@ -1415,8 +1432,12 @@ export function columnarTextCorpusQuery(
 						}),
 						pageSize: 0
 					})
-				)
-		})
+				),
+			{
+				capacity: 16,
+				timeToLive: (exit) => (Exit.isSuccess(exit) ? Duration.infinity : Duration.zero)
+			}
+		)
 	);
 	const cachedSearch: TextCorpusQuery["search"] = (request) => {
 		const {
@@ -1425,6 +1446,7 @@ export function columnarTextCorpusQuery(
 			pageSize: _pageSize,
 			...countsRequest
 		} = request;
+		checkInterrupted?.();
 		return search(
 			request,
 			runJoinedQuery(Cache.get(pageCounts, JSON.stringify(countsRequest)))

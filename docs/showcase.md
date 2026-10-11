@@ -195,11 +195,15 @@ Type into **Search text** to search source text; the live match count updates as
 are grouped by what they need, worst first: a changed key, gather work, translation work, then
 findings. **Filter** opens a field and then its values with counts, and each choice becomes a pill
 such as "Editing is Editable"; **Display** regroups the list by folder, asset, origin or namespace.
-The culture picker takes any number of cultures, and each line ends with a strip showing every
-culture's state. Counts follow the current search and filters.
+The list has **Key**, **Source**, **Translation** and **State** columns. Pick one culture to
+preview its translations, or several cultures to show their state strip. **All**, **Translated**,
+**Stale**, **Missing** and **Outside target** filter the actual localization states. The translation
+summary counts matching lines in the picked cultures. Counts follow the current search and filters.
+**Ctrl K** focuses search. Rescan keeps the current list usable with inline progress; the footer
+shows the last successful query round trip and actual counts.
 
-Select a line to open its page: what it needs, its key, character and word counts, translator
-notes, **Where it appears**, every translation, and its properties. **‹ Lines** returns to the list
+Select a line to open its page beside the list: what it needs, its key, character and word counts,
+translator notes, **Where it appears**, every translation, and its properties. **‹ Lines** closes the detail
 and the arrows step to the next line. Rows preserve the exact Unreal asset, row, entry and property
 names. Copy icons copy the text, key or asset path. **Saved file** reveals the package file;
 **Show N more locations** loads more places when needed. Read problems for the selected line remain

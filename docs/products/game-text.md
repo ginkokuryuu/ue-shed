@@ -102,6 +102,16 @@ thousands of lines, hundreds of problems and a dozen cultures. The toolbar holds
 matches source text as you type, then **Changed files…**, **Filter**, **Display**, **Export** and
 **Presets**. Every count comes from the same query as the list (see [Counting](#counting)).
 
+The compact list has **Key**, **Source**, **Translation** and **State** columns. Pick one culture
+to preview its translations and states; with several cultures picked, the state column retains
+the culture strip. **All**, **Translated**, **Stale**, **Missing** and **Outside target** filter
+the real localization states, with other states still available through Filter. The translation
+summary counts matching lines in the picked cultures; counts can overlap across cultures and
+are not presented as percentages of one total. **Ctrl K** (or **Cmd K**) focuses search.
+Rescan shows inline progress and retains the current list for browsing and searching while the
+new index is prepared. The footer reports the last successful query round trip, excluding the
+typing debounce, and actual matching-line, culture and inspected-asset counts.
+
 ### Problems
 
 Each line is classified by what it needs, worst first:
@@ -116,10 +126,11 @@ Each line is classified by what it needs, worst first:
    localizable.
 7. **Up to date**.
 
-A line counts once for each problem it has and is grouped under its worst. Colour marks severity
-only: red for key problems, amber for lines waiting on Unreal and translation work, blue for
+A line counts once for each problem it has and is grouped under its worst. Problem groups mark
+severity: red for key problems, amber for lines waiting on Unreal and translation work, blue for
 translations not yet in Unreal. Findings and facts such as "Gathered only" or "Not found in the
-project" stay grey; facts are not problems.
+project" stay grey; facts are not problems. In a single-culture browse row, the labelled state
+badge and dot use green for translated, amber for stale, red for missing and blue for not synced.
 
 ### Filter
 
@@ -150,6 +161,12 @@ preferences and presets saved before pills open with their toggles, lenses and s
 pills.
 
 ### Display and groups
+
+Workbench's Text view uses the shared package's scoped worker adapter so scans leave the desktop main
+thread available. Typing waits for 120 ms of quiet before requesting a page; pressing Enter searches
+immediately. New searches cancel obsolete scans while independent group pages can load together.
+Case-insensitive source matching reuses prepared source bytes. Completed query pages remain cached
+when another request is cancelled.
 
 **Display** groups the list by problem (the default), folder, asset, origin or namespace, or not at
 all. Groups are listed worst first with their line counts and, outside problem grouping, how many
@@ -194,14 +211,15 @@ A changed-file list lasts for the session.
 
 ### The line page
 
-Opening a line shows its **page** in place of the list; **‹ Lines** returns to the list as it was,
-with its groups and loaded pages. The header says where the line sits ("2 of 58") and steps to the
+Opening a line shows its **page** beside the list; **‹ Lines** closes the detail while retaining
+the list's groups and loaded pages. The header says where the line sits ("2 of 58") and steps to the
 line before or after it, opening the next group or loading its next page when needed.
 
 The page says the line's worst problem first, in plain words and its severity colour, with what
-resolves it. It keeps the text, key, **Where it appears**, every culture's translation (with
-editing, review and key-change carrying), and read problems together, and lists the line's
-properties beside them: problems, namespace and key, origin, asset and folder, editing, translator
+resolves it. It keeps the text, key, every culture's translation (with editing, review and
+key-change carrying), **Where it appears** and read problems together. The picked culture's
+translation comes first. It lists the line's
+properties below them: problems, namespace and key, origin, asset and folder, editing, translator
 notes, length and findings. **Show in Unreal** reports success only when the editor confirms asset
 navigation.
 

@@ -35,6 +35,16 @@ Workbench unless a named verification failure leaves the public package contract
 
 ## Required and optional capabilities
 
+For a desktop host using the compact index, compose
+`gameTextIndexRefreshLayer(cacheRoot, { searchWorker: true, latestSearchOnly: true })` and call
+the retained refresh result's Effect-shaped `search(request)`. The host scope owns the worker
+and its pinned reader. `latestSearchOnly` fits a single search view and preserves concurrent group
+pages while cancelling replaced pages and older filter selections; leave it false for independent
+concurrent callers. Worker startup and searches have 30-second bounds. Bundled hosts must emit
+`dist/search-worker.js` from the installed package beside the bundle that resolves it through
+`import.meta.url`. Verify the packaged worker through the host transport. The synchronous
+`query.search` remains available for headless batch use and bounded direct queries.
+
 The core audit requires saved project packages and a configured reader. It does not require a
 running editor, Perforce, `UEShedCore`, or any other UE Shed Unreal plugin.
 

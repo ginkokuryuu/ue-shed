@@ -12,14 +12,27 @@ import { tokens } from "@ue-shed/ui-theme/tokens.stylex.js";
 import { For, Show } from "solid-js";
 import { CultureStrip } from "./game-text-culture-strip.js";
 import { cultureCell, cultureSummary, lineState } from "./game-text-culture-state.js";
-import { LocalizationRow, localizationLabels } from "./game-text-localization-view.js";
-import { sourceText, textContext } from "./game-text-view.js";
+import { localizationLabels } from "./game-text-localization-view.js";
+import { browseStateLabel, browseStyles, stateTone } from "./game-text-browse-chrome.js";
+import { identityLabel, sourceText, textContext } from "./game-text-view.js";
 import { styles } from "./game-text-styles.js";
 
 type ResultRow = {
 	readonly line: LocalizationLinePreview | undefined;
 	readonly unit: TextUnitSearchResult | undefined;
 };
+
+export function GameTextColumns(props: { readonly culture: string | undefined }) {
+	return (
+		<div aria-hidden="true" {...stylex.attrs(local.columns)}>
+			<span />
+			<span>Key</span>
+			<span>Source</span>
+			<span>Translation{props.culture ? ` · ${props.culture}` : ""}</span>
+			<span>State</span>
+		</div>
+	);
+}
 
 export function GameTextResultRows(props: {
 	readonly page: TextCorpusSearchPage | undefined;
@@ -59,13 +72,33 @@ export function GameTextResultRows(props: {
 				? row.line.id === props.selectedLocalizationId
 				: row.unit !== undefined && row.unit.id === props.selectedId
 			: row.unit !== undefined && row.unit.id === props.selectedId;
+	const mark = (row: ResultRow) =>
+		row.line?.cultures.find((item) => item.culture === props.culture);
+	const key = (row: ResultRow) => {
+		const identity = row.line?.identity;
+		if (identity) return [identity.namespace, identity.key].filter(Boolean).join(".");
+		return row.unit ? identityLabel(row.unit) : "No localization key";
+	};
+	const rowLabel = (row: ResultRow) => {
+		const context = row.unit?.contexts[0];
+		const current = mark(row);
+		return [
+			row.line?.source ?? (row.unit ? sourceText(row.unit) : ""),
+			context ? textContext(context.location).title : row.line?.manifestLocations[0],
+			key(row),
+			current?.translation,
+			current ? browseStateLabel(current.state) : undefined
+		]
+			.filter(Boolean)
+			.join(" ");
+	};
 	return (
 		<For each={rows()}>
 			{(row) => (
 				<div {...stylex.attrs(local.wrap, selected(row) && styles.selected)}>
-					<Show when={props.onCheck !== undefined && row.line}>
-						{(line) => (
-							<span {...stylex.attrs(local.tick)}>
+					<span {...stylex.attrs(local.tick)}>
+						<Show when={props.onCheck !== undefined && row.line}>
+							{(line) => (
 								<input
 									type="checkbox"
 									aria-label={"Select " + line().source}
@@ -73,27 +106,30 @@ export function GameTextResultRows(props: {
 									onClick={(event) => props.onCheck?.(line(), event.shiftKey)}
 									{...stylex.attrs(local.box, props.checking && local.boxOn)}
 								/>
-							</span>
-						)}
-					</Show>
+							)}
+						</Show>
+					</span>
 					<button
 						type="button"
 						aria-current={selected(row) ? "true" : undefined}
+						aria-label={rowLabel(row)}
 						data-row=""
 						data-unit={row.unit?.id}
 						data-line={row.line?.id}
 						onClick={() => props.onSelect(row.unit?.id, row.line?.id)}
 						{...stylex.attrs(styles.row, local.line, selected(row) && styles.selected)}
 					>
+						<span
+							aria-hidden="true"
+							{...stylex.attrs(local.dot, stateTone(mark(row)?.state))}
+						/>
+						<span title={key(row)} {...stylex.attrs(local.key)}>
+							{key(row)}
+						</span>
 						<span {...stylex.attrs(local.main)}>
 							<span {...stylex.attrs(styles.rowText)}>
 								{row.line?.source ?? (row.unit ? sourceText(row.unit) : "")}
 							</span>
-							<Show when={row.line}>
-								{(line) => (
-									<LocalizationRow line={line()} culture={props.culture} />
-								)}
-							</Show>
 							<Show
 								when={row.unit}
 								fallback={
@@ -137,8 +173,56 @@ export function GameTextResultRows(props: {
 								)}
 							</Show>
 						</span>
-						<Show when={row.line}>
-							{(line) => <LineStatus line={line()} cultures={props.cultures ?? []} />}
+						<span
+							title={mark(row)?.translation ?? undefined}
+							{...stylex.attrs(
+								local.translation,
+								!mark(row)?.translation && local.empty
+							)}
+						>
+							{mark(row)?.translation ?? (props.culture ? "No translation" : "—")}
+						</span>
+						<Show
+							when={mark(row)}
+							fallback={
+								<Show
+									when={row.line}
+									fallback={
+										<span {...stylex.attrs(local.quiet)}>Saved source</span>
+									}
+								>
+									{(line) => (
+										<LineStatus line={line()} cultures={props.cultures ?? []} />
+									)}
+								</Show>
+							}
+						>
+							{(current) => (
+								<span {...stylex.attrs(local.status)}>
+									<Show when={row.line?.keyChange?.direction === "to"}>
+										<span {...stylex.attrs(local.severe)}>Key changed</span>
+									</Show>
+									<span
+										title={current()
+											.facts.map((state) => localizationLabels[state])
+											.join(" · ")}
+										{...stylex.attrs(
+											browseStyles.badge,
+											stateTone(current().state)
+										)}
+									>
+										{browseStateLabel(current().state)}
+									</span>
+									<Show
+										when={
+											current().state !== "not_synced" &&
+											current().facts.includes("not_synced")
+										}
+									>
+										<span {...stylex.attrs(local.synced)}>Not synced</span>
+									</Show>
+								</span>
+							)}
 						</Show>
 					</button>
 				</div>
@@ -210,10 +294,47 @@ function LineStatus(props: {
 }
 
 const local = stylex.create({
-	wrap: { display: "flex", minWidth: 0 },
+	wrap: { display: "flex", minWidth: 650 },
+	columns: {
+		display: "grid",
+		gridTemplateColumns:
+			"34px minmax(120px, 1fr) minmax(160px, 1.6fr) minmax(150px, 1.5fr) minmax(110px, max-content)",
+		gap: 12,
+		padding: "8px 14px",
+		minWidth: 650,
+		position: "sticky",
+		top: 0,
+		zIndex: 2,
+		backgroundColor: tokens.colorCanvas,
+		borderBottomWidth: 1,
+		borderBottomStyle: "solid",
+		borderBottomColor: tokens.colorBorder,
+		color: tokens.colorTextFaint,
+		fontSize: 10,
+		textTransform: "uppercase",
+		letterSpacing: ".04em"
+	},
+	key: {
+		fontFamily: tokens.fontMono,
+		fontSize: 11,
+		color: tokens.colorTextMuted,
+		whiteSpace: "nowrap",
+		overflow: "hidden",
+		textOverflow: "ellipsis"
+	},
+	translation: {
+		fontSize: 12,
+		whiteSpace: "nowrap",
+		overflow: "hidden",
+		textOverflow: "ellipsis"
+	},
+	empty: { color: tokens.colorTextFaint, fontStyle: "italic" },
+	dot: { width: 6, height: 6, borderRadius: "50%", backgroundColor: "currentColor" },
 	tick: {
 		display: "flex",
 		alignItems: "center",
+		width: 26,
+		flexShrink: 0,
 		paddingInlineStart: 12,
 		borderBottomWidth: 1,
 		borderBottomStyle: "solid",
@@ -226,7 +347,17 @@ const local = stylex.create({
 		opacity: { default: 0.35, ":hover": 1, ":checked": 1, ":focus-visible": 1 }
 	},
 	boxOn: { opacity: 1 },
-	line: { flex: 1, minWidth: 0, flexDirection: "row", alignItems: "center", gap: 12 },
+	line: {
+		flex: 1,
+		minWidth: 0,
+		display: "grid",
+		gridTemplateColumns:
+			"8px minmax(120px, 1fr) minmax(160px, 1.6fr) minmax(150px, 1.5fr) minmax(110px, max-content)",
+		alignItems: "center",
+		gap: 12,
+		minHeight: 34,
+		paddingBlock: 6
+	},
 	main: { flex: 1, minWidth: 0, display: "flex", flexDirection: "column", gap: 3 },
 	status: {
 		flexShrink: 0,

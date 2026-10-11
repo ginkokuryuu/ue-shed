@@ -69,6 +69,7 @@ export * from "./index-refresh.js";
 export * from "./index-source-node.js";
 export * from "./index-context.js";
 export * from "./index-retained.js";
+export { makeGameTextSearchWorker } from "./search-worker-node.js";
 export { columnarTextCorpusQuery } from "./columnar-query.js";
 export {
 	openJoinedTarget,

@@ -60,6 +60,14 @@ Review counts intersect every active filter; a toggle's count excludes that togg
 can show how many lines are available when it is enabled. Notes match only when every saved location
 has empty notes after trimming. An omitted `withoutNotes` means false.
 
+Compact-index hosts can select worker search with
+`gameTextIndexRefreshLayer(cacheRoot, { searchWorker: true })`. The retained result's
+`search(request)` returns an Effect and keeps scans off the caller's thread. Its scope closes
+the worker and pinned reader together. `latestSearchOnly: true` cancels replaced pages and older
+filter selections while preserving concurrent group pages;
+independent callers should leave it false. Cancellation does not evict completed query results.
+The synchronous `query.search(request)` API remains available.
+
 `summary().counts` uses that same query path with no active filters. `summary().searchable` counts
 only lines with searchable source and their saved locations. `TextCorpus.coverage` retains raw scan
 provenance, including empty FText values; it is not a count of writer-visible lines. Character counts

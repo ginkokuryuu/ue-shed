@@ -12,9 +12,10 @@
 
 - **State**: Phase 6 implementation and targeted verification are complete: canonical WTF-8
   format v4, cross-language goldens, host migration and direct column previews are implemented.
-  Recorded 1× results leave performance acceptance incomplete: changed-input refresh, Workbench
-  opening an existing index and facet latency remain open. The owner stopped all further 10× runs;
-  the attempted CLI cold build failed its 900-second cap. Phase 7 remains incomplete. Reader v1.8
+  The latest 1× changed-input refresh case meets 10 seconds; Workbench startup, facets and an
+  uncached text search leave overall performance acceptance incomplete. The owner stopped all further
+  10× runs; the attempted CLI cold build failed its 900-second cap. Phase 7's browse layout is wired
+  to the index; its generated-scale desktop measurements and tour remain incomplete. Reader v1.8
   and gather rule v1.9 are unchanged. See the latest evidence below; no full-gate pass is claimed.
 - **Priority**: P1
 - **Effort**: XL
@@ -1304,3 +1305,78 @@ The final package build and all six final pre-commit stages pass, including 43 a
 No 10× run, studio project, Rust-builder-tree edit or native/Unreal integration change was made.
 The UE lanes were not rerun for this TypeScript query change. This follow-up is included in
 [PR #62](https://github.com/ue-shed/ue-shed/pull/62).
+
+### Phase 7 follow-up: desktop browse layout
+
+The owner supplied `test-results/phase7/game-text-layout.html` as the desktop design reference.
+Workbench Game Text now uses its compact Key, Source, Translation and State columns with real
+query previews. A picked culture supplies translation text and labelled state badges; multiple
+cultures retain their state strip. Translation summary counts follow the current query and
+picked cultures. They can overlap, so no percentage bar or invented timing is shown. State
+buttons use the existing localization query filters; advanced filters and grouping remain.
+
+The list remains beside the selected line in a 400-pixel detail pane. The picked culture's
+translation comes first, with editing, review, key carrying, locations and properties retained.
+Ctrl/Cmd K focuses search without scrolling the surrounding layout. Only the results and detail
+panes scroll; the header remains visible across navigation and refresh. Rescan uses inline progress and permits searching the retained index;
+the footer reports the last successful query round trip excluding typing debounce and actual
+matching-line, culture and inspected-package counts.
+
+The desktop cold-scan check exposed missing parser-worker bundles: Workbench now emits the
+localization and package workers beside its main-process entry, where the shared library
+resolves them. This does not change the headless library, index format or Unreal integration.
+
+Verification uses the repository's generic fixture project and isolated Electron profile at
+1440×900 and 1280×800. It covers a native cold scan, a real culture's translation in the list
+and detail, folder grouping, Ctrl K search, line navigation with the list visible, and Rescan
+preserving the search. Component checks cover state filters and searching while a refresh is
+held. Validation artifacts are `test-results/phase7/layout-{build,components-final,desktop,precommit}.log`;
+screenshots are under `test-results/workbench/game-text-layout.e2e.ts-*/`.
+
+Final checks pass using Node 26.5.0: **90 component tests in six files** (25.92 s), the packaged
+Electron workflow, the Workbench build and all six pre-commit stages,
+including StyleX checks and 43 architecture tests. These are functional checks on the generic
+fixture, not generated-scale UI performance measurements.
+
+Generated-scale desktop timings and the captioned tour remain open. The retained 1× refresh
+result above is unchanged; Workbench startup, historical facet latency and uncached text search
+still need performance work. No 10× run, studio project or Rust-tree edit was made. UE 5.7 and
+5.8 lanes are not rerun for this UI and desktop-packaging change; parser and Unreal code are
+unchanged. This browse-layout follow-up is included in
+[PR #62](https://github.com/ue-shed/ue-shed/pull/62).
+
+### Follow-up: responsive desktop search
+
+Workbench now selects the shared package's scoped worker search adapter. Search scans run on a
+separately pinned reader; the main process keeps its event loop available. Replacement requests
+set shared cancellation flags, and scans check them without waiting for worker messages. Different
+open groups can load concurrently; replaced pages and old filter selections are retired. Failed
+query-cache lookups have zero TTL, preserving completed pages through cancellation. The existing
+120 ms typing debounce remains. Worker startup and requests have 30-second bounds with typed
+failures. The headless synchronous API and default library layer remain available.
+
+Opening the Text view also defers full localization quality evaluation until the Quality checks
+tab is selected. A component regression keeps text search available while that evaluation is
+pending. The full quality evaluation itself is unchanged and still needs performance work.
+
+The case-insensitive source fallback now decodes the prepared WTF-8 arena instead of repeatedly
+opening compressed shared-string blocks. Unicode and lone UTF-16 values keep their original search
+semantics. Text-unit preview schemas preserve their existing optional translation field across
+worker transfer. Workbench emits the search worker beside its main bundle; the package emits it in
+`dist`, with host adoption instructions and a Changeset.
+
+A local cached-index input probe, with recording and overlays disabled, measured a first four-letter
+query at 170 ms per key. First-to-last accepted input fell from 10,995 ms to 539 ms; last-input-to-result
+fell from 4,879 ms to 342 ms. A new five-letter query at 60 ms per key fell from 2,807 ms to 268 ms after
+the last input. Maximum 50 ms main-process heartbeat gaps fell from 5,546 ms to 66 ms. Match counts
+were unchanged. These are single-run observations on a separate cached project, not the generated
+1× acceptance lane or a performance guarantee. Local evidence stays under ignored
+`test-results/phase7/search-responsiveness/`; no 10× or Rust-tree work was performed.
+
+Validation passes: 55 query/oracle/regression tests in six files; 30 host and worker tests in four
+files, with the updated cancellation/group test rerun; 91 component tests in six files; the real
+packaged Workbench flow at both viewport sizes (35.6 s); all six pre-commit stages, including 43
+architecture tests; and the Effect architecture check. The Game Text tarball contains the worker,
+protocol and Node adapter. The full packed-consumer release gate and Unreal runtime lanes were not
+rerun for this search-adapter change. Library and Workbench builds pass. This follow-up is included
+in [PR #62](https://github.com/ue-shed/ue-shed/pull/62).

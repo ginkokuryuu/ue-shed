@@ -24,6 +24,8 @@ import { reuseJoinedQueryProjection, type JoinedQueryProjection } from "./joined
 import { instrumentIndexQuery } from "./index-query.js";
 import { columnarTextCorpusQuery } from "./columnar-query.js";
 import type { TextCorpusQuery } from "./query.js";
+import { makeGameTextSearchWorker } from "./search-worker-node.js";
+import type { TextCorpusSearchRequest, TextCorpusSearchPage } from "./schema.js";
 import type { refreshJoinedTarget } from "./joined-target.js";
 import {
 	indexedTextCorpus,
@@ -87,6 +89,10 @@ type ImportedTarget = Effect.Success<ReturnType<typeof importLocalizationTarget>
 export interface GameTextIndexRefreshResult {
 	readonly joined: JoinedTargetReader;
 	readonly query: TextCorpusQuery;
+	/** Asynchronous search adapter; worker-backed when selected by the host's layer. */
+	readonly search: (
+		request: TextCorpusSearchRequest
+	) => Effect.Effect<TextCorpusSearchPage, IndexFailure>;
 	readonly imported: ImportedTarget;
 	readonly packages: Effect.Success<ReturnType<typeof refreshPackageTextLayer>>;
 	readonly join: Effect.Success<ReturnType<typeof refreshJoinedTarget>>;
@@ -147,7 +153,10 @@ const savedTarget = Schema.decodeUnknownSync(LocalizationTarget)({
 });
 
 /** One writer lease includes inventory, packages, localization, review and the join. */
-export const gameTextIndexRefreshLayer = (cacheRoot: string) =>
+export const gameTextIndexRefreshLayer = (
+	cacheRoot: string,
+	options: { readonly searchWorker?: boolean; readonly latestSearchOnly?: boolean } = {}
+) =>
 	Layer.effect(
 		GameTextIndexRefresh,
 		Effect.gen(function* () {
@@ -405,10 +414,31 @@ export const gameTextIndexRefreshLayer = (cacheRoot: string) =>
 							)
 						)
 					);
+					const search = options.searchWorker
+						? yield* makeGameTextSearchWorker(
+								{
+									configuration,
+									generation: joined.reader.manifest.generation,
+									joinedKey: joined.reader.manifest.active.joined!
+								},
+								{ latestOnly: options.latestSearchOnly ?? false }
+							)
+						: Effect.fn("GameTextIndex.search")((request: TextCorpusSearchRequest) =>
+								Effect.try({
+									try: () => query.search(request),
+									catch: (cause) =>
+										failure(
+											"query",
+											String(cause),
+											"Refresh the Game Text index and retry."
+										)
+								})
+							);
 					return {
 						...result,
 						joined,
 						query,
+						search,
 						evidence: indexedEvidence,
 						corpus: indexedTextCorpus(joined, query),
 						localizationJoin: indexedLocalizationJoin(joined, query)

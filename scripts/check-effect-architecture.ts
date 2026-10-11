@@ -33,6 +33,8 @@ const approvedRuntimeExits = new Set([
 	"packages/game-text/src/joined-query-node.ts",
 	// Node worker messages are foreign callbacks; the target scope owns and terminates the pool.
 	"packages/game-text/src/localization-import-worker.ts",
+	// Search messages are a Node boundary; the host scope terminates its pinned worker reader.
+	"packages/game-text/src/search-worker.ts",
 	// The browser worker is a foreign entrypoint; each read's scope terminates its runtime.
 	"apps/site/src/blueprints/blueprint.worker.ts",
 	"apps/cli/src/index.ts",
@@ -61,6 +63,8 @@ const approvedRuntimeExits = new Set([
 	"packages/unreal-assets/src/protocol-transport.ts"
 ]);
 const approvedPromiseAdapters = new Set([
+	// The search adapter bridges Node worker messages once; callers receive scoped Effects.
+	"packages/game-text/src/search-worker-node.ts",
 	// The cold importer adapts worker messages and staged snapshot handles below SharedIndex.
 	"packages/game-text/src/localization-cold-import.ts",
 	// Package cold import owns the same worker-message Promise bridge under Effect.acquireRelease;
@@ -157,6 +161,11 @@ const approvedRawFetchAdapters = new Set([
 	"packages/unreal-connection/src/remote-control-client.ts"
 ]);
 const approvedResourceAdapters = new Set([
+	// Ctrl+K belongs to the Solid owner and is removed by onSettled cleanup.
+	"extensions/game-text/src/game-text-query-route.tsx",
+	// Search listeners and cancellation flags belong to the pinned reader's worker scope.
+	"packages/game-text/src/search-worker-node.ts",
+	"packages/game-text/src/search-worker.ts",
 	// Parser workers and their listeners are closed on success, failure and scope cancellation.
 	"packages/game-text/src/localization-cold-import.ts",
 	// Package workers, reply/abort listeners, readers and staging belong to the cold-import scope.

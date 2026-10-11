@@ -50,6 +50,7 @@ import {
 	type TextCorpusFocusRequest,
 	type TextCorpusFocusResult,
 	type TextCorpusQuery,
+	type GameTextIndexRefreshResult,
 	type TextCorpusQueryRunResult,
 	type TextCorpusRunResult,
 	type TextCorpusSearchRequest,
@@ -205,6 +206,9 @@ export const WorkbenchGameTextLive = Layer.effect(
 			);
 		const retainedCorpus = yield* Ref.make<TextCorpus | undefined>(undefined);
 		const queryModel = yield* Ref.make<TextCorpusQuery | undefined>(undefined);
+		const querySearch = yield* Ref.make<GameTextIndexRefreshResult["search"] | undefined>(
+			undefined
+		);
 		const qualityModel = yield* Ref.make<TextQualityQuery | undefined>(undefined);
 		const qualityDocument = yield* Ref.make<GameTextRuleDocument | undefined>(undefined);
 		const qualityRulePath = yield* Ref.make<
@@ -340,6 +344,7 @@ export const WorkbenchGameTextLive = Layer.effect(
 							yield* Effect.all([
 								Ref.set(retainedCorpus, report),
 								Ref.set(queryModel, next),
+								Ref.set(querySearch, indexed.search),
 								Ref.set(
 									qualityModel,
 									rules
@@ -490,25 +495,18 @@ export const WorkbenchGameTextLive = Layer.effect(
 							}
 				)
 			);
-		const search = Effect.fn("Workbench.WorkbenchGameText.search")(
-			(input: TextCorpusSearchRequest) =>
-				projectRelativeRequest(input).pipe(
-					Effect.flatMap((request) =>
-						request.localization
-							? localization.search(request)
-							: currentModel(queryModel).pipe(
-									Effect.map((model) =>
-										model === undefined
-											? { status: "not_ready" as const }
-											: {
-													page: model.search(request),
-													status: "ready" as const
-												}
-									)
-								)
-					)
-				)
-		);
+		const search = Effect.fn("Workbench.WorkbenchGameText.search")(function* (
+			input: TextCorpusSearchRequest
+		): Effect.fn.Return<TextCorpusSearchResult> {
+			const request = yield* projectRelativeRequest(input);
+			if (request.localization) return yield* localization.search(request);
+			const search = yield* currentModel(querySearch);
+			if (!search) return { status: "not_ready" };
+			const page = yield* search(request).pipe(Effect.orDie);
+			return (yield* currentModel(querySearch)) === search
+				? { status: "ready", page }
+				: { status: "not_ready" };
+		});
 
 		const focus = Effect.fn("Workbench.WorkbenchGameText.focus")(
 			(request: TextCorpusFocusRequest) =>

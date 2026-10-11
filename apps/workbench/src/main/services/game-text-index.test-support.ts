@@ -107,6 +107,7 @@ export function oracleGameTextIndexLayer<E>(read: (root: string) => Effect.Effec
 					return {
 						corpus,
 						query,
+						search: (request) => Effect.sync(() => query.search(request)),
 						get localizationJoin(): GameTextIndexRefreshResult["localizationJoin"] {
 							if (!join) throw new Error("No target in this oracle request");
 							return join;

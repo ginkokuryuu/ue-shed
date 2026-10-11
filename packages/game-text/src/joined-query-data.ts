@@ -207,7 +207,10 @@ export class JoinedQueryData {
 		this.projection.sources = { packed, index, ids, simple };
 	}
 	/** Native byte scans find ASCII terms without allocating one string/view per source. */
-	searchSourceBytes(terms: readonly Buffer[]): Uint8Array | undefined {
+	searchSourceBytes(
+		terms: readonly Buffer[],
+		checkInterrupted?: () => void
+	): Uint8Array | undefined {
 		const source = this.projection.sources;
 		if (!source) return undefined;
 		const counts = new Uint32Array(source.ids.length),
@@ -217,6 +220,7 @@ export class JoinedQueryData {
 			let row = 0,
 				position = 0;
 			for (;;) {
+				if ((row & 255) === 0) checkInterrupted?.();
 				const found = bytes.indexOf(term, position);
 				if (found < 0) break;
 				while (row < counts.length && offsets[row + 1]! <= found) row++;

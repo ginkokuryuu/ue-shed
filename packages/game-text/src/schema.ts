@@ -367,7 +367,15 @@ export const TextUnitContext = Schema.Struct({
 export interface TextUnitContext extends Schema.Schema.Type<typeof TextUnitContext> {}
 
 export const TextUnitSearchResult = Schema.Struct({
-	localization: Schema.optionalKey(Schema.Array(LocalizationCultureMark)),
+	localization: Schema.optionalKey(
+		Schema.Array(
+			LocalizationCultureMark.pipe(
+				Schema.fieldsAssign({
+					translation: Schema.optionalKey(Schema.NullOr(Schema.String))
+				})
+			)
+		)
+	),
 	contexts: Schema.Array(TextUnitContext).check(Schema.isMaxLength(3)),
 	id: TextUnitId,
 	source: TextUnit.fields.source,

@@ -267,6 +267,43 @@ beforeEach(() => {
 });
 
 describe("Game Text localization", () => {
+	it("connects the browse columns, culture summary and state filter while keeping the list beside the line", async () => {
+		const user = userEvent.setup();
+		mount();
+		await screen.findByText("3 matches");
+		await choose(user, "Culture", "fr");
+		await user.click(screen.getByRole("button", { name: /^Culture:/u }));
+		await waitFor(() => expect(screen.queryByText("Searching…")).toBeNull());
+		const results = screen.getByRole("region", { name: "Results" });
+		expect(within(results).getByText("Key")).toBeDefined();
+		expect(within(results).getByText("Translation · fr")).toBeDefined();
+		const row = within(results).getByRole("button", { name: /^Welcome/u });
+		expect(row.textContent).toContain("Bienvenue");
+		expect(row.textContent).toContain("Stale");
+		const states = within(screen.getByRole("group", { name: "Translation state" }));
+		await user.click(states.getByRole("button", { name: "Stale" }));
+		await screen.findByText("1 match");
+		expect(states.getByRole("button", { name: "Stale" }).getAttribute("aria-pressed")).toBe(
+			"true"
+		);
+		await user.click(within(results).getByRole("button", { name: /^Welcome/u }));
+		await within(screen.getByRole("complementary", { name: "Text focus" })).findByRole(
+			"heading",
+			{ name: "Welcome" }
+		);
+		const translations = await within(
+			screen.getByRole("complementary", { name: "Text focus" })
+		).findAllByRole("article", { name: /^Translation /u });
+		expect(translations[0]?.getAttribute("aria-label")).toBe("Translation fr");
+		expect(within(results).getByRole("button", { name: /^Welcome/u })).toBeDefined();
+		expect(results.hasAttribute("hidden")).toBe(false);
+		expect(screen.getByRole("region", { name: "Translation summary" }).textContent).toContain(
+			"Stale 1"
+		);
+		await user.click(states.getByRole("button", { name: "All" }));
+		await screen.findByText("3 matches");
+	});
+
 	it("loads another target through the host and remembers the choice", async () => {
 		const user = userEvent.setup();
 		const api = client({ twoTargets: true });
@@ -447,15 +484,16 @@ describe("Game Text localization", () => {
 		await within(translations).findByText("Willkommen");
 		const cards = within(translations).getAllByRole("article");
 		expect(cards.map((card) => card.getAttribute("aria-label"))).toEqual([
-			"Translation en",
 			"Translation de",
+			"Translation en",
 			"Translation fr"
 		]);
-		expect(within(cards[1]!).getByText("In PO, not synced")).toBeDefined();
-		expect(within(cards[1]!).getByText("Neue Begrüßung")).toBeDefined();
-		expect(within(cards[1]!).getByText("Old greeting")).toBeDefined();
-		expect(within(cards[1]!).getByText("translator")).toBeDefined();
-		expect(within(cards[1]!).getByText("PO flags: fuzzy")).toBeDefined();
+		const german = within(translations).getByRole("article", { name: "Translation de" });
+		expect(within(german).getByText("In PO, not synced")).toBeDefined();
+		expect(within(german).getByText("Neue Begrüßung")).toBeDefined();
+		expect(within(german).getByText("Old greeting")).toBeDefined();
+		expect(within(german).getByText("translator")).toBeDefined();
+		expect(within(german).getByText("PO flags: fuzzy")).toBeDefined();
 		expect(within(translations).getByText("Manifest key path")).toBeDefined();
 		const french = within(translations).getByRole("article", { name: "Translation fr" });
 		expect(

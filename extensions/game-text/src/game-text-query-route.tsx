@@ -24,7 +24,7 @@ import {
 } from "@ue-shed/game-text/browser";
 import { Button, Chip, createEffectAction, createEffectSubscription } from "@ue-shed/ui";
 import { InvestigationActions } from "@ue-shed/ui/investigation-actions";
-import { TaskProgressModal, type TaskProgress } from "@ue-shed/ui/task-progress";
+import type { TaskProgress } from "@ue-shed/ui/task-progress";
 import { Effect, Schedule, Stream } from "effect";
 import { For, Show, createEffect, createSignal, onSettled, untrack } from "solid-js";
 import type { JSX } from "@solidjs/web";
@@ -68,7 +68,8 @@ import {
 	GatheredDetail,
 	localizationLabels
 } from "./game-text-localization-view.js";
-import { GameTextResultRows } from "./game-text-result-rows.js";
+import { GameTextColumns, GameTextResultRows } from "./game-text-result-rows.js";
+import { BrowseSummary, BrowseStateFilter, browseStyles } from "./game-text-browse-chrome.js";
 import {
 	createGameTextOperations,
 	OperationPanel,
@@ -141,6 +142,7 @@ export function GameTextRoute(props: {
 	const [page, setPage] = createSignal<TextCorpusSearchPage>();
 	const [focus, setFocus] = createSignal<TextCorpusFocus>();
 	const [searching, setSearching] = createSignal(true);
+	const [queryMs, setQueryMs] = createSignal<number>();
 	const [loading, setLoading] = createSignal(true);
 	const [memoryReady, setMemoryReady] = createSignal(false);
 	const [projectKey, setProjectKey] = createSignal(untrack(() => props.projectKey));
@@ -275,6 +277,7 @@ export function GameTextRoute(props: {
 	// A picked line opens its page. Its place and neighbours come from the rows each group reports,
 	// or the flat page's rows, so the page follows grouping, open groups and loaded pages.
 	let resultsSection: HTMLElement | undefined;
+	let searchInput: HTMLInputElement | undefined;
 	const lineOpen = () => selectedId() !== undefined || localization.selectedId() !== undefined;
 	const [groupRows, setGroupRows] = createSignal<ReadonlyMap<string, readonly LoadedRow[]>>(
 		new Map()
@@ -548,6 +551,7 @@ export function GameTextRoute(props: {
 	};
 	const requestPage = (request: TextCorpusSearchRequest, debounce = false) => {
 		const generation = ++searchGeneration;
+		let started = 0;
 		// A new search replaces the rows a pending step was counting on.
 		if (!request.cursor && !request.localizationCursor) {
 			pendingFlat = undefined;
@@ -557,7 +561,10 @@ export function GameTextRoute(props: {
 		setSearching(true);
 		searchAction.run(
 			(debounce ? Effect.sleep("120 millis") : Effect.void).pipe(
-				Effect.flatMap(() => props.client.search(request))
+				Effect.flatMap(() => {
+					started = performance.now();
+					return props.client.search(request);
+				})
 			),
 			{
 				onFailure: (cause) => {
@@ -570,6 +577,7 @@ export function GameTextRoute(props: {
 				onSuccess: (result) => {
 					if (generation !== searchGeneration) return;
 					if (result.status === "ready") {
+						setQueryMs(performance.now() - started);
 						setPage((previous) =>
 							(request.cursor || request.localizationCursor) && previous
 								? {
@@ -676,11 +684,10 @@ export function GameTextRoute(props: {
 		() => ({
 			summary: summary(),
 			request: searchRequest(),
-			ready: localization.ready(),
-			loading: loading()
+			ready: localization.ready()
 		}),
-		({ summary: current, request, ready, loading: busy }) => {
-			if (current && ready && !busy) requestPage(request, true);
+		({ summary: current, request, ready }) => {
+			if (current && ready) requestPage(request, true);
 		}
 	);
 	createEffect(
@@ -757,6 +764,17 @@ export function GameTextRoute(props: {
 	);
 
 	onSettled(() => {
+		const shortcut = (event: KeyboardEvent) => {
+			if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "k") {
+				event.preventDefault();
+				searchInput?.focus({ preventScroll: true });
+				searchInput?.select();
+			}
+		};
+		window.addEventListener("keydown", shortcut);
+		return () => window.removeEventListener("keydown", shortcut);
+	});
+	onSettled(() => {
 		memoryAction.run(
 			Effect.gen(function* () {
 				const key =
@@ -816,15 +834,17 @@ export function GameTextRoute(props: {
 	};
 	createEffect(
 		() => ({
+			mode: mode(),
 			active: localization.active(),
 			culture: localization.culture(),
 			document: qualityDocument(),
 			summary: qualitySummary()
 		}),
-		({ active, culture }) => {
+		({ mode: currentMode, active, culture }) => {
 			workspaceCountAction.cancel();
 			setWorkspaceFindingCount(undefined);
-			if (!active || !props.client.localizationQualitySearch) return;
+			if (currentMode !== "quality" || !active || !props.client.localizationQualitySearch)
+				return;
 			workspaceCountAction.run(
 				props.client.localizationQualitySearch({
 					target: active.target.name,
@@ -937,13 +957,8 @@ export function GameTextRoute(props: {
 	);
 	return (
 		<main {...stylex.attrs(styles.page)}>
-			<TaskProgressModal
-				open={loading() && progress().phase !== "idle"}
-				progress={progress()}
-				title="Scanning saved game text"
-				detail="Reading the project's saved assets."
-			/>
 			<div {...stylex.attrs(styles.toolbar)}>
+				<h1 {...stylex.attrs(styles.heading)}>Game Text</h1>
 				<div role="tablist" aria-label="Game Text view" {...stylex.attrs(styles.bar)}>
 					<button
 						type="button"
@@ -1040,6 +1055,35 @@ export function GameTextRoute(props: {
 					</Button>
 				</Show>
 			</div>
+			<Show when={loading()}>
+				<progress
+					aria-label={
+						progress().phase === "scanning"
+							? "Inspecting text-bearing packages"
+							: "Preparing saved text index"
+					}
+					aria-valuenow={progress().total > 0 ? progress().completed : undefined}
+					aria-valuemax={progress().total > 0 ? progress().total : undefined}
+					max={progress().total || 1}
+					value={progress().total > 0 ? progress().completed : undefined}
+					{...stylex.attrs(styles.progress)}
+				/>
+				<p role="status" {...stylex.attrs(styles.indexProgress)}>
+					{summary() ? "Rescanning" : "Opening saved text index"}
+					<Show when={progress().total > 0}>
+						{" · "}
+						{progress().completed.toLocaleString()} /{" "}
+						{progress().total.toLocaleString()}
+					</Show>
+				</p>
+			</Show>
+			<Show when={mode() === "corpus"}>
+				<BrowseSummary
+					page={page()}
+					culture={localization.culture()}
+					cultures={localization.cultures()}
+				/>
+			</Show>
 			<OperationPanel model={operations} />
 			<StagedEditsPanel model={edits} />
 			<Show when={localization.error()}>
@@ -1180,7 +1224,7 @@ export function GameTextRoute(props: {
 						}
 					>
 						<div {...stylex.attrs(styles.workspace)}>
-							<div {...stylex.attrs(styles.bar)}>
+							<div {...stylex.attrs(styles.bar, styles.browseBar)}>
 								<div {...stylex.attrs(styles.search)}>
 									<svg
 										aria-hidden="true"
@@ -1191,6 +1235,9 @@ export function GameTextRoute(props: {
 										<path d="M15 15 L21 21" />
 									</svg>
 									<input
+										ref={(element) => {
+											searchInput = element;
+										}}
 										autofocus
 										type="search"
 										aria-label="Search game text"
@@ -1201,7 +1248,7 @@ export function GameTextRoute(props: {
 												: "Search text"
 										}
 										maxlength={512}
-										disabled={loading()}
+										disabled={loading() && !summary()}
 										value={query()}
 										{...stylex.attrs(styles.input)}
 										onInput={(event) => setQuery(event.currentTarget.value)}
@@ -1219,7 +1266,14 @@ export function GameTextRoute(props: {
 													? "1 match"
 													: page()?.total.toLocaleString() + " matches"}
 									</span>
+									<kbd {...stylex.attrs(browseStyles.keyboard)}>Ctrl K</kbd>
 								</div>
+								<Show when={localization.active()}>
+									<BrowseStateFilter
+										selected={localization.state()}
+										onChange={localization.setState}
+									/>
+								</Show>
 								<Show
 									when={
 										localization.active() && localization.cultures().length > 0
@@ -1242,7 +1296,7 @@ export function GameTextRoute(props: {
 									counts={page()?.counts.origins}
 									fileScope={page()?.fileScope}
 									searching={searching()}
-									disabled={loading()}
+									disabled={loading() && !summary()}
 									filesOnly
 									onChange={setWhere}
 								/>
@@ -1250,7 +1304,7 @@ export function GameTextRoute(props: {
 									filter={filter()}
 									counts={filterCounts()}
 									hasTarget={localization.active() !== undefined}
-									disabled={loading()}
+									disabled={loading() && !summary()}
 									onChange={setFilter}
 									extraFields={extraFields()}
 									folderBrowser={(typed) => (
@@ -1267,7 +1321,7 @@ export function GameTextRoute(props: {
 								/>
 								<DisplayMenu
 									group={group() === "none" ? undefined : groupField()?.group}
-									disabled={loading()}
+									disabled={loading() && !summary()}
 									onGroupChange={(next) => setGroup(next ?? "none")}
 								/>
 								{exports()}
@@ -1301,16 +1355,16 @@ export function GameTextRoute(props: {
 									</Show>
 								</div>
 							</Show>
-							<div {...stylex.attrs(styles.grid, lineOpen() && styles.gridPage)}>
-								{/* An open line takes the page; the list stays mounted so its groups and pages
-								    survive, and the page steps through its rows. */}
+							<div {...stylex.attrs(styles.grid)}>
+								{/* Keep the paged list beside the line detail so selection, groups and pages survive. */}
 								<section
 									aria-label="Results"
 									ref={(element) => {
 										resultsSection = element;
 									}}
-									{...stylex.attrs(styles.pane, lineOpen() && styles.hidden)}
+									{...stylex.attrs(styles.pane)}
 								>
+									<GameTextColumns culture={localization.culture()} />
 									<Show
 										when={page()?.groups}
 										fallback={
@@ -1514,6 +1568,16 @@ export function GameTextRoute(props: {
 																	.join(" · ")}
 															</span>
 														</Show>
+														<TranslationsDetail
+															model={localization}
+															edits={edits}
+															review={{
+																client: props.client,
+																busy:
+																	loading() || operations.busy(),
+																onChanged: () => load(false)
+															}}
+														/>
 														<h3 {...stylex.attrs(styles.section)}>
 															Where it appears
 														</h3>
@@ -1533,16 +1597,6 @@ export function GameTextRoute(props: {
 																/>
 															)}
 														</For>
-														<TranslationsDetail
-															model={localization}
-															edits={edits}
-															review={{
-																client: props.client,
-																busy:
-																	loading() || operations.busy(),
-																onChanged: () => load(false)
-															}}
-														/>
 														<CoverageNotes
 															diagnostics={current().diagnostics}
 														/>
@@ -1587,6 +1641,23 @@ export function GameTextRoute(props: {
 						</div>
 					</Show>
 				</Show>
+			</Show>
+			<Show when={summary()}>
+				{(current) => (
+					<footer {...stylex.attrs(browseStyles.footer)}>
+						<Show when={queryMs() !== undefined}>
+							<span title="Last successful query round trip, excluding the typing debounce">
+								Last query {Math.round(queryMs() ?? 0)} ms
+							</span>
+						</Show>
+						<span>Matching lines: {page()?.total.toLocaleString() ?? "—"}</span>
+						<span {...stylex.attrs(styles.grow)} />
+						<span>
+							{localization.active()?.target.cultures.length ?? 0} cultures ·{" "}
+							{current().coverage.inspectedPackages.toLocaleString()} assets
+						</span>
+					</footer>
+				)}
 			</Show>
 		</main>
 	);

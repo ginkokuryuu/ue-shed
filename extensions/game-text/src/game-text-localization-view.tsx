@@ -67,20 +67,24 @@ function displayedState(detail: LocalizationFocus, translation: LocalizationTran
 	return detail.scopeSummary ? translation.cultureState : translation.state;
 }
 
-function visibleTranslations(detail: LocalizationFocus) {
-	return detail.translations.filter(
-		(translation) =>
-			!detail.scopeSummary ||
-			!!translation.archiveTranslation ||
-			translation.poTranslation !== null ||
-			translation.translatorComments.length > 0 ||
-			translation.flags.length > 0 ||
-			translation.cultureState === "unknown" ||
-			translation.reducedSourceChecking ||
-			(translation.translationSource !== null &&
-				translation.facts.includes("needs_update")) ||
-			translation.nextContextOffset !== undefined
-	);
+function visibleTranslations(detail: LocalizationFocus, culture: string | undefined) {
+	return detail.translations
+		.filter(
+			(translation) =>
+				!detail.scopeSummary ||
+				!!translation.archiveTranslation ||
+				translation.poTranslation !== null ||
+				translation.translatorComments.length > 0 ||
+				translation.flags.length > 0 ||
+				translation.cultureState === "unknown" ||
+				translation.reducedSourceChecking ||
+				(translation.translationSource !== null &&
+					translation.facts.includes("needs_update")) ||
+				translation.nextContextOffset !== undefined
+		)
+		.toSorted(
+			(left, right) => Number(right.culture === culture) - Number(left.culture === culture)
+		);
 }
 
 export function LocalizationControls(props: {
@@ -289,7 +293,7 @@ export function TranslationsDetail(props: {
 									)}
 								</Show>
 								<KeyChangeDetail detail={detail()} edits={props.edits} />
-								<For each={visibleTranslations(detail())}>
+								<For each={visibleTranslations(detail(), props.model.culture())}>
 									{(translation) => (
 										<article
 											aria-label={"Translation " + translation.culture}

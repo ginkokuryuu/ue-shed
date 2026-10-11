@@ -228,10 +228,41 @@ async function openQuality(user: ReturnType<typeof userEvent.setup>) {
 }
 
 describe("Game Text writing workspace", () => {
-	it("uses a compact toolbar, live count and zero-count hint without a header or select", async () => {
+	it("keeps the indexed list searchable during a rescan and focuses search with Ctrl K", async () => {
+		const response = await Effect.runPromise(Deferred.make<TextCorpusQueryRunResult>());
+		const query = textCorpusQuery(corpus);
+		const user = userEvent.setup();
+		mount(
+			makeClient(corpus, {
+				loadConfiguredProject: (refresh) =>
+					refresh
+						? Deferred.await(response)
+						: Effect.succeed({ status: "completed", summary: query.summary() })
+			})
+		);
+		await screen.findByText("2 matches");
+		await user.click(screen.getByRole("button", { name: "Rescan" }));
+		await screen.findByText("Rescanning");
+		const search = screen.getByRole("searchbox");
+		expect(search).toHaveProperty("disabled", false);
+		expect(screen.queryByRole("dialog")).toBeNull();
+		await user.keyboard("{Control>}k{/Control}");
+		expect(document.activeElement).toBe(search);
+		await user.type(search, "Quit");
+		await screen.findByText("1 match");
+		const results = within(screen.getByRole("region", { name: "Results" }));
+		expect(results.getByRole("button", { name: /^Quit game/u })).toBeDefined();
+		await Effect.runPromise(
+			Deferred.succeed(response, { status: "completed", summary: query.summary() })
+		);
+		await waitFor(() => expect(screen.queryByText("Rescanning")).toBeNull());
+		expect(search).toHaveProperty("value", "Quit");
+	});
+
+	it("uses the browse header, compact toolbar, live count and zero-count hint", async () => {
 		mount();
 		await screen.findByText("2 matches");
-		expect(screen.queryByRole("heading", { name: /Game text/i })).toBeNull();
+		expect(screen.getByRole("heading", { name: "Game Text" })).toBeDefined();
 		expect(screen.queryByRole("combobox")).toBeNull();
 		expect(screen.queryByRole("button", { name: "Search" })).toBeNull();
 		// One Filter and one Display control instead of chip rows; lines group by problem.

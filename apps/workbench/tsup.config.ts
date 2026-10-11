@@ -6,7 +6,13 @@ export default defineConfig([
 			js: 'import { createRequire as createWorkbenchRequire } from "node:module"; const require = createWorkbenchRequire(import.meta.url);'
 		},
 		clean: false,
-		entry: ["src/main/main.ts"],
+		entry: {
+			main: "src/main/main.ts",
+			"localization-import-worker":
+				"../../packages/game-text/src/localization-import-worker.ts",
+			"package-text-worker": "../../packages/game-text/src/package-text-worker.ts",
+			"search-worker": "../../packages/game-text/src/search-worker.ts"
+		},
 		external: [/^electron(?:\/|$)/, "trash"],
 		format: ["esm"],
 		noExternal: [/^@ue-shed\//, "effect"],

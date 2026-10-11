@@ -1,6 +1,7 @@
 import { performance } from "node:perf_hooks";
 import { Effect, Metric } from "effect";
 import type { TextCorpusQuery } from "./query.js";
+import { runJoinedQuery } from "./joined-query-node.js";
 
 const duration = Metric.histogram("game_text.index.query_duration_ms", {
 	boundaries: [1, 10, 50, 100, 1000, 10000]
@@ -21,7 +22,7 @@ export function instrumentIndexQuery(query: TextCorpusQuery): TextCorpusQuery {
 				)
 			);
 		});
-		return (...args: A) => Effect.runSync(observed(...args));
+		return (...args: A) => runJoinedQuery(observed(...args));
 	};
 	return {
 		summary: measure("summary", query.summary),

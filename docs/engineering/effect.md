@@ -55,6 +55,11 @@ exception also requires a repeatable benchmark, explicit cleanup ownership, and 
   bounded Effect cache. It accepts effects without service requirements and rejects asynchronous
   work. The caller's shared-index scope owns and closes the pinned handles; query data and hosts
   do not own additional runtimes or reader lifetimes.
+- The Game Text search worker is a Node message boundary. The host's retained index scope owns
+  startup, its separately pinned reader and termination; only bounded, schema-validated search
+  pages cross the boundary. Shared cancellation flags interrupt scans without waiting for a
+  worker message. Failed or interrupted query-cache lookups have zero TTL; completed pages stay
+  cached. The Workbench and CLI keep their existing runtimes.
 
 ## Tests
 

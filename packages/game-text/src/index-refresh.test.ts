@@ -1,7 +1,7 @@
 import { mkdir, mkdtemp, realpath, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
-import { Effect, Layer, Schema, Stream } from "effect";
+import { Effect, Exit, Fiber, Layer, Schema, Stream } from "effect";
 import { expect, it } from "vitest";
 import {
 	LocalizationEvidence,
@@ -12,6 +12,9 @@ import {
 import { emptyPackageTextRecord } from "./package-text-record.js";
 import { target } from "./localization.test-support.js";
 import { hydrateJoinedTarget } from "./joined-target-reader.js";
+import { columnarTextCorpusQuery } from "./columnar-query.js";
+import { makeGameTextSearchWorker } from "./search-worker-node.js";
+import { TextCorpusSearchRequest } from "./schema.js";
 import { GameTextIndexBuilder, typeScriptIndexBuilderLayer } from "./index-builder.js";
 import {
 	GameTextIndexSource,
@@ -128,6 +131,77 @@ it("retains readers while one refresh lease updates only selected inputs and rev
 					const refresh = yield* GameTextIndexRefresh;
 					const request = { projectRoot, targetName: authored.name };
 					const first = yield* refresh.refresh(request);
+					const searches = [
+						{ query: "source", capability: "all" as const, pageSize: 10 },
+						{ query: "absent", capability: "all" as const, pageSize: 10 },
+						{
+							query: "Source",
+							capability: "all" as const,
+							pageSize: 10,
+							localization: { target: authored.name, culture: "de" },
+							facets: { folder: "", assets: true, origins: true, cultures: true }
+						}
+					].map((request) => Schema.decodeUnknownSync(TextCorpusSearchRequest)(request));
+					for (const search of searches)
+						expect(yield* first.search(search)).toEqual(first.query.search(search));
+					let armed = false;
+					let checkpoints = 0;
+					const cancellable = columnarTextCorpusQuery(
+						first.joined,
+						undefined,
+						undefined,
+						() => {
+							checkpoints++;
+							if (armed && checkpoints === 2) throw new Error("Test interruption");
+						}
+					);
+					cancellable.search(searches[0]!);
+					checkpoints = 0;
+					armed = true;
+					const interruptedRequest = {
+						query: "new-term",
+						capability: "all" as const,
+						pageSize: 10
+					};
+					expect(() => cancellable.search(interruptedRequest)).toThrow();
+					armed = false;
+					checkpoints = 0;
+					expect(cancellable.search(searches[0]!)).toEqual(
+						first.query.search(searches[0]!)
+					);
+					expect(checkpoints).toBe(1);
+					expect(cancellable.search(interruptedRequest)).toEqual(
+						first.query.search(interruptedRequest)
+					);
+					const latest = yield* makeGameTextSearchWorker(
+						{
+							configuration: {
+								cacheRoot: join(projectRoot, "cache"),
+								projectKey: projectRoot,
+								targetKey: authored.name
+							},
+							generation: first.joined.reader.manifest.generation,
+							joinedKey: first.joined.reader.manifest.active.joined!
+						},
+						{ latestOnly: true }
+					);
+					const obsolete = yield* latest(searches[0]!).pipe(
+						Effect.forkChild({ startImmediately: true })
+					);
+					expect(yield* latest(searches[1]!)).toEqual(first.query.search(searches[1]!));
+					const obsoleteExit = yield* Fiber.await(obsolete);
+					expect(Exit.isFailure(obsoleteExit)).toBe(true);
+					expect(yield* latest(searches[0]!)).toEqual(first.query.search(searches[0]!));
+					const groupRequests = ["Content/Text", "Content/Other"].map((openGroup) =>
+						Schema.decodeUnknownSync(TextCorpusSearchRequest)({
+							...searches[0],
+							group: "folder",
+							openGroup
+						})
+					);
+					expect(
+						yield* Effect.all(groupRequests.map(latest), { concurrency: "unbounded" })
+					).toEqual(groupRequests.map((request) => first.query.search(request)));
 					expect(
 						first.query.search({ query: "Source", capability: "all", pageSize: 10 })
 							.total
@@ -169,6 +243,14 @@ it("retains readers while one refresh lease updates only selected inputs and rev
 					expect(marks?.archive?.translation.Text).toBe("Shipped");
 					expect(marks?.poTranslation).toBe("Pending");
 					expect(yield* hydrateJoinedTarget(first.joined)).toEqual(before);
+					expect(yield* first.search(searches[0]!)).toEqual(
+						first.query.search(searches[0]!)
+					);
+					expect(
+						yield* changed.search({ query: "Changed", capability: "all", pageSize: 10 })
+					).toEqual(
+						changed.query.search({ query: "Changed", capability: "all", pageSize: 10 })
+					);
 					const reviewPath = defaultLocalizationReviewPath(authored.name);
 					yield* Effect.promise(async () => {
 						await mkdir(join(projectRoot, dirname(reviewPath)), { recursive: true });
@@ -231,11 +313,9 @@ it("retains readers while one refresh lease updates only selected inputs and rev
 				})
 			).pipe(
 				Effect.provide(
-					gameTextIndexRefreshLayer(join(projectRoot, "cache")).pipe(
-						Layer.provide(source),
-						Layer.provide(builder),
-						Layer.provide(evidence)
-					)
+					gameTextIndexRefreshLayer(join(projectRoot, "cache"), {
+						searchWorker: true
+					}).pipe(Layer.provide(source), Layer.provide(builder), Layer.provide(evidence))
 				)
 			)
 		);
