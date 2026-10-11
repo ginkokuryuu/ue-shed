@@ -35,6 +35,7 @@ const { values } = parseArgs({
 		cache: { type: "string" },
 		output: { type: "string" },
 		mode: { type: "string", default: "files" },
+		host: { type: "string", default: "cli" },
 		worker: { type: "boolean" },
 		select: { type: "string" },
 		profile: { type: "boolean" },
@@ -51,7 +52,7 @@ const project = repositoryPath(values.project),
 	cache = repositoryPath(values.cache),
 	output = repositoryPath(values.output);
 const mode = Schema.decodeUnknownSync(
-	Schema.Literals(["files", "target", "size", "shared", "package", "join"])
+	Schema.Literals(["files", "target", "size", "shared", "package", "join", "hosts"])
 )(values.mode);
 const changedPoByte = boundedNumber(values["po-change-byte"] ?? "110", "--po-change-byte", 122);
 if (!Number.isInteger(changedPoByte) || changedPoByte < 97)
@@ -142,7 +143,11 @@ if (values.worker) {
 			);
 		}
 		const passes: readonly ("cold" | "touched" | "unchanged" | "changed")[] =
-			mode === "size" || mode === "shared" || mode === "package" || mode === "join"
+			mode === "size" ||
+			mode === "shared" ||
+			mode === "package" ||
+			mode === "join" ||
+			mode === "hosts"
 				? []
 				: ["cold", "touched", "unchanged", "changed"];
 		if (mode === "package") {
@@ -154,6 +159,19 @@ if (values.worker) {
 				repositoryPath(values.records),
 				measure,
 				values.select ?? "all"
+			);
+		}
+		if (mode === "hosts") {
+			if (!values.records) throw new Error("Host measurements require retained --records.");
+			const { measureGameTextHosts } = await import("./game-text-host-measure.ts");
+			await measureGameTextHosts(
+				project,
+				cache,
+				repositoryPath(values.records),
+				measure,
+				values.host!,
+				values.select ?? "all",
+				changedPoByte
 			);
 		}
 		if (mode === "join") {
@@ -324,6 +342,7 @@ if (values.worker) {
 	const changedByte =
 		mode === "target" ||
 		mode === "package" ||
+		(mode === "hosts" && ["all", "refresh"].includes(values.select ?? "all")) ||
 		(mode === "join" && ["all", "refresh"].includes(values.select ?? "all")) ||
 		(mode === "shared" && ["all", "cold", "refresh"].includes(values.select ?? "all"))
 			? await captureBenchmarkByte(
@@ -349,6 +368,7 @@ if (values.worker) {
 			"--po-change-byte",
 			String(changedPoByte),
 			...(values.select ? ["--select", values.select] : []),
+			...(values.host ? ["--host", values.host] : []),
 			...(values.report ? ["--report", values.report] : []),
 			...(values.domain ? ["--domain", values.domain] : []),
 			...(values.records ? ["--records", values.records] : [])
@@ -357,7 +377,7 @@ if (values.worker) {
 			execArgv: [
 				"--import",
 				"tsx",
-				`--max-old-space-size=${maximumHeapMiB}`,
+				...(mode === "hosts" ? [] : [`--max-old-space-size=${maximumHeapMiB}`]),
 				"--expose-gc",
 				"--trace-gc-nvp",
 				...(values.profile ? ["--cpu-prof", `--cpu-prof-dir=${resolve(output, "..")}`] : [])
@@ -405,7 +425,8 @@ if (values.worker) {
 					results,
 					stages,
 					limits: {
-						heapMiB: maximumHeapMiB,
+						heapMiB: mode === "hosts" ? null : maximumHeapMiB,
+						defaultHeap: mode === "hosts",
 						rssBytes: maximumRssBytes,
 						stageSeconds: maximumStageSeconds,
 						runSeconds: runSeconds ?? null

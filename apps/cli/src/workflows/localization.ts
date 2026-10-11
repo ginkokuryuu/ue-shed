@@ -1,31 +1,19 @@
+import { refreshCliGameTextIndex } from "./game-text-index.js";
 import { cultureList, parseTextFilter } from "./text-filter.js";
 import { readChangedFiles } from "./changed-files.js";
 import { textWhere } from "../commands/localization-flags.js";
-import {
-	LocalizationEvidence,
-	LocalizationEvidenceNodeLive,
-	LocalizationFileAccessLive,
-	readLocalizationReview,
-	type LocalizationTargetEvidence
-} from "@ue-shed/localization";
+import { LocalizationEvidence, LocalizationEvidenceNodeLive } from "@ue-shed/localization";
 import { Effect, FileSystem, Metric, Result, Schema } from "effect";
 import {
 	GameTextLocalizationError,
 	localizationManifestFailure,
 	LocalizationSelection,
-	applyLocalizationKeyChanges,
-	applyLocalizationReview,
-	joinLocalizationTarget,
-	localizationKeyChanges,
 	localizationLinesCsv,
 	pickedLocalizationCultures,
-	localizationStatusReport,
-	textCorpusQuery,
-	TextCorpusService,
-	TextCorpusServiceLive,
+	indexedLocalizationStatusReport,
 	type TextCorpus
 } from "@ue-shed/game-text";
-import { observeCliOperation, readerLayer } from "../cli-operation.js";
+import { observeCliOperation } from "../cli-operation.js";
 import { CliRuntime, printJson } from "../cli-runtime.js";
 import type { CliCommand } from "../command-model.js";
 
@@ -35,29 +23,12 @@ type LocalizationSearchCommand = Extract<CliCommand, { readonly _tag: "TextSearc
 type LocalizationCheckCommand = Extract<CliCommand, { readonly _tag: "LocalizationCheck" }>;
 type LocalizationReportCommand = Extract<CliCommand, { readonly _tag: "LocalizationReport" }>;
 
-/** Scans the project's saved text once; every target a command reads joins the same corpus. */
+/** Compatibility projection for explicit full-corpus reports and exports. */
 export const scanProjectText = Effect.fn("Cli.localization.scan")(function* (
 	projectRoot: string,
 	reader: string | undefined
 ) {
-	return yield* Effect.gen(function* () {
-		const service = yield* TextCorpusService;
-		return yield* service.scan({ projectRoot });
-	}).pipe(
-		Effect.provide(TextCorpusServiceLive),
-		Effect.provide(readerLayer(reader)),
-		Effect.mapError(
-			(error) =>
-				new GameTextLocalizationError({
-					code: "reader_failure",
-					message: error.message,
-					recovery:
-						"recovery" in error
-							? error.recovery
-							: "Configure UE_SHED_UASSET_EXECUTABLE or --reader and valid reader timeout settings, then retry."
-				})
-		)
-	);
+	return (yield* refreshCliGameTextIndex({ projectRoot }, reader)).corpus;
 });
 
 /** Decode CLI selections and read evidence before starting the saved-package reader. */
@@ -116,41 +87,43 @@ export const loadLocalizationContext = Effect.fn("Cli.localization.load_context"
 				recovery: "Choose a culture listed by loc targets."
 			})
 		);
-	const evidence = yield* service.read({ projectRoot: command.projectRoot, target });
-	if (evidence.manifest.status === "failed")
-		return yield* Effect.fail(localizationManifestFailure(evidence.manifest.error));
-	const corpus = yield* scanProjectText(command.projectRoot, command.reader);
-	const joined = yield* joinProjectTarget(command.projectRoot, evidence, corpus);
-	return { corpus, evidence, selection, ...joined };
-});
-
-/** Joins a target's files to a scan, with its review file and the keys that changed. */
-const joinProjectTarget = Effect.fn("Cli.localization.join")(function* (
-	projectRoot: string,
-	evidence: LocalizationTargetEvidence,
-	corpus: TextCorpus
-) {
-	// The review file is UE Shed's own project data; a missing file means nothing is reviewed yet.
-	const review = yield* readLocalizationReview({
-		projectRoot,
-		target: evidence.target.name
-	}).pipe(Effect.provide(LocalizationFileAccessLive));
-	// Review is tracked once the target has a review file; until then reports say "not tracked".
-	const joined = applyLocalizationReview(
-		joinLocalizationTarget(corpus, evidence, evidence.target),
-		review.contentHash === null ? undefined : review.file
+	const indexed = yield* refreshCliGameTextIndex(
+		{ projectRoot: command.projectRoot, targetName: target.name, requireManifest: true },
+		command.reader
+	).pipe(
+		Effect.mapError((cause) =>
+			"localizationError" in cause && cause.localizationError
+				? localizationManifestFailure(cause.localizationError)
+				: new GameTextLocalizationError({
+						code: "reader_failure",
+						message: cause.message,
+						// Keep the established CLI reader-failure output at this boundary.
+						recovery:
+							"operation" in cause && cause.operation === "reader_failure"
+								? "Choose an Unreal project directory containing a Content folder."
+								: cause.recovery
+					})
+		)
 	);
-	// Saved text whose key changed since the last gather pairs with the key Unreal still lists.
-	const keyChanges = localizationKeyChanges(joined, corpus);
-	const join = applyLocalizationKeyChanges(joined, keyChanges.pairs);
-	return { join, review, keyChanges };
+	if (indexed.evidence.manifest.status === "failed")
+		return yield* Effect.fail(localizationManifestFailure(indexed.evidence.manifest.error));
+	return {
+		joined: indexed.joined,
+		corpus: indexed.corpus,
+		evidence: indexed.evidence,
+		selection,
+		join: indexed.localizationJoin,
+		query: indexed.query,
+		review: indexed.review,
+		keyChanges: { pairs: indexed.joined.meta.pairs, ambiguous: indexed.joined.meta.ambiguous }
+	};
 });
 
 /** A target's query over a scan already made, for saved investigations that filter by target. */
 export const loadTargetQuery = Effect.fn("Cli.localization.target_query")(function* (
 	projectRoot: string,
 	targetName: string,
-	corpus: TextCorpus
+	_corpus: TextCorpus
 ) {
 	const service = yield* LocalizationEvidence;
 	const discovery = yield* service.discover({ projectRoot });
@@ -163,11 +136,13 @@ export const loadTargetQuery = Effect.fn("Cli.localization.target_query")(functi
 				recovery: "Run loc targets and choose a listed target, or edit the preset."
 			})
 		);
-	const evidence = yield* service.read({ projectRoot, target });
-	if (evidence.manifest.status === "failed")
-		return yield* Effect.fail(localizationManifestFailure(evidence.manifest.error));
-	const { join } = yield* joinProjectTarget(projectRoot, evidence, corpus);
-	return textCorpusQuery(corpus, undefined, join);
+	const indexed = yield* refreshCliGameTextIndex(
+		{ projectRoot, targetName: target.name, requireManifest: true },
+		undefined
+	);
+	if (indexed.evidence.manifest.status === "failed")
+		return yield* Effect.fail(localizationManifestFailure(indexed.evidence.manifest.error));
+	return indexed.query;
 }, Effect.provide(LocalizationEvidenceNodeLive));
 
 function whereField(command: Parameters<typeof textWhere>[0], files?: readonly string[]) {
@@ -186,13 +161,13 @@ const filterField = Effect.fn("Cli.localization.filter")(function* (command: {
 export const loadLocalizationStatus = Effect.fn("Cli.localization.load_status")(function* (
 	command: LocalizationStatusCommand | LocalizationSearchCommand
 ) {
-	const { corpus, join, evidence, selection } = yield* loadLocalizationContext(command);
+	const { joined, query, evidence, selection } = yield* loadLocalizationContext(command);
 	const files =
 		command.changedFiles === undefined
 			? undefined
 			: yield* readChangedFiles(command.changedFiles, command.projectRoot);
 	const filter = yield* filterField(command);
-	const page = textCorpusQuery(corpus, undefined, join).search({
+	const page = query.search({
 		capability: "all",
 		pageSize: command.limit ?? 50,
 		query: command._tag === "TextSearch" ? command.query : "",
@@ -202,7 +177,7 @@ export const loadLocalizationStatus = Effect.fn("Cli.localization.load_status")(
 		...(command.group === undefined ? undefined : { group: command.group })
 	});
 	yield* Metric.update(Metric.counter("cli.localization.status.lines"), page.total);
-	return localizationStatusReport(corpus, evidence, page);
+	return indexedLocalizationStatusReport(joined, evidence, page);
 });
 
 export const runLocalizationStatus = Effect.fn("Cli.workflow.localization_status")(
@@ -249,13 +224,14 @@ export const runLocalizationExport = Effect.fn("Cli.workflow.localization_export
 								recovery: "Choose a new .csv file."
 							})
 						);
-					const { corpus, join, selection } = yield* loadLocalizationContext(command);
+					const { corpus, join, query, selection } =
+						yield* loadLocalizationContext(command);
 					const files =
 						command.changedFiles === undefined
 							? undefined
 							: yield* readChangedFiles(command.changedFiles, command.projectRoot);
 					const filter = yield* filterField(command);
-					const lines = textCorpusQuery(corpus, undefined, join).localizationLines({
+					const lines = query.localizationLines({
 						capability: "all",
 						query: "",
 						localization: selection,

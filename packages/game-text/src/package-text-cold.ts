@@ -12,12 +12,11 @@ import type { ColdLayerSource } from "./shared-string-sort.js";
 
 function worker() {
 	const compiled = new URL("./package-text-worker.js", import.meta.url);
-	if (existsSync(compiled))
-		return new Worker(compiled, { resourceLimits: { maxOldGenerationSizeMb: 16384 } });
+	if (existsSync(compiled)) return new Worker(compiled);
 	const source = new URL("./package-text-worker.ts", import.meta.url);
 	return new Worker(
 		`import("tsx/esm/api").then(async ({ register }) => { register(); await import(${JSON.stringify(source.href)}); });`,
-		{ eval: true, resourceLimits: { maxOldGenerationSizeMb: 16384 } }
+		{ eval: true }
 	);
 }
 

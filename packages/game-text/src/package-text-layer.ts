@@ -1,6 +1,9 @@
+import { mkdir, mkdtemp, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { createHash } from "node:crypto";
 import { relative, resolve } from "node:path";
-import { Effect, Schema, Stream } from "effect";
+import { Effect, Option, Schema, Stream } from "effect";
 import { ProjectIndexHeader, SavedAssetPackageTextEvent } from "@ue-shed/unreal-assets";
 import { SharedIndex } from "./shared-index.js";
 import { snapshotFailure } from "./snapshot-format.js";
@@ -17,6 +20,9 @@ import {
 import type { ColdLayerSource } from "./shared-string-sort.js";
 import { textCorpusFromExtractionEvents } from "./corpus.js";
 import { comparePackageTextPathBytes } from "./package-text-order.js";
+import { encodeWtf8 } from "./wtf8.js";
+import { LocalizationImportSession } from "./localization-import-session.js";
+import { writeSnapshotFile, openSnapshotFile, type SnapshotFileReader } from "./snapshot-file.js";
 
 /** The caller supplies the Project Index's opaque package-and-sidecar signature, never a layer hash.
  * Header evidence and signatures must come from the same complete inventory generation.
@@ -38,6 +44,7 @@ const shardName = (shard: number) => `package-text.${shard}`;
 
 export interface PackageTextRefreshInput<E, R> {
 	readonly inventory: readonly PackageTextInventoryEntry[];
+	readonly changedFiles?: readonly string[];
 	readonly read: (
 		paths: readonly string[]
 	) => Stream.Stream<typeof SavedAssetPackageTextEvent.Type, E, R>;
@@ -46,7 +53,10 @@ export interface PackageTextRefreshInput<E, R> {
 /** Signature keys include eligibility, so external-reference/header transitions invalidate reuse.
  * Digest framing prevents ambiguous concatenations. Inventory order is required to be path sorted.
  */
-export function packageTextSelection(inventory: readonly PackageTextInventoryEntry[]) {
+export function packageTextSelection(
+	inventory: readonly PackageTextInventoryEntry[],
+	retainedEligibility?: ReadonlyMap<string, boolean>
+) {
 	const external = packageTextExternalReferences(inventory.map((entry) => entry.path));
 	const buckets: { entry: PackageTextInventoryEntry; selected: boolean }[][] = Array.from(
 		{ length: PACKAGE_TEXT_SHARDS },
@@ -57,7 +67,10 @@ export function packageTextSelection(inventory: readonly PackageTextInventoryEnt
 	);
 	let previous: string | undefined;
 	for (const entry of inventory) {
-		if (previous !== undefined && entry.path <= previous)
+		if (
+			previous !== undefined &&
+			Buffer.compare(encodeWtf8(entry.path), encodeWtf8(previous)) <= 0
+		)
 			throw snapshotFailure(
 				"package-text.inventory",
 				"Inventory must have unique paths in byte order"
@@ -68,7 +81,9 @@ export function packageTextSelection(inventory: readonly PackageTextInventoryEnt
 				"package-text.inventory",
 				"Missing header evidence; upgrade the paired reader"
 			);
-		const selected = isPackageTextCandidate(entry.headerData, external.has(entry.path));
+		const selected =
+			retainedEligibility?.get(entry.path) ??
+			isPackageTextCandidate(entry.headerData, external.has(entry.path));
 		const shard = packageTextShard(entry.path);
 		buckets[shard]!.push({ entry, selected });
 		hashes[shard]!.update(JSON.stringify([entry.path, entry.signature, selected]));
@@ -84,14 +99,73 @@ export function packageTextSelection(inventory: readonly PackageTextInventoryEnt
 export const refreshPackageTextLayer = Effect.fn("PackageText.refresh")(function* <E, R>(
 	input: PackageTextRefreshInput<E, R>
 ) {
-	const selection = yield* Effect.try({
-		try: () => packageTextSelection(input.inventory),
-		catch: (cause) => snapshotFailure("package-text.inventory", String(cause))
-	});
 	const store = yield* SharedIndex,
 		writer = yield* store.writer();
 	const manifest = writer.manifest();
-	if (!input.inventory.length && manifest.active[selection[0]!.name] === selection[0]!.key)
+	let inventory = input.inventory;
+	const retainedEligibility = new Map<string, boolean>();
+	if (
+		input.changedFiles !== undefined &&
+		Object.keys(manifest.active).some((name) => name.startsWith("package-text."))
+	) {
+		const selected = new Set(
+			input.changedFiles.flatMap((path) => {
+				const normalized = path.replaceAll("\\", "/");
+				return /\.(?:uexp|ubulk|uptnl)$/u.test(normalized)
+					? [
+							normalized.replace(/\.[^.]+$/u, ".uasset"),
+							normalized.replace(/\.[^.]+$/u, ".umap")
+						]
+					: [normalized];
+			})
+		);
+		const retained = new Map<string, PackageTextInventoryEntry>();
+		const reader = yield* store.open();
+		for (const name of Object.keys(manifest.active).filter((name) =>
+			name.startsWith("package-text.")
+		)) {
+			const layer = yield* reader.layer(name);
+			const paths = yield* layer.section("package.path"),
+				signatures = yield* layer.section("package.signature"),
+				statuses = yield* layer.section("package.status");
+			if (
+				!(paths instanceof Uint32Array) ||
+				!(signatures instanceof Uint32Array) ||
+				!(statuses instanceof Uint32Array)
+			)
+				return yield* Effect.fail(
+					snapshotFailure(name, "Expected package inventory columns")
+				);
+			const pathValues = yield* layer.strings("paths", [...paths]),
+				signatureValues = yield* layer.strings("identity", [...signatures]);
+			for (let row = 0; row < paths.length; row++) {
+				const path = pathValues[row]!;
+				if (!selected.has(path)) {
+					retainedEligibility.set(path, statuses[row] !== 2);
+					retained.set(path, {
+						path,
+						signature: signatureValues[row]!,
+						headerData: {
+							packageFlags: statuses[row] === 2 ? 0 : 0x40000,
+							gatherableTextDataCount: 0,
+							gatherableTextDataOffset: 0,
+							hasTextProperty: false
+						}
+					});
+				}
+			}
+		}
+		for (const entry of inventory)
+			if (selected.has(entry.path)) retained.set(entry.path, entry);
+		inventory = [...retained.values()].sort((left, right) =>
+			Buffer.compare(encodeWtf8(left.path), encodeWtf8(right.path))
+		);
+	}
+	const selection = yield* Effect.try({
+		try: () => packageTextSelection(inventory, retainedEligibility),
+		catch: (cause) => snapshotFailure("package-text.inventory", String(cause))
+	});
+	if (!inventory.length && manifest.active[selection[0]!.name] === selection[0]!.key)
 		return {
 			readPackages: 0,
 			reusedPackages: 0,
@@ -106,7 +180,7 @@ export const refreshPackageTextLayer = Effect.fn("PackageText.refresh")(function
 	const removed = selection
 		.filter((shard) => !shard.entries.length && manifest.active[shard.name])
 		.map((shard) => shard.name);
-	if (!input.inventory.length && !Object.keys(manifest.layers).length) {
+	if (!inventory.length && !Object.keys(manifest.layers).length) {
 		yield* writer.publishCold([
 			{ name: selection[0]!.name, key: selection[0]!.key, source: packageTextColumns([]) }
 		]);
@@ -122,7 +196,7 @@ export const refreshPackageTextLayer = Effect.fn("PackageText.refresh")(function
 	if (!changed.length && !removed.length)
 		return {
 			readPackages: 0,
-			reusedPackages: input.inventory.length,
+			reusedPackages: inventory.length,
 			changedShards: 0,
 			removedShards: 0,
 			published: false,
@@ -132,6 +206,33 @@ export const refreshPackageTextLayer = Effect.fn("PackageText.refresh")(function
 		? yield* store.open()
 		: undefined;
 	const sources: ColdLayerSource[] = [];
+	// A cold build must release each shard's authored objects before reading the next shard.
+	// Disk-backed sources retain the atomic dictionary/root publication without retaining the corpus.
+	const session = yield* Effect.serviceOption(LocalizationImportSession);
+	const staged =
+		changed.length > 8
+			? yield* Effect.acquireRelease(
+					Effect.tryPromise({
+						try: async () => {
+							const root = Option.isSome(session)
+								? join(session.value.configuration.cacheRoot, "staging")
+								: tmpdir();
+							await mkdir(root, { recursive: true });
+							const readers: SnapshotFileReader[] = [];
+							return {
+								directory: await mkdtemp(join(root, "package-refresh-")),
+								readers
+							};
+						},
+						catch: (cause) => snapshotFailure("package-text.stage", String(cause))
+					}),
+					(value) =>
+						Effect.promise(async () => {
+							await Promise.all(value.readers.map((reader) => reader.close()));
+							await rm(value.directory, { recursive: true, force: true });
+						})
+				)
+			: undefined;
 	let readPackages = 0;
 	for (const shard of changed) {
 		const old =
@@ -188,7 +289,27 @@ export const refreshPackageTextLayer = Effect.fn("PackageText.refresh")(function
 				snapshotFailure("package-text.read", "Reader omitted requested packages")
 			);
 		next.sort((a, b) => (a.path < b.path ? -1 : a.path > b.path ? 1 : 0));
-		sources.push({ name: shard.name, key: shard.key, source: packageTextColumns(next) });
+		if (staged) {
+			const file = yield* Effect.tryPromise({
+				try: async () => {
+					const path = join(staged.directory, `${shard.name}.snapshot`);
+					await writeSnapshotFile(path, packageTextColumns(next), 1);
+					return openSnapshotFile(path);
+				},
+				catch: (cause) => snapshotFailure("package-text.stage", String(cause))
+			});
+			staged.readers.push(file);
+			sources.push({
+				name: shard.name,
+				key: shard.key,
+				source: {
+					columns: [...file.directory.entries.values()].map((entry) => ({
+						...entry,
+						load: () => file.load(entry.name)
+					}))
+				}
+			});
+		} else sources.push({ name: shard.name, key: shard.key, source: packageTextColumns(next) });
 	}
 	if (!Object.keys(manifest.layers).length || sources.length > 8)
 		yield* writer.publishCold(sources, removed);
@@ -200,7 +321,7 @@ export const refreshPackageTextLayer = Effect.fn("PackageText.refresh")(function
 	});
 	return {
 		readPackages,
-		reusedPackages: input.inventory.length - readPackages,
+		reusedPackages: inventory.length - readPackages,
 		changedShards: changed.length,
 		removedShards: removed.length,
 		published: true,
@@ -219,7 +340,7 @@ export const textCorpusFromPackageTextLayer = Effect.fn("PackageText.oracleCorpu
 	))
 		records.push(...(yield* decodePackageTextColumns(yield* reader.layer(name))));
 	// Shards are a storage partition, not the native reader's package emission order.
-	records.sort((a, b) => comparePackageTextPathBytes(Buffer.from(a.path), Buffer.from(b.path)));
+	records.sort((a, b) => comparePackageTextPathBytes(encodeWtf8(a.path), encodeWtf8(b.path)));
 	const corpus = textCorpusFromExtractionEvents({
 		projectRoot,
 		discoveredPackages: records.length,

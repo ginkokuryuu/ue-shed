@@ -13,3 +13,5 @@ export * from "./sha256.js";
 export * from "./operation-schema.js";
 export * from "./operation-plan.js";
 export * from "./operation-progress.js";
+export { validateUnrealJsonEscapes } from "./unreal-json.js";
+export { localizationError } from "./decode.js";

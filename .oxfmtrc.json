@@ -18,6 +18,7 @@
 		"target",
 		"coverage",
 		"pnpm-lock.yaml",
+		"fixtures/game-text-wtf8/unreal-json-probe.inc",
 		"*.tsbuildinfo"
 	]
 }

@@ -3,15 +3,16 @@
 `@ue-shed/game-text` owns Plan 057's derived package-text, localization and joined-target
 snapshots. The pure format is available from both entry points; the Effect Node store and its
 source adapter are available from the main entry. Libraries and CLI provide the same layer as
-Workbench. This domain storage stays outside the native Catalog and needs no Rust protocol change
-or new dependency. Localization import is available now; package import and joins remain Phases 4–5.
+Workbench. Domain storage stays outside the native Catalog. Package, localization and joined
+layers are published through `GameTextIndexBuilder`; every host uses the shared refresh service.
+The native Catalog supplies bounded committed signature inventory, as described below.
 
 The Node adapter uses built-in zstd and CRC32, verified on Node 24 and 26. Store activation on a
 runtime without zstd fails with typed upgrade guidance. Other package exports remain loadable.
 
 ## Format and lazy reads
 
-Layout version 3 uses magic `UESHT003` inside the existing `game-text-v1` cache namespace.
+Layout version 4 uses magic `UESHT004` inside the existing `game-text-v1` cache namespace.
 Old derived generations are rejected and rebuilt. Integers are little endian; payloads are
 four-byte aligned. The 48-byte header contains version, section count, file length, directory end,
 directory CRC32 and header CRC32. Reserved bytes must be zero.
@@ -33,13 +34,13 @@ Caps: 16 GiB per file or explicitly loaded raw domain, 128 MiB per section, 1,04
 The file-length cap accommodates the measured generated raw probe; it never authorizes a
 whole-file allocation. Each frame allocation is bounded by the smaller section cap.
 Sections contain bytes, unsigned bytes, unsigned 32-bit integers, domain-local string IDs or
-UTF-8 string blocks. Domain-specific numeric relationships need their layer's semantic validator.
+WTF-8 string blocks. Domain-specific numeric relationships need their layer's semantic validator.
 
 Standalone Phase 2 files deduplicate separately by domain. The Phase 3 shared index below replaces
 those independent dictionaries with project-wide IDs across all layers. Blocks target 256 KiB of raw bytes,
 including local offsets; an oversized single string gets its own bounded block. Each domain has
 a small `u32` block-start-ID column, checked for order, counts and agreement with loaded blocks.
-Lookup binary-searches that column. UTF-8 is checked once per payload plus each string boundary.
+Lookup binary-searches that column. Canonical WTF-8 is checked at each string boundary.
 Domains remain contiguous on disk and avoid both unrelated reads and a global 4 GiB offset limit.
 
 `reader.section(name)` retains numeric columns on first use. String blocks are temporary.
@@ -126,7 +127,7 @@ The 512 MiB dictionary allowance was chosen after 10× exceeded the tentative 25
 The 16 GiB byte allowance limits disk work and spill usage; the record, dictionary, tree and row
 limits bound memory directly.
 
-Each file uses layout version 3, with the following logical localization columns (importer version 5):
+Each file uses layout version 4, with the following logical localization columns (importer version 6):
 
 | Sections                                        | Domain / meaning                                                                                                                                                                                                                                                                |
 | ----------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -310,3 +311,66 @@ The Phase 2 joined projection is a layout probe of identities, states, facts, un
 translations, sparse PO overrides, review/key changes and occurrences. Source metadata, full
 comments, package coverage, complete origin membership and lossless domain hydration remain
 work for later phases.
+
+## Lossless UTF-16 and host queries
+
+All snapshot string domains use canonical WTF-8. Well-formed strings have exactly their UTF-8
+bytes; supplementary characters use four bytes. Lone surrogate code units use their generalized
+three-byte encoding. A three-byte lead immediately followed by a three-byte trail in one entry is
+rejected as a non-canonical pair, as are overlong, truncated and out-of-range sequences. Independent
+entries may end and begin with those code units. Errors name the section as `SnapshotFormatError`.
+The dictionary, A64 fences, sorting and IDs use the same bytes in TypeScript and Rust. Search and
+case folding preserve lone surrogates. Encoding checks `isWellFormed()` before using `TextEncoder`;
+decoding scans for surrogate sequences before using the fatal UTF-8 `TextDecoder` fast path.
+
+The actual UE 5.7 and UE 5.8 manifest and archive serializers use RapidJSON and reject escaped lone
+leads, lone trails and trail-then-lead sequences. Both TypeScript parsers now return
+`malformed_manifest` / `malformed_archive` with file and character offset, matching those loaders.
+The disposable process-lane probe invokes both serializers: six expected rejections and two accepted
+pairs. PO acceptance remains UTF-8. Saved package strings preserve every UTF-16 code unit.
+`fixtures/game-text-wtf8` contains shared golden bytes and genuine snapshots written by both builders.
+
+The existing `TextCorpusQuery` API reads the pinned joined, package and localization layers.
+`joined-v10` adds `query.package.order`, raw/slice namespace IDs and `query.place` projections;
+native builders must emit these projections as well. Package order preserves the native reader's
+path-component order. Folder ancestors, normalized asset keys, namespaces and UTF-16 label ranks
+use numeric coordinates. Normalized object, package and manifest paths use packed WTF-8 byte
+arenas. Group/facet scans and path, asset and namespace predicates decode only displayed labels.
+Private byte arenas have u32 offsets; coordinate IDs remain local to that joined snapshot. Shared
+file/path/namespace ID vectors retain their domains so dictionary compaction remaps them. Their
+byte order is independent of append segments and remains stable after compaction. Hot numeric
+columns remain in array buffers. Pages decode direct previews; full evidence objects are decoded
+only for focus, explicit report or export. Matching row sets and count projections use bounded
+Effect caches. One retained generation per host model is released on replacement or shutdown.
+
+Every host obtains builds through `GameTextIndexBuilder`: import, package refresh, dictionary,
+compaction and joined refresh. `typeScriptIndexBuilderLayer` implements the existing signatures;
+hosts import the service rather than build functions. `GameTextIndexRefresh` owns the writer lease,
+refresh spans/metrics, typed failures and cache invalidation. A persisted `joined.invalidated`
+marker forces the next join refresh while retaining prior metadata for selected-file refreshes;
+it is removed after successful publication. PO layers are invalidated by their content key and
+review changes by the next review read/hash. Query boundaries record spans and duration metrics.
+
+The native Project Index exposes bounded `Inventory` queries over one committed generation.
+Rows contain package paths, opaque four-part package/sidecar signatures and optional header
+gather evidence. Memory, binary and SQLite adapters derive these from their committed inventory,
+without scanning disk or re-reading headers. The Game Text source refreshes that catalog once;
+Workbench reuses the generation published by its project refresh. Selected bundles are verified
+before and after extraction. A worker lacking this query capability fails with upgrade guidance.
+
+Joined columns larger than the format's 128 MiB section limit are published as physical
+`.chunk0`, `.chunk1`, … sections. `join.meta.chunks` maps their logical names; both asynchronous
+and synchronous readers reconstruct the same numeric buffers and apply logical overlays. Equal
+unpatched aliases share their buffer; patched columns retain their own buffer so an alias still
+sees its pinned base values.
+Long logical names use short `join.chunk<column>.<part>` physical names to fit the directory's
+31-byte name field. Readers use the metadata mapping rather than deriving physical names.
+
+Incremental refresh checks the metadata generation before opening a previous overlay base.
+After compaction it rebuilds from current inputs. Saved-only joins have no manifest layer;
+their source edits use an empty manifest source vector instead of requesting an absent layer.
+Restoring the original inputs uses a full publication when their content key equals the retained
+base, preventing an overlay from overwriting the base it references.
+Count baselines are cached per target/culture selection, so Workbench target selection cannot
+evict another culture's baseline and make otherwise equivalent facet/search requests recount
+the entire target. These caches are bounded Effect caches owned by the query generation.

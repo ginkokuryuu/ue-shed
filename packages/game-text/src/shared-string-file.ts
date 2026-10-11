@@ -1,3 +1,4 @@
+import { decodeWtf8, encodeWtf8 } from "./wtf8.js";
 import { randomUUID } from "node:crypto";
 import { constants, zstdCompressSync, zstdDecompressSync } from "node:zlib";
 import { join } from "node:path";
@@ -61,7 +62,7 @@ function scanPacked(strings: PackedStrings, needle: string) {
 	const count = strings.offsets.length - 1,
 		lower = needle.toLowerCase();
 	if (!lower.length) return count;
-	const query = Buffer.from(lower),
+	const query = Buffer.from(encodeWtf8(lower)),
 		bytes = strings.bytes;
 	let matches = 0;
 	const ascii = query.every((byte) => byte < 128);
@@ -104,7 +105,10 @@ function scanPacked(strings: PackedStrings, needle: string) {
 			}
 		}
 		// Unicode lowercase can change byte lengths (for example İ -> i plus combining dot).
-		if (found || (unicode && bytes.toString("utf8", start, end).toLowerCase().includes(lower)))
+		if (
+			found ||
+			(unicode && decodeWtf8(bytes.subarray(start, end)).toLowerCase().includes(lower))
+		)
 			matches++;
 	}
 	return matches;
@@ -173,10 +177,11 @@ function expandDomain(packed: PackedStrings) {
 			position = offsets[block]!,
 			local = id - starts[block]!,
 			payload = position + 8 + view.getUint32(position, true) * 4;
-		return bytes.toString(
-			"utf8",
-			payload + view.getUint32(position + 4 + local * 4, true),
-			payload + view.getUint32(position + 8 + local * 4, true)
+		return decodeWtf8(
+			bytes.subarray(
+				payload + view.getUint32(position + 4 + local * 4, true),
+				payload + view.getUint32(position + 8 + local * 4, true)
+			)
 		);
 	};
 	return {
@@ -397,7 +402,7 @@ export class SharedStringFiles {
 	}
 	/** Bounded A64 reads share caches, verification and the generation's existing handles. */
 	stringsSync(ids: readonly number[]): string[] {
-		return ids.map((id) => this.bytesSync(id).toString("utf8"));
+		return ids.map((id) => decodeWtf8(this.bytesSync(id)));
 	}
 	/** A selected UTF-8 value for byte predicates; backed by the bounded decoded-block cache. */
 	bytesSync(id: number): Buffer {
@@ -467,7 +472,7 @@ export class SharedStringFiles {
 		return payload;
 	}
 	async strings(ids: readonly number[]): Promise<string[]> {
-		return (await this.bytes(ids)).map((value) => value.toString("utf8"));
+		return (await this.bytes(ids)).map((value) => decodeWtf8(value));
 	}
 	/** Prior IDs are sorted ranks: decode each block directly into the external byte arena. */
 	async collectSorted(ids: Uint32Array, arena: StringArena) {
@@ -809,7 +814,7 @@ export class SharedStringFiles {
 			masks[block] = mask >>> 0;
 			frameBytes += encoded.length;
 			group.push(encoded);
-			fences.push(blockKeys[0]!.toString("utf8"));
+			fences.push(decodeWtf8(blockKeys[0]!));
 			block++;
 			blockKeys = [];
 			mask = 0;
@@ -958,7 +963,9 @@ export class SharedStringFiles {
 					"domain",
 					"Invalid domain ID"
 				);
-				return packed.bytes.toString("utf8", packed.offsets[id], packed.offsets[id + 1]);
+				return decodeWtf8(
+					packed.bytes.subarray(packed.offsets[id], packed.offsets[id + 1])
+				);
 			},
 			scanSubstring: (needle) => scanPacked(packed, needle),
 			timings: {
@@ -973,7 +980,7 @@ export class SharedStringFiles {
 	}
 	async range(prefix: string) {
 		snapshotCheck(!this.closed, "range", "Shared string scope is closed");
-		const lower = Buffer.from(prefix),
+		const lower = Buffer.from(encodeWtf8(prefix)),
 			upper = Buffer.from(lower);
 		let last = upper.length - 1;
 		while (last >= 0 && upper[last] === 255) last--;

@@ -1,6 +1,7 @@
 import {
 	MAX_LOCALIZATION_CULTURES,
-	joinLocalizationTarget,
+	makeRetainedGameTextIndex,
+	GameTextIndexRefresh,
 	localizationQualityWorkspace,
 	checkLocalizationTarget,
 	evaluateGameTextSourceQuality,
@@ -22,16 +23,11 @@ import {
 	type WorkspaceReportFileRequest,
 	type WorkspaceReportFileResult,
 	localizationFocusPage,
-	textCorpusQuery,
-	applyLocalizationKeyChanges,
 	localizationLinesCsv,
 	pickedLocalizationCultures,
 	type LocalizationLinesFileResult,
 	localizationKeyChangesAcross,
-	mergeLocalizationKeyChanges,
 	type LocalizationKeyChangePair,
-	applyLocalizationReview,
-	localizationKeyChanges,
 	localizationEditChangeSet,
 	type LocalizationReviewRequest,
 	type LocalizationReviewResult,
@@ -53,7 +49,6 @@ import {
 	LocalizationEvidence,
 	LocalizationFileAccessLive,
 	localizationEvidenceFingerprint,
-	readLocalizationReview,
 	updateLocalizationReview,
 	type LocalizationReviewSnapshot,
 	type LocalizationReviewUpdate,
@@ -61,7 +56,7 @@ import {
 	type LocalizationTargetEvidence,
 	type LocalizationTarget
 } from "@ue-shed/localization";
-import { Effect, Option, Ref, Result } from "effect";
+import { Effect, Ref, Result } from "effect";
 import type { ElectronDialogApi } from "../adapters/electron-dialog.js";
 import type { LocalFilesApi } from "../adapters/local-files.js";
 
@@ -81,6 +76,8 @@ export const makeGameTextLocalization = Effect.fn("Workbench.GameText.localizati
 	currentRules?: () => Effect.Effect<GameTextRuleDocument | undefined>
 ) {
 	const reader = yield* LocalizationEvidence;
+	const refreshIndex = yield* makeRetainedGameTextIndex();
+	const index = yield* GameTextIndexRefresh;
 	const rules = currentRules ?? (() => Effect.succeed(undefined));
 	const baseline = yield* Ref.make<LocalizationBaseline | undefined>(undefined);
 	const qualityCache = yield* Ref.make<
@@ -132,7 +129,9 @@ export const makeGameTextLocalization = Effect.fn("Workbench.GameText.localizati
 		const cached = yield* Ref.get(selected);
 		yield* Ref.set(
 			gatherBaseline,
-			root && cached?.join.target === name ? { root, join: cached.join } : undefined
+			root && cached?.join.target === name
+				? { root, join: { ...cached.join, lines: cached.join.lines } }
+				: undefined
 		);
 	});
 
@@ -188,42 +187,42 @@ export const makeGameTextLocalization = Effect.fn("Workbench.GameText.localizati
 		if (!target) return failure("target_not_found");
 		const version = yield* Ref.updateAndGet(revision, (value) => value + 1);
 		yield* Ref.set(selected, undefined);
-		const evidence = yield* reader.read({ projectRoot: root, target }).pipe(Effect.result);
+		const carried = yield* Ref.get(acrossGather);
+		let indexed = yield* refreshIndex({
+			projectRoot: root,
+			targetName: name,
+			tolerateReviewErrors: true,
+			keyChangePairs: carried?.root === root && carried.target === name ? carried.pairs : []
+		}).pipe(Effect.result);
 		if ((yield* currentCorpus()) !== corpus || (yield* Ref.get(revision)) !== version)
 			return { status: "not_ready" as const };
-		if (Result.isFailure(evidence)) return failure(evidence.failure.code);
-		// A malformed review file must not hide translations: show them without review state.
-		const review = Option.getOrUndefined(
-			yield* readLocalizationReview({ projectRoot: root, target: target.name }).pipe(
-				Effect.provide(LocalizationFileAccessLive),
-				Effect.option
-			)
-		);
-		if ((yield* currentCorpus()) !== corpus || (yield* Ref.get(revision)) !== version)
-			return { status: "not_ready" as const };
-		// Review is tracked once the target has a review file; until then nothing is "not reviewed".
-		const reviewed = applyLocalizationReview(
-			joinLocalizationTarget(corpus, evidence.success),
-			review?.contentHash ? review.file : undefined
-		);
+		if (Result.isFailure(indexed))
+			return failure(
+				"operation" in indexed.failure ? indexed.failure.operation : "invalid_project"
+			);
 		const before = yield* Ref.get(gatherBaseline);
 		if (before?.root === root && before.join.target === name) {
+			const across = localizationKeyChangesAcross(
+				before.join,
+				indexed.success.localizationJoin
+			);
 			yield* Ref.set(gatherBaseline, undefined);
-			const across = localizationKeyChangesAcross(before.join, reviewed);
 			yield* Ref.set(acrossGather, { root, target: name, pairs: across.pairs });
-			yield* Effect.annotateCurrentSpan({ keyChangesAcrossGather: across.pairs.length });
+			indexed = yield* refreshIndex({
+				projectRoot: root,
+				targetName: name,
+				tolerateReviewErrors: true,
+				keyChangePairs: across.pairs
+			}).pipe(Effect.result);
+			if (Result.isFailure(indexed))
+				return failure(
+					"operation" in indexed.failure ? indexed.failure.operation : "invalid_project"
+				);
 		}
-		const carried = yield* Ref.get(acrossGather);
-		// Saved text whose key changed since the last gather pairs with the key Unreal still lists;
-		// keys that changed in a gather UE Shed ran keep their pairs from before that gather.
-		const join = applyLocalizationKeyChanges(
-			reviewed,
-			mergeLocalizationKeyChanges(
-				localizationKeyChanges(reviewed, corpus).pairs,
-				carried?.root === root && carried.target === name ? carried.pairs : []
-			)
-		);
-		const model = textCorpusQuery(corpus, undefined, join);
+		const join = indexed.success.localizationJoin,
+			model = indexed.success.query,
+			review = indexed.success.review;
+		const evidence = indexed.success.evidence;
 		const textCounts = model.search({
 			query: "",
 			capability: "all",
@@ -248,7 +247,7 @@ export const makeGameTextLocalization = Effect.fn("Workbench.GameText.localizati
 			join,
 			model,
 			result,
-			evidence: evidence.success,
+			evidence,
 			review
 		});
 		yield* Effect.annotateCurrentSpan({
@@ -602,6 +601,22 @@ export const makeGameTextLocalization = Effect.fn("Workbench.GameText.localizati
 				message: receipt.failure.message,
 				recovery: receipt.failure.recovery
 			};
+		yield* index
+			.invalidate({
+				projectRoot: root,
+				targetName: request.target,
+				changedFiles: receipt.success.files
+					.filter((file) => file.error === null)
+					.map((file) => file.relativePath)
+			})
+			.pipe(
+				Effect.catch((cause) =>
+					Effect.logWarning("Game Text write succeeded but cache invalidation failed", {
+						message: cause.message,
+						recovery: cause.recovery
+					})
+				)
+			);
 		// Reload so states, counts and the not-synced indicator describe the written files.
 		yield* Ref.set(selected, undefined);
 		const reloaded = yield* select(request.target);
@@ -673,6 +688,20 @@ export const makeGameTextLocalization = Effect.fn("Workbench.GameText.localizati
 						? "The review file changed on disk, for example after a merge. Rescan and try again."
 						: "Check the file out in source control or make it writable, then try again."
 			};
+		yield* index
+			.invalidate({
+				projectRoot: root,
+				targetName: request.target,
+				changedFiles: [written.success.relativePath]
+			})
+			.pipe(
+				Effect.catch((cause) =>
+					Effect.logWarning("Game Text write succeeded but cache invalidation failed", {
+						message: cause.message,
+						recovery: cause.recovery
+					})
+				)
+			);
 		yield* Ref.set(selected, undefined);
 		yield* Ref.set(qualityCache, undefined);
 		yield* select(request.target);

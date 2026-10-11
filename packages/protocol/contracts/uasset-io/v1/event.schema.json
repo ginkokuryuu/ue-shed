@@ -9423,6 +9423,26 @@
 				},
 				{
 					"$ref": "#/$defs/UAssetIoProjectIndexHeader"
+				},
+				{
+					"type": "object",
+					"properties": {
+						"kind": {
+							"type": "string",
+							"enum": ["inventory"]
+						},
+						"packagePath": {
+							"$ref": "#/$defs/UAssetIoNonEmptyString"
+						},
+						"signature": {
+							"$ref": "#/$defs/UAssetIoNonEmptyString"
+						},
+						"headerData": {
+							"$ref": "#/$defs/PackageHeaderData"
+						}
+					},
+					"required": ["kind", "packagePath", "signature"],
+					"additionalProperties": false
 				}
 			]
 		},
@@ -9510,6 +9530,26 @@
 							},
 							{
 								"$ref": "#/$defs/UAssetIoProjectIndexDictionaryHeader"
+							},
+							{
+								"type": "object",
+								"properties": {
+									"kind": {
+										"type": "string",
+										"enum": ["inventory"]
+									},
+									"packagePath": {
+										"$ref": "#/$defs/UAssetIoNonEmptyString"
+									},
+									"signature": {
+										"$ref": "#/$defs/UAssetIoNonEmptyString"
+									},
+									"headerData": {
+										"$ref": "#/$defs/PackageHeaderData"
+									}
+								},
+								"required": ["kind", "packagePath", "signature"],
+								"additionalProperties": false
 							}
 						]
 					},

@@ -374,7 +374,7 @@ export function localizationColumnsBuilder(
 	const parser =
 		options.format === "po"
 			? localizationPOStream(file, limits, poBlock)
-			: localizationJsonStream(file, limits, jsonChild);
+			: localizationJsonStream(file, limits, jsonChild, options.format);
 	return {
 		feed: (text: string) => parser.feed(text),
 		close: () => closeSync(handle),

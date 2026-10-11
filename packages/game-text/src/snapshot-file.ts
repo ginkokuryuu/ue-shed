@@ -3,6 +3,7 @@ import { readSync } from "node:fs";
 import { isUtf8 } from "node:buffer";
 import * as zlib from "node:zlib";
 import { Schema } from "effect";
+import { decodeWtf8 } from "./wtf8.js";
 import {
 	decodeSnapshotDirectory,
 	decodeSnapshotSection,
@@ -27,13 +28,12 @@ export function snapshotNodeChecksum(bytes: Uint8Array): number {
 	return checksum;
 }
 const codecOptions = { checksum: snapshotNodeChecksum, utf8Valid: isUtf8 };
-const textDecoder = new TextDecoder("utf-8", { fatal: true, ignoreBOM: true });
 function verifiedString(bytes: Uint8Array, id: number) {
 	const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
 	const count = view.getUint32(0, true),
 		payload = 4 + (count + 1) * 4;
 	snapshotCheck(id >= 0 && id < count, "strings", "String ID out of bounds");
-	return textDecoder.decode(
+	return decodeWtf8(
 		bytes.subarray(
 			payload + view.getUint32(4 + id * 4, true),
 			payload + view.getUint32(8 + id * 4, true)
@@ -462,7 +462,7 @@ export async function openSnapshotFile(
 				const stringAt = (block: number, id: number) => {
 					const at = offsets[block]!;
 					const payload = at + 4 + (view.getUint32(at, true) + 1) * 4;
-					return textDecoder.decode(
+					return decodeWtf8(
 						bytes.subarray(
 							payload + view.getUint32(at + 4 + id * 4, true),
 							payload + view.getUint32(at + 8 + id * 4, true)

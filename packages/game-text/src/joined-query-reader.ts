@@ -3,6 +3,7 @@ import { snapshotCheck, snapshotFailure, SnapshotFormatError } from "./snapshot-
 import { SnapshotStoreError } from "./snapshot-store.js";
 import type { JoinedTargetReader } from "./joined-target-reader.js";
 import { runJoinedQuery } from "./joined-query-node.js";
+import { concatenateJoinedChunks } from "./joined-target-reader.js";
 
 const read = <A>(operation: string, run: () => A) =>
 	Effect.try({
@@ -37,25 +38,41 @@ export function synchronousJoinedTarget(joined: JoinedTargetReader): JoinedTarge
 	const raw = layerSync("joined"),
 		base = joined.meta.base ? layerSync(joined.meta.base) : raw;
 	const patched = new Map<string, Uint32Array>();
+	const chunked = new Map<string, Uint32Array>();
+	const original = (name: string) => {
+		const names = joined.meta.chunks?.[name];
+		if (!names) return base.section(joined.meta.aliases[name] ?? name);
+		let values = chunked.get(name);
+		if (!values) {
+			const parts = names.map((field) => {
+				const part = base.section(field);
+				snapshotCheck(part instanceof Uint32Array, field, "Invalid chunk column kind");
+				return part;
+			});
+			values = concatenateJoinedChunks(parts, name);
+			chunked.set(name, values);
+		}
+		return values;
+	};
 	const section = (name: string) =>
 		read(name, () => {
 			if (name === "join.meta") return raw.section(name);
 			const patch = joined.meta.patches?.[name];
-			if (!patch) return base.section(joined.meta.aliases[name] ?? name);
+			if (!patch) return original(name);
 			let values = patched.get(name);
 			if (values) return values;
-			const original = base.section(joined.meta.aliases[name] ?? name),
+			const source = original(name),
 				rows = raw.section(joined.meta.patchRows?.[name] ?? "patch.rows"),
 				replacements = raw.section(patch);
 			snapshotCheck(
-				original instanceof Uint32Array &&
+				source instanceof Uint32Array &&
 					rows instanceof Uint32Array &&
 					replacements instanceof Uint32Array,
 				name,
 				"Invalid patch column kind"
 			);
 			snapshotCheck(rows.length === replacements.length, patch, "Patch lengths differ");
-			values = original.slice();
+			values = source.slice();
 			for (let row = 0; row < rows.length; row++) {
 				snapshotCheck(
 					rows[row]! < values.length && (row === 0 || rows[row]! > rows[row - 1]!),

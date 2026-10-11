@@ -26,10 +26,18 @@ import {
 import type { SavedAssetScan } from "@ue-shed/unreal-assets";
 import { Deferred, Effect, Fiber, Layer, Ref } from "effect";
 import { expect } from "vitest";
-import { WorkbenchGameText, WorkbenchGameTextLive } from "./game-text.js";
+import { workbenchGameTextIndexOracleLayer } from "./game-text-index.test-support.js";
+import {
+	WorkbenchGameText,
+	WorkbenchGameTextLive as indexedWorkbenchGameTextLive
+} from "./game-text.js";
 import { makeWorkbenchProjectTestLayer } from "./project-workspace.js";
 import { ElectronDialog } from "../adapters/electron-dialog.js";
 import { LocalFilesLive, makeLocalFilesTestLayer } from "../adapters/local-files.js";
+
+const WorkbenchGameTextLive = indexedWorkbenchGameTextLive.pipe(
+	Layer.provide(workbenchGameTextIndexOracleLayer)
+);
 
 const noLocalization = makeLocalizationEvidenceTestLayer({
 	discover: () => Effect.succeed({ schemaVersion: 1, targets: [], diagnostics: [] }),

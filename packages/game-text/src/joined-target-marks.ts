@@ -9,7 +9,11 @@ import type { JoinedColumns, JoinedTargetInput } from "./joined-target.js";
 import { stateBit } from "./joined-target.js";
 import { absent, occurrenceLocation, packagePath } from "./joined-target-input.js";
 import type { SharedIndexReader, SharedIndexWriter } from "./shared-index.js";
-import { manifestPlace, type LocalizationKeyChangePair } from "./localization-key-changes.js";
+import {
+	manifestPlace,
+	mergeLocalizationKeyChanges,
+	type LocalizationKeyChangePair
+} from "./localization-key-changes.js";
 import { textFileKey } from "./text-origin.js";
 
 const placeKey = (path: string) =>
@@ -216,6 +220,26 @@ export const finishJoinedTarget = Effect.fn("JoinedTarget.marks")(function* (
 				indexes.some((index, tier) => reachable(row, tier, index, true).size > 0)
 			)
 				ambiguous++;
+	}
+	if (input.keyChangePairs?.length) {
+		const merged = mergeLocalizationKeyChanges(pairs, input.keyChangePairs);
+		pairs.splice(0, pairs.length, ...merged);
+		const changes = new Map<string, number>();
+		for (let index = 0; index < pairs.length; index++) {
+			const pair = pairs[index]!;
+			const ids = yield* writer.intern("identity", [
+				pair.to.namespace,
+				pair.to.key,
+				pair.from.namespace,
+				pair.from.key
+			]);
+			changes.set(`${ids[0]}:${ids[1]}`, (index + 1) * 2);
+			changes.set(`${ids[2]}:${ids[3]}`, (index + 1) * 2 + 1);
+		}
+		for (let row = 0; row < count; row++)
+			line.key_change![row] = isResolved(row)
+				? (changes.get(`${line.namespace![row]}:${line.key![row]}`) ?? 0)
+				: 0;
 	}
 	const review = input.review?.target === input.target.name ? input.review : undefined;
 	if (review) {

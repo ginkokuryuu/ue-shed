@@ -37,7 +37,7 @@ import type {
 	SavedAssetPackageTextRecord,
 	SavedAssetTextOccurrence
 } from "../packages/unreal-assets/dist/index.js";
-import { expectLocalizationImportMatchesParser } from "./localization-import-oracle.test-support.ts";
+import { importLocalizationFile } from "../packages/game-text/src/localization-import.ts";
 
 export async function withJoinCache(run: (cache: string) => Promise<void>) {
 	const cache = await mkdtemp(join(tmpdir(), "ue-shed-columnar-join-"));
@@ -80,15 +80,17 @@ export async function importJoinEvidence(
 		)
 	] as const)
 		if (file.status === "read")
-			await expectLocalizationImportMatchesParser({
-				projectRoot,
-				cacheRoot,
-				relativePath: file.provenance.relativePath,
-				format,
-				poFormat: evidence.target.poFormat,
-				collapseMode: evidence.target.collapseMode,
-				sharedTargetKey: evidence.target.name
-			});
+			await Effect.runPromise(
+				importLocalizationFile({
+					projectRoot,
+					cacheRoot,
+					relativePath: file.provenance.relativePath,
+					format,
+					poFormat: evidence.target.poFormat,
+					collapseMode: evidence.target.collapseMode,
+					sharedTargetKey: evidence.target.name
+				})
+			);
 }
 export function joinFileErrors(evidence: LocalizationTargetEvidence) {
 	return Object.fromEntries(

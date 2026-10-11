@@ -642,6 +642,12 @@ impl Snapshot {
         after: usize,
         limit: usize,
     ) -> Result<Vec<usize>, CatalogError> {
+        if matches!(kind, QueryKind::Inventory) {
+            return Ok((after..self.inventory.len())
+                .filter(|&id| self.inventory[id].signature.kind == EntryKind::Package)
+                .take(limit)
+                .collect());
+        }
         if matches!(kind, QueryKind::Maps) {
             return Ok(self
                 .inventory
@@ -686,7 +692,7 @@ impl Snapshot {
                     }
                 }
             }
-            QueryKind::Maps => unreachable!(),
+            QueryKind::Maps | QueryKind::Inventory => unreachable!(),
         }
         let mut ids = Vec::new();
         for index in selected {
@@ -1116,7 +1122,30 @@ impl Catalog for BinaryCatalog {
         let headers = snapshot.headers(selected)?;
         for (&id, header) in selected.iter().zip(headers) {
             let path = snapshot.inventory[id].signature.relative_path.clone();
-            items.push(if matches!(request.kind, QueryKind::Maps) {
+            items.push(if matches!(request.kind, QueryKind::Inventory) {
+                let stem = path
+                    .rsplit_once('.')
+                    .map_or(path.as_str(), |(stem, _)| stem);
+                let paths = [
+                    path.clone(),
+                    format!("{stem}.uexp"),
+                    format!("{stem}.ubulk"),
+                    format!("{stem}.uptnl"),
+                ];
+                let parts = paths.map(|path| {
+                    let row = snapshot
+                        .inventory
+                        .binary_search_by(|item| item.signature.relative_path.cmp(&path))
+                        .ok()?;
+                    let signature = &snapshot.inventory[row].signature;
+                    Some((signature.size, signature.modified_nanos))
+                });
+                QueryItem::Inventory {
+                    package_path: path,
+                    signature: super::catalog::bundle_signature(parts),
+                    header_data: header.and_then(|value| value.header_data),
+                }
+            } else if matches!(request.kind, QueryKind::Maps) {
                 QueryItem::Map {
                     package_name: header
                         .map(|h| h.package_name)

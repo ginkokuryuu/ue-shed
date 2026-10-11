@@ -1,12 +1,8 @@
+import { packageTextFixtureEvidence } from "./package-text-fixture.test-support.ts";
 import { resolve } from "node:path";
 import { readFile, writeFile } from "node:fs/promises";
 import { Effect, Stream } from "effect";
 import { beforeAll, describe, expect, it } from "vitest";
-import {
-	assetReaderLayer,
-	scanSavedProject,
-	type SavedAssetPackageTextEvent
-} from "../packages/unreal-assets/dist/index.js";
 import {
 	applyLocalizationReview,
 	applyLocalizationKeyChanges,
@@ -24,8 +20,7 @@ import {
 import {
 	refreshPackageTextLayer,
 	packageTextShard,
-	textCorpusFromPackageTextLayer,
-	type PackageTextInventoryEntry
+	textCorpusFromPackageTextLayer
 } from "../packages/game-text/src/package-text-layer.ts";
 import { compareLocalizationJoins } from "./localization-join-oracle.test-support.ts";
 import {
@@ -41,11 +36,7 @@ import {
 	importJoinEvidence,
 	joinFileErrors
 } from "./columnar-join.test-support.ts";
-import {
-	committedPackagePaths,
-	measureNativeText,
-	packageTextFixtureProjects
-} from "./package-text-reader.test-support.ts";
+import { packageTextFixtureProjects } from "./package-text-reader.test-support.ts";
 import { ensureUassetExecutable } from "./native-tools.ts";
 import {
 	localizationReviewFingerprint,
@@ -485,6 +476,108 @@ describe("split saved identity findings regression", () => {
 });
 
 describe("columnar join", () => {
+	it.each(["source edit", "restore original inputs"] as const)(
+		"saved-only %s equals a full rebuild without a manifest",
+		async (operation) => {
+			await withJoinCache(async (cache) => {
+				const { projectRoot, evidence, inventory, events } = await tinyJoinInput(
+					cache,
+					0.0001
+				);
+				const run = <A, E>(effect: Parameters<typeof runJoinIn<A, E>>[3]) =>
+					runJoinIn(projectRoot, cache, "Generated", effect);
+				const authored = {
+					...evidence.target,
+					cultures: [],
+					nativeCulture: null,
+					outputPaths: { ...evidence.target.outputPaths, manifest: null }
+				};
+				const input = { projectRoot, target: authored };
+				const records = [...packageTextRecordsFromEvents(events)];
+				const original = records.find(
+					(record) =>
+						record.event === "text_package_record" &&
+						record.occurrences.some((occurrence) => occurrence.source.length >= 40)
+				);
+				if (!original || original.event !== "text_package_record")
+					throw new Error("Missing long source.");
+				await run(refreshJoinedTarget(input));
+				const baseline = await run(
+					Effect.gen(function* () {
+						return yield* hydrateJoinedTarget(yield* openJoinedTarget(), 0, 10000);
+					})
+				);
+				await run(
+					refreshPackageTextLayer({
+						inventory: inventory.map((entry) =>
+							entry.path === original.path
+								? { ...entry, signature: "saved-source-edit" }
+								: entry
+						),
+						read: () =>
+							Stream.succeed({
+								...original,
+								occurrences: original.occurrences.map((occurrence) =>
+									occurrence.source.length >= 40
+										? { ...occurrence, source: occurrence.source + " edit" }
+										: occurrence
+								)
+							})
+					})
+				);
+				const refreshed = await run(refreshJoinedTarget(input));
+				expect(refreshed.rebuilt).toBe(true);
+				const collect = Effect.gen(function* () {
+					return yield* hydrateJoinedTarget(yield* openJoinedTarget(), 0, 10000);
+				});
+				const actual = await run(collect);
+				if (operation === "restore original inputs") {
+					await run(
+						refreshPackageTextLayer({
+							inventory,
+							read: (paths) =>
+								Stream.fromIterable(
+									records.filter(
+										(record) => "path" in record && paths.includes(record.path)
+									)
+								)
+						})
+					);
+					const restored = await run(refreshJoinedTarget(input));
+					expect(restored.rebuilt).toBe(true);
+					expect(compareLocalizationJoins(baseline, await run(collect))).toMatchObject({
+						equal: true,
+						differenceCount: 0
+					});
+					// Reapply the edit to compare its incremental result with a forced build.
+					await run(
+						refreshPackageTextLayer({
+							inventory: inventory.map((entry) =>
+								entry.path === original.path
+									? { ...entry, signature: "saved-source-edit" }
+									: entry
+							),
+							read: () =>
+								Stream.succeed({
+									...original,
+									occurrences: original.occurrences.map((occurrence) =>
+										occurrence.source.length >= 40
+											? { ...occurrence, source: occurrence.source + " edit" }
+											: occurrence
+									)
+								})
+						})
+					);
+				}
+				await run(refreshJoinedTarget({ ...input, force: true }));
+				expect(compareLocalizationJoins(actual, await run(collect))).toMatchObject({
+					equal: true,
+					differenceCount: 0
+				});
+			});
+		},
+		60000
+	);
 	it("stable package/PO edits and compaction equal full rebuilds; overlays do not chain", async () => {
 		await withJoinCache(async (cache) => {
 			const { projectRoot, evidence, inventory, events } = await tinyJoinInput(cache, 0.001);
@@ -799,35 +892,10 @@ describe("columnar join", () => {
 		"committed fixture join oracle: %s",
 		async (project) => {
 			await withJoinCache(async (cache) => {
-				const projectRoot = resolve(project),
-					paths = committedPackagePaths(project);
-				const scan = await Effect.runPromise(
-					scanSavedProject({
-						projectRoot,
-						paths,
-						depth: "header",
-						headerData: true,
-						inventory: true
-					}).pipe(Effect.provide(assetReaderLayer({ executable })))
-				);
-				expect(scan.failures).toEqual([]);
-				const inventory: PackageTextInventoryEntry[] = scan.assets
-					.map((asset) => {
-						if (asset.depth !== "header" || !asset.header.package.header_data)
-							throw new Error("Missing header evidence");
-						const signature = scan.inventory?.find(
-							(entry) => entry.path === asset.header.path
-						);
-						if (!signature) throw new Error("Missing signature");
-						return {
-							path: asset.header.path,
-							signature: JSON.stringify([signature.size, signature.modifiedMs]),
-							headerData: asset.header.package.header_data
-						};
-					})
-					.sort((a, b) => (a.path < b.path ? -1 : a.path > b.path ? 1 : 0));
-				const events = measureNativeText(executable, project, false, paths).events.filter(
-					(event) => event.event !== "text_package_record"
+				const projectRoot = resolve(project);
+				const { inventory, events, packageEvents } = await packageTextFixtureEvidence(
+					executable,
+					project
 				);
 				for (const evidence of await fixtureJoinEvidence(projectRoot)) {
 					const run = <A, E>(effect: Parameters<typeof runJoinIn<A, E>>[3]) =>
@@ -838,18 +906,10 @@ describe("columnar join", () => {
 							inventory,
 							read: (selected) =>
 								Stream.fromIterable(
-									measureNativeText(
-										executable,
-										project,
-										true,
-										selected
-									).events.filter(
-										(event): event is SavedAssetPackageTextEvent =>
-											![
-												"text_occurrence",
-												"text_coverage_gap",
-												"text_package"
-											].includes(event.event)
+									packageEvents.filter(
+										(event) =>
+											event.event !== "text_summary" &&
+											selected.includes(event.path)
 									)
 								)
 						})

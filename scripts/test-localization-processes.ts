@@ -305,6 +305,32 @@ for (const engine of configured) {
 		}
 	);
 	if (!legacy) {
+		// Probe the engine's real localization loaders in this disposable copy, without changing saved fixtures.
+		const probePath = join(
+			project,
+			"Source/UEShedFixtureEditor/Private/UEShedBuildFixtureCommandlet.cpp"
+		);
+		const probe = await readFile(
+			join(repositoryRoot, "fixtures/game-text-wtf8/unreal-json-probe.inc"),
+			"utf8"
+		);
+		const commandlet = await readFile(probePath, "utf8");
+		const entry = "int32 UUEShedBuildFixtureCommandlet::Main(const FString& Params)\n{";
+		assert(commandlet.replaceAll("\r\n", "\n").includes(entry));
+		await writeFile(
+			probePath,
+			commandlet
+				.replaceAll("\r\n", "\n")
+				.replace(
+					'#include "UEShedBuildFixtureCommandlet.h"',
+					'#include "UEShedBuildFixtureCommandlet.h"\n' + probe
+				)
+				.replace(
+					entry,
+					entry +
+						'\n\tif (FParse::Param(*Params, TEXT("Wtf8JsonOnly"))) return VerifyWtf8LocalizationAcceptance() ? 0 : 1;'
+				)
+		);
 		const descriptorPath = join(project, "UEShedFixture.uproject");
 		const descriptor = Schema.decodeUnknownSync(
 			Schema.fromJsonString(Schema.Record(Schema.String, Schema.Json))
@@ -326,6 +352,15 @@ for (const engine of configured) {
 			"-WaitMutex",
 			"-NoHotReloadFromIDE",
 			"-MaxParallelActions=1"
+		]);
+		runProcess(unrealEngineTools(engine.root).editorCommandlet, [
+			descriptorPath,
+			"-run=UEShedBuildFixture",
+			"-Wtf8JsonOnly",
+			"-unattended",
+			"-nullrhi",
+			"-nosplash",
+			"-nop4"
 		]);
 	}
 	const target = await Effect.runPromise(

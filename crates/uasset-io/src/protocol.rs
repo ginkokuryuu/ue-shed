@@ -174,6 +174,15 @@ pub enum ProjectIndexPageEncoding {
 #[derive(Clone, Debug, Deserialize, PartialEq, Eq)]
 #[serde(tag = "kind", deny_unknown_fields)]
 pub enum ProjectIndexQuery {
+    #[serde(rename = "inventory")]
+    Inventory {
+        cursor: Option<String>,
+        #[serde(rename = "expectedGeneration")]
+        expected_generation: u64,
+        limit: u32,
+        #[serde(rename = "projectId")]
+        project_id: String,
+    },
     #[serde(rename = "maps")]
     Maps {
         cursor: Option<String>,
@@ -700,6 +709,12 @@ fn validate_project_index_query(query: &ProjectIndexQuery) -> Result<(), Protoco
             expected_generation,
             limit,
             project_id,
+        }
+        | ProjectIndexQuery::Inventory {
+            cursor,
+            expected_generation,
+            limit,
+            project_id,
         } => (project_id, *expected_generation, *limit, cursor, None),
         ProjectIndexQuery::ExactClasses {
             cursor,
@@ -858,6 +873,14 @@ fn validate_result_frame(result: &ResultFrame) -> Result<(), ProtocolError> {
             }
             for item in &page.items {
                 match item {
+                    ProjectIndexDictionaryItem::Inventory {
+                        package_path,
+                        signature,
+                        ..
+                    } => {
+                        validate_non_empty(package_path, "packagePath")?;
+                        validate_non_empty(signature, "signature")?;
+                    }
                     ProjectIndexDictionaryItem::Map {
                         map_path,
                         package_name,

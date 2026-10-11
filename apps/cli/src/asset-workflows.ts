@@ -13,6 +13,7 @@ import { CliCommandError, CliRuntime, messageOf, printJson } from "./cli-runtime
 import { observeCliOperation, readerLayer } from "./cli-operation.js";
 import type { CliCommand } from "./command-model.js";
 import { LocalizationEvidenceNodeLive } from "@ue-shed/localization";
+import { refreshCliGameTextIndex } from "./workflows/game-text-index.js";
 import { loadLocalizationStatus } from "./workflows/localization.js";
 
 function summarizeScan(scan: SavedAssetScan) {
@@ -106,15 +107,9 @@ export const runTextScan = Effect.fn("Cli.workflow.text_scan")((command: TextSca
 	observeCliOperation(
 		command._tag,
 		Effect.gen(function* () {
-			const { TextCorpusService, TextCorpusServiceLive } = yield* Effect.promise(
-				() => import("@ue-shed/game-text")
-			);
-			const corpus = yield* Effect.gen(function* () {
-				const service = yield* TextCorpusService;
-				return yield* service.scan({ projectRoot: command.projectRoot });
-			}).pipe(
-				Effect.provide(TextCorpusServiceLive),
-				Effect.provide(readerLayer(command.reader))
+			const { corpus } = yield* refreshCliGameTextIndex(
+				{ projectRoot: command.projectRoot },
+				command.reader
 			);
 			return yield* printJson(corpus);
 		})
@@ -154,19 +149,12 @@ export const runTextSearch = Effect.fn("Cli.workflow.text_search")((command: Tex
 					})
 				);
 			}
-			const {
-				searchTextCorpus,
-				textCorpusDiagnosticSummary,
-				TextCorpusService,
-				TextCorpusServiceLive,
-				unitMatchesTextWhere
-			} = yield* Effect.promise(() => import("@ue-shed/game-text"));
-			const corpus = yield* Effect.gen(function* () {
-				const service = yield* TextCorpusService;
-				return yield* service.scan({ projectRoot: command.projectRoot });
-			}).pipe(
-				Effect.provide(TextCorpusServiceLive),
-				Effect.provide(readerLayer(command.reader))
+			const { textCorpusDiagnosticSummary } = yield* Effect.promise(
+				() => import("@ue-shed/game-text")
+			);
+			const { corpus, query } = yield* refreshCliGameTextIndex(
+				{ projectRoot: command.projectRoot },
+				command.reader
 			);
 			const where = textWhere(
 				command,
@@ -179,9 +167,11 @@ export const runTextSearch = Effect.fn("Cli.workflow.text_search")((command: Tex
 				status: corpus.status,
 				query: command.query,
 				coverage: corpus.coverage,
-				matches: searchTextCorpus(corpus, command.query).filter((unit) =>
-					unitMatchesTextWhere(unit, where)
-				),
+				matches: query.export({
+					query: command.query,
+					capability: "all",
+					...(where ? { where } : undefined)
+				}).units,
 				...textCorpusDiagnosticSummary(corpus.diagnostics)
 			});
 		})
@@ -192,13 +182,8 @@ export const runTextReview = Effect.fn("Cli.workflow.text_review")((command: Tex
 	observeCliOperation(
 		command._tag,
 		Effect.gen(function* () {
-			const {
-				decodeGameTextRuleDocumentJson,
-				evaluateGameTextSourceQuality,
-				TextCorpusScanError,
-				TextCorpusService,
-				TextCorpusServiceLive
-			} = yield* Effect.promise(() => import("@ue-shed/game-text"));
+			const { decodeGameTextRuleDocumentJson, evaluateGameTextSourceQuality } =
+				yield* Effect.promise(() => import("@ue-shed/game-text"));
 			const ruleJson = yield* Effect.tryPromise({
 				try: () => readFile(command.ruleFile, "utf8"),
 				catch: () =>
@@ -215,21 +200,9 @@ export const runTextReview = Effect.fn("Cli.workflow.text_review")((command: Tex
 						})
 				)
 			);
-			const corpus = yield* Effect.gen(function* () {
-				const service = yield* TextCorpusService;
-				return yield* service.scan({ projectRoot: command.projectRoot });
-			}).pipe(
-				Effect.provide(TextCorpusServiceLive),
-				Effect.provide(readerLayer(command.reader)),
-				Effect.mapError(
-					(error) =>
-						new CliCommandError({
-							message:
-								error instanceof TextCorpusScanError
-									? `Game Text corpus scan failed (${error.code}). ${error.recovery}`
-									: "Game Text corpus scan configuration failed. Confirm the saved-asset reader configuration and retry."
-						})
-				)
+			const { corpus } = yield* refreshCliGameTextIndex(
+				{ projectRoot: command.projectRoot },
+				command.reader
 			);
 			return yield* printJson(evaluateGameTextSourceQuality(corpus, document));
 		})

@@ -1,3 +1,4 @@
+import { decodeWtf8, encodeWtf8 } from "./wtf8.js";
 import { absent, unitId, type JoinPackages } from "./joined-target-input.js";
 import { StringArena } from "./shared-string-codec.js";
 import { snapshotCheck } from "./snapshot-format.js";
@@ -58,6 +59,7 @@ export function joinedQueryColumns(input: {
 	const fields = [
 		"representative",
 		"identity",
+		"namespace",
 		"raw",
 		"line",
 		"member_start",
@@ -109,10 +111,10 @@ export function joinedQueryColumns(input: {
 			strings.string(c.namespace[member]!),
 			strings.string(c.key[member]!)
 		);
-	for (const member of rawRepresentatives) ids.add(Buffer.from(unitName(member)));
+	for (const member of rawRepresentatives) ids.add(Buffer.from(encodeWtf8(unitName(member))));
 	const packedIds = ids.finish();
 	const id = (row: number) =>
-		packedIds.bytes.toString("utf8", packedIds.offsets[row], packedIds.offsets[row + 1]);
+		decodeWtf8(packedIds.bytes.subarray(packedIds.offsets[row], packedIds.offsets[row + 1]));
 	function add(
 		columns: Record<string, Uint32Array>,
 		row: number,
@@ -124,6 +126,7 @@ export function joinedQueryColumns(input: {
 	) {
 		columns.representative![row] = first;
 		columns.identity![row] = c.identity[first]!;
+		columns.namespace![row] = c.namespace[first]!;
 		columns.raw![row] = rawIndex[first]!;
 		columns.line![row] = gathered;
 		columns.member_start![row] = members.count;

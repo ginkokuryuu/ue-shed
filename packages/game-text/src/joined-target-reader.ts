@@ -1,6 +1,8 @@
 import { Effect, Schema } from "effect";
 import {
 	LocalizationTarget,
+	FileProvenance,
+	LocalizationError,
 	LocalizationReviewFile,
 	ManifestEntry,
 	ArchiveEntry,
@@ -29,6 +31,7 @@ export const JoinedTargetMeta = Schema.Struct({
 	version: Schema.Literal(3),
 	count: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
 	aliases: Schema.Record(Schema.String, Schema.String),
+	chunks: Schema.optionalKey(Schema.Record(Schema.String, Schema.Array(Schema.String))),
 	generation: Schema.String,
 	base: Schema.optionalKey(Schema.String),
 	patches: Schema.optionalKey(Schema.Record(Schema.String, Schema.String)),
@@ -37,7 +40,10 @@ export const JoinedTargetMeta = Schema.Struct({
 		projectRoot: Schema.String,
 		target: LocalizationTarget,
 		review: Schema.optionalKey(LocalizationReviewFile),
-		fileErrors: Schema.optionalKey(Schema.Record(Schema.String, Schema.String))
+		keyChangePairs: Schema.optionalKey(Schema.Array(LocalizationKeyChangePair)),
+		fileErrors: Schema.optionalKey(Schema.Record(Schema.String, Schema.String)),
+		fileProvenances: Schema.optionalKey(Schema.Record(Schema.String, FileProvenance)),
+		fileDiagnostics: Schema.optionalKey(Schema.Record(Schema.String, LocalizationError))
 	}),
 	dependencies: Schema.Record(Schema.String, Schema.String),
 	packageNames: Schema.Array(Schema.String),
@@ -71,14 +77,38 @@ export const readJoinedTarget = Effect.fn("JoinedTarget.read")(function* (
 	for (const canonical of Object.values(meta.aliases))
 		if (!baseLayer.directory.entries.has(canonical))
 			return yield* Effect.fail(snapshotFailure("join.meta", "Invalid column alias"));
+	for (const names of Object.values(meta.chunks ?? {})) {
+		snapshotCheck(names.length > 1, "join.meta", "Invalid column chunks");
+		for (const name of names)
+			snapshotCheck(
+				baseLayer.directory.entries.has(name),
+				"join.meta",
+				"Missing column chunk"
+			);
+	}
 	const patched = new Map<string, Uint32Array>();
+	const chunked = new Map<string, Uint32Array>();
+	const original = Effect.fn("JoinedTarget.original")(function* (name: string) {
+		const names = meta.chunks?.[name];
+		if (!names) return yield* baseLayer.section(meta.aliases[name] ?? name);
+		let values = chunked.get(name);
+		if (!values) {
+			const parts: Uint32Array[] = [];
+			for (const field of names) parts.push(yield* u32(baseLayer, field));
+			values = concatenateJoinedChunks(parts, name);
+			chunked.set(name, values);
+		}
+		return values;
+	});
 	const section = Effect.fn("JoinedTarget.section")(function* (name: string) {
 		if (name === "join.meta") return yield* rawLayer.section(name);
 		const patch = meta.patches?.[name];
-		if (!patch) return yield* baseLayer.section(meta.aliases[name] ?? name);
+		if (!patch) return yield* original(name);
 		let values = patched.get(name);
 		if (!values) {
-			values = (yield* u32(baseLayer, meta.aliases[name] ?? name)).slice();
+			const baseValues = yield* original(name);
+			snapshotCheck(baseValues instanceof Uint32Array, name, "Invalid patch column kind");
+			values = baseValues.slice();
 			const rows = yield* u32(rawLayer, meta.patchRows?.[name] ?? "patch.rows"),
 				replacements = yield* u32(rawLayer, patch);
 			snapshotCheck(rows.length === replacements.length, patch, "Patch lengths differ");
@@ -106,6 +136,23 @@ export const openJoinedTarget = Effect.fn("JoinedTarget.open")(function* () {
 	return yield* readJoinedTarget(yield* (yield* SharedIndex).open());
 });
 export type JoinedTargetReader = Effect.Success<ReturnType<typeof openJoinedTarget>>;
+
+/** Logical query arenas span bounded physical sections at large scales. */
+export function concatenateJoinedChunks(parts: readonly Uint32Array[], name: string): Uint32Array {
+	const length = parts.reduce((sum, part) => sum + part.length, 0);
+	snapshotCheck(
+		Number.isSafeInteger(length) && length <= 0xffffffff,
+		name,
+		"Logical column exceeds u32 range"
+	);
+	const values = new Uint32Array(length);
+	let offset = 0;
+	for (const part of parts) {
+		values.set(part, offset);
+		offset += part.length;
+	}
+	return values;
+}
 
 function occurrenceUnitId(
 	values: Readonly<Record<string, string>>,
@@ -178,15 +225,15 @@ export const hydrateJoinedTarget = Effect.fn("JoinedTarget.page")(function* (
 		return value;
 	});
 	const entry = Effect.fn("JoinedTarget.pageEntry")(function* (name: string, row: number) {
-		const block = Math.floor(row / 256),
+		const block = row,
 			key = `${name}:${block}`;
 		let page = entryPages.get(key);
 		if (!page) {
-			page = yield* decodeLocalizationSnapshot(yield* file(name), block * 256, 256);
+			page = yield* decodeLocalizationSnapshot(yield* file(name), block, 1);
 			if (entryPages.size >= 128) entryPages.delete(entryPages.keys().next().value!);
 		} else entryPages.delete(key);
 		entryPages.set(key, page);
-		return page.entries[row - block * 256];
+		return page.entries[0];
 	});
 	const occurrences = Effect.fn("JoinedTarget.pageOccurrences")(function* (shard: number) {
 		let values = occurrenceShards.get(shard);
@@ -386,7 +433,7 @@ export const inspectJoinedTarget = Effect.fn("JoinedTarget.inspect")(function* (
 	for (const [name, entry] of layer.directory.entries) {
 		if (name === "join.meta" || name === "shared.meta") continue;
 		const values = yield* layer.section(name);
-		if (name.startsWith("line.") || /^c\d+\./u.test(name))
+		if (!/\.chunk\d+$/u.test(name) && (name.startsWith("line.") || /^c\d+\./u.test(name)))
 			snapshotCheck(values.length === meta.count, name, "Incomplete line column");
 		if (record.stringColumns[name])
 			for (const id of values) snapshotCheck(id < limit, name, "ID outside dictionary");
@@ -394,6 +441,7 @@ export const inspectJoinedTarget = Effect.fn("JoinedTarget.inspect")(function* (
 	}
 	for (const name of new Set([
 		...Object.keys(meta.aliases),
+		...Object.keys(meta.chunks ?? {}),
 		...Object.keys(meta.patches ?? {})
 	])) {
 		const values = yield* u32(layer, name);

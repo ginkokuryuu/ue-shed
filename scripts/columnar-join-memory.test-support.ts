@@ -1,3 +1,4 @@
+import { encodeWtf8 } from "../packages/game-text/src/wtf8.ts";
 import { Effect, Layer } from "effect";
 import {
 	SharedIndex,
@@ -45,7 +46,7 @@ export function joinMemoryLayer() {
 	const intern = (_domain: string, strings: readonly string[]) =>
 		Effect.sync(() => {
 			const fresh = [...new Set(strings.filter((value) => !ids.has(value)))].sort((a, b) =>
-				Buffer.compare(Buffer.from(a), Buffer.from(b))
+				Buffer.compare(encodeWtf8(a), encodeWtf8(b))
 			);
 			if (fresh.length) {
 				segments.push({
@@ -154,7 +155,7 @@ export function joinMemoryLayer() {
 		bytesSync: (id) => {
 			const value = values[id];
 			if (value === undefined) throw new Error(`Fuzz store: missing string ${id}`);
-			return Buffer.from(value);
+			return Buffer.from(encodeWtf8(value));
 		},
 		stringsSync: (ids) =>
 			ids.map((id) => {

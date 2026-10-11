@@ -1,5 +1,6 @@
 import { Predicate, Result, Schema } from "effect";
 import { defaultLocalizationLimits, LocalizationError, LocalizationLimits } from "./schema.js";
+import { validateUnrealJsonEscapes } from "./unreal-json.js";
 
 export function localizationError(code: LocalizationError["code"]): LocalizationError {
 	const regenerate =
@@ -7,6 +8,8 @@ export function localizationError(code: LocalizationError["code"]): Localization
 	const recovery = {
 		invalid_encoding: regenerate,
 		malformed_json: regenerate,
+		malformed_manifest: regenerate,
+		malformed_archive: regenerate,
 		invalid_schema: regenerate,
 		malformed_struct: regenerate,
 		malformed_ini: regenerate,
@@ -117,11 +120,13 @@ export function decodeJson<S extends Schema.ConstraintDecoder<unknown>>(
 	bytes: Uint8Array,
 	limits: LocalizationLimits,
 	schema: S,
-	version: number
+	version: number,
+	file?: string
 ): S["Type"] {
 	const text = decodeText(bytes, limits);
 	checkJsonNesting(text, limits);
 	const value = validate(JsonFromString, text, "malformed_json");
+	validateUnrealJsonEscapes(text, version === 1 ? "manifest" : "archive", file);
 	checkDepth(value, limits);
 	if (validate(FormatVersion, value).FormatVersion !== version)
 		throw localizationError("unsupported_version");

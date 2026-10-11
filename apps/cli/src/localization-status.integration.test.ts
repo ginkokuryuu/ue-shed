@@ -52,7 +52,7 @@ describe.skipIf(!executable)("localization CLI with the real reader", () => {
 			expect(status.packageCoverage?.packages.length).toBeLessThanOrEqual(200);
 			expect(
 				status.packageCoverage?.packages.every((item) =>
-					["partial", "failed"].includes(item.status)
+					["partial", "failed", "not_gatherable"].includes(item.status)
 				)
 			).toBe(true);
 			expect(status.page.total).toBe(2);

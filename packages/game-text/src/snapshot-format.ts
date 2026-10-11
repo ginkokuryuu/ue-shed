@@ -1,7 +1,8 @@
 import { Schema } from "effect";
+import { decodeWtf8, encodeWtf8, hasWtf8Surrogate, isWtf8 } from "./wtf8.js";
 
-/** Disposable v3 layout, still inside the game-text-v1 cache namespace. */
-export const SNAPSHOT_VERSION = 3;
+/** Disposable v4 layout: every string domain stores canonical WTF-8. */
+export const SNAPSHOT_VERSION = 4;
 export const SNAPSHOT_HEADER_BYTES = 48;
 export const SNAPSHOT_DIRECTORY_BYTES = 96;
 export const MAX_SNAPSHOT_BYTES = 16 * 1024 ** 3;
@@ -11,7 +12,7 @@ export const MAX_SNAPSHOT_STRINGS = 64_000_000;
 export const MAX_SNAPSHOT_STRING_BYTES = 1024 * 1024;
 export const SNAPSHOT_STRING_BLOCK_BYTES = 256 * 1024;
 const MAX_BLOCK_STRINGS = MAX_SNAPSHOT_SECTION_BYTES / 4 - 2;
-const magic = new TextEncoder().encode("UESHT003");
+const magic = new TextEncoder().encode("UESHT004");
 const encoder = new TextEncoder();
 const decoder = new TextDecoder("utf-8", { fatal: true, ignoreBOM: true });
 const isString = Schema.is(Schema.String);
@@ -126,10 +127,26 @@ export function encodeStringBlock(values: readonly string[]): Uint8Array {
 	for (let i = 0; i < values.length; i++) {
 		view.setUint32(4 + i * 4, position, true);
 		const value = values[i]!;
-		const result = encoder.encodeInto(value, bytes.subarray(start + position));
-		snapshotCheck(result.read === value.length, "strings", "String block exceeds section cap");
-		bounded(result.written, MAX_SNAPSHOT_STRING_BYTES, "strings");
-		position += result.written;
+		if (value.isWellFormed()) {
+			const result = encoder.encodeInto(value, bytes.subarray(start + position));
+			snapshotCheck(
+				result.read === value.length,
+				"strings",
+				"String block exceeds section cap"
+			);
+			bounded(result.written, MAX_SNAPSHOT_STRING_BYTES, "strings");
+			position += result.written;
+		} else {
+			const encoded = encodeWtf8(value);
+			snapshotCheck(
+				start + position + encoded.length <= bytes.length,
+				"strings",
+				"String block exceeds section cap"
+			);
+			bounded(encoded.length, MAX_SNAPSHOT_STRING_BYTES, "strings");
+			bytes.set(encoded, start + position);
+			position += encoded.length;
+		}
 	}
 	view.setUint32(4 + values.length * 4, position, true);
 	return bytes.slice(0, start + position);
@@ -152,10 +169,18 @@ export function decodeStringBlock(
 		"Invalid string endpoints"
 	);
 	const payload = bytes.subarray(start);
+	const generalized = hasWtf8Surrogate(payload);
 	try {
-		if (options.utf8Valid)
-			snapshotCheck(options.utf8Valid(payload), section, "Invalid UTF-8 or split code point");
-		else decoder.decode(payload);
+		// Adjacent entries can independently contain a lone lead and a lone trail.
+		if (!generalized) {
+			if (options.utf8Valid)
+				snapshotCheck(
+					options.utf8Valid(payload),
+					section,
+					"Invalid UTF-8 or split code point"
+				);
+			else decoder.decode(payload);
+		}
 	} catch {
 		throw snapshotFailure(section, "Invalid UTF-8 or split code point");
 	}
@@ -172,6 +197,12 @@ export function decodeStringBlock(
 			section,
 			"Invalid UTF-8 or split code point"
 		);
+		if (generalized)
+			snapshotCheck(
+				isWtf8(payload.subarray(a, b)),
+				section,
+				"Invalid or non-canonical WTF-8"
+			);
 	}
 	return {
 		count,
@@ -184,7 +215,7 @@ export function decodeStringBlock(
 		},
 		string(id: number) {
 			bounded(id, count - 1, section);
-			return decoder.decode(
+			return decodeWtf8(
 				bytes.subarray(
 					start + view.getUint32(4 + id * 4, true),
 					start + view.getUint32(8 + id * 4, true)
@@ -213,7 +244,7 @@ export function snapshotStringTableBuilder(
 			if (existing !== undefined) return existing;
 			bounded(values.length + 1, MAX_SNAPSHOT_STRINGS, domain);
 			bounded(value.length, MAX_SNAPSHOT_STRING_BYTES, domain);
-			bounded(encoder.encode(value).length, MAX_SNAPSHOT_STRING_BYTES, domain);
+			bounded(encodeWtf8(value).length, MAX_SNAPSHOT_STRING_BYTES, domain);
 			const id = values.length;
 			ids.set(value, id);
 			values.push(value);
@@ -229,7 +260,7 @@ export function snapshotStringTableBuilder(
 				let end = start,
 					bytes = 8;
 				while (end < values.length) {
-					const next = encoder.encode(values[end]!).length + 4;
+					const next = encodeWtf8(values[end]!).length + 4;
 					if (end > start && bytes + next > targetBytes) break;
 					bytes += next;
 					end++;

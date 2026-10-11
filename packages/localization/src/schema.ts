@@ -18,6 +18,8 @@ export type TextKey = typeof TextKey.Type;
 export const LocalizationErrorCode = Schema.Literals([
 	"invalid_encoding",
 	"malformed_json",
+	"malformed_manifest",
+	"malformed_archive",
 	"invalid_schema",
 	"unsupported_version",
 	"malformed_struct",

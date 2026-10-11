@@ -79,6 +79,7 @@ const UAssetIoProjectIndexQueryBase = {
 };
 
 export const UAssetIoProjectIndexQuery = Schema.Union([
+	Schema.Struct({ kind: Schema.Literal("inventory"), ...UAssetIoProjectIndexQueryBase }),
 	Schema.Struct({
 		kind: Schema.Literal("maps"),
 		...UAssetIoProjectIndexQueryBase
@@ -182,9 +183,16 @@ export interface UAssetIoProjectIndexHeader extends Schema.Schema.Type<
 	typeof UAssetIoProjectIndexHeader
 > {}
 
+const UAssetIoProjectIndexInventory = Schema.Struct({
+	kind: Schema.Literal("inventory"),
+	packagePath: NonEmptyString,
+	signature: NonEmptyString,
+	headerData: Schema.optionalKey(PackageHeaderData)
+});
 export const UAssetIoProjectIndexItem = Schema.Union([
 	UAssetIoProjectIndexMap,
-	UAssetIoProjectIndexHeader
+	UAssetIoProjectIndexHeader,
+	UAssetIoProjectIndexInventory
 ]).annotate({ identifier: "UAssetIoProjectIndexItem" });
 export type UAssetIoProjectIndexItem = Schema.Schema.Type<typeof UAssetIoProjectIndexItem>;
 
@@ -210,7 +218,11 @@ const UAssetIoProjectIndexDictionaryHeader = Schema.Struct({
 export const UAssetIoProjectIndexDictionaryPage = Schema.Struct({
 	...UAssetIoProjectIndexPage.fields,
 	items: Schema.Array(
-		Schema.Union([UAssetIoProjectIndexMap, UAssetIoProjectIndexDictionaryHeader])
+		Schema.Union([
+			UAssetIoProjectIndexMap,
+			UAssetIoProjectIndexDictionaryHeader,
+			UAssetIoProjectIndexInventory
+		])
 	).check(Schema.isMaxLength(UASSET_IO_PROJECT_INDEX_MAX_PAGE_SIZE)),
 	strings: Schema.Array(NonEmptyString).check(
 		Schema.isMaxLength(UASSET_IO_PROJECT_INDEX_MAX_PAGE_SIZE * 128)

@@ -10,11 +10,14 @@ import {
 	utimes
 } from "node:fs/promises";
 import { resolve, relative } from "node:path";
-import { Effect } from "effect";
+import { Effect, Result } from "effect";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import {
 	LocalizationEvidenceNodeLive,
-	defaultLocalizationLimits
+	defaultLocalizationLimits,
+	parseManifest,
+	parseArchive,
+	parsePO
 } from "../packages/localization/dist/index.js";
 import {
 	importLocalizationFile,
@@ -61,6 +64,33 @@ const manifest = JSON.stringify({
 });
 
 describe("localization snapshot parser oracle", () => {
+	it.each(["manifest", "archive", "po"] as const)(
+		"malformed %s keeps the event parser's typed failure and recovery",
+		async (format) => {
+			const file = `malformed-recovery.${format}`;
+			const bytes =
+				format === "po" ? Buffer.from('msgid "unterminated\n') : utf16("not JSON");
+			const expected =
+				format === "manifest"
+					? parseManifest(bytes)
+					: format === "archive"
+						? parseArchive(bytes)
+						: parsePO(bytes);
+			await writeFile(resolve(temporary, file), bytes);
+			const actual = await Effect.runPromise(
+				importLocalizationFile(request(file, format)).pipe(Effect.result)
+			);
+			expect(expected._tag).toBe("Failure");
+			expect(Result.isFailure(actual)).toBe(true);
+			if (expected._tag === "Failure" && Result.isFailure(actual)) {
+				expect(actual.failure).toMatchObject({
+					code: expected.failure.code,
+					recovery: expected.failure.recovery
+				});
+				expect(actual.failure.message).toContain(file);
+			}
+		}
+	);
 	it("reuses unchanged local blocks after compaction and matches every refreshed PO entry", async () => {
 		const file = "block-reuse.po";
 		const text = Array.from(

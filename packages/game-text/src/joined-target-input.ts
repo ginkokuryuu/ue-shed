@@ -1,3 +1,4 @@
+import { decodeWtf8 } from "./wtf8.js";
 import { relative, resolve } from "node:path";
 import { Effect, Schema } from "effect";
 import type { LocalizationTarget } from "@ue-shed/localization";
@@ -65,7 +66,7 @@ export class JoinStrings {
 		return packed.bytes.subarray(packed.offsets[local]!, packed.offsets[local + 1]!);
 	}
 	string(id: number) {
-		return this.bytes(id).toString("utf8");
+		return decodeWtf8(this.bytes(id));
 	}
 }
 

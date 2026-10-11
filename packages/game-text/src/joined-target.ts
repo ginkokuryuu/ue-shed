@@ -1,3 +1,4 @@
+import { decodeWtf8, encodeWtf8 } from "./wtf8.js";
 import { createHash } from "node:crypto";
 import { Effect, Schema, Option } from "effect";
 import {
@@ -6,7 +7,7 @@ import {
 	type LocalizationReviewFile
 } from "@ue-shed/localization";
 import { SharedIndex } from "./shared-index.js";
-import { snapshotCheck } from "./snapshot-format.js";
+import { snapshotCheck, MAX_SNAPSHOT_SECTION_BYTES } from "./snapshot-format.js";
 import type { SnapshotSourceColumn } from "./snapshot-file.js";
 import { snapshotNodeChecksum } from "./snapshot-file.js";
 import { localizationStates, LocalizationUnknownReason } from "./localization-schema.js";
@@ -28,6 +29,8 @@ import { finishJoinedTarget } from "./joined-target-marks.js";
 import { incrementJoinedTarget } from "./joined-target-incremental.js";
 import { comparePackageTextPathBytes } from "./package-text-order.js";
 import { joinedQueryColumns } from "./joined-query-columns.js";
+import { joinedQueryPlaces } from "./joined-query-places.js";
+import { joinedPhysicalChunkName } from "./joined-column-chunks.js";
 import { StringArena } from "./shared-string-codec.js";
 
 const noteMetadata = Schema.decodeUnknownOption(
@@ -42,8 +45,15 @@ export interface JoinedTargetInput {
 	readonly projectRoot: string;
 	readonly target: LocalizationTarget;
 	readonly review?: LocalizationReviewFile;
+	readonly keyChangePairs?: readonly import("./localization-key-changes.js").LocalizationKeyChangePair[];
 	/** Failed file paths and their typed localization error codes, supplied by the importer. */
 	readonly fileErrors?: Readonly<Record<string, string>>;
+	readonly fileProvenances?: Readonly<
+		Record<string, import("@ue-shed/localization").FileProvenance>
+	>;
+	readonly fileDiagnostics?: Readonly<
+		Record<string, import("@ue-shed/localization").LocalizationError>
+	>;
 	readonly force?: boolean;
 }
 export const stateBit = (state: (typeof localizationStates)[number]) =>
@@ -98,7 +108,7 @@ export const refreshJoinedTarget = Effect.fn("JoinedTarget.refresh")(function* (
 			.sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))
 	);
 	const key =
-		"joined-v7:" +
+		"joined-v10:" +
 		createHash("sha256")
 			.update(
 				JSON.stringify([
@@ -107,7 +117,10 @@ export const refreshJoinedTarget = Effect.fn("JoinedTarget.refresh")(function* (
 					dependencies,
 					input.target,
 					input.review ?? null,
-					input.fileErrors ?? {}
+					input.keyChangePairs ?? null,
+					input.fileErrors ?? {},
+					input.fileProvenances ?? {},
+					input.fileDiagnostics ?? {}
 				])
 			)
 			.digest("hex");
@@ -123,7 +136,7 @@ export const refreshJoinedTarget = Effect.fn("JoinedTarget.refresh")(function* (
 	}
 	const reader = yield* store.open();
 	let incrementalFallback: string | undefined;
-	if (!input.force && root.active.joined?.startsWith("joined-v7:")) {
+	if (!input.force && root.active.joined?.startsWith("joined-v10:")) {
 		const incremental = yield* incrementJoinedTarget(
 			input,
 			key,
@@ -897,9 +910,9 @@ export const refreshJoinedTarget = Effect.fn("JoinedTarget.refresh")(function* (
 			const raw = queryColumns["query.slice.raw"]![sliceStart]!;
 			const identity =
 				hasUnits && keys[row - start] === ""
-					? `unresolved:${rawIdBytes.toString("utf8", rawIdStarts[raw], rawIdStarts[raw + 1])}`
+					? `unresolved:${decodeWtf8(rawIdBytes.subarray(rawIdStarts[raw], rawIdStarts[raw + 1]))}`
 					: JSON.stringify([namespaces[row - start], keys[row - start]]);
-			lineIds.add(Buffer.from(`${input.target.name}:${identity}`));
+			lineIds.add(Buffer.from(encodeWtf8(`${input.target.name}:${identity}`)));
 		}
 	}
 	const packedLineIds = lineIds.finish();
@@ -913,18 +926,53 @@ export const refreshJoinedTarget = Effect.fn("JoinedTarget.refresh")(function* (
 	queryColumns["query.line.id_utf8"] = lineIdValues;
 	queryColumns["query.line.id_starts"] = Uint32Array.from(packedLineIds.offsets);
 	const lineId = (row: number) =>
-		packedLineIds.bytes.toString(
-			"utf8",
-			packedLineIds.offsets[row],
-			packedLineIds.offsets[row + 1]
+		decodeWtf8(
+			packedLineIds.bytes.subarray(packedLineIds.offsets[row], packedLineIds.offsets[row + 1])
 		);
 	queryColumns["query.line.order"] = Uint32Array.from({ length: count }, (_, row) => row).sort(
 		(left, right) => lineId(left).localeCompare(lineId(right))
 	);
+	queryColumns["query.package.order"] = Uint32Array.from(
+		{ length: packages.paths.length },
+		(_, row) => row
+	).sort((left, right) =>
+		comparePackageTextPathBytes(
+			strings.bytes(packages.paths[left]!),
+			strings.bytes(packages.paths[right]!)
+		)
+	);
 	const sourceColumns: SnapshotSourceColumn[] = [];
+	Object.assign(
+		queryColumns,
+		yield* joinedQueryPlaces(
+			writer,
+			packages,
+			manifest,
+			line,
+			queryColumns,
+			fileRows.subarray(0, fileCount)
+		)
+	);
 	const aliases: Record<string, string> = {};
+	const chunks: Record<string, string[]> = {};
 	const identical = new Map<string, { name: string; bytes: Buffer }[]>();
 	function add(name: string, values: Uint32Array, domain?: string) {
+		if (values.byteLength > MAX_SNAPSHOT_SECTION_BYTES) {
+			const names: string[] = [];
+			for (let start = 0; start < values.length; start += MAX_SNAPSHOT_SECTION_BYTES / 4) {
+				const field = joinedPhysicalChunkName(name, sourceColumns.length, names.length);
+				names.push(field);
+				const part = values.subarray(start, start + MAX_SNAPSHOT_SECTION_BYTES / 4);
+				sourceColumns.push({
+					name: field,
+					kind: domain ? "stringIds" : "u32",
+					...(domain ? { domain } : undefined),
+					load: async () => part
+				});
+			}
+			chunks[name] = names;
+			return;
+		}
 		const bytes = Buffer.from(values.buffer, values.byteOffset, values.byteLength);
 		const signature = `${domain ?? "u32"}:${values.length}:${snapshotNodeChecksum(bytes)}`;
 		const candidates = identical.get(signature) ?? [];
@@ -958,7 +1006,20 @@ export const refreshJoinedTarget = Effect.fn("JoinedTarget.refresh")(function* (
 		add(
 			name,
 			values,
-			name.endsWith(".sources") ? "source" : name.endsWith(".files") ? "paths" : undefined
+			name.endsWith(".sources")
+				? "source"
+				: name.endsWith(".files")
+					? "paths"
+					: [
+								"query.place.file_ids",
+								"query.place.path_ids",
+								"query.place.occurrence_object",
+								"query.place.occurrence_package"
+						  ].includes(name)
+						? "paths"
+						: name.endsWith(".namespace") || name === "query.place.namespace_ids"
+							? "identity"
+							: undefined
 		);
 	add("occurrence.rows", order);
 	add("manifest.rows", mo);
@@ -977,6 +1038,7 @@ export const refreshJoinedTarget = Effect.fn("JoinedTarget.refresh")(function* (
 			count,
 			input,
 			aliases,
+			chunks,
 			generation: root.generation,
 			dependencies,
 			packageNames: packages.names,

@@ -1,4 +1,5 @@
 import { isUtf8 } from "node:buffer";
+import { encodeWtf8, hasWtf8Surrogate, isWtf8 } from "./wtf8.js";
 import { snapshotCheck } from "./snapshot-format.js";
 export interface PackedStrings {
 	readonly bytes: Buffer;
@@ -10,11 +11,20 @@ export function packedStrings(values: readonly string[]): PackedStrings {
 	let size = 0;
 	for (let i = 0; i < values.length; i++) {
 		offsets[i] = size;
-		size += Buffer.byteLength(values[i]!);
+		size += values[i]!.isWellFormed()
+			? Buffer.byteLength(values[i]!)
+			: encodeWtf8(values[i]!).length;
 	}
 	const bytes = Buffer.allocUnsafe(size);
 	let position = 0;
-	for (const value of values) position += bytes.write(value, position, "utf8");
+	for (const value of values) {
+		if (value.isWellFormed()) position += bytes.write(value, position, "utf8");
+		else {
+			const encoded = encodeWtf8(value);
+			bytes.set(encoded, position);
+			position += encoded.length;
+		}
+	}
 	offsets[values.length] = position;
 	return { bytes, offsets };
 }
@@ -294,7 +304,11 @@ export function a64Cursor(bytes: Buffer) {
 			if (row === count)
 				snapshotCheck(cursor.position === bytes.length, "front", "Trailing block bytes");
 			const value = scratch.subarray(0, length);
-			snapshotCheck(isUtf8(value), "front", "Invalid UTF-8");
+			snapshotCheck(
+				isUtf8(value) || isWtf8(value),
+				"front",
+				"Invalid or non-canonical WTF-8"
+			);
 			return value;
 		}
 	};
@@ -365,9 +379,21 @@ export function decodeA64Into(bytes: Buffer, output: PackedStrings, first: numbe
 		previous = position;
 		position += length;
 		output.offsets[first + row + 1] = position;
+		const value = output.bytes.subarray(previous, position);
+		if (hasWtf8Surrogate(value))
+			snapshotCheck(isWtf8(value), "front", "Invalid or non-canonical WTF-8");
 	}
 	snapshotCheck(
-		cursor.position === bytes.length && isUtf8(output.bytes.subarray(begin, position)),
+		cursor.position === bytes.length &&
+			(isUtf8(output.bytes.subarray(begin, position)) ||
+				Array.from({ length: count }, (_, row) => row).every((row) =>
+					isWtf8(
+						output.bytes.subarray(
+							output.offsets[first + row],
+							output.offsets[first + row + 1]
+						)
+					)
+				)),
 		"front",
 		"Trailing bytes or invalid UTF-8"
 	);

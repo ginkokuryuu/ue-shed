@@ -1,3 +1,4 @@
+import { refreshCliGameTextIndex } from "./game-text-index.js";
 import { resolve } from "node:path";
 import { Effect, Schema } from "effect";
 import {
@@ -38,29 +39,17 @@ export const runInvestigation = Effect.fn("Cli.workflow.investigation")(
 				};
 				const contents = yield* Effect.gen(function* () {
 					if (preset.kind === "game_text") {
-						const corpus = yield* Effect.flatMap(text.TextCorpusService, (service) =>
-							service.scan({ projectRoot: source.projectRoot })
-						).pipe(
-							Effect.provide(text.TextCorpusServiceLive),
-							Effect.provide(readerLayer(command.reader))
+						const indexed = yield* refreshCliGameTextIndex(
+							{
+								projectRoot: source.projectRoot,
+								...(preset.query.localization
+									? { targetName: preset.query.localization.target }
+									: undefined)
+							},
+							command.reader
 						);
-						// Problem and translation filters need the target the preset was saved with.
-						const target = preset.query.localization?.target;
-						const localized =
-							target === undefined
-								? undefined
-								: yield* Effect.promise(() => import("./localization.js")).pipe(
-										Effect.flatMap(({ loadTargetQuery }) =>
-											loadTargetQuery(source.projectRoot, target, corpus)
-										),
-										Effect.mapError(
-											(error) =>
-												new InvestigationError({
-													message: error.message,
-													recovery: error.recovery
-												})
-										)
-									);
+						const corpus = indexed.corpus;
+						const localized = indexed.query;
 						const document = yield* text.exportGameTextInvestigation(
 							corpus,
 							preset,

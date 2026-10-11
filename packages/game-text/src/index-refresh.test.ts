@@ -150,6 +150,7 @@ it("retains readers while one refresh lease updates only selected inputs and rev
 							archive.replace("Shipped", "Skipped")
 						);
 					});
+					yield* refresh.invalidate({ ...request, changedFiles: ["de.po"] });
 					const changed = yield* refresh.refresh({
 						...request,
 						changedFiles: [path, "de.po"]
@@ -194,6 +195,7 @@ it("retains readers while one refresh lease updates only selected inputs and rev
 							})
 						);
 					});
+					yield* refresh.invalidate({ ...request, changedFiles: [reviewPath] });
 					const reviewed = yield* refresh.refresh({ ...request, changedFiles: [] });
 					expect(reviewed.join.rebuilt).toBe(true);
 					expect(reviewed.imported.files).toHaveLength(0);

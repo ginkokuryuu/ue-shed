@@ -5,7 +5,7 @@ import { availableParallelism } from "node:os";
 import { Worker } from "node:worker_threads";
 import { performance } from "node:perf_hooks";
 import { Effect, Schema } from "effect";
-import { LocalizationError } from "@ue-shed/localization";
+import { LocalizationError, FileProvenance } from "@ue-shed/localization";
 import { SharedIndex, sharedIndexDirectory } from "./shared-index.js";
 import { SnapshotStoreError } from "./snapshot-store.js";
 import { SnapshotFormatError } from "./snapshot-format.js";
@@ -21,6 +21,7 @@ const Reply = Schema.Union([
 		file: Schema.Struct({
 			key: Schema.String,
 			contentHash: Schema.String,
+			provenance: FileProvenance,
 			relativePath: Schema.String,
 			format: Schema.Literals(["manifest", "archive", "po"]),
 			inputBytes: Schema.Number
@@ -34,13 +35,12 @@ const Reply = Schema.Union([
 ]);
 function parserWorker() {
 	const compiled = new URL("./localization-import-worker.js", import.meta.url);
-	if (existsSync(compiled))
-		return new Worker(compiled, { resourceLimits: { maxOldGenerationSizeMb: 16384 } });
+	if (existsSync(compiled)) return new Worker(compiled);
 	const source = new URL("./localization-import-worker.ts", import.meta.url);
 	// The repository's source tests use tsx; installed packages start their emitted JS directly.
 	return new Worker(
 		`import("tsx/esm/api").then(async ({ register }) => { register(); await import(${JSON.stringify(source.href)}); });`,
-		{ eval: true, resourceLimits: { maxOldGenerationSizeMb: 16384 } }
+		{ eval: true }
 	);
 }
 function prepare(worker: Worker, request: LocalizationFileImportRequest, stagedFile: string) {

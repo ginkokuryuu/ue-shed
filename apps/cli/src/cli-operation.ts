@@ -1,6 +1,6 @@
 import { observeOperation } from "@ue-shed/observability";
 import { assetReaderLayer, AssetReaderLive } from "@ue-shed/unreal-assets";
-import { Effect } from "effect";
+import { Effect, type Scope } from "effect";
 import { CliCommandError, messageOf } from "./cli-runtime.js";
 
 export function readerLayer(reader?: string) {
@@ -10,8 +10,9 @@ export function readerLayer(reader?: string) {
 export function observeCliOperation<A, E, R>(
 	command: string,
 	effect: Effect.Effect<A, E, R>
-): Effect.Effect<A, CliCommandError, R> {
+): Effect.Effect<A, CliCommandError, Exclude<R, Scope.Scope>> {
 	return observeOperation(`Cli.${command}`, effect).pipe(
+		Effect.scoped,
 		Effect.withSpan("cli.external_operation", {
 			attributes: { "cli.command": command }
 		}),

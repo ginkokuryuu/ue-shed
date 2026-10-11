@@ -77,7 +77,9 @@ function compareIdentity(a: LocalizationIdentity, b: LocalizationIdentity): numb
 					: 0;
 }
 
-function diagnostics(entries: readonly LocalizationIdentity[]): DuplicateIdentityDiagnostic[] {
+export function localizationIdentityDiagnostics(
+	entries: readonly LocalizationIdentity[]
+): DuplicateIdentityDiagnostic[] {
 	const groups = new Map<string, { identity: LocalizationIdentity; count: number }>();
 	for (const entry of entries) {
 		const id = identityKey(entry);
@@ -125,10 +127,10 @@ function flatten<Child extends Schema.Json, A>(
 	return entries;
 }
 
-export function parseManifest(bytes: Uint8Array, options?: LocalizationLimits) {
+export function parseManifest(bytes: Uint8Array, options?: LocalizationLimits, file?: string) {
 	return parseResult(() => {
 		const limits = limitsFor(options);
-		const root = decodeJson(bytes, limits, ManifestTree, 1);
+		const root = decodeJson(bytes, limits, ManifestTree, 1, file);
 		const entries = flatten<typeof ManifestChild.Type, ManifestEntry>(
 			root,
 			limits,
@@ -152,16 +154,16 @@ export function parseManifest(bytes: Uint8Array, options?: LocalizationLimits) {
 		const manifest: LocalizationManifest = {
 			formatVersion: 1,
 			entries,
-			diagnostics: diagnostics(entries)
+			diagnostics: localizationIdentityDiagnostics(entries)
 		};
 		return immutable(manifest);
 	});
 }
 
-export function parseArchive(bytes: Uint8Array, options?: LocalizationLimits) {
+export function parseArchive(bytes: Uint8Array, options?: LocalizationLimits, file?: string) {
 	return parseResult(() => {
 		const limits = limitsFor(options);
-		const root = decodeJson(bytes, limits, ArchiveTree, 2);
+		const root = decodeJson(bytes, limits, ArchiveTree, 2, file);
 		const entries = flatten<typeof ArchiveChild.Type, ArchiveEntry>(
 			root,
 			limits,
@@ -182,7 +184,7 @@ export function parseArchive(bytes: Uint8Array, options?: LocalizationLimits) {
 		const archive: LocalizationArchive = {
 			formatVersion: 2,
 			entries,
-			diagnostics: diagnostics(entries)
+			diagnostics: localizationIdentityDiagnostics(entries)
 		};
 		return immutable(archive);
 	});

@@ -8,6 +8,18 @@ use super::{ProjectIndexItem, ProjectIndexPage};
 #[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
 #[serde(tag = "kind", deny_unknown_fields)]
 pub enum ProjectIndexDictionaryItem {
+    #[serde(rename = "inventory")]
+    Inventory {
+        #[serde(rename = "packagePath")]
+        package_path: String,
+        signature: String,
+        #[serde(
+            default,
+            skip_serializing_if = "Option::is_none",
+            rename = "headerData"
+        )]
+        header_data: Option<uasset_inspection::package_header::PackageHeaderData>,
+    },
     #[serde(rename = "map")]
     Map {
         #[serde(rename = "mapPath")]
@@ -69,6 +81,15 @@ impl From<ProjectIndexPage> for ProjectIndexDictionaryPage {
             .items
             .into_iter()
             .map(|item| match item {
+                ProjectIndexItem::Inventory {
+                    package_path,
+                    signature,
+                    header_data,
+                } => ProjectIndexDictionaryItem::Inventory {
+                    package_path,
+                    signature,
+                    header_data,
+                },
                 ProjectIndexItem::Map {
                     map_path,
                     package_name,

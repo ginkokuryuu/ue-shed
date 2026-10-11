@@ -14,7 +14,8 @@ export default defineProject({
 			"scripts/package-text-layer.test.ts",
 			"scripts/columnar-join.test.ts",
 			"scripts/columnar-join-fuzz.test.ts",
-			"scripts/columnar-join-regressions.test.ts"
+			"scripts/columnar-join-regressions.test.ts",
+			"scripts/joined-column-chunks.test.ts"
 		],
 		name: "node"
 	}

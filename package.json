@@ -65,6 +65,7 @@
 		"release:plugins:observatory": "node scripts/release-plugin-bundle.ts observatory",
 		"test:adoption:data-authoring": "node scripts/test-data-authoring-adoption.ts",
 		"test:components": "node scripts/test.ts --project component",
+		"test:game-text:fuzz": "node scripts/test-columnar-join-fuzz.ts",
 		"test:coverage": "node scripts/test.ts --coverage",
 		"test:e2e": "pnpm run test:e2e:cli && pnpm run test:e2e:workbench",
 		"test:e2e:cli": "node scripts/test.ts apps/cli/src/index.e2e.test.ts apps/cli/src/review-authoring.e2e.test.ts apps/cli/src/review-session.e2e.test.ts apps/cli/src/review-capture.e2e.test.ts",

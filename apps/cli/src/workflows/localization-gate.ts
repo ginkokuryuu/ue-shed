@@ -3,15 +3,11 @@ import { Effect, Metric, Result, Schema } from "effect";
 import {
 	GameTextLocalizationError,
 	localizationManifestFailure,
-	applyLocalizationKeyChanges,
-	joinLocalizationTarget,
 	localizationGateFailures,
 	localizationGateResult,
 	localizationGateTarget,
 	localizationGateUnreadEvidence,
 	localizationGateUnreadPackages,
-	localizationKeyChanges,
-	textCorpusQuery,
 	type LocalizationGateCheck,
 	type LocalizationGateResult
 } from "@ue-shed/game-text";
@@ -19,7 +15,7 @@ import { observeCliOperation } from "../cli-operation.js";
 import { CliCommandError, CliRuntime, printJson } from "../cli-runtime.js";
 import type { CliCommand } from "../command-model.js";
 import { readChangedFiles } from "./changed-files.js";
-import { scanProjectText } from "./localization.js";
+import { refreshCliGameTextIndex } from "./game-text-index.js";
 
 type LocalizationGateCommand = Extract<CliCommand, { readonly _tag: "LocalizationGate" }>;
 
@@ -107,9 +103,13 @@ const loadGate = Effect.fn("Cli.localization.gate")(function* (command: Localiza
 				recovery: "Set up a localization target in Unreal, or check the project root."
 			})
 		);
-	const evidence = yield* Effect.forEach(targets, (target) =>
-		service.read({ projectRoot: command.projectRoot, target })
+	const indexed = yield* Effect.forEach(targets, (target) =>
+		refreshCliGameTextIndex(
+			{ projectRoot: command.projectRoot, targetName: target.name, changedFiles: files },
+			command.reader
+		)
 	);
+	const evidence = indexed.map((item) => item.evidence);
 	// A target whose manifest does not exist was never gathered and has no translations to lose.
 	// Checking every target skips it; a target named on the command line must have one.
 	const ungathered = evidence.filter(
@@ -153,7 +153,7 @@ const loadGate = Effect.fn("Cli.localization.gate")(function* (command: Localiza
 		target: item.target.name,
 		reason: "It has no manifest; Unreal has not gathered it."
 	}));
-	const corpus = yield* scanProjectText(command.projectRoot, command.reader);
+	const corpus = indexed[0]!.corpus;
 	const unscanned = localizationGateUnreadPackages(corpus, files);
 	if (unscanned.length > 0)
 		return yield* Effect.fail(
@@ -166,15 +166,18 @@ const loadGate = Effect.fn("Cli.localization.gate")(function* (command: Localiza
 		);
 	const failOn = localizationGateFailures(command.failOn, command.warnOn);
 	const results = checked.map((item) => {
-		const joined = joinLocalizationTarget(corpus, item);
-		const join = applyLocalizationKeyChanges(
-			joined,
-			localizationKeyChanges(joined, corpus).pairs
-		);
+		const result = indexed.find((result) => result.evidence === item)!;
 		return localizationGateTarget({
-			corpus,
-			query: textCorpusQuery(corpus, undefined, join),
-			join,
+			corpus: {
+				schemaVersion: result.corpus.schemaVersion,
+				status: result.corpus.status,
+				coverage: result.corpus.coverage,
+				diagnostics: result.corpus.diagnostics,
+				packageCoverage: result.corpus.packageCoverage ?? [],
+				units: result.query.export({ query: "", capability: "all", where: { files } }).units
+			},
+			query: result.query,
+			join: result.localizationJoin,
 			files,
 			failOn
 		});

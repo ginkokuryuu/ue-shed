@@ -1,0 +1,21 @@
+{
+	"contract": { "name": "uasset-io", "version": { "major": 1, "minor": 9 } },
+	"kind": "result",
+	"requestId": "project-index-inventory-001",
+	"result": {
+		"kind": "project_index_dictionary_page",
+		"page": {
+			"generation": 3,
+			"items": [
+				{
+					"kind": "inventory",
+					"packagePath": "Content/Data/DT_Items.uasset",
+					"signature": "[{\"modifiedMs\":456,\"size\":123},null,null,null]"
+				}
+			],
+			"projectId": "fixture-project",
+			"strings": []
+		}
+	},
+	"sequence": 1
+}

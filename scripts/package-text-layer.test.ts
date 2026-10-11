@@ -1,13 +1,9 @@
+import { packageTextFixtureEvidence } from "./package-text-fixture.test-support.ts";
 import { mkdtemp, rm, writeFile, mkdir } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve, normalize } from "node:path";
 import { Effect, Stream, type Scope } from "effect";
 import { describe, expect, it } from "vitest";
-import {
-	assetReaderLayer,
-	scanSavedProject,
-	type SavedAssetPackageTextEvent
-} from "../packages/unreal-assets/dist/index.js";
 import { SharedIndex, sharedIndexNodeLayer } from "../packages/game-text/src/shared-index.ts";
 import {
 	refreshPackageTextLayer,
@@ -23,11 +19,7 @@ import {
 } from "../packages/game-text/src/package-text-record.ts";
 import { comparePackageTextLayerWithEvents } from "./package-text-layer-oracle.test-support.ts";
 import { gameTextScaleRecipe, gameTextScaleEvents } from "./localization-scale-data.ts";
-import {
-	committedPackagePaths,
-	packageTextFixtureProjects,
-	measureNativeText
-} from "./package-text-reader.test-support.ts";
+import { packageTextFixtureProjects } from "./package-text-reader.test-support.ts";
 import { ensureUassetExecutable } from "./native-tools.ts";
 import { packageTextColumns } from "../packages/game-text/src/package-text-columns.ts";
 import {
@@ -64,6 +56,66 @@ const runIn = <A, E>(root: string, effect: Effect.Effect<A, E, SharedIndex | Sco
 	);
 
 describe("package text layer", () => {
+	it("selected refresh retains unlisted outer eligibility and recognizes map sidecars", async () => {
+		await withStore(async (cache) => {
+			const outer = "Content/Maps/World.umap";
+			const external = "Content/__ExternalActors__/Maps/World/AA/BB/Actor.uasset";
+			const map = "Content/Maps/Changed.umap";
+			const first = [map, outer].map((path) => ({
+				path,
+				signature: "before",
+				headerData: header(path === map)
+			}));
+			const reads: string[] = [];
+			const read = (paths: readonly string[]) => {
+				reads.push(...paths);
+				return Stream.fromIterable(paths.map((path) => emptyPackageTextRecord(path)));
+			};
+			await runIn(cache, refreshPackageTextLayer({ inventory: first, read }));
+			reads.length = 0;
+			const next = [
+				...first.map((entry) =>
+					entry.path === map ? { ...entry, signature: "after" } : entry
+				),
+				{ path: external, signature: "new", headerData: header(false) }
+			].sort((a, b) => (a.path < b.path ? -1 : 1));
+			await runIn(
+				cache,
+				refreshPackageTextLayer({
+					inventory: next,
+					changedFiles: [external, map.replace(".umap", ".uexp")],
+					read
+				})
+			);
+			expect(reads.sort()).toEqual([external, map].sort());
+			const corpus = await runIn(cache, textCorpusFromPackageTextLayer("."));
+			expect(
+				corpus.packageCoverage?.find((entry) => entry.packageFile === normalize(outer))
+					?.status
+			).toBe("not_gatherable");
+		});
+	});
+	it("a many-shard cold refresh stages package objects before atomic publication", async () => {
+		await withStore(async (cache) => {
+			const inventory = Array.from({ length: 24 }, (_, row) => ({
+				path: `Content/P${String(row).padStart(2, "0")}.uasset`,
+				signature: "cold",
+				headerData: header(true)
+			}));
+			const result = await runIn(
+				cache,
+				refreshPackageTextLayer({
+					inventory,
+					read: (paths) =>
+						Stream.fromIterable(paths.map((path) => emptyPackageTextRecord(path)))
+				})
+			);
+			expect(result.readPackages).toBe(24);
+			expect(
+				(await runIn(cache, textCorpusFromPackageTextLayer("."))).coverage.inspectedPackages
+			).toBe(24);
+		});
+	});
 	it("an empty fixture has a persistent layer and a no-change refresh publishes nothing", async () => {
 		await withStore(async (cache) => {
 			const read = () => Stream.die(new Error("Empty inventory must not be read"));
@@ -152,51 +204,21 @@ describe("package text layer", () => {
 		"layer oracle on every committed root: %s",
 		async (project) => {
 			await withStore(async (cache) => {
-				const projectRoot = resolve(project),
-					paths = committedPackagePaths(project);
-				const scan = await Effect.runPromise(
-					scanSavedProject({
-						projectRoot,
-						paths,
-						depth: "header",
-						headerData: true,
-						inventory: true
-					}).pipe(Effect.provide(assetReaderLayer({ executable })))
+				const projectRoot = resolve(project);
+				const { inventory, events, packageEvents } = await packageTextFixtureEvidence(
+					executable,
+					project
 				);
-				expect(scan.failures).toEqual([]);
-				const inventory: PackageTextInventoryEntry[] = scan.assets
-					.map((asset) => {
-						if (asset.depth !== "header") throw new Error("Expected header");
-						const signature = scan.inventory?.find(
-							(entry) => entry.path === asset.header.path
-						);
-						if (!signature) throw new Error("Missing signature inventory");
-						if (!asset.header.package.header_data)
-							throw new Error("Missing header data");
-						return {
-							path: asset.header.path,
-							signature: JSON.stringify([signature.size, signature.modifiedMs]),
-							headerData: asset.header.package.header_data
-						};
-					})
-					.sort((a, b) => (a.path < b.path ? -1 : a.path > b.path ? 1 : 0));
-				const old = measureNativeText(executable, project, false, paths);
 				await runIn(
 					cache,
 					refreshPackageTextLayer({
 						inventory,
 						read: (selected) =>
 							Stream.fromIterable(
-								measureNativeText(
-									executable,
-									project,
-									true,
-									selected
-								).events.filter(
-									(event): event is SavedAssetPackageTextEvent =>
-										event.event !== "text_occurrence" &&
-										event.event !== "text_coverage_gap" &&
-										event.event !== "text_package"
+								packageEvents.filter(
+									(event) =>
+										event.event !== "text_summary" &&
+										selected.includes(event.path)
 								)
 							)
 					})
@@ -206,21 +228,7 @@ describe("package text layer", () => {
 					comparePackageTextLayerWithEvents({
 						projectRoot,
 						inventory,
-						events: old.events.filter(
-							(
-								event
-							): event is Extract<
-								(typeof old.events)[number],
-								{
-									event:
-										| "text_occurrence"
-										| "text_coverage_gap"
-										| "text_package"
-										| "text_summary"
-										| "error";
-								}
-							> => event.event !== "text_package_record"
-						)
+						events
 					})
 				);
 				expect(oracle, JSON.stringify(oracle)).toMatchObject({

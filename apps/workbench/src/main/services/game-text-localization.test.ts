@@ -20,7 +20,23 @@ import {
 	unit,
 	cultureCode
 } from "./game-text-localization.test-support.js";
-import { makeGameTextLocalization } from "./game-text-localization.js";
+import { oracleGameTextIndexLayer } from "./game-text-index.test-support.js";
+import { makeGameTextLocalization as indexedGameTextLocalization } from "./game-text-localization.js";
+
+const makeGameTextLocalization = (...args: Parameters<typeof indexedGameTextLocalization>) =>
+	indexedGameTextLocalization(...args).pipe(
+		Effect.provide(
+			oracleGameTextIndexLayer(() =>
+				args[0]().pipe(
+					Effect.map((corpus) => {
+						if (!corpus) throw new Error("No corpus in this oracle request");
+						return corpus;
+					})
+				)
+			)
+		),
+		Effect.scoped
+	);
 
 it.effect("returns a recoverable reader failure without exposing file authority", () =>
 	Effect.gen(function* () {

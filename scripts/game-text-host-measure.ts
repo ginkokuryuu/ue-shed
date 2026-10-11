@@ -1,0 +1,479 @@
+/// <reference path="../apps/workbench/node_modules/electron/electron.d.ts" />
+import { join, basename } from "node:path";
+import { Context, Effect, Exit, Layer, Schema, Scope, Stream } from "effect";
+import {
+	GameTextIndexRefresh,
+	GameTextIndexBuilder,
+	GameTextIndexSource,
+	gameTextIndexRefreshLayer,
+	typeScriptIndexBuilderLayer,
+	type GameTextIndexRefreshResult,
+	type TextCorpusSearchRequest,
+	type TextCorpusSearchPage
+} from "../packages/game-text/dist/index.js";
+import {
+	LocalizationEvidenceNodeLive,
+	LocalizationEvidence,
+	LocalizationTargetName,
+	CultureCode
+} from "../packages/localization/dist/index.js";
+import { PackageTextStored } from "../packages/game-text/src/package-text-columns.ts";
+import { packageTextShard } from "../packages/game-text/src/package-text-layer.ts";
+import { packageTextJsonLines } from "../packages/game-text/src/package-text-ndjson.ts";
+import { readGeneratedPackageInventory } from "./package-text-generated.ts";
+import { captureBenchmarkByte, restoreBenchmarkByte } from "./localization-benchmark-byte.ts";
+import { readScaleRecipe } from "./game-text-scale-options.ts";
+import type { WorkbenchGameTextApi } from "../apps/workbench/src/main/services/game-text.ts";
+
+type Measure = <A>(
+	name: string,
+	run: () => Promise<A>,
+	summary: (value: A) => object
+) => Promise<void>;
+
+/** Retained reader evidence is supplied at the native-reader boundary. Hosts, refresh, builder and
+ * queries are the production implementations; no event-built corpus or join is used here. */
+export async function measureGameTextHosts(
+	project: string,
+	cache: string,
+	records: string,
+	measure: Measure,
+	host: string,
+	task: string,
+	changedByte: number
+) {
+	if (host !== "cli" && host !== "workbench") throw new Error("Choose cli or workbench.");
+	if (
+		process.env.NODE_OPTIONS ||
+		process.execArgv.some((arg) => arg.startsWith("--max-old-space-size"))
+	)
+		throw new Error("Host measurements require Node's default heap.");
+	const recipe = await readScaleRecipe(project);
+	// A capped cold build may publish nothing. Prepare disposable file layers in separately
+	// capped runs so query measurements remain available; this is never a cold-build success.
+	if (task.startsWith("prepare-file:")) {
+		const position = Number(task.slice("prepare-file:".length));
+		const preparation = Effect.gen(function* () {
+			const builder = yield* GameTextIndexBuilder;
+			const evidence = yield* LocalizationEvidence;
+			const discovery = yield* evidence.discover({ projectRoot: project });
+			const target = discovery.targets.find((value) => value.name === "Generated");
+			if (!target) throw new Error("Generated target is absent.");
+			const files = [
+				{ path: target.outputPaths.manifest, format: "manifest" as const },
+				...target.cultures.flatMap((culture) => [
+					{ path: target.outputPaths.archives[culture], format: "archive" as const },
+					{ path: target.outputPaths.portableObjects[culture], format: "po" as const }
+				])
+			];
+			const file =
+				Number.isSafeInteger(position) && position >= 0 ? files[position] : undefined;
+			if (!file?.path) throw new Error("Choose an existing target file position.");
+			return yield* builder.withSession(
+				{
+					configuration: { cacheRoot: cache, projectKey: project, targetKey: target.name }
+				},
+				builder.importLocalizationFile({
+					projectRoot: project,
+					cacheRoot: cache,
+					sharedTargetKey: target.name,
+					relativePath: file.path,
+					format: file.format,
+					poFormat: target.poFormat,
+					collapseMode: target.collapseMode
+				})
+			);
+		}).pipe(
+			Effect.provide(typeScriptIndexBuilderLayer),
+			Effect.provide(LocalizationEvidenceNodeLive)
+		);
+		await measure(
+			`${host}:${task}`,
+			() => Effect.runPromise(preparation),
+			(file) => ({
+				builder: "TypeScript builder; native builder pending",
+				path: file.relativePath,
+				parsed: file.parsed,
+				bytes: file.snapshotBytes
+			})
+		);
+		return;
+	}
+	const selected = (await readGeneratedPackageInventory(records)).find((entry) =>
+		entry.path.endsWith("/Package0.uasset")
+	);
+	if (!selected) throw new Error("Retained package 0 is absent.");
+	let version = "";
+	const source = Layer.succeed(
+		GameTextIndexSource,
+		GameTextIndexSource.of({
+			inventory: () =>
+				Effect.promise(async () =>
+					(await readGeneratedPackageInventory(records)).map((entry) =>
+						version && entry.path === selected.path
+							? { ...entry, signature: `${selected.signature}:${version}` }
+							: entry
+					)
+				),
+			read: (_root, entries) =>
+				Stream.fromAsyncIterable(
+					(async function* () {
+						const wanted = new Set(entries.map((entry) => entry.path));
+						const shards = [
+							...new Set(entries.map((entry) => packageTextShard(entry.path)))
+						];
+						const decode = Schema.decodeUnknownSync(
+							Schema.fromJsonString(PackageTextStored)
+						);
+						for (const shard of shards)
+							for await (const line of packageTextJsonLines(
+								join(records, `package-text.${shard}.ndjson`)
+							)) {
+								const record = decode(line);
+								if (!wanted.has(record.path)) continue;
+								if (record.evidence.event === "not_gatherable")
+									throw new Error("Host requested an excluded package.");
+								const event = record.evidence;
+								yield version &&
+								record.path === selected.path &&
+								event.event === "text_package_record"
+									? {
+											...event,
+											occurrences: event.occurrences.map((occurrence, row) =>
+												row === 0
+													? {
+															...occurrence,
+															source: `${occurrence.source} ${version}`
+														}
+													: occurrence
+											)
+										}
+									: event;
+							}
+					})(),
+					(cause) => {
+						throw cause;
+					}
+				)
+		})
+	);
+	if (task === "prepare-packages" || task === "prepare-saved-packages") {
+		const preparation = Effect.gen(function* () {
+			const builder = yield* GameTextIndexBuilder;
+			const reader = yield* GameTextIndexSource;
+			const inventory = yield* reader.inventory({ projectRoot: project });
+			const byPath = new Map(inventory.map((entry) => [entry.path, entry]));
+			return yield* builder.withSession(
+				{
+					configuration: {
+						cacheRoot: cache,
+						projectKey: project,
+						targetKey: task === "prepare-saved-packages" ? "SavedText" : "Generated"
+					}
+				},
+				builder.refreshPackageTextLayer({
+					inventory,
+					read: (paths) =>
+						reader.read(
+							project,
+							paths.map((path) => byPath.get(path)!)
+						)
+				})
+			);
+		}).pipe(Effect.provide(source), Effect.provide(typeScriptIndexBuilderLayer));
+		await measure(
+			`${host}:${task}`,
+			() => Effect.runPromise(preparation),
+			(value) => ({
+				builder: "TypeScript builder; native builder pending",
+				readPackages: value.readPackages,
+				changedShards: value.changedShards,
+				published: value.published
+			})
+		);
+		return;
+	}
+	const indexLayer = gameTextIndexRefreshLayer(cache).pipe(
+		Layer.provide(source),
+		Layer.provide(typeScriptIndexBuilderLayer),
+		Layer.provide(LocalizationEvidenceNodeLive)
+	);
+	const rootScope = await Effect.runPromise(Scope.make());
+	const context = await Effect.runPromise(Layer.buildWithScope(indexLayer, rootScope));
+	const targetName = LocalizationTargetName.make("Generated");
+	const cli =
+		host === "cli" ? await import("../apps/cli/src/workflows/game-text-index.ts") : undefined;
+	const builderLabel = "TypeScript builder; native builder pending";
+	let readerScope: Scope.Closeable | undefined;
+	let result: GameTextIndexRefreshResult | undefined;
+	let workbench: WorkbenchGameTextApi | undefined;
+	const run = <A, E>(effect: Effect.Effect<A, E>) => Effect.runPromise(effect);
+	const openCli = async () => {
+		if (readerScope) await run(Scope.close(readerScope, Exit.void));
+		readerScope = await run(Scope.make());
+		result = await run(
+			cli!
+				.refreshCliGameTextIndex(
+					{ projectRoot: project, targetName: "Generated" },
+					undefined
+				)
+				.pipe(Effect.provide(context), Effect.provideService(Scope.Scope, readerScope))
+		);
+		return {
+			builder: builderLabel,
+			readPackages: result.packages.readPackages,
+			parsedFiles: result.imported.files.filter((file) => file.parsed).length,
+			rebuilt: result.join.rebuilt
+		};
+	};
+	const openWorkbench = async () => {
+		const { WorkbenchGameText, WorkbenchGameTextLive } =
+			await import("../apps/workbench/src/main/services/game-text.ts");
+		const { makeWorkbenchProjectTestLayer } =
+			await import("../apps/workbench/src/main/services/project-workspace.ts");
+		const { ElectronDialog } =
+			await import("../apps/workbench/src/main/adapters/electron-dialog.ts");
+		const { LocalFilesLive } =
+			await import("../apps/workbench/src/main/adapters/local-files.ts");
+		const projectSummary = {
+			inputAtlas: "ready" as const,
+			mapCount: 0,
+			packageCount: recipe.packages,
+			projectName: basename(project),
+			projectRoot: project,
+			generation: 0
+		};
+		const projects = makeWorkbenchProjectTestLayer({
+			choose: () => Effect.succeed({ status: "ready", project: projectSummary }),
+			current: () => Effect.succeed({ status: "ready", project: projectSummary }),
+			candidates: () =>
+				Effect.succeed({
+					generation: 0,
+					assets: [],
+					failures: [],
+					summary: {
+						cacheHits: 0,
+						depth: "header",
+						diagnostics: [],
+						emittedAssets: 0,
+						failedAssets: 0,
+						partialAssets: 0,
+						projectRoot: project,
+						roots: [join(project, "Content")],
+						scannedAssets: 0,
+						schema_version: 8,
+						skippedAssets: 0
+					}
+				}),
+			inputAtlas: () => Effect.die("Not used"),
+			savedProject: () => Effect.succeed({ maps: [], projectRoot: project }),
+			savedTables: () => Effect.die("Not used")
+		});
+		const dialogs = Layer.succeed(
+			ElectronDialog,
+			ElectronDialog.of({
+				chooseDirectory: () => Effect.succeed({ status: "cancelled" }),
+				chooseFile: () => Effect.succeed({ status: "cancelled" }),
+				chooseFiles: () => Effect.succeed({ status: "cancelled" }),
+				chooseSaveFile: () => Effect.succeed({ status: "cancelled" })
+			})
+		);
+		const layer = WorkbenchGameTextLive.pipe(
+			Layer.provide(projects),
+			Layer.provide(dialogs),
+			Layer.provide(LocalFilesLive),
+			Layer.provide(LocalizationEvidenceNodeLive),
+			Layer.provide(
+				Layer.succeed(GameTextIndexRefresh, Context.get(context, GameTextIndexRefresh))
+			)
+		);
+		const built = await run(Layer.buildWithScope(layer, rootScope));
+		workbench = Context.get(built, WorkbenchGameText);
+		const refreshed = await run(workbench.configuredRefresh(true));
+		if (refreshed.status !== "completed") throw new Error(JSON.stringify(refreshed));
+		const localized = await run(workbench.localizationTarget(targetName));
+		if (localized.status !== "ready") throw new Error(JSON.stringify(localized));
+		return {
+			builder: builderLabel,
+			lines: localized.lines,
+			savedUnits: refreshed.summary.searchable.textUnits
+		};
+	};
+	const refresh = async () => {
+		if (host === "cli") return openCli();
+		if (!workbench) return openWorkbench();
+		const refreshed = await run(workbench.configuredRefresh(true));
+		if (refreshed.status !== "completed") throw new Error(JSON.stringify(refreshed));
+		const localized = await run(workbench.localizationTarget(targetName));
+		if (localized.status !== "ready") throw new Error(JSON.stringify(localized));
+		return {
+			builder: builderLabel,
+			lines: localized.lines,
+			savedUnits: refreshed.summary.searchable.textUnits
+		};
+	};
+	const query = async (request: TextCorpusSearchRequest): Promise<TextCorpusSearchPage> => {
+		if (host === "cli") return result!.query.search(request);
+		const reply = await run(workbench!.search(request));
+		if (reply.status !== "ready") throw new Error(JSON.stringify(reply));
+		return reply.page;
+	};
+	const base: TextCorpusSearchRequest = {
+		query: "",
+		capability: "all",
+		pageSize: 1,
+		localization: { target: targetName, culture: CultureCode.make(recipe.cultures[0]!) }
+	};
+	const pageSummary = (page: TextCorpusSearchPage) => ({
+		total: page.total,
+		displayed: page.units.length,
+		lines: page.localization?.lines.length ?? 0
+	});
+	try {
+		await measure(
+			`${host}:${
+				task === "cold" || task === "all"
+					? "cold-build"
+					: task === "prepared"
+						? "prepared-open"
+						: "warm-open"
+			}`,
+			refresh,
+			(value) => value
+		);
+		let first: TextCorpusSearchPage | undefined;
+		await measure(`${host}:first-query`, async () => (first = await query(base)), pageSummary);
+		await measure(`${host}:count`, () => query(base), pageSummary);
+		await measure(
+			`${host}:filter`,
+			() =>
+				query({
+					...base,
+					filter: [{ field: "problem", op: "is", values: ["translation"] }]
+				}),
+			pageSummary
+		);
+		await measure(
+			`${host}:facet`,
+			async () => {
+				const page = await query({
+					...base,
+					facets: { folder: "", assets: true, origins: true, cultures: true }
+				});
+				if (
+					!page.facets?.folders ||
+					!page.facets.assets ||
+					!page.facets.origins ||
+					!page.facets.cultures
+				)
+					throw new Error("Requested facets are absent.");
+				return page;
+			},
+			pageSummary
+		);
+		await measure(
+			`${host}:page`,
+			() =>
+				query({
+					...base,
+					pageSize: 50,
+					...(first!.localization?.nextCursor === undefined
+						? undefined
+						: { localizationCursor: first!.localization.nextCursor })
+				}),
+			pageSummary
+		);
+		await measure(`${host}:search`, () => query({ ...base, query: "mirava" }), pageSummary);
+		const id = first!.units[0]?.id,
+			lineId = first!.localization?.lines[0]?.id;
+		if (!id || !lineId) throw new Error("Focus fixture absent.");
+		await measure(
+			`${host}:focus`,
+			async () =>
+				host === "cli"
+					? result!.query.focus({
+							id,
+							pageSize: 20,
+							localization: { target: targetName, id: lineId }
+						})
+					: run(
+							workbench!.focus({
+								id,
+								pageSize: 20,
+								localization: { target: targetName, id: lineId }
+							})
+						),
+			(value) => ({ found: value !== undefined })
+		);
+		await measure(`${host}:refresh-no-change`, refresh, (value) => value);
+		if (host === "cli") {
+			const { runCli } = await import("../apps/cli/src/command.ts");
+			const { CliRuntime } = await import("../apps/cli/src/cli-runtime.ts");
+			let statusTotal = 0,
+				exitCode = 0;
+			const runtime = Layer.succeed(
+				CliRuntime,
+				CliRuntime.of({
+					print: (value) =>
+						Effect.sync(() => {
+							statusTotal = JSON.parse(value).page?.total ?? statusTotal;
+						}),
+					printError: (value) => Effect.die(value),
+					setExitCode: (code) =>
+						Effect.sync(() => {
+							exitCode = code;
+						})
+				})
+			);
+			await measure(
+				"cli:loc-status-command",
+				async () => {
+					await run(
+						runCli([
+							"loc",
+							"status",
+							project,
+							"--target",
+							"Generated",
+							"--limit",
+							"1"
+						]).pipe(Effect.provide(context), Effect.provide(runtime))
+					);
+					if (exitCode) throw new Error(`CLI status exited ${exitCode}`);
+					return { total: statusTotal, exitCode };
+				},
+				(value) => value
+			);
+		}
+		if (task === "all" || task === "refresh") {
+			const byte = await captureBenchmarkByte(
+				join(project, "Content/Localization/Generated/en/Generated.po"),
+				"mirava"
+			);
+			try {
+				version = "phase6-refresh";
+				const { open } = await import("node:fs/promises");
+				const file = await open(byte.path, "r+");
+				try {
+					await file.write(
+						Uint8Array.of(changedByte === byte.byte ? 111 : changedByte),
+						0,
+						1,
+						byte.offset
+					);
+					await file.sync();
+				} finally {
+					await file.close();
+				}
+				await measure(`${host}:refresh-one-package-one-po`, refresh, (value) => value);
+			} finally {
+				await restoreBenchmarkByte(byte);
+				version = "";
+				await measure(`${host}:restore-derived-index`, refresh, (value) => value);
+			}
+		}
+	} finally {
+		if (readerScope) await run(Scope.close(readerScope, Exit.void));
+		await run(Scope.close(rootScope, Exit.void));
+	}
+}

@@ -208,6 +208,37 @@
 					"properties": {
 						"kind": {
 							"type": "string",
+							"enum": ["inventory"]
+						},
+						"cursor": {
+							"$ref": "#/$defs/UAssetIoNonEmptyString"
+						},
+						"expectedGeneration": {
+							"$ref": "#/$defs/UAssetIoPositiveInt"
+						},
+						"limit": {
+							"type": "integer",
+							"allOf": [
+								{
+									"exclusiveMinimum": 0
+								},
+								{
+									"maximum": 1024
+								}
+							]
+						},
+						"projectId": {
+							"$ref": "#/$defs/UAssetIoNonEmptyString"
+						}
+					},
+					"required": ["kind", "expectedGeneration", "limit", "projectId"],
+					"additionalProperties": false
+				},
+				{
+					"type": "object",
+					"properties": {
+						"kind": {
+							"type": "string",
 							"enum": ["maps"]
 						},
 						"cursor": {

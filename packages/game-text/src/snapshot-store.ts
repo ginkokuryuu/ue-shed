@@ -4,7 +4,12 @@ import { join } from "node:path";
 import { hostname } from "node:os";
 import * as zlib from "node:zlib";
 import { Context, Effect, Layer, Metric, Schema, Semaphore, type Scope } from "effect";
-import { SnapshotFormatError, snapshotFailure, type SnapshotDirectory } from "./snapshot-format.js";
+import {
+	SnapshotFormatError,
+	snapshotFailure,
+	SNAPSHOT_VERSION,
+	type SnapshotDirectory
+} from "./snapshot-format.js";
 import {
 	openSnapshotFile,
 	writeSnapshotFile,
@@ -39,7 +44,7 @@ const InputKeys = Schema.Record(
 );
 const Manifest = Schema.Struct({
 	manifestVersion: Schema.Literal(1),
-	formatVersion: Schema.Literal(3),
+	formatVersion: Schema.Literal(SNAPSHOT_VERSION),
 	identity: Schema.String,
 	physicalSnapshot: SnapshotName,
 	previousSnapshot: Schema.NullOr(SnapshotName),
@@ -418,7 +423,7 @@ function makeNodeLayer(options: SnapshotStoreOptions): Layer.Layer<SnapshotStore
 				);
 				yield* Effect.logDebug("Game Text snapshot directory opened", {
 					sections: reader.file.directory.entries.size,
-					formatVersion: 3
+					formatVersion: SNAPSHOT_VERSION
 				});
 				return {
 					manifest: reader.manifest,
@@ -504,7 +509,7 @@ function makeNodeLayer(options: SnapshotStoreOptions): Layer.Layer<SnapshotStore
 									const physicalSnapshot = `snapshot-${randomUUID()}.snapshot`;
 									const value = Manifest.make({
 										manifestVersion: 1,
-										formatVersion: 3,
+										formatVersion: SNAPSHOT_VERSION,
 										identity,
 										physicalSnapshot,
 										previousSnapshot: current?.physicalSnapshot ?? null,
@@ -564,7 +569,7 @@ function makeNodeLayer(options: SnapshotStoreOptions): Layer.Layer<SnapshotStore
 								Effect.tap(() =>
 									Effect.logDebug("Game Text snapshot published", {
 										sections: source.columns.length,
-										formatVersion: 3
+										formatVersion: SNAPSHOT_VERSION
 									})
 								),
 								Effect.uninterruptible

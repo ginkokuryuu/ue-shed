@@ -18,6 +18,7 @@ import { importColdLocalizationTarget } from "./localization-cold-import.js";
 import { Context, Effect, Metric, Option, Result, Schema } from "effect";
 import {
 	LocalizationError,
+	FileProvenance,
 	LocalizationEvidence,
 	LocalizationTarget,
 	resolveLocalizationGatherPath,
@@ -49,7 +50,7 @@ export {
 	defaultLocalizationImportLimits,
 	type LocalizationImportLimits
 } from "./localization-stream.js";
-export const LOCALIZATION_IMPORT_VERSION = 5;
+export const LOCALIZATION_IMPORT_VERSION = 6;
 export interface LocalizationImportSourceFile {
 	readonly read: (
 		bytes: Uint8Array,
@@ -108,6 +109,7 @@ export type LocalizationFileImportRequest = typeof FileRequest.Type;
 export interface LocalizationFileSnapshotKey {
 	readonly key: string;
 	readonly contentHash: string;
+	readonly provenance: typeof FileProvenance.Type;
 	readonly relativePath: string;
 	readonly format: LocalizationImportOptions["format"];
 	/** True when a new parsed snapshot was published. */
@@ -531,6 +533,12 @@ const importFile = Effect.fn("LocalizationSnapshot.importFile")(function* (
 	return {
 		key,
 		contentHash,
+		provenance: {
+			relativePath: file,
+			size: observed.size,
+			modifiedTime: new Date(Number(BigInt(observed.mtimeNs) / 1_000_000n)).toISOString(),
+			contentHash
+		},
 		relativePath: file,
 		format: options.format,
 		parsed,

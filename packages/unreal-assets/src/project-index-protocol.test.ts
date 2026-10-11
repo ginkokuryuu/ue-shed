@@ -28,6 +28,25 @@ const fixture = async (name: string): Promise<Schema.Json> =>
 	);
 
 describe("Project Index protocol adapter mappings", () => {
+	it.each([
+		"project-index-inventory-result-event.json",
+		"project-index-inventory-dictionary-result-event.json"
+	])("retains committed package signatures in %s", async (name) => {
+		const event = await Effect.runPromise(decodeUAssetIoEvent(await fixture(`valid/${name}`)));
+		if (event.kind !== "result") throw new Error("Expected result.");
+		const result = event.result;
+		if (result.kind !== "project_index_page" && result.kind !== "project_index_dictionary_page")
+			throw new Error("Expected page.");
+		const page =
+			result.kind === "project_index_page"
+				? decodeProjectIndexWirePage(result.page)
+				: decodeProjectIndexDictionaryPage(result.page);
+		expect(page.items[0]).toEqual({
+			kind: "inventory",
+			packagePath: "Content/Data/DT_Items.uasset",
+			signature: '[{"modifiedMs":456,"size":123},null,null,null]'
+		});
+	});
 	it("validates compact domain bounds before retaining immutable expanded pages", async () => {
 		const page = {
 			generation: 1,

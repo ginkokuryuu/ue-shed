@@ -1,10 +1,10 @@
-import { Effect } from "effect";
+import { Effect, Schema } from "effect";
 import { isDeepStrictEqual } from "node:util";
 import { localizationReviewFingerprint } from "@ue-shed/localization";
 import type { SharedIndexReader, SharedIndexWriter } from "./shared-index.js";
 import type { SnapshotSourceColumn } from "./snapshot-file.js";
 import { snapshotCheck } from "./snapshot-format.js";
-import { readJoinedTarget } from "./joined-target-reader.js";
+import { JoinedTargetMeta, readJoinedTarget } from "./joined-target-reader.js";
 import { loadJoinFile, u32, type ColumnReader } from "./joined-target-input.js";
 import { precedence, reasonBit, stateBit, type JoinedTargetInput } from "./joined-target.js";
 
@@ -31,6 +31,22 @@ export const incrementJoinedTarget = Effect.fn("JoinedTarget.increment")(functio
 		onFallback(reason);
 		return null;
 	};
+	// Compaction can retire the overlay's base before its join is rebuilt. Check the
+	// metadata generation before opening that base or any previous input layer.
+	const raw = yield* reader.layer("joined");
+	snapshotCheck(
+		(raw.directory.entries.get("join.meta")?.rawLength ?? Infinity) <= 16 * 1024 ** 2,
+		"join.meta",
+		"Metadata exceeds bound"
+	);
+	const candidate = yield* Schema.decodeUnknownEffect(Schema.fromJsonString(JoinedTargetMeta))(
+		new TextDecoder().decode(yield* raw.section("join.meta"))
+	);
+	if (
+		candidate.generation !== reader.manifest.generation ||
+		(candidate.base !== undefined && !Object.hasOwn(reader.manifest.layers, candidate.base))
+	)
+		return fallback("generation-or-retired-base");
 	const previous = yield* readJoinedTarget(reader, true),
 		{ meta, layer } = previous;
 	if (
@@ -41,9 +57,16 @@ export const incrementJoinedTarget = Effect.fn("JoinedTarget.increment")(functio
 				meta.input.projectRoot,
 				meta.input.target,
 				meta.input.review,
+				meta.input.keyChangePairs ?? [],
 				meta.input.fileErrors ?? {}
 			],
-			[input.projectRoot, input.target, input.review, input.fileErrors ?? {}]
+			[
+				input.projectRoot,
+				input.target,
+				input.review,
+				input.keyChangePairs ?? [],
+				input.fileErrors ?? {}
+			]
 		)
 	)
 		return fallback("generation-target-review-or-absence");
@@ -52,6 +75,8 @@ export const incrementJoinedTarget = Effect.fn("JoinedTarget.increment")(functio
 	if (names.length !== oldNames.length || names.some((name) => !meta.dependencies[name]))
 		return fallback("dependency-set");
 	const changed = names.filter((name) => dependencies[name] !== meta.dependencies[name]);
+	if (changed.some((name) => !Object.hasOwn(reader.manifest.layers, meta.dependencies[name]!)))
+		return fallback("retired-input");
 	const poNames = Object.values(input.target.outputPaths.portableObjects);
 	if (
 		!changed.length ||
@@ -205,8 +230,11 @@ export const incrementJoinedTarget = Effect.fn("JoinedTarget.increment")(functio
 		return (yield* u32(file, `occurrence.${field}`))[occurrence - meta.packageStarts[low]!]!;
 	});
 	const manifestRows = yield* u32(layer, "manifest.rows");
-	const manifest = yield* reader.layer(meta.dependencies[input.target.outputPaths.manifest!]!);
-	const manifestSource = yield* u32(manifest, "entry.source");
+	const manifestKey = meta.dependencies[input.target.outputPaths.manifest ?? "<manifest>"];
+	const manifestSource =
+		manifestKey === undefined
+			? new Uint32Array()
+			: yield* u32(yield* reader.layer(manifestKey), "entry.source");
 	for (const row of affected) {
 		if (packageLines.has(row) && line.split_unit![row]) return fallback("split-unit");
 		let source = line.source![row]!,
@@ -464,6 +492,9 @@ export const incrementJoinedTarget = Effect.fn("JoinedTarget.increment")(functio
 		});
 	}
 	const base = meta.base ?? reader.manifest.active.joined!;
+	// Restoring the original inputs reuses the full base's content key. Publishing
+	// an overlay there would overwrite its own retained base with the patch.
+	if (key === base) return fallback("base-key-reuse");
 	const bytes = new TextEncoder().encode(
 		JSON.stringify({ ...meta, input, dependencies, base, patches, patchRows })
 	);

@@ -10,13 +10,13 @@ import {
 } from "./columnar-join-fuzz.test-support.ts";
 
 it("seeded differential joins and query fields match the original event oracle", async () => {
-	const count = Number(process.env.UE_SHED_JOIN_FUZZ_SEEDS ?? 2000);
+	const count = Number(process.env.UE_SHED_JOIN_FUZZ_SEEDS ?? 100);
 	const first = Number(process.env.UE_SHED_JOIN_FUZZ_START ?? 0);
 	if (!Number.isSafeInteger(count) || count < 1 || !Number.isSafeInteger(first) || first < 0)
 		throw new Error("Fuzz seed count must be positive and the first seed nonnegative.");
 	const failures = new Map<string, { seed: number; detail: string }>();
-	for (let seed = first; seed < first + count; seed++) {
-		await withJoinCache(async (cache) => {
+	await withJoinCache(async (cache) => {
+		for (let seed = first; seed < first + count; seed++) {
 			const input = joinFuzzInput(seed);
 			const differences = await compareJoinFuzzInput(input, cache).catch(joinFuzzException);
 			for (const difference of differences)
@@ -32,12 +32,12 @@ it("seeded differential joins and query fields match the original event oracle",
 						JSON.stringify(input, null, 2)
 					);
 				}
-		});
-		if ((seed - first + 1) % 100 === 0)
-			console.info(
-				`Fuzz: ${seed - first + 1}/${count} seeds; ${failures.size} distinct differing fields`
-			);
-	}
+			if ((seed - first + 1) % 100 === 0)
+				console.info(
+					`Fuzz: ${seed - first + 1}/${count} seeds; ${failures.size} distinct differing fields`
+				);
+		}
+	});
 	await mkdir(resolve("test-results/codex/phase6-fuzz"), { recursive: true });
 	const summary = JSON.stringify({ count, first, failures: [...failures] }, null, 2);
 	await writeFile(resolve("test-results/codex/phase6-fuzz/latest.json"), summary);

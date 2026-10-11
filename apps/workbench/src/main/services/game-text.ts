@@ -26,9 +26,8 @@ import {
 import {
 	decodeGameTextRuleDocumentJson,
 	evaluateGameTextSourceQuality,
-	textCorpusQuery,
 	textQualityQuery,
-	TextCorpusService,
+	makeRetainedGameTextIndex,
 	type TextCorpus,
 	type WorkspaceQualityRequest,
 	type WorkspaceQualityResult,
@@ -158,14 +157,14 @@ export class WorkbenchGameText extends Context.Service<WorkbenchGameText, Workbe
 
 function unavailableProject(message: string, recovery: string): TextCorpusRunResult {
 	return {
-		error: { code: "invalid_project", message, recovery, retrySafe: true },
+		error: { code: "invalid_project" as const, message, recovery, retrySafe: true },
 		status: "failed"
 	};
 }
 
 function unavailableQueryProject(message: string, recovery: string): TextCorpusQueryRunResult {
 	return {
-		error: { code: "invalid_project", message, recovery, retrySafe: true },
+		error: { code: "invalid_project" as const, message, recovery, retrySafe: true },
 		status: "failed"
 	};
 }
@@ -174,7 +173,7 @@ export const WorkbenchGameTextLive = Layer.effect(
 	WorkbenchGameText,
 	Effect.gen(function* () {
 		const project = yield* WorkbenchProject;
-		const textCorpus = yield* TextCorpusService;
+		const refreshIndex = yield* makeRetainedGameTextIndex();
 		const dialog = yield* ElectronDialog;
 		const files = yield* LocalFiles;
 		const activity = yield* Ref.make({ scans: 0, operation: false });
@@ -216,16 +215,16 @@ export const WorkbenchGameTextLive = Layer.effect(
 			if (projectProgress.phase === "enumerating" || projectProgress.phase === "scanning") {
 				return projectProgress;
 			}
-			const corpusProgress = yield* textCorpus.progress();
+			const active = yield* Ref.get(activity);
 			return {
-				completed: corpusProgress.processedAssets,
-				phase: corpusProgress.phase,
+				completed: 0,
+				phase: active.scans ? ("scanning" as const) : ("idle" as const),
 				stage: "game_text" as const,
-				total: corpusProgress.totalAssets
+				total: 0
 			};
 		});
-		const scanCorpus = (projectRoot: string, index: SavedAssetScan) =>
-			textCorpus.scanFromProjectIndex(index, { projectRoot });
+		const scanCorpus = (projectRoot: string, _index: SavedAssetScan) =>
+			refreshIndex({ projectRoot }).pipe(Effect.map((result) => result.corpus));
 
 		const runScan = (projectRoot: string, index: SavedAssetScan) =>
 			scanCorpus(projectRoot, index).pipe(
@@ -233,10 +232,10 @@ export const WorkbenchGameTextLive = Layer.effect(
 				Effect.catch((error) =>
 					Effect.succeed({
 						error: {
-							code: error.code,
+							code: "invalid_project" as const,
 							message: error.message,
 							recovery: error.recovery,
-							retrySafe: error.retrySafe
+							retrySafe: "retrySafe" in error ? (error.retrySafe ?? true) : true
 						},
 						status: "failed" as const
 					})
@@ -303,9 +302,10 @@ export const WorkbenchGameTextLive = Layer.effect(
 						"The selected project changed.",
 						"Retry in the selected project."
 					);
-				return yield* scanCorpus(projectRoot, index).pipe(
-					Effect.flatMap((report) =>
+				return yield* refreshIndex({ projectRoot }).pipe(
+					Effect.flatMap((indexed) =>
 						Effect.gen(function* () {
+							const report = indexed.corpus;
 							const latest = yield* project.current();
 							if (
 								(yield* Ref.get(scanRevision)) !== revision ||
@@ -318,7 +318,7 @@ export const WorkbenchGameTextLive = Layer.effect(
 									"Refresh to read the current project generation."
 								);
 							yield* localization.reset();
-							const next = textCorpusQuery(report, new Date().toISOString());
+							const next = indexed.query;
 							const owner = yield* Ref.get(modelSelection);
 							const rules =
 								owner?.projectRoot === projectRoot
@@ -361,10 +361,10 @@ export const WorkbenchGameTextLive = Layer.effect(
 					Effect.catch((error) =>
 						Effect.succeed({
 							error: {
-								code: error.code,
+								code: "invalid_project" as const,
 								message: error.message,
 								recovery: error.recovery,
-								retrySafe: error.retrySafe
+								retrySafe: "retrySafe" in error ? (error.retrySafe ?? true) : true
 							},
 							status: "failed" as const
 						})
@@ -679,7 +679,7 @@ export const WorkbenchGameTextLive = Layer.effect(
 								code: "read_failed" as const,
 								message: error.message,
 								recovery: error.recovery,
-								retrySafe: error.retrySafe
+								retrySafe: true
 							},
 							status: "failed" as const
 						}),
@@ -819,7 +819,7 @@ export const WorkbenchGameTextLive = Layer.effect(
 								code: "write_failed" as const,
 								message: error.message,
 								recovery: error.recovery,
-								retrySafe: error.retrySafe
+								retrySafe: true
 							},
 							status: "failed" as const
 						}),
@@ -880,7 +880,7 @@ export const WorkbenchGameTextLive = Layer.effect(
 				// Problem and translation pills select lines through the target's join, as the list does.
 				const localized =
 					query.localization === undefined
-						? undefined
+						? yield* currentModel(queryModel)
 						: yield* localization.targetQuery(query.localization.target);
 				const document = yield* exportGameTextInvestigation(
 					snapshot.corpus,

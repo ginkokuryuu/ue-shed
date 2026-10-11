@@ -7,8 +7,8 @@ requiring a running editor. The product preserves Unreal text identity, authored
 evidence, and parser coverage instead of presenting strings as an unexplained flat list.
 
 Saved game text is read-only. UE Shed discovers it through the shared saved-project index and
-compact text extraction path, builds one `TextCorpus`, and exposes scan, search, focus, and quality
-review through public package and CLI surfaces. Workbench is a bounded client of the same query
+compact text extraction path, refreshes a persistent column index, and exposes scan, search, focus,
+and quality review through public package and CLI surfaces. Workbench is a bounded client of the same query
 model; it is not a second corpus or policy authority. Project-authored quality rule documents are
 the one editable artifact in this slice: users may inspect, preview, and save them without changing
 game text or localization resources.
@@ -22,10 +22,22 @@ file. The saved-asset reader allows 10 GiB of cumulative protocol output and def
 scans to 50 minutes. A failed read names its cause and recovery; only a missing manifest asks for
 an Unreal gather.
 
-Every localization command still builds the corpus and join in memory. A target of about 130,000
-keys and 10 cultures in a project of 166,000 packages needs about 7 GB of Node heap, more than
-Node's default; run the CLI with `NODE_OPTIONS=--max-old-space-size=8192` for projects of that
-size. A compact, persistent index that refreshes only changed files replaces this in-memory build.
+Game Text and localization hosts query the shared index through `GameTextIndexRefresh`. A refresh
+compares the Project Index's package-and-sidecar signatures and localization file stat/content
+keys, reads changed inputs, then publishes a joined generation. `loc gate` refreshes the named
+changed files. Rescan with unchanged inputs reuses the index. Review and PO writes invalidate the
+affected localization layers and join; open readers keep their pinned generation until replaced.
+
+The CLI cache is under `UE_SHED_PROJECT_INDEX_CACHE_ROOT`, defaulting to `.cache/ue-shed` in the
+user's home directory. Workbench uses `project-catalogs-v1` under its existing Electron user-data
+root. The `game-text-v1` descendants are disposable; close the affected hosts before deleting those
+cache directories, then refresh to rebuild. This removes derived data without changing saved
+packages, localization evidence, review state or authored rules. Format version 4 preserves UTF-16
+strings with canonical WTF-8. Older cache generations are rejected and rebuilt.
+
+`GameTextIndexBuilder` is the build capability supplied by each host. The TypeScript layer remains
+the tested oracle and fallback; the native layer is being developed as the default. Queries are
+independent of the chosen builder. Refresh measurements currently use the TypeScript builder.
 
 Tagged-property text extraction supports classic, uncooked, versioned editor packages from UE 4.27
 and UE 5.0–5.3, alongside the existing UE 5.4+ reader. The legacy window includes String Tables,

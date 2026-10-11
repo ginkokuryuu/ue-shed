@@ -1,18 +1,137 @@
 # Shared Game Text index measurements
 
-Source order is fixed, with independent fixture/tiny/targeted and saved 1× equality re-runs.
-The split gathered-identity findings mismatch is fixed. The subsequent 10,000-seed differential
-run and eight persisted-store checks passed. The new column query is also compared to the
-event oracle. An isolated persisted reproduction now exposes loss of a lone UTF-16 surrogate
-in the UTF-8 dictionary, including through the existing localization JSON parser: Phase 6 is
-stopped on source fidelity. See the latest
-[plan evidence](../../plans/057-game-text-compact-index.md#phase-6-continuation-column-query-builder-service-and-utf-16-stop).
-Host migration and its default-heap measurements remain outstanding; no Phase 6 performance
-acceptance is claimed. TypeScript builder; native builder pending.
+The owner resolved UTF-16 fidelity with canonical WTF-8 and format 4. CLI and Workbench now use
+the shared refresh service and column query through `GameTextIndexBuilder`. Targeted differential,
+fixture/tiny and host verification is complete; recorded 1× performance acceptance remains
+incomplete. The owner stopped all further 10× runs. The saved-scale oracle result is historical,
+not a new comparison of the final host/WTF-8 revision. Historical STOP
+subsections below describe earlier revisions; they do not supersede the latest
+[plan evidence](../../plans/057-game-text-compact-index.md#phase-6-final-verification-and-recorded-1-results).
+Cold/refresh results use **TypeScript builder; native builder pending**. Earlier Phase 6 cold
+discovery measurements with explicit worker heap limits are superseded by default-worker runs.
+
+## Phase 6 final recorded host measurements
+
+The host harness calls the production CLI refresh/query and headless Workbench main service.
+Retained package inventories and records replace the native reader boundary; it does not build an
+event corpus or object join. This measures the TypeScript index and host query path, excluding native
+catalog enumeration and package extraction. Empty derived caches define cold builds; OS caches are
+not evicted. The CLI cold `final` artifact uses Node 24.21.0; both selected warm artifacts and the
+earlier `default` artifacts use Node 26.11.1. Each uses default heaps with `NODE_OPTIONS` removed.
+Reported query-stage heap and the larger value including observed pre-GC trace peaks are shown
+separately; build, refresh and startup peaks are excluded. No new benchmark was run for this handoff.
+
+| 1× operation                              | CLI cold, Node 24.21.0 | CLI warm, Node 26.11.1 | Workbench warm, Node 26.11.1 |   Target |
+| ----------------------------------------- | ---------------------: | ---------------------: | ---------------------------: | -------: |
+| First query                               |               54.49 ms |               42.48 ms |                      1.99 ms |  ≤100 ms |
+| Count                                     |                1.54 ms |                1.31 ms |                      1.41 ms |  ≤100 ms |
+| Filter                                    |              123.05 ms |               91.37 ms |                     96.37 ms |  ≤100 ms |
+| Facets (folder, asset, origin, culture)   |              203.02 ms |              106.09 ms |                    104.85 ms |  ≤100 ms |
+| Page                                      |               42.71 ms |               36.21 ms |                     54.34 ms |  ≤100 ms |
+| Search                                    |              115.16 ms |               79.18 ms |                     99.67 ms |  ≤100 ms |
+| Focus                                     |               26.81 ms |               26.23 ms |                     24.22 ms |  ≤100 ms |
+| Maximum reported query-stage heap         |             102.61 MiB |              72.72 MiB |                    82.78 MiB | ≤128 MiB |
+| Query heap including observed trace peaks |             115.45 MiB |              77.02 MiB |                    88.86 MiB | ≤128 MiB |
+| No-change refresh                         |                 4.32 s |                 2.59 s |                       4.92 s |     ≤5 s |
+| Opening an existing index                 |                      — |                 4.29 s |                      42.13 s |   Record |
+| One package + one PO refresh              |                13.48 s |           Not recorded |                 Not recorded |    ≤10 s |
+
+The table uses `test-results/codex/phase6-cli-1x-{cold,warm}-final.json` and
+`phase6-workbench-1x-warm-verified.json`. **TypeScript builder; native builder pending:** the
+selected Node 24 cold build took 153.30 s and the changed-input refresh took 13.48 s, with a
+`source-conflict` fallback to a full join. The earlier Node 26 cold build took 154.26 s, reading
+16,500 packages and parsing 21 localization files; its one-package/one-PO refresh took 8.43 s,
+reading one package and parsing one file, and restoration took 7.63 s
+(`phase6-cli-1x-cold-default.json`). That passing refresh does not resolve the recorded 13.48 s
+miss. The selected CLI `loc status` warm command took 3.50 s and returned 583,507 lines, exit 0.
+
+Warm query stages except facets meet the 100 ms target, and query heap and no-change refresh
+meet their targets. The open issues are **changed-input refresh at 13.48 s against 10 s**,
+**Workbench opening an existing index at 42.13 s versus CLI's 4.29 s**, and **facets around
+105–106 ms against 100 ms**. The Node 24 cold filter/search/facet misses are also retained in the
+table. These measurements do not establish uniformly passing cold/warm performance acceptance.
+
+The CLI 10× cold attempt failed the 900-second deadline before publication or query. Peak observed
+RSS was 6,356.4 MiB (artifact: `phase6-cli-10x-cold-default.json`). This is a timing failure, not a
+successful cold measurement or a semantic STOP. **The owner stopped all further 10× runs.**
+There is no successful 10× host query/refresh result to report, no raised cap and no prepared
+index relabelled as a successful cold build. Workbench cold and changed-input refresh results
+were not recorded in the selected artifacts.
+
+### Final handoff verification ledger
+
+Recorded 2026-10-11. The broad command below is
+`node scripts/test.ts --config vitest.node.config.ts packages/game-text packages/localization packages/protocol packages/unreal-assets apps/cli apps/workbench/src/main scripts --testTimeout 60000 --maxWorkers 1`.
+Artifact names are relative to `test-results/codex/`.
+
+| Check                                     | Runtime     | Passed / failed / skipped                           | Duration | Evidence                                      |
+| ----------------------------------------- | ----------- | --------------------------------------------------- | -------: | --------------------------------------------- |
+| Broad handoff Node suite                  | Node 26.5.0 | 1,130 / 0 / 7; 152 passed files                     | 377.56 s | `test-setup-optimized-broad.{log,json}`       |
+| Game Text components, six files           | Node 26.5.0 | 88 / 0 / 0                                          |  22.88 s | `phase6-final-components-20261011.{log,json}` |
+| Final committed-fixture layer/join checks | Node 26.5.0 | 24 / 0 / 22 filtered out                            |  12.66 s | `test-setup-optimized-fixtures-final.log`     |
+| Localization-process lane                 | UE 5.7.4    | 1 lane / 0 / 0                                      | 396.13 s | `localization-rerun-20261011-57-fixed.log`    |
+| Localization-process lane                 | UE 5.8.3    | 1 lane / 0 / 0                                      | 391.46 s | `localization-rerun-20261011-58.log`          |
+| Final pre-push quick gates                | Node 26.5.0 | 6 stages / 0 failures; 43 architecture tests passed |  30.58 s | `phase6-final-prepush-20261011.log`           |
+
+All three previous timeout cases pass individually with a 60-second test budget and again in the
+broad suite. Its default fuzz file passes 100 deterministic seeds plus all eight persisted seeds
+in 28.59 s, with zero differing fields, and all ten minimized/Unicode regression tests pass.
+The 2,000-seed sweep is now explicit (`pnpm test:game-text:fuzz`); its configurable seed count was
+verified with two seeds in the final command check (`test-setup-explicit-fuzz-command-final.log`).
+The existing Node 26.11.1 sweep starting at seed 2,000 completed all 5,000 seeds without differences
+(`phase6-fuzz/run-v26.11.1-2000-5000.json`). No new long sweep was needed for the setup changes.
+
+Native fixture setup reuses immutable header and extraction evidence only within one wrapper
+invocation; writable stores remain isolated. The reader protocol tests continue fresh extraction,
+and non-persisted fuzz cases still use the real column importer while avoiding redundant input
+file writes. The dedicated fuzz command skips native setup. Both engine lanes exercise supported
+operations, audit/cancellation, review state, apply/sync PO writes, key carryover and the Unicode
+JSON probe. The initial 5.7 probe compilation failure was repaired by restoring C++ formatting
+and excluding the `.inc` file from oxfmt; both engine reruns pass.
+
+The saved 1× oracle comparison in `phase6-final-order-1x.json` matches **583,507/583,507 lines,
+zero differences**. It predates the final host/WTF-8 revision and is historical evidence. No new
+saved-scale comparison or parser/codegen engine-matrix result is claimed here. The incoming
+handoff reported passing `cargo test --locked -p uasset-io`; no native code changed during this
+test-setup/documentation continuation.
+
+Separately, the historical full `pnpm check` fails at the known Data Authoring adoption stage:
+the copied protocol package lacks `editor-foreground-responsiveness.js`
+(`phase6-stop-full-check-fixed.log`). Three stale Game Text Workbench e2e expectations also
+remain failing (`phase6-game-text-e2e.log`), expecting an old tab label and immediate results
+before the initial scan action. Those failures were not fixed or rerun here. The broad suite's
+seven gated skips are the unconfigured Blueprint, commandlet and live-parity integrations.
+Targeted checks passing does not constitute a full-repository or performance-acceptance pass.
+
+### Earlier Phase 6 verification (retained)
+
+| Command / artifact suffix                                                                                              | Runtime      | Passed | Failed | Skipped | Notes                                                                                  |
+| ---------------------------------------------------------------------------------------------------------------------- | ------------ | -----: | -----: | ------: | -------------------------------------------------------------------------------------- |
+| `scripts/test.ts` required host roots plus fixture/tiny, regression and chunk tests; `phase6-host-node24-complete.log` | Node 24.21.0 |    938 |      0 |       7 | One worker; real native CLI integration included                                       |
+| `scripts/test.ts --project component extensions/game-text`; `phase6-components-node24-complete.log`                    | Node 24.21.0 |     88 |      0 |       0 | Six Game Text component files                                                          |
+| Expanded seeded differential assertion and eight persisted seeds; `phase6-fuzz/run-v24.21.0-0-2000.json`               | Node 24.21.0 |      9 |      0 |       0 | 2,000 seeds, zero differing fields; lone surrogates enabled                            |
+| Real-reader gate and localization importer; `phase6-errors-node24-final.log`                                           | Node 24.21.0 |     51 |      0 |       0 | Includes malformed manifest/archive/PO recovery regressions, fixtures and tiny imports |
+
+Node 26's final one-worker host command, including the 2,000-seed fuzz and importer suites, passes
+**997 tests / zero failures / seven gated skips** in 820.50 s (142 passed files). Artifact:
+`phase6-host-node26-complete.log`. Pre-commit passes all six checks; architecture has 43 passed tests.
+
+The first mixed node/component discovery command completed with 1,048 passed, eight failed and
+seven skipped (six failed files). It exposed reader recovery drift and concurrent timeout failures.
+The two-worker node rerun completed with 934 passed, four failed and seven skipped: the permitted
+`not_gatherable` assertion, gate input-list semantics, and two unrelated CLI process timeouts.
+Those two process scenarios pass in the isolated rerun (14 passed/one gate failure); the final
+one-worker host suite above passes every scenario. Gate's fixture now names all inputs it edits and
+checks that unlisted files retain their prior evidence. Its real multi-session mutation/recovery
+scenario has a 60-second test budget. No product benchmark cap changed.
+
+This earlier gate run then exposed generic malformed-file recovery drift. The streaming importer and event parser
+now share `localizationError` recovery; malformed manifest, archive and PO each have an individual
+regression. The CLI boundary retains its established reader-failure response. The final ledger
+above supersedes that run's pending verification status.
 
 Phase 5 adds the joined layer, saved-oracle equality and bounded incremental refresh; its
-measurements and command ledger follow the retained Phase 3/4 evidence below. Hosts and the
-production host query migration remain Phase 6 work.
+measurements and command ledger follow the retained Phase 3/4 evidence below.
 
 The following opening measurements are the retained **Phase 3** baseline, recorded
 2026-10-10, Windows / Node 26.11.1. Cold import, ordinary PO refresh and size targets
@@ -911,9 +1030,11 @@ and the requested host suites supply their separately reported checks, not a ful
 Final evidence updates are included in the changed-file formatting and whitespace checks.
 **Phase 6 is incomplete.**
 
-## Phase 6 continuation: column query and UTF-16 fidelity STOP
+## Phase 6 continuation: column query and UTF-16 fidelity STOP (historical, resolved)
 
-Recorded 2026-10-11, Windows. The detailed design, defects and unfinished host work are in
+Recorded before the owner resolved WTF-8, 2026-10-11, Windows. This subsection describes that
+stopped revision; the final verification and recorded host measurements above supersede its
+pending work and STOP status. The detailed design, defects and unfinished host work are in
 [the latest plan evidence](../../plans/057-game-text-compact-index.md#phase-6-continuation-column-query-builder-service-and-utf-16-stop).
 This continuation adds the injectable `GameTextIndexBuilder`, TypeScript fallback, shared
 library refresh and an opt-in column query. Production hosts are not migrated. Query
@@ -986,21 +1107,18 @@ paired-astral sources at 39/40/41 UTF-16 code units; earlier seed runs used the 
 | `pnpm effect:architecture`, after adapter refactor                                           | Node 24.21.0 |                                      Gate passes | 0                                                        | `phase6-stop-effect-architecture-fixed.log`       |
 | Final `pnpm run check:precommit`                                                             | Node 24.21.0 |       43 architecture tests; all six stages pass | 0                                                        | `phase6-stop-precommit-fixed.log`                 |
 
-| Measurement, CLI and headless Workbench        | 1× target    | 10× target  | Result at both scales |
-| ---------------------------------------------- | ------------ | ----------- | --------------------- |
-| First query after cold build / warm index      | Record both  | Record both | Not measured: STOP    |
-| Count / filter / facet / page / search / focus | ≤100 ms each | ≤1 s each   | Not measured: STOP    |
-| Peak query heap, default heap                  | ≤128 MiB     | ≤256 MiB    | Not measured: STOP    |
-| No-change refresh                              | ≤5 s         | ≤30 s       | Not measured: STOP    |
-| One package + one PO refresh                   | ≤10 s        | ≤60 s       | Not measured: STOP    |
+Host measurements were not performed on this historically stopped revision. The current 1×
+query, heap, refresh and startup results appear in the final recorded host table at the top of
+this document. The owner stopped further 10× runs after the capped CLI cold attempt failed.
 
-UE 5.7 and UE 5.8 localization-process checks have not been rerun on this library-only
-revision: native reader/fixture/codegen and production apply/sync paths were not changed.
+At this historical library-only revision, UE 5.7 and UE 5.8 localization-process checks had not
+been rerun: native reader/fixture/codegen and production apply/sync paths were not changed.
 The earlier source-order continuation recorded passing process checks separately on
 UE 5.7.4 and UE 5.8.3; these remain historical evidence, not verification of a host migration.
-The complete host suites, component and e2e suites likewise have not been rerun for a
-migration that has not happened. The three stale Game Text e2e expectations remain
-pre-existing failures. **Phase 6 is incomplete.**
+The host migration had not happened, so complete host and component suites had not been rerun.
+The current host/component and both engine results are in the final ledger above. The three
+stale Game Text e2e expectations remain pre-existing failures. Performance acceptance is
+incomplete, while current targeted host verification is complete.
 
 Final full-gate rerun: `pnpm check` on Node 24.21.0 passes the native/WASM checks, package
 builds, typecheck, Effect architecture, license, StyleX, architecture and release gates,
@@ -1013,11 +1131,11 @@ the adoption manifest changed in this pass. Evidence: `phase6-stop-full-check-fi
 The later full-gate lint, format, contracts and whole-repository test stages do not execute;
 final precommit and the separately reported targeted runs are their own checks.
 
-| Final broad command                                  | Runtime      | Passed                                                     | Failed                                 |
-| ---------------------------------------------------- | ------------ | ---------------------------------------------------------- | -------------------------------------- |
-| `pnpm check`                                         | Node 24.21.0 | 356 Rust, 43 architecture, 42 release; 20 packed consumers | 1 known adoption stage; 4 Rust ignored |
-| Full `pnpm check` on Node 26                         | Node 26.11.1 | Not run                                                    | Not run                                |
-| `pnpm test:localization-processes`, current revision | UE 5.7.4     | Not run: STOP before write-path migration                  | Not run                                |
-| `pnpm test:localization-processes`, current revision | UE 5.8.3     | Not run: STOP before write-path migration                  | Not run                                |
+| Final broad command                                             | Runtime      | Passed                                                     | Failed                                 |
+| --------------------------------------------------------------- | ------------ | ---------------------------------------------------------- | -------------------------------------- |
+| `pnpm check`                                                    | Node 24.21.0 | 356 Rust, 43 architecture, 42 release; 20 packed consumers | 1 known adoption stage; 4 Rust ignored |
+| Full `pnpm check` on Node 26                                    | Node 26.11.1 | Not run                                                    | Not run                                |
+| `pnpm test:localization-processes`, historical stopped revision | UE 5.7.4     | Not run: STOP before write-path migration                  | Not run                                |
+| `pnpm test:localization-processes`, historical stopped revision | UE 5.8.3     | Not run: STOP before write-path migration                  | Not run                                |
 
 Final changed-file formatting and `git diff --check` include these evidence updates.

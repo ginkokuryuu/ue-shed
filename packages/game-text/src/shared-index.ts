@@ -1,3 +1,4 @@
+import { encodeWtf8 } from "./wtf8.js";
 import { randomUUID, createHash } from "node:crypto";
 import { join } from "node:path";
 import { readdir, unlink, mkdtemp, rm } from "node:fs/promises";
@@ -269,7 +270,7 @@ export function sharedIndexNodeLayer(options: SnapshotStoreOptions) {
 							new SnapshotStoreError({
 								operation: "layer",
 								code: "missing",
-								message: "Layer is absent.",
+								message: `Layer ${name} (${key}) is absent.`,
 								recovery: "Import this input."
 							})
 						);
@@ -319,7 +320,7 @@ export function sharedIndexNodeLayer(options: SnapshotStoreOptions) {
 						throw new SnapshotStoreError({
 							operation: "layer",
 							code: "missing",
-							message: "Layer is absent.",
+							message: `Layer ${name} (${key}) is absent.`,
 							recovery: "Import this input."
 						});
 					const file = layers.get(key)!;
@@ -813,7 +814,7 @@ export function sharedIndexNodeLayer(options: SnapshotStoreOptions) {
 										"Batch exceeds bound"
 									);
 									const arena = new StringArena();
-									for (const value of values) arena.add(Buffer.from(value));
+									for (const value of values) arena.add(encodeWtf8(value));
 									const ids = await files.internPacked(domain, arena.finish());
 									await files.flush();
 									return ids;

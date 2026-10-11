@@ -727,7 +727,9 @@ pub(crate) fn every_query_kind_answers_from_committed_evidence<C: CatalogSnapsho
             assert_eq!(classes, &vec!["/Script/Engine.World".to_owned()]);
             assert!(serialized_names.is_empty());
         }
-        QueryItem::Map { .. } => panic!("class queries return header items"),
+        QueryItem::Map { .. } | QueryItem::Inventory { .. } => {
+            panic!("class queries return header items")
+        }
     }
 }
 
@@ -986,12 +988,67 @@ pub(crate) fn warm_refresh_retries_failed_headers<C: CatalogSnapshot>(make: impl
 }
 
 /// Run the adapter-neutral Catalog conformance suite against one adapter factory.
+pub(crate) fn inventory_retains_package_and_sidecar_signatures<C: CatalogSnapshot>(
+    make: impl Fn() -> C,
+) {
+    let mut catalog = make();
+    let mut scanner = refresh_fixture();
+    let path = scanner
+        .entries
+        .iter()
+        .find(|entry| entry.kind == EntryKind::Package)
+        .unwrap()
+        .relative_path
+        .clone();
+    let stem = path.rsplit_once('.').unwrap().0;
+    scanner
+        .entries
+        .push(sidecar(&format!("{stem}.uexp"), 123, 456_000_000));
+    let events = refresh(
+        &mut catalog,
+        &scanner,
+        FIXTURE_PROJECT_ROOT,
+        &CancellationToken::new(),
+        |_| {},
+    )
+    .unwrap();
+    let summary = completed_summary(&events);
+    let reads = scanner.header_reads.get();
+    let inventory = collect_pages(&catalog, summary.generation, QueryKind::Inventory, 1);
+    assert_eq!(inventory.len() as u64, summary.package_count);
+    let item = inventory
+        .iter()
+        .find(|item| item_path(item) == path)
+        .unwrap();
+    let QueryItem::Inventory { signature, .. } = item else {
+        panic!("inventory row")
+    };
+    let stamps: serde_json::Value = serde_json::from_str(signature).unwrap();
+    assert_eq!(stamps[1]["size"], 123.0);
+    assert_eq!(stamps[1]["modifiedMs"], 456.0);
+    assert!(stamps[2].is_null() && stamps[3].is_null());
+    assert_eq!(scanner.header_reads.get(), reads);
+    let page = catalog.query(&QueryRequest {
+        project_id: summary.project_id,
+        expected_generation: summary.generation.next(),
+        kind: QueryKind::Inventory,
+        limit: 1,
+        cursor: None,
+    });
+    assert!(matches!(page, Err(CatalogError::StaleGeneration { .. })));
+}
+
 macro_rules! catalog_conformance_tests {
     ($module:ident, $make:expr) => {
         mod $module {
             #[allow(unused_imports)]
             use super::*;
             use crate::direct_executor::catalog_conformance as conformance;
+
+            #[test]
+            fn inventory_retains_package_and_sidecar_signatures() {
+                conformance::inventory_retains_package_and_sidecar_signatures($make);
+            }
 
             #[test]
             fn warm_refresh_retries_failed_headers() {

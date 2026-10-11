@@ -122,6 +122,7 @@ pub struct CatalogSnapshotEntry {
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum QueryKind {
+    Inventory,
     Maps,
     ExactClasses { values: Vec<String> },
     ClassPrefixes { values: Vec<String> },
@@ -155,6 +156,11 @@ pub struct CountResult {
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum QueryItem {
+    Inventory {
+        package_path: String,
+        signature: String,
+        header_data: Option<uasset_inspection::package_header::PackageHeaderData>,
+    },
     Map {
         map_path: String,
         package_name: String,
@@ -274,7 +280,8 @@ pub trait Catalog {
                 for item in page.items {
                     paths.insert(match item {
                         QueryItem::Map { map_path, .. } => map_path,
-                        QueryItem::Header { package_path, .. } => package_path,
+                        QueryItem::Header { package_path, .. }
+                        | QueryItem::Inventory { package_path, .. } => package_path,
                     });
                 }
                 cursor = page.next_cursor;
@@ -385,8 +392,15 @@ pub(crate) fn parse_page_cursor(cursor: Option<&str>) -> Result<String, CatalogE
 pub(crate) fn item_path(item: &QueryItem) -> &str {
     match item {
         QueryItem::Map { map_path, .. } => map_path.as_str(),
-        QueryItem::Header { package_path, .. } => package_path.as_str(),
+        QueryItem::Header { package_path, .. } | QueryItem::Inventory { package_path, .. } => {
+            package_path.as_str()
+        }
     }
+}
+
+/// Opaque package plus sidecar stamps; consumers may verify selected bundles without enumerating.
+pub(crate) fn bundle_signature(parts: [Option<(u64, u64)>; 4]) -> String {
+    serde_json::to_string(&parts.map(|part| part.map(|(size, modified)| serde_json::json!({"size": size as f64, "modifiedMs": modified as f64 / 1_000_000.0})))).expect("finite signature stamps")
 }
 
 #[cfg(test)]

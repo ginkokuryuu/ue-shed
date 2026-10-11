@@ -10,13 +10,12 @@
 
 ## Status
 
-- **State**: STOP at Phase 6: source fidelity for a lone UTF-16 surrogate. The current UTF-8
-  dictionary replaces a schema-valid `"\ud800"` with U+FFFD; the existing JSON parser and
-  object oracle preserve it. The fixed findings/facet regressions and saved 583,507-line
-  oracle recheck pass. A column query, shared refresh and injectable TypeScript builder are
-  implemented in the library; hosts still use the corpus path and measurements are pending.
-  Phases 6–7 remain incomplete. Reader v1.8 and gather rule v1.9 are unchanged. See the latest
-  Phase 6 evidence below.
+- **State**: Phase 6 implementation and targeted verification are complete: canonical WTF-8
+  format v4, cross-language goldens, host migration and direct column previews are implemented.
+  Recorded 1× results leave performance acceptance incomplete: changed-input refresh, Workbench
+  opening an existing index and facet latency remain open. The owner stopped all further 10× runs;
+  the attempted CLI cold build failed its 900-second cap. Phase 7 remains incomplete. Reader v1.8
+  and gather rule v1.9 are unchanged. See the latest evidence below; no full-gate pass is claimed.
 - **Priority**: P1
 - **Effort**: XL
 - **Risk**: HIGH. This replaces how every Game Text and localization host holds its data, and adds
@@ -1009,6 +1008,9 @@ and adoption manifest are unchanged from HEAD. Full-gate lint/format/contracts/w
 tests do not run after the adoption failure; final precommit and targeted runs supply their
 separate checks. This is not a full-gate pass (`phase6-stop-full-check-fixed.log`).
 
+The following continuation records the historical state before the owner's WTF-8 decision;
+the later implementation and verification supersede its STOP and host-migration status.
+
 The differential harness now exercises this actual column query as well as the original
 event query and hydrated comparison. It compares every recursive output field, adds export
 metadata and full localization lines, cycles all nine filter fields, tests review/key-change
@@ -1088,3 +1090,116 @@ permitted 16 GiB oracle cap, never a default-heap host query measurement. No 10�
 real-project read, retained regeneration, commit, push, branch switch or stash occurred.
 The Data Authoring adoption failure and three stale Game Text e2e expectations are separately
 identified pre-existing failures. **Phase 6 is incomplete.**
+
+### Phase 6: WTF-8 decision and host migration
+
+The owner resolved the UTF-16 STOP with `test-results/codex/057-wtf8-spec.md`. Format 4 stores
+canonical WTF-8 in every string domain, preserving saved lone surrogates. Six shared byte goldens
+and snapshots genuinely written by TypeScript and Rust cover interoperability and rejection of
+non-canonical pairs. Both former UTF-16 expected-failure wrappers are ordinary passing assertions.
+The manifest/archive parsers match UE 5.7/5.8 rejection of escaped lone surrogates, with file and
+offset diagnostics; PO acceptance is unchanged. The engine probe records six rejections and two
+paired accepts for each engine. Only saved text receives lone-surrogate fuzz values (3% probability).
+
+`GameTextIndexBuilder` supplies the build session, localization import, package refresh,
+dictionary/compaction and joined refresh through an Effect service. Its TypeScript layer keeps the
+existing inputs/results/typed failures and remains the oracle/fallback. CLI and Workbench obtain
+the builder through that service. One refresh service owns writer leases, publication, pinned
+readers, typed recovery and refresh/query telemetry. Hosts use the existing column query API;
+list/count/filter/facet/group/page/focus and localization queries retain their public schemas.
+PO/review writes invalidate affected file keys and the join marker. `loc gate` retains unselected
+inputs and refreshes selected files. Product docs now describe disposable caches and clearing them,
+and remove the large-heap setup note. No TypeScript build-speed optimization was undertaken.
+
+The final query projections store normalized paths as WTF-8 bytes and groups/facets as numeric
+coordinates, with UTF-16 label ranks preserving the original deterministic ordering. Only display
+labels, selected pages/focus and text searches decode strings. Bounded Effect caches keep separate
+count baselines for culture selections. Physical chunks support logical columns above 128 MiB;
+unchanged aliases share buffers while patched columns keep separate pinned values. Native Project
+Index inventory queries provide committed package/sidecar signatures and header gather evidence;
+the source verifies selected bundles before and after extraction without a second enumeration.
+
+New fixed cases include empty-source cached facets, saved-only edits without a manifest, restoring
+the original content key without overwriting an overlay's base, and generation checks before
+opening a retired base. Fixture/tiny comparisons also exposed private-projection ordering and
+unpublished-ID bounds; byte order is now stable across append/compaction. The original combined
+source findings and each earlier fuzz defect remain individually covered. The event oracle stays
+unchanged except the owner-directed Unreal-compatible malformed JSON acceptance fix, which has
+its own changeset. The expanded Node 24 differential run now passes **2,000 seeds plus eight
+persisted seed assertions**, with zero differing fields, including lone surrogates and the final
+numeric problem tally. Node 26 also passes the same 2,000 seeds without differences; the saved
+5,000-seed run starting at seed 2,000 completed with zero differing fields
+(`phase6-fuzz/run-v26.11.1-2000-5000.json`).
+
+Host discovery also caught recovery guidance drift: the CLI reader-failure boundary now keeps its
+established output, and the streaming importer shares the event parser's typed recovery through
+`localizationError`. Malformed manifest, archive and PO each have a separate regression assertion;
+the importer and real-reader gate rerun passes **51 tests, zero failures**. The gate fixture now
+lists the localization files it actually edits and verifies that unlisted files retain their prior
+evidence. `not_gatherable` is included in the permitted package diagnostic assertion. The two
+unrelated CLI process timeout cases both pass in isolation and in the final one-worker host suite.
+The required host roots pass **938 tests / zero failures / seven gated skips on Node 24**, and
+**997 / zero / seven on Node 26**, whose run also includes the differential and importer suites.
+All **88 Game Text component tests** pass. Pre-commit passes formatting, lint, types, StyleX,
+architecture and contracts after fixing the new lint/type findings.
+
+### Phase 6 final verification and recorded 1× results
+
+Recorded 2026-10-11. The broad handoff Node suite passes **1,130 tests / zero failures / seven
+gated skips**, 152 passed files, in **377.56 s** on Node 26.5.0 with one worker and an explicit
+60-second test budget (`test-setup-optimized-broad.{log,json}`). All three previously timed-out
+tests also passed individually with that budget; their broad-suite rerun passes. The default
+differential sweep now uses 100 deterministic seeds plus all eight persisted seeds; the file takes
+28.59 s, with zero differing fields. All ten minimized/Unicode regression tests pass. The
+2,000-seed sweep remains available as `pnpm test:game-text:fuzz`; its seed-count override was
+checked separately without repeating a long sweep. Read-only committed native fixture evidence is
+shared within one test invocation; each layer/join test still builds its own writable index.
+Final fixture checks after simplifying that helper pass **24 / zero failures**, 12.66 s.
+
+The Game Text component rerun passes **88 tests / zero failures**, six files, in **22.88 s**
+on Node 26.5.0 (`phase6-final-components-20261011.{log,json}`). Localization-process lanes pass
+separately on **UE 5.7.4**, 396.13 s (`localization-rerun-20261011-57-fixed.log`), and
+**UE 5.8.3**, 391.46 s (`localization-rerun-20261011-58.log`). Both cover supported operations,
+audit, cancellation, review persistence, PO writes through apply/sync, key carryover and the
+Unicode JSON probe. The first 5.7 attempt exposed a probe include damaged by markup formatting;
+restoring valid C++ and excluding that include from oxfmt fixes compilation on both engines.
+Native IO tests were already passing in the incoming handoff. No new parser/codegen engine-matrix
+result is claimed. The final pre-push check passes all six stages in 30.58 s, including
+**43 architecture tests / zero failures**, formatting, lint, typecheck, StyleX and contracts
+(`phase6-final-prepush-20261011.log`). The measurement ledger records each result separately.
+
+The existing host artifacts, not new benchmark runs, provide the final 1× evidence:
+
+| Measurement                                      |                            CLI warm, Node 26.11.1 | Workbench warm, Node 26.11.1 | Target / result                      |
+| ------------------------------------------------ | ------------------------------------------------: | ---------------------------: | ------------------------------------ |
+| Query stages excluding facets                    |                                     1.31–91.37 ms |                1.41–99.67 ms | ≤100 ms: pass                        |
+| Facets                                           |                                         106.09 ms |                    104.85 ms | ≤100 ms: open miss                   |
+| Maximum reported query-stage heap                |                                         72.72 MiB |                    82.78 MiB | ≤128 MiB: pass                       |
+| Query heap including observed pre-GC trace peaks |                                         77.02 MiB |                    88.86 MiB | ≤128 MiB: pass                       |
+| No-change refresh                                |                                            2.59 s |                       4.92 s | ≤5 s: pass                           |
+| Opening an existing index                        |                                            4.29 s |                      42.13 s | Workbench startup issue remains open |
+| One package + one PO refresh                     | 13.48 s on Node 24; 8.43 s in another Node 26 run |                 Not recorded | ≤10 s: not consistently met          |
+
+Sources are `phase6-cli-1x-{cold,warm}-final.json`,
+`phase6-workbench-1x-warm-verified.json`, and the earlier
+`phase6-cli-1x-cold-default.json`. The Node 24 cold artifact also records filter/search/facet at
+123.05/115.16/203.02 ms; it is not a Node 26 cold-query pass. These measurements cover the
+TypeScript builder and host query path with retained package inputs, excluding native catalog
+enumeration/extraction. The saved 1× oracle comparison is historical: **583,507/583,507 lines,
+zero differences** in `phase6-final-order-1x.json`; it predates the final host/WTF-8 work. No new
+saved-scale oracle comparison is claimed. Current fixture, tiny and differential checks cover the
+final query implementation.
+
+**The owner stopped all further 10× runs.** The CLI 10× cold attempt failed the 900-second cap
+before publication/query (`phase6-cli-10x-cold-default.json`); no cap was relaxed, no prepared
+index is relabelled as a successful cold build, and no further benchmarks were run in this handoff.
+
+The open issues are the TypeScript changed-input refresh's `source-conflict` fallback to a full
+join (13.48 s against 10 s), Workbench's 42.13 s open versus CLI's 4.29 s, and facets around
+105–106 ms against 100 ms. These are recorded, not fixed. Separately, the historical full
+`pnpm check` fails at the pre-existing Data Authoring adoption stage (missing
+`editor-foreground-responsiveness.js` in the copied protocol package), and three stale Game Text
+Workbench e2e expectations fail against the initial scan action and `Quality checks` tab.
+Neither is fixed or relabelled as a pass. Targeted verification is complete; full verification,
+Phase 6 performance acceptance and Phase 7 remain incomplete. The native-builder workstream stays
+separate and was not merged or pushed here.

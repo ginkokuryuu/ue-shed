@@ -108,6 +108,18 @@ pub enum ProjectIndexStatusPayload {
 #[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
 #[serde(tag = "kind", deny_unknown_fields)]
 pub enum ProjectIndexItem {
+    #[serde(rename = "inventory")]
+    Inventory {
+        #[serde(rename = "packagePath")]
+        package_path: String,
+        signature: String,
+        #[serde(
+            default,
+            skip_serializing_if = "Option::is_none",
+            rename = "headerData"
+        )]
+        header_data: Option<uasset_inspection::package_header::PackageHeaderData>,
+    },
     #[serde(rename = "map")]
     Map {
         #[serde(rename = "mapPath")]

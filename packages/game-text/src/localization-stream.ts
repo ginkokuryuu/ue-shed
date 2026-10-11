@@ -1,5 +1,6 @@
 import { Schema } from "effect";
 import { LocalizationError, LocalizationLimits, type POLine } from "@ue-shed/localization";
+import { validateUnrealJsonEscapes, localizationError } from "@ue-shed/localization";
 
 const Positive = Schema.Int.check(Schema.isGreaterThan(0));
 export const LocalizationImportLimits = LocalizationLimits.pipe(
@@ -25,10 +26,7 @@ export function importFailure(
 			code === "file_changed"
 				? `${file}${location}: file changed during import; retry after writing finishes.`
 				: `${file}${location}: localization import failed (${code}).`,
-		recovery:
-			code === "limit_exceeded"
-				? "Reduce the input or explicitly increase the bounded localization import limits."
-				: "Check the saved file and target configuration, then retry the import."
+		recovery: localizationError(code).recovery
 	});
 }
 interface Frame {
@@ -49,7 +47,8 @@ export interface ImportNamespace {
 export function localizationJsonStream(
 	file: string,
 	limits: LocalizationImportLimits,
-	child: (value: Schema.Json, node: number, offset: number) => void
+	child: (value: Schema.Json, node: number, offset: number) => void,
+	format: "manifest" | "archive" = "manifest"
 ) {
 	const frames: Frame[] = [];
 	const nodes: ImportNamespace[] = [];
@@ -189,6 +188,7 @@ export function localizationJsonStream(
 		} catch {
 			fail();
 		}
+		validateUnrealJsonEscapes(token, format, file, offset - token.length);
 		emit(value);
 		token = "";
 	}
@@ -257,6 +257,12 @@ export function localizationJsonStream(
 						} catch {
 							fail();
 						}
+						validateUnrealJsonEscapes(
+							current.raw,
+							format,
+							file,
+							offset - current.raw.length
+						);
 						record = undefined;
 						accept(value);
 					}

@@ -204,6 +204,7 @@ pub(crate) fn catalog_was_quarantined(catalog: &BinaryCatalog) -> bool {
 pub(crate) fn query_project_id(query: &ProtocolQuery) -> &str {
     match query {
         ProtocolQuery::Maps { project_id, .. }
+        | ProtocolQuery::Inventory { project_id, .. }
         | ProtocolQuery::ExactClasses { project_id, .. }
         | ProtocolQuery::ClassPrefixes { project_id, .. }
         | ProtocolQuery::ClassNameSuffixes { project_id, .. }
@@ -213,6 +214,10 @@ pub(crate) fn query_project_id(query: &ProtocolQuery) -> &str {
 
 fn query_expected_generation(query: &ProtocolQuery) -> u64 {
     match query {
+        ProtocolQuery::Inventory {
+            expected_generation,
+            ..
+        } => *expected_generation,
         ProtocolQuery::Maps {
             expected_generation,
             ..
@@ -350,6 +355,18 @@ pub(crate) fn progress_phase(phase: RefreshPhase) -> &'static str {
 
 fn to_catalog_query(query: &ProtocolQuery) -> Result<QueryRequest, Failure> {
     let (project_id, expected_generation, limit, cursor, kind) = match query {
+        ProtocolQuery::Inventory {
+            cursor,
+            expected_generation,
+            limit,
+            project_id,
+        } => (
+            project_id,
+            *expected_generation,
+            *limit,
+            cursor.clone(),
+            QueryKind::Inventory,
+        ),
         ProtocolQuery::Maps {
             cursor,
             expected_generation,
@@ -464,6 +481,15 @@ fn to_protocol_diagnostic(
 
 fn to_protocol_item(item: QueryItem) -> ProjectIndexItem {
     match item {
+        QueryItem::Inventory {
+            package_path,
+            signature,
+            header_data,
+        } => ProjectIndexItem::Inventory {
+            package_path,
+            signature,
+            header_data,
+        },
         QueryItem::Map {
             map_path,
             package_name,

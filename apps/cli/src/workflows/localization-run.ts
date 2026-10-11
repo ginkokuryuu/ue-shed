@@ -1,3 +1,4 @@
+import { refreshCliGameTextIndex, invalidateCliGameTextIndex } from "./game-text-index.js";
 import { Effect, Metric, Schema, Stream } from "effect";
 import {
 	LocalizationEvidence,
@@ -10,12 +11,8 @@ import {
 	localizationOperationError,
 	type LocalizationError
 } from "@ue-shed/localization";
-import {
-	joinLocalizationTarget,
-	localizationKeyChangesAcross,
-	type LocalizationJoin
-} from "@ue-shed/game-text";
-import { LocalizationChangeSet, type LocalizationTargetEvidence } from "@ue-shed/localization";
+import { localizationKeyChangesAcross, type LocalizationJoin } from "@ue-shed/game-text";
+import { LocalizationChangeSet } from "@ue-shed/localization";
 import { CliRuntime, printJson } from "../cli-runtime.js";
 import {
 	LocalizationCheckOutputError,
@@ -39,25 +36,6 @@ const LocalizationRunFailure = Schema.Union([
 	LocalizationRunConfigurationError,
 	LocalizationCheckOutputError
 ]);
-// Key pairing across a gather reads only Unreal's files, so it joins against no saved scan.
-const noSavedScan = {
-	schemaVersion: 1,
-	status: "complete",
-	units: [],
-	diagnostics: [],
-	coverage: {
-		discoveredPackages: 0,
-		inspectedPackages: 0,
-		partialPackages: 0,
-		failedPackages: 0,
-		textUnits: 0,
-		textOccurrences: 0,
-		resolvedOccurrences: 0,
-		unresolvedOccurrences: 0,
-		unsupportedTextProperties: 0
-	}
-} as const;
-
 /**
  * The translations of keys that changed in the gather, as a change set for the new keys. Pairs
  * whose text changed too are left out: those translations were written for the earlier text.
@@ -99,10 +77,6 @@ function carriedChanges(before: LocalizationJoin, after: LocalizationJoin) {
 	};
 }
 
-function joinEvidence(evidence: LocalizationTargetEvidence): LocalizationJoin {
-	return joinLocalizationTarget(noSavedScan, evidence);
-}
-
 function discoveryFailure(error: LocalizationError): LocalizationOperationError {
 	switch (error.code) {
 		case "file_missing":
@@ -128,7 +102,17 @@ export const runLocalizationOperation = Effect.fn("Cli.workflow.localization_run
 				const work = Effect.gen(function* () {
 					const name = yield* Schema.decodeUnknownEffect(LocalizationTargetName)(
 						command.target
-					).pipe(Effect.mapError(() => localizationOperationError("invalid_request")));
+					).pipe(
+						Effect.mapError(
+							(cause) =>
+								new LocalizationOperationError({
+									...localizationOperationError("io_failed"),
+									message: cause.message,
+									recovery:
+										"Choose a listed target and a valid localization operation."
+								})
+						)
+					);
 					const reader = yield* LocalizationEvidence;
 					const discovery = yield* reader
 						.discover({ projectRoot: command.projectRoot })
@@ -146,7 +130,17 @@ export const runLocalizationOperation = Effect.fn("Cli.workflow.localization_run
 						Object.assign(input, { explicitEngineRoot: command.engineRoot });
 					const request = yield* Schema.decodeUnknownEffect(LocalizationRunRequest)(
 						input
-					).pipe(Effect.mapError(() => localizationOperationError("invalid_request")));
+					).pipe(
+						Effect.mapError(
+							(cause) =>
+								new LocalizationOperationError({
+									...localizationOperationError("io_failed"),
+									message: cause.message,
+									recovery:
+										"Choose a listed target and a valid localization operation."
+								})
+						)
+					);
 					const operations = yield* LocalizationOperations;
 					if (command.plan) return yield* printJson(yield* operations.plan(request));
 					// Unreal trims the archive translations of keys that leave the manifest, so a
@@ -154,11 +148,23 @@ export const runLocalizationOperation = Effect.fn("Cli.workflow.localization_run
 					const before =
 						command.carry === undefined
 							? undefined
-							: joinEvidence(
-									yield* reader
-										.read({ projectRoot: command.projectRoot, target })
-										.pipe(Effect.mapError(discoveryFailure))
-								);
+							: (yield* refreshCliGameTextIndex(
+									{
+										projectRoot: command.projectRoot,
+										targetName: target.name,
+										savedPackages: false
+									},
+									undefined
+								).pipe(
+									Effect.mapError(
+										(cause) =>
+											new LocalizationOperationError({
+												...localizationOperationError("io_failed"),
+												message: cause.message,
+												recovery: cause.recovery
+											})
+									)
+								)).localizationJoin;
 					let completed = false;
 					yield* operations.run(request).pipe(
 						Stream.runForEach((event) => {
@@ -182,12 +188,43 @@ export const runLocalizationOperation = Effect.fn("Cli.workflow.localization_run
 							);
 						})
 					);
+					if (completed)
+						yield* invalidateCliGameTextIndex({
+							projectRoot: command.projectRoot,
+							targetName: target.name,
+							changedFiles: [
+								...Object.values(target.outputPaths.archives),
+								...Object.values(target.outputPaths.portableObjects),
+								...(target.outputPaths.manifest
+									? [target.outputPaths.manifest]
+									: [])
+							]
+						}).pipe(
+							Effect.catch((cause) =>
+								Effect.logWarning(
+									"Game Text write succeeded but cache invalidation failed",
+									{ message: cause.message, recovery: cause.recovery }
+								)
+							)
+						);
 					if (before === undefined || command.carry === undefined || !completed) return;
-					const after = joinEvidence(
-						yield* reader
-							.read({ projectRoot: command.projectRoot, target })
-							.pipe(Effect.mapError(discoveryFailure))
-					);
+					const after = (yield* refreshCliGameTextIndex(
+						{
+							projectRoot: command.projectRoot,
+							targetName: target.name,
+							savedPackages: false
+						},
+						undefined
+					).pipe(
+						Effect.mapError(
+							(cause) =>
+								new LocalizationOperationError({
+									...localizationOperationError("io_failed"),
+									message: cause.message,
+									recovery: cause.recovery
+								})
+						)
+					)).localizationJoin;
 					const carry = carriedChanges(before, after);
 					if (carry.changes.length > 0)
 						yield* writeLocalizationCheckChanges(

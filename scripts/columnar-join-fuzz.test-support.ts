@@ -1,4 +1,4 @@
-import { mkdir, writeFile } from "node:fs/promises";
+import { mkdir, unlink, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { isDeepStrictEqual } from "node:util";
 import { JoinedQueryData } from "../packages/game-text/src/joined-query-data.ts";
@@ -33,8 +33,11 @@ import {
 	localizationKeyChanges,
 	applyLocalizationReview
 } from "../packages/game-text/src/index.ts";
+import { indexedLocalizationStatusReport } from "../packages/game-text/src/index-context.ts";
+import { localizationStatusReport } from "../packages/game-text/src/localization-status.ts";
 import { textCorpusQuery } from "../packages/game-text/src/query.ts";
 import { TextProblem, TextCorpusSearchRequest } from "../packages/game-text/src/schema.ts";
+import { localizationStates } from "../packages/game-text/src/localization-schema.ts";
 import {
 	target,
 	evidence as emptyEvidence,
@@ -122,8 +125,13 @@ export function joinFuzzInput(seed: number): JoinFuzzInput {
 		"Beta source twenty four",
 		"first\nsecond",
 		"first\u2028second",
+		"\ufeffAlpha",
+		"alpha\u0000beta",
+		"\ue000",
+		"𐀀",
 		"x".repeat(120)
 	];
+	const loneSources = ["lead\ud800", "trail\udfff", "\udfff\ud800", "a".repeat(39) + "\ud800"];
 	const count = 2 + int(19);
 	const records = Array.from({ length: count }, (_, row) => ({
 		...emptyPackageTextRecord(
@@ -142,7 +150,7 @@ export function joinFuzzInput(seed: number): JoinFuzzInput {
 		const namespace = pick(["UI", "UI [package]", "UI [literal]", "Other"]);
 		const object = `/Game/${record.path.slice(8, -7)}.Object`;
 		record.occurrences.push({
-			source: pick(sources),
+			source: int(100) < 3 ? pick(loneSources) : pick(sources),
 			dev_notes: pick(["", " ", "note\u2028line"]),
 			identity:
 				kind === 4
@@ -351,7 +359,7 @@ export async function compareJoinFuzzInput(
 	persisted = false
 ): Promise<FuzzDifference[]> {
 	const projectRoot = join(cache, "project");
-	await mkdir(projectRoot, { recursive: true });
+	if (persisted) await mkdir(projectRoot, { recursive: true });
 	const memoryLayer = joinMemoryLayer();
 	const run = <A, E>(effect: Parameters<typeof runJoinIn<A, E>>[3]) =>
 		persisted
@@ -362,9 +370,10 @@ export async function compareJoinFuzzInput(
 		data: Buffer,
 		format: "manifest" | "archive" | "po"
 	) => {
+		const spill = join(cache, `${name}.spill`);
 		const builder = localizationColumnsBuilder(
 			name,
-			join(cache, `${name}.spill`),
+			spill,
 			{ format, poFormat: target.poFormat, collapseMode: target.collapseMode },
 			defaultLocalizationImportLimits
 		);
@@ -382,6 +391,7 @@ export async function compareJoinFuzzInput(
 			);
 		} finally {
 			builder.close();
+			await unlink(spill);
 		}
 	};
 	const authored = Schema.decodeUnknownSync(LocalizationTarget)({
@@ -451,8 +461,8 @@ export async function compareJoinFuzzInput(
 		contentHash: "fuzz"
 	});
 	const manifest = bytes(input.manifest);
-	await writeFile(join(projectRoot, "Fuzz.manifest"), manifest);
-	if (!persisted) await importMemory("Fuzz.manifest", manifest, "manifest");
+	if (persisted) await writeFile(join(projectRoot, "Fuzz.manifest"), manifest);
+	else await importMemory("Fuzz.manifest", manifest, "manifest");
 	const cultures: LocalizationTargetEvidence["cultures"][number][] = [];
 	for (let ci = 0; ci < authored.cultures.length; ci++) {
 		const culture = authored.cultures[ci]!,
@@ -463,9 +473,10 @@ export async function compareJoinFuzzInput(
 					""
 				)
 		);
-		await writeFile(join(projectRoot, `${culture}.archive`), archive);
-		await writeFile(join(projectRoot, `${culture}.po`), po);
-		if (!persisted) {
+		if (persisted) {
+			await writeFile(join(projectRoot, `${culture}.archive`), archive);
+			await writeFile(join(projectRoot, `${culture}.po`), po);
+		} else {
 			await importMemory(`${culture}.archive`, archive, "archive");
 			await importMemory(`${culture}.po`, po, "po");
 		}
@@ -520,13 +531,43 @@ export async function compareJoinFuzzInput(
 		facets: { folder: "", assets: true, origins: true, cultures: true }
 	};
 	const { localization: _selection, ...unlocalized } = base;
+	const { facets: _facets, ...withoutFacets } = base;
+	const translationQuery = ["translated", "po", "Alpha", "\ud800", "\udfff", "\u0000"][
+		input.seed % 6
+	]!;
 	const requests: TextCorpusSearchRequest[] = [
+		withoutFacets,
 		base,
 		unlocalized,
 		{ ...base, pageSize: 2 },
 		{ ...base, capability: "read_only" },
 		{ ...base, capability: "source_editable" },
 		{ ...base, withoutNotes: true },
+		{
+			...base,
+			query: translationQuery,
+			localization: {
+				target: expected.target,
+				culture: authored.cultures[0]!,
+				searchTranslations: true
+			}
+		},
+		{
+			...base,
+			query: translationQuery,
+			localization: {
+				target: expected.target,
+				cultures: authored.cultures,
+				searchTranslations: true
+			}
+		},
+		{
+			...base,
+			localization: {
+				target: expected.target,
+				state: localizationStates[input.seed % localizationStates.length]!
+			}
+		},
 		{ ...base, where: { pathPrefix: "Content/Text" } },
 		{ ...base, where: { files: [input.records[0]!.path] } },
 		...(["shared", "duplicate_source", "long", "unresolved", "conflicting"] as const).map(
@@ -539,7 +580,9 @@ export async function compareJoinFuzzInput(
 				cultures: [authored.cultures.find((value) => value === culture)!]
 			}
 		})),
-		...["Alpha", "first", "\u2028", "translated"].map((query) => ({ ...base, query })),
+		...["Alpha", "first", "\u2028", "translated", "\ud800", "\udfff", "\u0000"].map(
+			(query) => ({ ...base, query })
+		),
 		...(["folder", "asset", "origin", "problem", "namespace"] as const).map((group) => ({
 			...base,
 			group
@@ -574,7 +617,8 @@ export async function compareJoinFuzzInput(
 			pageSize: 2,
 			localizationCursor: firstPage.localization.nextCursor
 		});
-	const grouped = oracle.search({ ...base, group: "asset" });
+	const group = (["asset", "folder", "namespace", "origin", "problem"] as const)[input.seed % 5]!;
+	const grouped = oracle.search({ ...base, group });
 	if (grouped.groups?.entries[0])
 		requests.push({
 			...base,
@@ -620,6 +664,11 @@ export async function compareJoinFuzzInput(
 			return {
 				query: {
 					summary: candidate.summary(),
+					statusReport: indexedLocalizationStatusReport(
+						joined,
+						evidence,
+						candidate.search(base)
+					),
 					exports: [candidate.export(base), candidate.export(unlocalized)],
 					lines: candidate.localizationLines(base),
 					searches: requests.map((request) => candidate.search(request)),
@@ -682,6 +731,15 @@ export async function compareJoinFuzzInput(
 	};
 	compare("query.summary", oracle.summary(), hydrated.summary());
 	compare("column-query.summary", oracle.summary(), actual.query.summary);
+	compare(
+		"column-query.statusReport",
+		Schema.decodeUnknownSync(Schema.Json)(
+			JSON.parse(
+				JSON.stringify(localizationStatusReport(corpus, evidence, oracle.search(base)))
+			)
+		),
+		Schema.decodeUnknownSync(Schema.Json)(JSON.parse(JSON.stringify(actual.query.statusReport)))
+	);
 	compare("column-query.export.localized", oracle.export(base), actual.query.exports[0]);
 	compare("column-query.export.raw", oracle.export(unlocalized), actual.query.exports[1]);
 	compare("column-query.localizationLines", oracle.localizationLines(base), actual.query.lines);

@@ -30,7 +30,9 @@ const typeScriptIndexBuildSession = <A, E, R>(
 			const session = LocalizationImportSession.of({
 				configuration: request.configuration,
 				index: leasedIndex,
-				...(request.files === undefined ? undefined : { files: request.files })
+				...(request.files === undefined || !writer.manifest().active.joined
+					? undefined
+					: { files: request.files })
 			});
 			return yield* effect.pipe(
 				Effect.provideService(SharedIndex, leasedIndex),
