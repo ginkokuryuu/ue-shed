@@ -39,6 +39,7 @@ const { values } = parseArgs({
 		worker: { type: "boolean" },
 		select: { type: "string" },
 		profile: { type: "boolean" },
+		"force-changed-join": { type: "boolean", default: false },
 		"po-change-byte": { type: "string" },
 		report: { type: "string" },
 		domain: { type: "string" },
@@ -92,11 +93,20 @@ if (values.worker) {
 		peak = memory();
 		process.send?.({ kind: "stage", stage });
 		const started = performance.now();
+		const profileStarted = values.profile ? Number(process.hrtime.bigint() / 1000n) : 0;
 		const value = await run();
 		sample();
 		const result = {
 			stage,
 			seconds: (performance.now() - started) / 1000,
+			...(values.profile
+				? {
+						profileWindowMicros: {
+							start: profileStarted,
+							end: Number(process.hrtime.bigint() / 1000n)
+						}
+					}
+				: undefined),
 			peak,
 			...summary(value)
 		};
@@ -171,7 +181,8 @@ if (values.worker) {
 				measure,
 				values.host!,
 				values.select ?? "all",
-				changedPoByte
+				changedPoByte,
+				values["force-changed-join"]
 			);
 		}
 		if (mode === "join") {
@@ -371,7 +382,9 @@ if (values.worker) {
 			...(values.host ? ["--host", values.host] : []),
 			...(values.report ? ["--report", values.report] : []),
 			...(values.domain ? ["--domain", values.domain] : []),
-			...(values.records ? ["--records", values.records] : [])
+			...(values.records ? ["--records", values.records] : []),
+			...(values.profile ? ["--profile"] : []),
+			...(values["force-changed-join"] ? ["--force-changed-join"] : [])
 		],
 		{
 			execArgv: [

@@ -1,7 +1,7 @@
 import { packageTextFixtureEvidence } from "./package-text-fixture.test-support.ts";
 import { resolve } from "node:path";
 import { readFile, writeFile } from "node:fs/promises";
-import { Effect, Stream } from "effect";
+import { Effect, Schema, Stream } from "effect";
 import { beforeAll, describe, expect, it } from "vitest";
 import {
 	applyLocalizationReview,
@@ -51,6 +51,7 @@ import {
 import { textCorpusQuery } from "../packages/game-text/src/query.ts";
 import {
 	TextProblem,
+	TextCorpusSearchRequest,
 	type TextCorpus,
 	type TextReviewSignal
 } from "../packages/game-text/src/schema.ts";
@@ -69,6 +70,12 @@ import {
 	manifestPathOrigin
 } from "../packages/game-text/src/text-origin.ts";
 import { localizationManifestNotes } from "../packages/game-text/src/localization.ts";
+import {
+	JoinedQueryData,
+	reuseJoinedQueryProjection
+} from "../packages/game-text/src/joined-query-data.ts";
+import { columnarTextCorpusQuery } from "../packages/game-text/src/columnar-query.ts";
+import type { SnapshotSourceColumn } from "../packages/game-text/src/snapshot-file.ts";
 
 const expectProblemOracle = (
 	corpus: TextCorpus,
@@ -476,6 +483,246 @@ describe("split saved identity findings regression", () => {
 });
 
 describe("columnar join", () => {
+	it("source conflicts grow, change and resolve in one flat overlay with full-column parity", async () => {
+		await withJoinCache(async (cache) => {
+			const { projectRoot, evidence, inventory, events } = await tinyJoinInput(cache, 0.0001);
+			const run = <A, E>(effect: Parameters<typeof runJoinIn<A, E>>[3]) =>
+				runJoinIn(projectRoot, cache, "Generated", effect);
+			const input = { projectRoot, target: evidence.target };
+			const initial = [...packageTextRecordsFromEvents(events)].flatMap((record) =>
+				record.event === "text_package_record"
+					? [{ ...record, status: "partial" as const }]
+					: []
+			);
+			const original = initial.find((record) =>
+				record.occurrences.some(
+					(item) =>
+						item.identity.status === "resolved" &&
+						item.location.kind === "asset_property" &&
+						item.source.length >= 40
+				)
+			);
+			const occurrenceIndex =
+				original?.occurrences.findIndex(
+					(item) =>
+						item.identity.status === "resolved" &&
+						item.location.kind === "asset_property" &&
+						item.source.length >= 40
+				) ?? -1;
+			const occurrence = original?.occurrences[occurrenceIndex];
+			if (
+				!original ||
+				!occurrence ||
+				occurrence.identity.status !== "resolved" ||
+				occurrence.location.kind !== "asset_property"
+			)
+				throw new Error("Missing authored long-source occurrence");
+			const identity = occurrence.identity;
+			const location = occurrence.location;
+			const namespace = identity.namespace.replace(/\s*\[[^\]]*\]$/u, "");
+			const selected = {
+				...original,
+				occurrences: [
+					...original.occurrences,
+					...["z", "A", "ä"].map((suffix, row) => ({
+						...occurrence,
+						identity: { ...identity, namespace: `${namespace} [${suffix}]` },
+						location: { ...location, property_path: `Conflict${row}` }
+					}))
+				]
+			};
+			const records = initial.map((record) =>
+				record.path === original.path ? selected : record
+			);
+			const baseline = inventory.map((item) => ({ ...item, signature: "conflict-baseline" }));
+			await run(
+				refreshPackageTextLayer({
+					inventory: baseline,
+					read: (paths) =>
+						Stream.fromIterable(records.filter((record) => paths.includes(record.path)))
+				})
+			);
+			await run(refreshJoinedTarget(input));
+			const base = await run(
+				Effect.gen(function* () {
+					return (yield* openJoinedTarget()).reader.manifest.active.joined!;
+				})
+			);
+			let projection = await run(
+				Effect.gen(function* () {
+					const joined = yield* openJoinedTarget();
+					const projection = reuseJoinedQueryProjection(joined);
+					columnarTextCorpusQuery(joined, undefined, projection);
+					return projection;
+				})
+			);
+			const collect = (reuse = false) =>
+				Effect.gen(function* () {
+					const joined = yield* openJoinedTarget();
+					const next = reuseJoinedQueryProjection(joined, reuse ? projection : undefined);
+					const previousSource = projection.columns.get("patch:line.source");
+					const heldSource = previousSource?.slice();
+					const query = columnarTextCorpusQuery(joined, undefined, next);
+					const cold = columnarTextCorpusQuery(joined);
+					expect(query.summary()).toEqual(cold.summary());
+					for (const text of ["", "Zebra", "alpha", "béta", "wirava", "xirava"])
+						for (const localization of [
+							undefined,
+							{ target: "Generated", culture: "en" }
+						]) {
+							const request = Schema.decodeUnknownSync(TextCorpusSearchRequest)({
+								query: text,
+								capability: "all" as const,
+								pageSize: 5,
+								...(localization ? { localization } : undefined),
+								facets: { origins: true, assets: true, cultures: true }
+							});
+							expect(query.search(request), `reused ${text}`).toEqual(
+								cold.search(request)
+							);
+						}
+					if (heldSource) expect(previousSource).toEqual(heldSource);
+					if (reuse) projection = next;
+					const data = new JoinedQueryData(joined, next);
+					const values: Record<string, Uint32Array> = {};
+					for (const name of new Set([
+						...joined.layer.directory.entries.keys(),
+						...Object.keys(joined.meta.aliases),
+						...Object.keys(joined.meta.patches ?? {})
+					])) {
+						if (name === "join.meta" || name === "shared.meta") continue;
+						values[name] = yield* u32(joined.layer, name);
+						expect(data.column(name), `synchronous ${name}`).toEqual(values[name]);
+					}
+					const key = joined.reader.manifest.active.joined!;
+					const stringColumns = joined.reader.manifest.layers[key]!.stringColumns;
+					const columns: SnapshotSourceColumn[] = [];
+					for (const [name, entry] of joined.rawLayer.directory.entries) {
+						if (name === "shared.meta") continue;
+						const value = yield* joined.rawLayer.section(name);
+						const domain = stringColumns[name];
+						columns.push({
+							name,
+							kind: domain ? "stringIds" : entry.kind,
+							...(domain ? { domain } : undefined),
+							load: async () => value
+						});
+					}
+					return {
+						values,
+						columns,
+						key,
+						base: joined.meta.base,
+						join: yield* hydrateJoinedTarget(joined, 0, 10000),
+						census: yield* inspectJoinedTarget(joined)
+					};
+				});
+			const variants = ["Zebra", "Alpha", "Béta \ud800"].map(
+				(prefix) => `${prefix} ${occurrence.source}`
+			);
+			let currentEvidence = evidence;
+			for (const [version, sources] of [
+				[occurrence.source, variants[0]!, occurrence.source, occurrence.source],
+				[occurrence.source, variants[0]!, variants[1]!, variants[2]!],
+				[variants[1]!, variants[1]!, variants[1]!, variants[1]!],
+				[variants[1]!, variants[1]!, variants[1]!, variants[1]!]
+			].entries()) {
+				if (version !== 3)
+					await run(
+						refreshPackageTextLayer({
+							inventory: baseline.map((item) =>
+								item.path === original.path
+									? { ...item, signature: `conflict:${version}` }
+									: item
+							),
+							read: () =>
+								Stream.succeed({
+									...selected,
+									occurrences: selected.occurrences.map((item, row) =>
+										row === occurrenceIndex
+											? { ...item, source: sources[0]! }
+											: row >= original.occurrences.length
+												? {
+														...item,
+														source: sources[
+															row - original.occurrences.length + 1
+														]!
+													}
+												: item
+									)
+								})
+						})
+					);
+				if (version === 0 || version === 3) {
+					const poPath = resolve(projectRoot, "en.po");
+					await writeFile(
+						poPath,
+						(await readFile(poPath, "utf8")).replace(
+							version === 0 ? "mirava" : "wirava",
+							version === 0 ? "wirava" : "xirava"
+						)
+					);
+					await expectLocalizationImportMatchesParser({
+						projectRoot,
+						cacheRoot: cache,
+						relativePath: "en.po",
+						format: "po",
+						poFormat: input.target.poFormat,
+						collapseMode: input.target.collapseMode,
+						sharedTargetKey: "Generated"
+					});
+					const value = projectPOEvidence(success(parsePO(await readFile(poPath))));
+					currentEvidence = {
+						...currentEvidence,
+						cultures: currentEvidence.cultures.map((culture) =>
+							culture.culture === "en" && culture.po.status === "read"
+								? { ...culture, po: { ...culture.po, value } }
+								: culture
+						)
+					};
+				}
+				expect(await run(refreshJoinedTarget(input))).toMatchObject({
+					strategy: "incremental"
+				});
+				const incremental = await run(collect(true));
+				expect(incremental.base).toBe(base);
+				const corpus = await run(textCorpusFromPackageTextLayer(projectRoot));
+				const objectJoin = joinLocalizationTarget(corpus, currentEvidence);
+				const expected = applyLocalizationKeyChanges(
+					objectJoin,
+					localizationKeyChanges(objectJoin, corpus).pairs
+				);
+				expect(compareLocalizationJoins(expected, incremental.join)).toMatchObject({
+					equal: true,
+					differenceCount: 0
+				});
+				expectProblemOracle(
+					corpus,
+					expected,
+					incremental.join,
+					incremental.values["line.problems"]!
+				);
+				await run(expectFacetOracle(corpus, expected));
+				await run(refreshJoinedTarget({ ...input, force: true }));
+				const full = await run(collect());
+				expect(incremental.values).toEqual(full.values);
+				expect(incremental.census).toEqual(full.census);
+				// Restore the captured overlay after the proof so the next edit tests flattening.
+				await run(
+					Effect.gen(function* () {
+						const writer = yield* (yield* SharedIndex).writer();
+						yield* writer.publishIds(
+							"joined",
+							incremental.key,
+							{ columns: incremental.columns },
+							writer.manifest().generation,
+							{ "joined-base": base }
+						);
+					})
+				);
+			}
+		});
+	}, 60000);
 	it.each(["source edit", "restore original inputs"] as const)(
 		"saved-only %s equals a full rebuild without a manifest",
 		async (operation) => {

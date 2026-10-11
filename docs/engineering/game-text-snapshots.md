@@ -343,6 +343,16 @@ columns remain in array buffers. Pages decode direct previews; full evidence obj
 only for focus, explicit report or export. Matching row sets and count projections use bounded
 Effect caches. One retained generation per host model is released on replacement or shutdown.
 
+The refresh service's two-entry Effect cache retains the latest query projection for each
+dictionary-generation/full-base pair. Incremental generations copy references to immutable
+numeric buffers only when their exact physical layer keys remain dependencies. Patched and
+derived columns stay private to the new query; full-base changes and dictionary compaction reset
+reuse. Source search arenas copy retained WTF-8 bytes and decode only newly selected source IDs.
+Reuse permits at most 8,192 newly selected IDs, 8,192 obsolete IDs and 32 MiB of obsolete source
+bytes; beyond those bounds, the arena rebuilds from current sources. Old readers keep their
+original buffers. Query preparation remains eager, including source search and common counts.
+Refresh spans record reused-column count, source reuse and query-preparation duration.
+
 Every host obtains builds through `GameTextIndexBuilder`: import, package refresh, dictionary,
 compaction and joined refresh. `typeScriptIndexBuilderLayer` implements the existing signatures;
 hosts import the service rather than build functions. `GameTextIndexRefresh` owns the writer lease,
@@ -365,6 +375,17 @@ unpatched aliases share their buffer; patched columns retain their own buffer so
 sees its pinned base values.
 Long logical names use short `join.chunk<column>.<part>` physical names to fit the directory's
 31-byte name field. Readers use the metadata mapping rather than deriving physical names.
+
+`joined-v11` supports stable source conflicts in one flat overlay over the full base. Joined
+metadata v4 adds `sourcePatches.raw` and `sourcePatches.slice`; each names sorted query-row indices,
+replacement-list starts and shared source IDs in the overlay. Each projection is bounded to 8,192
+rows and 8,192 source IDs. Readers splice the base source arena and derive its packed start/end
+columns, copying unchanged runs without retaining row objects. These list patches cannot overlap
+fixed-size patches of the same source/range columns. Both read paths preserve unpatched aliases.
+Successive overlays flatten their list replacements over the same full base. Metadata v3 full
+layers and earlier fixed-size overlays remain readable; the new content-key prefix prevents older
+builders from reusing an unsupported metadata-v4 overlay. This is separate from the unchanged
+physical snapshot/WTF-8 format v4.
 
 Incremental refresh checks the metadata generation before opening a previous overlay base.
 After compaction it rebuilds from current inputs. Saved-only joins have no manifest layer;

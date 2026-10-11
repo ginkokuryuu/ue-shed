@@ -1194,12 +1194,113 @@ final query implementation.
 before publication/query (`phase6-cli-10x-cold-default.json`); no cap was relaxed, no prepared
 index is relabelled as a successful cold build, and no further benchmarks were run in this handoff.
 
-The open issues are the TypeScript changed-input refresh's `source-conflict` fallback to a full
-join (13.48 s against 10 s), Workbench's 42.13 s open versus CLI's 4.29 s, and facets around
-105–106 ms against 100 ms. These are recorded, not fixed. Separately, the historical full
+At the Phase 6 push, the open issues were the TypeScript changed-input refresh's `source-conflict`
+fallback to a full join (13.48 s against 10 s), Workbench's 42.13 s open versus CLI's 4.29 s, and
+facets around 105–106 ms against 100 ms. The follow-up below addresses the conflict fallback;
+its initial fresh-input 1× refresh runs straddle 10 seconds, and subsequent query-buffer reuse
+brings all three measured refreshes below the target. Separately, the historical full
 `pnpm check` fails at the pre-existing Data Authoring adoption stage (missing
 `editor-foreground-responsiveness.js` in the copied protocol package), and three stale Game Text
 Workbench e2e expectations fail against the initial scan action and `Quality checks` tab.
 Neither is fixed or relabelled as a pass. Targeted verification is complete; full verification,
 Phase 6 performance acceptance and Phase 7 remain incomplete. The native-builder workstream stays
 separate and was not merged or pushed here.
+
+### Follow-up: incremental source conflicts
+
+Stable package-source edits now create, modify and resolve conflicting-source lines through the
+bounded flat overlay. A source-list patch replaces only affected raw/slice rows, with at most
+8,192 accumulated rows and 8,192 source IDs in each projection. Both asynchronous and synchronous
+readers reconstruct the packed numeric source arena and offsets, including chunked base columns.
+Unpatched aliases retain their base buffers. No overlay references another overlay.
+
+Joined metadata v4 identifies the variable-list patches; metadata v3 full layers and fixed-size
+overlays remain readable. Cache keys advance to `joined-v11` so older builders rebuild unsupported
+overlays. This does not change the physical snapshot's canonical WTF-8 format v4.
+Conflict reasons, culture facts/states, source ordering, words, problems, duplicate-source signals
+and facets retain full-rebuild semantics. Short-source/visibility, split-unit, structural and
+absence-candidate edits continue to fall back to the full merge, as do edits beyond patch bounds.
+
+The targeted regression covers a package-plus-PO edit creating a conflict, further conflicting
+edits, conflict resolution and a subsequent PO-only edit. Every step matches the object oracle,
+all logical columns of a forced full rebuild, synchronous reads, problem filters and facet counts;
+successive edits retain the same full base. Additional checks cover chunked source arenas,
+unpatched aliases and malformed/out-of-bound list patches.
+
+Validation on Node 26.5.0: **542 tests pass in 63 files** (142.57 s), covering Game Text,
+localization, the Workbench main Game Text services, the join, 100 deterministic fuzz seeds plus
+all eight persisted seeds, minimized regressions and column chunks. The package dependency build
+and all six pre-commit stages pass, including 43 architecture tests. Artifacts:
+`test-results/codex/incremental-source-conflicts-node-20261011.{log,json}` and
+`incremental-source-conflicts-precommit-20261011.log`. This is TypeScript join/query work; native
+parser and Unreal integration code are unchanged, so the engine lanes were not rerun.
+
+The owner subsequently authorized a fresh 1× measurement on Node 26.5.0. Three sequential
+production CLI package-plus-PO refreshes take **10.10 s, 9.65 s and 9.02 s**, median **9.65 s**.
+Every run reads one package, parses one fresh PO file and reports `strategy: incremental`,
+`affectedLines: 1`, with no fallback. The same-runtime forced full-join control, with the same
+fresh PO edit as the first run, takes **42.11 s**. A preliminary pair reuses a cached changed-PO
+snapshot (zero files parsed): 37.42 s full versus 9.08 s incremental; it is excluded from the
+fresh-input median. This is not a controlled comparison against the historical Node 24
+13.48 s result.
+
+After each production refresh, all **165 logical columns** and line/pair/ambiguity counts match
+a forced full rebuild of the same changed inputs: **583,507 lines, zero differences** in all
+three runs. The correctness proof and input restoration occur outside the refresh timed stage.
+Runs use retained synthetic package evidence and copied derived caches, excluding native catalog
+enumeration/extraction; default heaps and an explicit 180-second whole-run cap are retained.
+The PO byte and package inputs are restored. Artifacts under `test-results/codex/`:
+`incremental-conflicts-1x-control-fresh-20261011.{json,log}` and
+`incremental-conflicts-1x-fresh-20261011-{1,2,3}.{json,log}`. See the
+[measurement method and results](../docs/engineering/game-text-shared-index-measurements.md#incremental-source-conflict-1-refresh-2026-10-11).
+
+Two of three fresh-input runs meet 10 seconds; the first misses by 0.10 s. The conflict fallback
+is resolved for this edit, but consistent refresh performance acceptance remains open. Workbench
+startup and the historical facet misses were not remeasured. No 10× run, studio project or
+native-builder work was performed; the follow-up and harness changes are included in
+[PR #62](https://github.com/ue-shed/ue-shed/pull/62).
+
+The updated measurement harness passes all six pre-commit stages, including 43 architecture tests
+(`incremental-conflicts-measure-precommit-20261011.log`); the Game Text package build passes.
+
+### Follow-up: reuse immutable query buffers
+
+The owner authorized further optimization. Profiling isolates eager query preparation as a
+substantial remaining cost: about 2.87 s of sampled inclusive time in an 8.11 s refresh.
+The shared refresh service's two-entry Effect cache now keeps the latest projection for each
+dictionary-generation/full-base pair. New incremental generations retain numeric buffers only
+for immutable physical layer keys that remain dependencies. Patched and derived columns are
+private to each query; obsolete input layers are discarded. Source search reuses encoded WTF-8
+bytes and decodes only newly selected IDs, rebuilding when reuse bounds are exceeded. Full-base
+changes and compaction reset reuse; older readers remain pinned. Preparation remains eager and
+refresh spans record reuse and preparation duration.
+
+The optimized profile takes **6.46 s**, with about **1.15 s** sampled inclusive query preparation.
+Three subsequent unprofiled fresh package-plus-PO refreshes take **6.03 s, 6.02 s and 6.06 s**,
+median **6.03 s**, range **6.02–6.06 s**. Each reads one package, parses one PO, affects one line
+and reports `incremental` without a fallback. All three meet the 10-second refresh target for
+this retained-evidence 1× case. The previous unprofiled median was 9.65 s; OS cache effects and
+separate-run variation prevent attributing all of the observed 38% median reduction to reuse.
+The profile supports about 1.7 s less query preparation. Native discovery/extraction are excluded.
+
+After each refresh, the first page takes **36.52–38.92 ms** and returns 583,507 lines. The added
+uncached `phase6-refresh` text search takes **263.96–268.24 ms**, returns the single changed line
+and remains above the 100 ms query target. This case was not measured before the optimization.
+Workbench startup and the historical facet misses were not remeasured. Overall performance
+acceptance remains incomplete even though the measured refresh case now passes.
+
+All three forced-full proofs, timed outside refresh, match **165 logical columns**, plus
+line/pair/ambiguity counts: **583,507 lines, zero differences**. Inputs are restored after every
+run. The relevant Node suite passes **542 tests in 63 files** (136.14 s); the final focused rerun
+passes four tests (25 filtered out), 13.80 s, including source conflict/PO changes, lone-surrogate
+sources, chunked aliases, generation invalidation, newly decoded IDs and pinned-reader isolation.
+The final package build and all six final pre-commit stages pass, including 43 architecture tests
+(`incremental-query-reuse-precommit-20261011.log`). Artifacts under `test-results/codex/`:
+`incremental-query-reuse-fresh-20261011-{1,2,3}.{json,log}`,
+`incremental-query-reuse-node-20261011.{json,log}` and
+`incremental-query-reuse-final-targeted-20261011.log`. See the
+[method, profiles and complete results](../docs/engineering/game-text-shared-index-measurements.md#query-buffer-reuse-1-refresh-2026-10-11).
+
+No 10× run, studio project, Rust-builder-tree edit or native/Unreal integration change was made.
+The UE lanes were not rerun for this TypeScript query change. This follow-up is included in
+[PR #62](https://github.com/ue-shed/ue-shed/pull/62).

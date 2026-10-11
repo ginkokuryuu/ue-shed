@@ -19,7 +19,8 @@ catalog enumeration and package extraction. Empty derived caches define cold bui
 not evicted. The CLI cold `final` artifact uses Node 24.21.0; both selected warm artifacts and the
 earlier `default` artifacts use Node 26.11.1. Each uses default heaps with `NODE_OPTIONS` removed.
 Reported query-stage heap and the larger value including observed pre-GC trace peaks are shown
-separately; build, refresh and startup peaks are excluded. No new benchmark was run for this handoff.
+separately; build, refresh and startup peaks are excluded. No new benchmark was run for the
+Phase 6 handoff; the later incremental follow-up has fresh measurements below.
 
 | 1× operation                              | CLI cold, Node 24.21.0 | CLI warm, Node 26.11.1 | Workbench warm, Node 26.11.1 |   Target |
 | ----------------------------------------- | ---------------------: | ---------------------: | ---------------------------: | -------: |
@@ -46,10 +47,139 @@ reading one package and parsing one file, and restoration took 7.63 s
 miss. The selected CLI `loc status` warm command took 3.50 s and returned 583,507 lines, exit 0.
 
 Warm query stages except facets meet the 100 ms target, and query heap and no-change refresh
-meet their targets. The open issues are **changed-input refresh at 13.48 s against 10 s**,
+meet their targets. At the Phase 6 push, the open issues were **changed-input refresh at 13.48 s against 10 s**,
 **Workbench opening an existing index at 42.13 s versus CLI's 4.29 s**, and **facets around
 105–106 ms against 100 ms**. The Node 24 cold filter/search/facet misses are also retained in the
 table. These measurements do not establish uniformly passing cold/warm performance acceptance.
+
+A subsequent local follow-up supports stable source conflicts incrementally by replacing bounded
+source lists for affected identities. Correctness regressions compare conflict creation, further
+edits and resolution, plus a PO-only refresh, against the object oracle and every forced-full
+logical column. Joined metadata v4 records those patches; the physical WTF-8 snapshot format is
+unchanged. Its initial fresh-input measurements straddle 10 seconds; the later query-buffer
+reuse measurements below meet the refresh target in all three runs. See
+[the follow-up evidence](../../plans/057-game-text-compact-index.md#follow-up-incremental-source-conflicts).
+On Node 26.5.0, the follow-up's relevant Node suite passes 542 tests in 63 files (142.57 s),
+and its package build and six quick-gate stages pass. These are correctness checks, not new
+performance measurements (`incremental-source-conflicts-{node,precommit}-20261011.log`).
+
+### Incremental source-conflict 1× refresh (2026-10-11)
+
+The owner authorized fresh 1× measurements after the local incremental follow-up. These runs use
+Windows / Node 26.5.0, default heaps, the retained synthetic 1× project and package records, and
+separate copies of the same saved Phase 6 derived cache for the control and production path.
+All runs are sequential; OS caches are not evicted. The measured stage includes the production
+CLI refresh and opening its updated joined reader. Initial cache preparation, query stages,
+the subsequent full-rebuild correctness proof and restoration are timed separately.
+Native catalog enumeration and package extraction remain excluded.
+
+| One package + one PO refresh | PO change byte | Package reads | Files parsed | Join strategy |    Time |
+| ---------------------------- | -------------: | ------------: | -----------: | ------------- | ------: |
+| Forced full-join control     |            120 |             1 |            1 | full          | 42.11 s |
+| Incremental, fresh edit 1    |            120 |             1 |            1 | incremental   | 10.10 s |
+| Incremental, fresh edit 2    |            121 |             1 |            1 | incremental   |  9.65 s |
+| Incremental, fresh edit 3    |            122 |             1 |            1 | incremental   |  9.02 s |
+
+The fresh-edit median is **9.65 s**, range **9.02–10.10 s**. Each incremental refresh affects one
+line, with no full-join fallback. Two of three runs meet the 10-second target; the first misses
+by 0.10 s, so consistent performance acceptance remains open. This is a same-runtime control,
+not a controlled comparison with the historical 13.48 s Node 24 result. A preliminary cached-PO
+pair took 37.42 s full versus 9.08 s incremental but parsed zero files; it is excluded from the
+fresh-input median. Fresh bytes avoid reusing a previously published changed-PO snapshot.
+
+After each production refresh, a separately timed forced full rebuild of the same inputs matches
+SHA-256 hashes for **all 165 logical columns**, plus line/pair/ambiguity counts: **583,507 lines,
+zero differences**, in all three runs. This verifies the measured changed-input index against
+the current full builder; it does not constitute a new comparison against the older saved oracle.
+The authored PO byte and package inputs are restored after every run.
+
+Artifacts under `test-results/codex/`:
+`incremental-conflicts-1x-control-fresh-20261011.{json,log}`,
+`incremental-conflicts-1x-fresh-20261011-{1,2,3}.{json,log}`;
+the preliminary pair is `incremental-conflicts-1x-control-20261011.{json,log}` and
+`incremental-conflicts-1x-20261011-1.{json,log}`. The host harness exposes `--force-changed-join`
+for the control and records strategy, affected lines and fallback reasons. Reproduce fresh runs
+with `--mode hosts --host cli --select refresh --po-change-byte 120` (then 121 and 122),
+`--project test-results/game-text-scale/project-1x`,
+`--records test-results/game-text-scale/phase4-records-1x`, a `--cache` copied from the prepared
+`test-results/game-text-scale/phase6-host-cli-1x-final` cache, a distinct
+`--output` and `--run-timeout-seconds 180`; add `--force-changed-join` only for the control.
+
+No 10× run, Workbench startup measurement, native-builder run or studio-project work was performed.
+The Workbench startup and historical facet issues remain open. The follow-up and harness changes
+are included in [PR #62](https://github.com/ue-shed/ue-shed/pull/62).
+
+The updated harness passes all six pre-commit stages, including 43 architecture tests
+(`incremental-conflicts-measure-precommit-20261011.log`). The Game Text package build also passes.
+
+### Query-buffer reuse 1× refresh (2026-10-11)
+
+The owner authorized further optimization. A stage-isolated CPU profile of the incremental
+refresh finds about 2.87 s of sampled inclusive time in eager query preparation, including
+1.12 s in source-arena preparation. The shared refresh service now reuses immutable buffers by
+their physical layer keys within the same dictionary generation and full base. New projections
+drop patched and derived columns and obsolete input layers. The source arena copies retained
+WTF-8 bytes and decodes newly selected source IDs; stale IDs and bytes have explicit bounds.
+Older readers retain their own buffers, and full-base changes or compaction reset reuse.
+Query preparation, including source search and common counts, remains eager.
+
+The profiling pair takes 8.11 s before reuse and 6.46 s after; sampled inclusive query preparation
+falls from 2.87 s to 1.15 s. These are sampling estimates from separate runs, not exact operation
+timers. The harness records stage windows when `--profile` is enabled so startup, the full proof
+and restoration can be excluded from CPU analysis. The refresh span also records preparation
+duration, reused-column count and whether the source arena was seeded.
+
+Three subsequent **unprofiled** runs use the same 1× project, retained records, prepared cache,
+Node 26.5.0, default heaps and 180-second cap as above. Fresh bytes avoid cached changed-PO
+snapshots. No concurrent tests, builds or benchmarks run during these measurements.
+
+| Fresh edit | PO byte | Package + PO refresh | First page after refresh | New text search after refresh |
+| ---------- | ------: | -------------------: | -----------------------: | ----------------------------: |
+| 1          |     116 |               6.03 s |                 38.92 ms |                     268.24 ms |
+| 2          |     115 |               6.02 s |                 38.35 ms |                     268.18 ms |
+| 3          |     114 |               6.06 s |                 36.52 ms |                     263.96 ms |
+
+The refresh median is **6.03 s**, range **6.02–6.06 s**; all three meet 10 seconds. The previous
+unprofiled median was 9.65 s, so the observed median is about 38% lower. Runs are not randomized
+and OS caches are not evicted; the isolated profiles support attributing about 1.7 s of saved
+query-preparation time to buffer reuse rather than attributing the entire median difference to it.
+Every refresh reads one package, parses one fresh PO, affects one line and uses the incremental
+strategy. Observed worker RSS during refresh is 1.45–1.46 GiB, versus 1.94–1.98 GiB in the earlier
+fresh-input runs. Native catalog enumeration and extraction remain excluded.
+
+The subsequent page returns 583,507 lines. The new uncached `phase6-refresh` search returns the
+single changed line, but takes **264–268 ms**, exceeding the 100 ms query target. This added
+case was not measured in the earlier runs and is retained as an open latency issue. The
+Workbench startup and historical facet issues remain open; no broader query-acceptance pass is
+claimed. These runs do establish the 10-second refresh target for this retained-evidence 1× case.
+
+All three separately timed forced-full proofs match **165 logical columns**, line/pair/ambiguity
+counts and **583,507 lines**, with zero differences. The PO byte and package inputs are restored
+after each run. The relevant Node suite passes **542 tests in 63 files** (136.14 s). A final
+focused rerun passes four tests (25 excluded by the filter), 13.80 s, covering conflict creation,
+growth, resolution, PO edits, lone-surrogate sources, chunked aliases, generation invalidation,
+decoding only new source IDs and pinned-reader isolation. The final package build passes.
+All six final pre-commit stages pass, including 43 architecture tests
+(`incremental-query-reuse-precommit-20261011.log`).
+
+Artifacts under `test-results/codex/`:
+`incremental-query-reuse-fresh-20261011-{1,2,3}.{json,log}`,
+`incremental-query-reuse-node-20261011.{json,log}`,
+`incremental-query-reuse-final-targeted-20261011.log` and
+`incremental-query-reuse-build-final-20261011.log`.
+The profiling pair is `incremental-refresh-profile-window-20261011.{json,log}` and
+`incremental-query-reuse-profile-20261011.{json,log}`; corresponding analyses are
+`incremental-refresh-profile-analysis-20261011.json` and
+`incremental-query-reuse-profile-analysis-20261011.json`. Raw profiles:
+`CPU.20261011.130249.37416.0.001.cpuprofile` and
+`CPU.20261011.131435.34848.0.001.cpuprofile`.
+Use the preceding host command with PO bytes 116, 115 and 114 to reproduce fresh runs; use an
+unused byte in a disposable copy of the prepared cache when those changed snapshots already exist.
+
+The work is included in [PR #62](https://github.com/ue-shed/ue-shed/pull/62). No 10× run, studio project, Rust-builder tree or Unreal
+integration change was involved. The UE lanes were not rerun for this TypeScript query optimization.
+
+### Stopped 10× work (Phase 6)
 
 The CLI 10× cold attempt failed the 900-second deadline before publication or query. Peak observed
 RSS was 6,356.4 MiB (artifact: `phase6-cli-10x-cold-default.json`). This is a timing failure, not a

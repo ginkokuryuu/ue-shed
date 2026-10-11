@@ -267,7 +267,17 @@ samples use shared source, identity and path IDs; excluded packages retain `not_
 merges package and localization identities as shared IDs. It publishes line/culture state, review,
 key-change, problem and facet columns. A matching dependency key returns `rebuilt: false`. Stable
 source/PO edits update at most 8,192 affected lines in one flat overlay over a retained full layer;
-identity, coverage, manifest/archive, review, generation and absence-candidate changes use a full
+this includes creating, editing and resolving source conflicts. Variable query source lists use
+bounded row replacements (at most 8,192 rows and source IDs per raw/slice projection). Readers
+reconstruct packed numeric columns without hydrating the whole join. These overlays use joined
+metadata v4; full layers and older fixed-size overlays retain supported metadata v3. The physical
+snapshot's WTF-8 format v4 is unchanged. Short-source, visibility and split-unit edits still use
+a full merge, as do edits that exceed the overlay bounds.
+The shared refresh service also reuses immutable query buffers by physical layer key across
+incremental generations and decodes only newly needed source IDs for its eager search arena.
+Patched values remain private to each query, and dictionary compaction or a changed full base
+resets reuse. The source arena rebuilds when retained obsolete IDs or bytes exceed their bounds.
+Identity, coverage, manifest/archive, review, generation and absence-candidate changes use a full
 merge. `force: true` requests a full rebuild for validation. No authored file is written.
 `openJoinedTarget` rejects stale inputs; `hydrateJoinedTarget(reader, start, maximum)` reconstructs
 at most 10,000 oracle-shaped lines from their original file row references. `inspectJoinedTarget`

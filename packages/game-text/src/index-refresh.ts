@@ -20,7 +20,7 @@ import { SnapshotFormatError } from "./snapshot-format.js";
 import type { refreshPackageTextLayer, PackageTextInventoryEntry } from "./package-text-layer.js";
 import type { importLocalizationTarget } from "./localization-import.js";
 import { GameTextIndexBuilder } from "./index-builder.js";
-import type { JoinedQueryProjection } from "./joined-query-data.js";
+import { reuseJoinedQueryProjection, type JoinedQueryProjection } from "./joined-query-data.js";
 import { instrumentIndexQuery } from "./index-query.js";
 import { columnarTextCorpusQuery } from "./columnar-query.js";
 import type { TextCorpusQuery } from "./query.js";
@@ -154,7 +154,7 @@ export const gameTextIndexRefreshLayer = (cacheRoot: string) =>
 			const projections = yield* Cache.make({
 				capacity: 2,
 				lookup: (_key: string) =>
-					Effect.sync((): JoinedQueryProjection => ({ columns: new Map() }))
+					Effect.succeed<JoinedQueryProjection | undefined>(undefined)
 			});
 			const source = yield* GameTextIndexSource;
 			const evidence = yield* LocalizationEvidence;
@@ -361,10 +361,16 @@ export const gameTextIndexRefreshLayer = (cacheRoot: string) =>
 						})
 					);
 					const joined = yield* openJoinedTarget().pipe(Effect.provide(indexLayer));
-					const projection = yield* Cache.get(
-						projections,
-						`${joined.reader.manifest.generation}:${joined.reader.manifest.active.joined}`
-					);
+					const projectionKey = `${joined.reader.manifest.generation}:${joined.meta.base ?? joined.reader.manifest.active.joined}`;
+					const previousProjection = yield* Cache.get(projections, projectionKey);
+					const projection =
+						previousProjection &&
+						previousProjection.key === joined.reader.manifest.active.joined
+							? previousProjection
+							: reuseJoinedQueryProjection(joined, previousProjection);
+					const reusedColumns = projection.columns.size;
+					const reusedSources = Boolean(projection.sourceSeed);
+					const queryStarted = performance.now();
 					const query = yield* Effect.try({
 						try: () =>
 							instrumentIndexQuery(
@@ -377,12 +383,17 @@ export const gameTextIndexRefreshLayer = (cacheRoot: string) =>
 								"Clear the disposable Game Text index and refresh."
 							)
 					});
+					const queryPreparationMs = performance.now() - queryStarted;
+					yield* Cache.set(projections, projectionKey, projection);
 					yield* Metric.update(refreshes, 1);
 					yield* Metric.update(refreshDuration, performance.now() - started);
 					yield* Effect.annotateCurrentSpan({
 						"game_text.index.packages_read": result.packages.readPackages,
 						"game_text.index.join_rebuilt": result.join.rebuilt,
-						"game_text.index.generation": joined.reader.manifest.generation
+						"game_text.index.generation": joined.reader.manifest.generation,
+						"game_text.index.query_columns_reused": reusedColumns,
+						"game_text.index.query_sources_reused": reusedSources,
+						"game_text.index.query_preparation_ms": queryPreparationMs
 					});
 					const indexedEvidence = yield* readIndexedLocalizationEvidence(joined).pipe(
 						Effect.provide(LocalizationFileAccessLive),

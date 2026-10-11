@@ -140,7 +140,7 @@ it("retains readers while one refresh lease updates only selected inputs and rev
 					expect(reads).toEqual([[path]]);
 					yield* Effect.promise(async () => {
 						signature = "after";
-						value = "Changed source";
+						value = "Changed source with enough text to retain the long-source finding";
 						await writeFile(
 							join(projectRoot, "de.po"),
 							po.replace("Shipped", "Pending")
@@ -164,7 +164,7 @@ it("retains readers while one refresh lease updates only selected inputs and rev
 						first.query.search({ query: "Changed", capability: "all", pageSize: 10 })
 							.total
 					).toBe(0);
-					expect(after.lines[0]?.source).toBe("Changed source");
+					expect(after.lines[0]?.source).toBe(value);
 					const marks = after.lines[0]?.cultures.find((mark) => mark.culture === "de");
 					expect(marks?.archive?.translation.Text).toBe("Shipped");
 					expect(marks?.poTranslation).toBe("Pending");
@@ -208,6 +208,26 @@ it("retains readers while one refresh lease updates only selected inputs and rev
 						(yield* hydrateJoinedTarget(full.joined)).lines[0]?.cultures[1]?.archive
 							?.translation.Text
 					).toBe("Skipped");
+					const pinned = yield* hydrateJoinedTarget(full.joined);
+					signature = "incremental";
+					value = "Optimized source with enough text to retain the long-source finding";
+					const incremental = yield* refresh.refresh({
+						...request,
+						changedFiles: [path]
+					});
+					expect(incremental.join).toMatchObject({ strategy: "incremental" });
+					expect(
+						incremental.query.search({
+							query: "Optimized",
+							capability: "all",
+							pageSize: 10
+						}).total
+					).toBe(1);
+					expect(
+						full.query.search({ query: "Optimized", capability: "all", pageSize: 10 })
+							.total
+					).toBe(0);
+					expect(yield* hydrateJoinedTarget(full.joined)).toEqual(pinned);
 				})
 			).pipe(
 				Effect.provide(
@@ -219,7 +239,7 @@ it("retains readers while one refresh lease updates only selected inputs and rev
 				)
 			)
 		);
-		expect(builds).toEqual({ localization: 5, packages: 5, joined: 5 });
+		expect(builds).toEqual({ localization: 6, packages: 6, joined: 6 });
 	} finally {
 		await rm(directory, { recursive: true, force: true });
 	}

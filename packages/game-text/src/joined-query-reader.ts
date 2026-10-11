@@ -4,6 +4,7 @@ import { SnapshotStoreError } from "./snapshot-store.js";
 import type { JoinedTargetReader } from "./joined-target-reader.js";
 import { runJoinedQuery } from "./joined-query-node.js";
 import { concatenateJoinedChunks } from "./joined-target-reader.js";
+import { sourcePatchKind, spliceJoinedSources } from "./joined-source-patches.js";
 
 const read = <A>(operation: string, run: () => A) =>
 	Effect.try({
@@ -39,6 +40,7 @@ export function synchronousJoinedTarget(joined: JoinedTargetReader): JoinedTarge
 		base = joined.meta.base ? layerSync(joined.meta.base) : raw;
 	const patched = new Map<string, Uint32Array>();
 	const chunked = new Map<string, Uint32Array>();
+	const sourceLists = new Map<string, Uint32Array>();
 	const original = (name: string) => {
 		const names = joined.meta.chunks?.[name];
 		if (!names) return base.section(joined.meta.aliases[name] ?? name);
@@ -57,6 +59,42 @@ export function synchronousJoinedTarget(joined: JoinedTargetReader): JoinedTarge
 	const section = (name: string) =>
 		read(name, () => {
 			if (name === "join.meta") return raw.section(name);
+			const kind = sourcePatchKind(name, joined.meta.sourcePatches);
+			if (kind) {
+				if (!sourceLists.has(name)) {
+					const patch = joined.meta.sourcePatches![kind]!;
+					const prefix = `query.${kind}.`;
+					const columns = ["source_start", "source_end", "sources"].map((field) => {
+						const value = original(prefix + field);
+						snapshotCheck(
+							value instanceof Uint32Array,
+							name,
+							"Invalid source column kind"
+						);
+						return value;
+					});
+					const patches = [patch.rows, patch.starts, patch.values].map((field) => {
+						const value = raw.section(field);
+						snapshotCheck(
+							value instanceof Uint32Array,
+							name,
+							"Invalid source patch kind"
+						);
+						return value;
+					});
+					const lists = spliceJoinedSources(
+						columns[0]!,
+						columns[1]!,
+						columns[2]!,
+						patches[0]!,
+						patches[1]!,
+						patches[2]!
+					);
+					for (const [field, values] of Object.entries(lists))
+						sourceLists.set(prefix + field, values);
+				}
+				return sourceLists.get(name)!;
+			}
 			const patch = joined.meta.patches?.[name];
 			if (!patch) return original(name);
 			let values = patched.get(name);

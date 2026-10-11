@@ -26,9 +26,14 @@ import {
 import { TextUnitId } from "./identifiers.js";
 import { u32, type ColumnReader } from "./joined-target-input.js";
 import type { SharedIndexReader } from "./shared-index.js";
+import {
+	JoinedSourcePatches,
+	sourcePatchKind,
+	spliceJoinedSources
+} from "./joined-source-patches.js";
 
 export const JoinedTargetMeta = Schema.Struct({
-	version: Schema.Literal(3),
+	version: Schema.Literals([3, 4]),
 	count: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
 	aliases: Schema.Record(Schema.String, Schema.String),
 	chunks: Schema.optionalKey(Schema.Record(Schema.String, Schema.Array(Schema.String))),
@@ -36,6 +41,7 @@ export const JoinedTargetMeta = Schema.Struct({
 	base: Schema.optionalKey(Schema.String),
 	patches: Schema.optionalKey(Schema.Record(Schema.String, Schema.String)),
 	patchRows: Schema.optionalKey(Schema.Record(Schema.String, Schema.String)),
+	sourcePatches: Schema.optionalKey(JoinedSourcePatches),
 	input: Schema.Struct({
 		projectRoot: Schema.String,
 		target: LocalizationTarget,
@@ -53,6 +59,7 @@ export const JoinedTargetMeta = Schema.Struct({
 	oldCandidates: Schema.Int,
 	reducedSourceChecking: Schema.Array(Schema.Boolean)
 });
+export interface JoinedTargetMeta extends Schema.Schema.Type<typeof JoinedTargetMeta> {}
 export const readJoinedTarget = Effect.fn("JoinedTarget.read")(function* (
 	reader: SharedIndexReader,
 	stale = false
@@ -63,6 +70,20 @@ export const readJoinedTarget = Effect.fn("JoinedTarget.read")(function* (
 	const meta = yield* Schema.decodeUnknownEffect(Schema.fromJsonString(JoinedTargetMeta))(
 		new TextDecoder().decode(yield* rawLayer.section("join.meta"))
 	);
+	for (const kind of ["raw", "slice"] as const) {
+		if (!meta.sourcePatches?.[kind]) continue;
+		snapshotCheck(
+			meta.version === 4 && meta.base !== undefined,
+			"join.meta",
+			"Invalid source patch version or base"
+		);
+		for (const field of ["sources", "source_start", "source_end"])
+			snapshotCheck(
+				!meta.patches?.[`query.${kind}.${field}`],
+				"join.meta",
+				"Overlapping source patches"
+			);
+	}
 	if (!stale && meta.generation !== reader.manifest.generation)
 		return yield* Effect.fail(
 			snapshotFailure("join.meta", "Joined generation changed; refresh before querying")
@@ -88,6 +109,7 @@ export const readJoinedTarget = Effect.fn("JoinedTarget.read")(function* (
 	}
 	const patched = new Map<string, Uint32Array>();
 	const chunked = new Map<string, Uint32Array>();
+	const sourceLists = new Map<string, Uint32Array>();
 	const original = Effect.fn("JoinedTarget.original")(function* (name: string) {
 		const names = meta.chunks?.[name];
 		if (!names) return yield* baseLayer.section(meta.aliases[name] ?? name);
@@ -102,6 +124,30 @@ export const readJoinedTarget = Effect.fn("JoinedTarget.read")(function* (
 	});
 	const section = Effect.fn("JoinedTarget.section")(function* (name: string) {
 		if (name === "join.meta") return yield* rawLayer.section(name);
+		const kind = sourcePatchKind(name, meta.sourcePatches);
+		if (kind) {
+			if (!sourceLists.has(name)) {
+				const patch = meta.sourcePatches![kind]!;
+				const prefix = `query.${kind}.`;
+				const columns: Uint32Array[] = [];
+				for (const field of ["source_start", "source_end", "sources"]) {
+					const value = yield* original(prefix + field);
+					snapshotCheck(value instanceof Uint32Array, name, "Invalid source column kind");
+					columns.push(value);
+				}
+				const lists = spliceJoinedSources(
+					columns[0]!,
+					columns[1]!,
+					columns[2]!,
+					yield* u32(rawLayer, patch.rows),
+					yield* u32(rawLayer, patch.starts),
+					yield* u32(rawLayer, patch.values)
+				);
+				for (const [field, values] of Object.entries(lists))
+					sourceLists.set(prefix + field, values);
+			}
+			return sourceLists.get(name)!;
+		}
 		const patch = meta.patches?.[name];
 		if (!patch) return yield* original(name);
 		let values = patched.get(name);
@@ -437,7 +483,8 @@ export const inspectJoinedTarget = Effect.fn("JoinedTarget.inspect")(function* (
 			snapshotCheck(values.length === meta.count, name, "Incomplete line column");
 		if (record.stringColumns[name])
 			for (const id of values) snapshotCheck(id < limit, name, "ID outside dictionary");
-		snapshotCheck(entry.count === values.length, name, "Count differs");
+		if (!sourcePatchKind(name, meta.sourcePatches))
+			snapshotCheck(entry.count === values.length, name, "Count differs");
 	}
 	for (const name of new Set([
 		...Object.keys(meta.aliases),

@@ -10,6 +10,7 @@ import { comparePackageTextPathBytes } from "./package-text-order.js";
 import { TextUnitId } from "./identifiers.js";
 import { hydrateJoinedTarget, type JoinedTargetReader } from "./joined-target-reader.js";
 import { synchronousJoinedTarget } from "./joined-query-reader.js";
+import { sourcePatchKind } from "./joined-source-patches.js";
 import { runJoinedQuery } from "./joined-query-node.js";
 import { snapshotCheck } from "./snapshot-format.js";
 import { u32 } from "./joined-target-input.js";
@@ -59,11 +60,43 @@ const displayedLines = (joined: JoinedTargetReader) =>
 /** Immutable numeric/byte projections may outlive a reader; they contain no file handles. */
 export interface JoinedQueryProjection {
 	readonly columns: Map<string, Uint32Array>;
+	readonly generation?: string;
+	readonly base?: string;
+	readonly key?: string;
+	sourceSeed?: JoinedQueryProjection["sources"];
 	sources?: {
 		readonly packed: PackedStrings;
 		readonly index: Uint32Array;
 		readonly ids: Uint32Array;
 		readonly simple: Uint8Array;
+	};
+}
+
+/** Copy only immutable physical columns still referenced by this generation. Patched and
+ * derived columns remain private to each query; old readers keep their original buffers. */
+export function reuseJoinedQueryProjection(
+	joined: JoinedTargetReader,
+	previous?: JoinedQueryProjection
+): JoinedQueryProjection {
+	const generation = joined.reader.manifest.generation,
+		key = joined.reader.manifest.active.joined!,
+		base = joined.meta.base ?? key;
+	const columns = new Map<string, Uint32Array>();
+	const compatible = previous?.generation === generation && previous.base === base;
+	if (compatible) {
+		const retained = new Set([base, ...Object.values(joined.meta.dependencies)]);
+		for (const [name, values] of previous.columns) {
+			if (!name.startsWith("layer:")) continue;
+			const end = name.lastIndexOf("\0");
+			if (retained.has(name.slice(6, end))) columns.set(name, values);
+		}
+	}
+	return {
+		generation,
+		base,
+		key,
+		columns,
+		...(compatible && previous.sources ? { sourceSeed: previous.sources } : undefined)
 	};
 }
 
@@ -82,9 +115,11 @@ export class JoinedQueryData {
 	column(name: string) {
 		// Unpatched aliases share one buffer. A patched logical column must not replace
 		// the base buffer still used by other aliases in this pinned generation.
-		const key = this.joined.meta.patches?.[name]
-			? `patch:${name}`
-			: `base:${this.joined.meta.aliases[name] ?? name}`;
+		const key =
+			this.joined.meta.patches?.[name] ||
+			sourcePatchKind(name, this.joined.meta.sourcePatches)
+				? `patch:${name}`
+				: `layer:${this.joined.meta.base ?? this.joined.reader.manifest.active.joined}\0${this.joined.meta.aliases[name] ?? name}`;
 		let value = this.columns.get(key);
 		if (!value) {
 			value = runJoinedQuery(u32(this.joined.layer, name));
@@ -102,6 +137,53 @@ export class JoinedQueryData {
 		const selected = new Uint8Array(last ? last.start + last.count : 0);
 		for (const id of this.column("line.source")) selected[id] = 1;
 		for (const id of this.column("query.raw.sources")) selected[id] = 1;
+		const seed = this.projection.sourceSeed;
+		this.projection.sourceSeed = undefined;
+		if (seed) {
+			const added: number[] = [];
+			let obsolete = 0,
+				obsoleteBytes = 0;
+			for (let row = 0; row < seed.ids.length; row++)
+				if (!selected[seed.ids[row]!]) {
+					obsolete++;
+					obsoleteBytes += seed.packed.offsets[row + 1]! - seed.packed.offsets[row]!;
+				}
+			for (let id = 0; id < selected.length; id++)
+				if (selected[id] && !seed.index[id]) added.push(id);
+			// Keep stale source bytes bounded even across many edits of one identity.
+			if (added.length <= 8192 && obsolete <= 8192 && obsoleteBytes <= 32 * 1024 ** 2) {
+				const index = new Uint32Array(selected.length);
+				index.set(seed.index.subarray(0, index.length));
+				if (!added.length) {
+					this.projection.sources = { ...seed, index };
+					return;
+				}
+				const arena = new StringArena();
+				for (const id of added) arena.add(this.joined.reader.bytesSync(id));
+				const extra = arena.finish();
+				const bytes = Buffer.concat([seed.packed.bytes, extra.bytes]);
+				const offsets = new Float64Array(seed.ids.length + added.length + 1);
+				offsets.set(seed.packed.offsets);
+				for (let row = 0; row <= added.length; row++)
+					offsets[seed.ids.length + row] = seed.packed.bytes.length + extra.offsets[row]!;
+				const ids = new Uint32Array(seed.ids.length + added.length),
+					simple = new Uint8Array(ids.length);
+				ids.set(seed.ids);
+				simple.set(seed.simple);
+				for (let row = 0; row < added.length; row++) {
+					const id = added[row]!,
+						position = seed.ids.length + row;
+					ids[position] = id;
+					index[id] = position + 1;
+					const value = extra.bytes.subarray(extra.offsets[row], extra.offsets[row + 1]);
+					simple[position] = Number(
+						!value.some((byte) => byte >= 128 || (byte >= 65 && byte <= 90))
+					);
+				}
+				this.projection.sources = { packed: { bytes, offsets }, index, ids, simple };
+				return;
+			}
+		}
 		const index = new Uint32Array(selected.length),
 			arena = new StringArena();
 		let count = 0;
@@ -162,7 +244,8 @@ export class JoinedQueryData {
 			: this.joined.reader.bytesSync?.(id);
 	}
 	packageColumn(shard: number, field: string) {
-		const key = `${shard}:${field}`;
+		const dependency = this.joined.meta.dependencies[this.joined.meta.packageNames[shard]!]!;
+		const key = `layer:${dependency}\0${field}`;
 		let value = this.columns.get(key);
 		if (!value) {
 			const opened = this.joined.reader.layerSync!(this.joined.meta.packageNames[shard]!);
@@ -351,7 +434,7 @@ export class JoinedQueryData {
 		return runJoinedQuery(Cache.get(this.displayedLines, row));
 	}
 	fileColumn(name: string, field: string): Uint32Array {
-		const key = `file:${name}:${field}`;
+		const key = `layer:${this.joined.meta.dependencies[name]}\0entry.${field}`;
 		let value = this.columns.get(key);
 		if (!value) {
 			const opened = this.joined.reader.layerSync!(this.joined.meta.dependencies[name]!);

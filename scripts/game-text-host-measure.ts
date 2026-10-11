@@ -1,5 +1,6 @@
 /// <reference path="../apps/workbench/node_modules/electron/electron.d.ts" />
 import { join, basename } from "node:path";
+import { createHash } from "node:crypto";
 import { Context, Effect, Exit, Layer, Schema, Scope, Stream } from "effect";
 import {
 	GameTextIndexRefresh,
@@ -24,6 +25,12 @@ import { readGeneratedPackageInventory } from "./package-text-generated.ts";
 import { captureBenchmarkByte, restoreBenchmarkByte } from "./localization-benchmark-byte.ts";
 import { readScaleRecipe } from "./game-text-scale-options.ts";
 import type { WorkbenchGameTextApi } from "../apps/workbench/src/main/services/game-text.ts";
+import { refreshJoinedTarget } from "../packages/game-text/src/joined-target.ts";
+import { sharedIndexNodeLayer } from "../packages/game-text/src/shared-index.ts";
+import {
+	openJoinedTarget,
+	type JoinedTargetReader
+} from "../packages/game-text/src/joined-target-reader.ts";
 
 type Measure = <A>(
 	name: string,
@@ -40,7 +47,8 @@ export async function measureGameTextHosts(
 	measure: Measure,
 	host: string,
 	task: string,
-	changedByte: number
+	changedByte: number,
+	forceChangedJoin = false
 ) {
 	if (host !== "cli" && host !== "workbench") throw new Error("Choose cli or workbench.");
 	if (
@@ -104,6 +112,22 @@ export async function measureGameTextHosts(
 	);
 	if (!selected) throw new Error("Retained package 0 is absent.");
 	let version = "";
+	const builderLayer = forceChangedJoin
+		? Layer.effect(
+				GameTextIndexBuilder,
+				Effect.gen(function* () {
+					const builder = yield* GameTextIndexBuilder;
+					return GameTextIndexBuilder.of({
+						...builder,
+						refreshJoinedTarget: (input) =>
+							builder.refreshJoinedTarget({
+								...input,
+								force: input.force || version !== ""
+							})
+					});
+				}).pipe(Effect.provide(typeScriptIndexBuilderLayer))
+			)
+		: typeScriptIndexBuilderLayer;
 	const source = Layer.succeed(
 		GameTextIndexSource,
 		GameTextIndexSource.of({
@@ -195,7 +219,7 @@ export async function measureGameTextHosts(
 	}
 	const indexLayer = gameTextIndexRefreshLayer(cache).pipe(
 		Layer.provide(source),
-		Layer.provide(typeScriptIndexBuilderLayer),
+		Layer.provide(builderLayer),
 		Layer.provide(LocalizationEvidenceNodeLive)
 	);
 	const rootScope = await Effect.runPromise(Scope.make());
@@ -221,9 +245,19 @@ export async function measureGameTextHosts(
 		);
 		return {
 			builder: builderLabel,
+			joinPolicy: forceChangedJoin
+				? "force full join for changed inputs"
+				: "production incremental",
 			readPackages: result.packages.readPackages,
 			parsedFiles: result.imported.files.filter((file) => file.parsed).length,
-			rebuilt: result.join.rebuilt
+			rebuilt: result.join.rebuilt,
+			...("strategy" in result.join ? { strategy: result.join.strategy } : undefined),
+			...("affectedLines" in result.join
+				? { affectedLines: result.join.affectedLines }
+				: undefined),
+			...("incrementalFallback" in result.join
+				? { incrementalFallback: result.join.incrementalFallback }
+				: undefined)
 		};
 	};
 	const openWorkbench = async () => {
@@ -329,6 +363,32 @@ export async function measureGameTextHosts(
 		displayed: page.units.length,
 		lines: page.localization?.lines.length ?? 0
 	});
+	const columnProof = (joined: JoinedTargetReader) =>
+		run(
+			Effect.gen(function* () {
+				const hashes: Record<string, string> = {};
+				for (const name of [
+					...new Set([
+						...joined.layer.directory.entries.keys(),
+						...Object.keys(joined.meta.aliases),
+						...Object.keys(joined.meta.chunks ?? {}),
+						...Object.keys(joined.meta.patches ?? {})
+					])
+				].sort()) {
+					if (name === "join.meta" || name === "shared.meta") continue;
+					const values = yield* joined.layer.section(name);
+					hashes[name] = createHash("sha256")
+						.update(Buffer.from(values.buffer, values.byteOffset, values.byteLength))
+						.digest("hex");
+				}
+				return {
+					hashes,
+					count: joined.meta.count,
+					pairs: joined.meta.pairs,
+					ambiguous: joined.meta.ambiguous
+				};
+			})
+		);
 	try {
 		await measure(
 			`${host}:${
@@ -466,6 +526,51 @@ export async function measureGameTextHosts(
 					await file.close();
 				}
 				await measure(`${host}:refresh-one-package-one-po`, refresh, (value) => value);
+				if (host === "cli" && !forceChangedJoin) {
+					await measure("cli:query-after-refresh", () => query(base), pageSummary);
+					await measure(
+						"cli:search-after-refresh",
+						() => query({ ...base, query: "phase6-refresh" }),
+						pageSummary
+					);
+					await measure(
+						"cli:proof-incremental-full",
+						async () => {
+							const incremental = await columnProof(result!.joined);
+							const input = result!.joined.meta.input;
+							if (readerScope) await run(Scope.close(readerScope, Exit.void));
+							readerScope = undefined;
+							const full = await Effect.runPromise(
+								Effect.scoped(
+									Effect.gen(function* () {
+										yield* refreshJoinedTarget({ ...input, force: true });
+										const joined = yield* openJoinedTarget();
+										return yield* Effect.promise(() => columnProof(joined));
+									})
+								).pipe(
+									Effect.provide(
+										sharedIndexNodeLayer({
+											cacheRoot: cache,
+											projectKey: project,
+											targetKey: "Generated"
+										})
+									)
+								)
+							);
+							if (JSON.stringify(incremental) !== JSON.stringify(full))
+								throw new Error(
+									"STOP: measured incremental columns differ from full rebuild"
+								);
+							return {
+								equal: true,
+								columns: Object.keys(full.hashes).length,
+								lines: full.count,
+								differences: 0
+							};
+						},
+						(value) => value
+					);
+				}
 			} finally {
 				await restoreBenchmarkByte(byte);
 				version = "";
