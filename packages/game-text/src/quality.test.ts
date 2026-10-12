@@ -124,6 +124,61 @@ const corpus: TextCorpus = {
 	]
 };
 
+it.effect("preserves Unicode case folding, literal offsets and immutable occurrence inputs", () =>
+	Effect.gen(function* () {
+		const units = ["A+B old old", "K ſ İ ı Σ σ ς"].map((source, row) => {
+			const occurrence = Object.freeze({
+				...menuOccurrence,
+				id: makeTextOccurrenceId(`occurrence:regex-${row}`),
+				source
+			});
+			return {
+				id: makeTextUnitId(`unit:regex-${row}`),
+				identity: occurrence.identity,
+				source: { status: "consistent" as const, value: source },
+				occurrences: Object.freeze([occurrence])
+			};
+		});
+		const input = { ...corpus, units };
+		const before = JSON.stringify(input);
+		const rules = yield* decodeTextQualityRuleDocument({
+			schemaVersion: 1,
+			roles: [
+				{
+					id: "all-text",
+					scopes: [{ matchers: [{ kind: "location_kind", value: "data_table_cell" }] }]
+				}
+			],
+			rules: [
+				{
+					id: "literal-terms",
+					kind: "terminology",
+					caseSensitive: false,
+					role: "all-text",
+					recovery: "Use preferred wording.",
+					terms: ["a+b", "old", "k", "s", "i", "σ", "absent"].map((term) => ({
+						kind: "forbidden",
+						term
+					}))
+				}
+			]
+		});
+		const report = evaluateTextQuality(input, rules);
+		expect(report.findings.map((finding) => finding.actual)).toEqual([
+			{ kind: "terminology_match", source: "A+B old old", term: "A+B", start: 0, end: 3 },
+			{ kind: "terminology_match", source: "A+B old old", term: "old", start: 4, end: 7 },
+			{ kind: "terminology_match", source: "A+B old old", term: "old", start: 8, end: 11 },
+			{ kind: "terminology_match", source: "K ſ İ ı Σ σ ς", term: "K", start: 0, end: 1 },
+			{ kind: "terminology_match", source: "K ſ İ ı Σ σ ς", term: "ſ", start: 2, end: 3 },
+			{ kind: "terminology_match", source: "K ſ İ ı Σ σ ς", term: "Σ", start: 8, end: 9 },
+			{ kind: "terminology_match", source: "K ſ İ ı Σ σ ς", term: "σ", start: 10, end: 11 },
+			{ kind: "terminology_match", source: "K ſ İ ı Σ σ ς", term: "ς", start: 12, end: 13 }
+		]);
+		expect(evaluateTextQuality(input, rules)).toEqual(report);
+		expect(JSON.stringify(input)).toBe(before);
+	})
+);
+
 it.effect(
 	"decodes the generic version-1 fixture and emits deterministic explainable findings",
 	() =>

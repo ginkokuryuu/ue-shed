@@ -372,7 +372,12 @@ derived columns stay private to the new query; full-base changes and dictionary 
 reuse. Source search arenas copy retained WTF-8 bytes and decode only newly selected source IDs.
 Reuse permits at most 8,192 newly selected IDs, 8,192 obsolete IDs and 32 MiB of obsolete source
 bytes; beyond those bounds, the arena rebuilds from current sources. Old readers keep their
-original buffers. Query preparation remains eager, including source search and common counts.
+original buffers. Query preparation eagerly prepares source search, common counts and bounded
+default presentation pages. Other package, culture and rule columns load on demand through the
+pinned reader; preparation no longer inflates every physical column. The source arena trims
+backing capacity when spare bytes exceed 25%. Non-ASCII searches skip sources known to contain
+only lowercase ASCII, while other sources retain locale-sensitive folding. Raw focus lazily
+builds a numeric reverse index instead of repeatedly visiting every localization line.
 Refresh spans record reused-column count, source reuse and query-preparation duration.
 
 Every host obtains builds through `GameTextIndexBuilder`: import, package refresh, dictionary,

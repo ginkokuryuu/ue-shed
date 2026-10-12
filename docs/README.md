@@ -87,6 +87,9 @@ should follow [Website and illustrated guides](engineering/website.md).
 
 ## Research
 
+- [Game Text pipeline performance (2026-10-13)](research/game-text-pipeline-performance-2026-10-13.md) —
+  two-hour Rust/TypeScript investigation, measured keep/reject decisions, memory and query parity.
+
 - [UAsset source-derived parser model](../crates/uasset-source-gen/README.md) — source-derived class
   metadata, composable native serialization layouts, and Unreal-backed parser conformance.
 

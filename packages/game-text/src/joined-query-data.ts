@@ -192,7 +192,14 @@ export class JoinedQueryData {
 				index[id] = ++count;
 				arena.add(this.joined.reader.bytesSync(id));
 			}
-		const packed = arena.finish(),
+		const expanded = arena.finish(),
+			packed = {
+				...expanded,
+				bytes:
+					expanded.bytes.buffer.byteLength > expanded.bytes.length * 1.25
+						? Buffer.from(expanded.bytes)
+						: expanded.bytes
+			},
 			ids = new Uint32Array(count),
 			simple = new Uint8Array(count);
 		for (let id = 0; id < index.length; id++)
@@ -205,6 +212,17 @@ export class JoinedQueryData {
 				);
 			}
 		this.projection.sources = { packed, index, ids, simple };
+	}
+	/** Lowercase ASCII sources cannot contain a non-ASCII search term, even after locale folding. */
+	rejectAsciiSources(checkInterrupted?: () => void): Uint8Array | undefined {
+		const source = this.projection.sources;
+		if (!source) return undefined;
+		const result = new Uint8Array(source.index.length);
+		for (let row = 0; row < source.ids.length; row++) {
+			if ((row & 255) === 0) checkInterrupted?.();
+			if (source.simple[row]) result[source.ids[row]!] = 2;
+		}
+		return result;
 	}
 	/** Native byte scans find ASCII terms without allocating one string/view per source. */
 	searchSourceBytes(
