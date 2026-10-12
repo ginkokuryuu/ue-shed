@@ -966,9 +966,15 @@ describe("Game Text writing workspace", () => {
 		expect(screen.getByRole("button", { name: "Rescan" })).toHaveProperty("disabled", true);
 		now = 61000;
 		await Effect.runPromise(Deferred.succeed(translations, { status: "ready", targets: [] }));
-		await screen.findByRole("progressbar", { name: "Loading first results" });
-		expect(progress.hasAttribute("value")).toBe(false);
-		expect(progress.querySelector("span")?.style.width).toBe("");
+		await waitFor(() =>
+			expect(screen.getByLabelText("Index status").textContent).toContain(
+				"Loading first results"
+			)
+		);
+		expect(screen.queryByRole("progressbar")).toBeNull();
+		expect(
+			screen.getByLabelText("Index status").querySelector("[data-scan-activity]")
+		).not.toBeNull();
 		expect(screen.queryByText(/ready in/u)).toBeNull();
 		now = 181000;
 		await Effect.runPromise(

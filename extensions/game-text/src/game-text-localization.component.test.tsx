@@ -790,7 +790,12 @@ describe("Game Text localization", () => {
 		const user = userEvent.setup();
 		const pending = await Effect.runPromise(Deferred.make<LocalizationTargetResult>());
 		mount(client({ target: () => Deferred.await(pending) }));
-		await screen.findByRole("progressbar", { name: "Loading translations" });
+		await waitFor(() =>
+			expect(screen.getByLabelText("Index status").textContent).toContain(
+				"Loading translations"
+			)
+		);
+		expect(screen.queryByRole("progressbar")).toBeNull();
 		expect(screen.queryByText("No text matches these filters.")).toBeNull();
 		expect(screen.queryByText("0 matches")).toBeNull();
 		expect(screen.queryByRole("button", { name: /Not synced/ })).toBeNull();

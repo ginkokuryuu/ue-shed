@@ -1432,32 +1432,32 @@ export function GameTextRoute(props: {
 						}
 					>
 						<span role="status" {...stylex.attrs(styles.indexProgress)}>
-							<span>
-								{loading()
-									? summary()
-										? "Rescanning"
-										: "Opening saved text index"
-									: "Preparing translations and results"}
-							</span>
-							{" · "}
-							{progressLabel()}
-							<Show when={progressTotal() > 0}>
+							<GameTextScanProgress
+								label={progressLabel()}
+								completed={progress().completed}
+								total={progressTotal()}
+							/>
+							<span {...stylex.attrs(styles.scanReadout)}>
+								<span>
+									{loading()
+										? summary()
+											? "Rescanning"
+											: "Opening saved text index"
+										: "Preparing translations and results"}
+								</span>
 								{" · "}
-								{progress().completed.toLocaleString()} /{" "}
-								{progressTotal().toLocaleString()}
-							</Show>
-							{" · "}
-							{elapsedTime(elapsedSeconds())} elapsed
+								{progressLabel()}
+								<Show when={progressTotal() > 0}>
+									{" · "}
+									{progress().completed.toLocaleString()} /{" "}
+									{progressTotal().toLocaleString()}
+								</Show>
+								{" · "}
+								{elapsedTime(elapsedSeconds())} elapsed
+							</span>
 						</span>
 					</Show>
 				</span>
-				<Show when={indexBusy()}>
-					<GameTextScanProgress
-						label={progressLabel()}
-						completed={progress().completed}
-						total={progressTotal()}
-					/>
-				</Show>
 			</div>
 			<Show when={mode() === "corpus"}>
 				<BrowseSummary

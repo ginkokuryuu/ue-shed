@@ -19,6 +19,16 @@ test("Game Text browses indexed translations with the list beside the selected l
 	const scan = page.getByRole("button", { name: "Scan project", exact: true });
 	await expect(scan).toBeVisible();
 	await scan.click();
+	const measuredProgress = page.getByRole("progressbar");
+	await expect(measuredProgress).toBeVisible({ timeout: 60_000 });
+	await expect
+		.poll(async () => Number(await measuredProgress.getAttribute("aria-valuenow")))
+		.toBeGreaterThan(0);
+	await page.screenshot({ path: testInfo.outputPath("game-text-scan-measured-1440.png") });
+	await page
+		.getByRole("heading", { name: "Game Text", level: 1 })
+		.locator("..")
+		.screenshot({ path: testInfo.outputPath("game-text-scan-measured-header-1440.png") });
 	const results = page.getByRole("region", { name: "Results" });
 	await expect(results.locator("button[data-row]").first()).toBeVisible({ timeout: 60_000 });
 	await page.getByRole("button", { name: /^Culture:/u }).click();
@@ -69,26 +79,17 @@ test("Game Text browses indexed translations with the list beside the selected l
 		if (!before.header || !before.summary) throw new Error("The header has no bounds.");
 		expect(before.summary.y).toBe(before.header.y + before.header.height);
 		await page.getByRole("button", { name: "Rescan", exact: true }).click();
-		const progress = page.getByRole("progressbar");
-		await expect(progress).toBeVisible();
-		const fill = progress.locator("span");
-		await expect
-			.poll(() =>
-				fill.evaluate((element) => {
-					const bounds = element.getBoundingClientRect();
-					const track = element.parentElement?.getBoundingClientRect();
-					return track
-						? Math.min(bounds.right, track.right) - Math.max(bounds.left, track.left)
-						: 0;
-				})
-			)
-			.toBeGreaterThan(100);
+		const activity = status.locator('[data-scan-activity="true"]');
+		await expect(activity).toBeVisible();
+		await expect(page.getByRole("progressbar")).toBeHidden();
 		await expect(status).toContainText("elapsed");
 		expect(await header.boundingBox()).toEqual(before.header);
 		expect(await status.boundingBox()).toEqual(before.status);
 		expect(await results.boundingBox()).toEqual(before.results);
-		const progressBounds = await progress.boundingBox();
-		if (!progressBounds) throw new Error("Scan progress has no bounds.");
+		const progressBounds = await activity.boundingBox();
+		if (!progressBounds || !before.status) throw new Error("Scan activity has no bounds.");
+		expect(progressBounds.width).toBeLessThanOrEqual(16);
+		expect(progressBounds.y).toBeGreaterThanOrEqual(before.status.y);
 		expect(progressBounds.y).toBeGreaterThanOrEqual(before.header.y);
 		expect(progressBounds.y + progressBounds.height).toBeLessThanOrEqual(
 			before.header.y + before.header.height
@@ -97,7 +98,7 @@ test("Game Text browses indexed translations with the list beside the selected l
 		await header.screenshot({
 			path: testInfo.outputPath(`game-text-rescan-header-${width}.png`)
 		});
-		await expect(progress).toBeHidden();
+		await expect(activity).toBeHidden();
 		await expect(page.getByRole("button", { name: "Rescan", exact: true })).toBeEnabled();
 		expect(await header.boundingBox()).toEqual(before.header);
 		expect(await status.boundingBox()).toEqual(before.status);

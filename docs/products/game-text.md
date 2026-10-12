@@ -135,10 +135,11 @@ Rescan shows inline progress and retains the current list for browsing and searc
 new index is prepared. The footer reports the last successful query round trip, excluding the typing debounce, and
 the culture count. Matching lines and inspected assets remain in the header; the footer appears
 only in Text. Search retains at least 150 px of input space. At 1024 px, columns fit the available
-list width and the side pane can be hidden. Scan progress replaces the header's coverage text and
-draws its bar inside the header's bottom edge, so rescans neither reserve empty space nor shift rows.
-The bar uses a visible blue fill for known package counts and an animated blue segment while totals
-are unknown, with a static indicator under reduced motion. Project selection belongs to the host's
+list width and the side pane can be hidden. Scan progress replaces the header's coverage text, with
+a compact bar beside the stage readout only when package/file totals are known. Unknown totals use
+a small activity spinner instead of a looping bar. This keeps idle space and row positions stable;
+reduced motion stops the spinner. The bar measures the named stage, not an overall percentage.
+Project selection belongs to the host's
 workspace project picker; **Scan project** and **Rescan** only use that selected project. A separate
 **Localization target** icon chooses translation resources within that project and identifies its
 current target in the accessible label and tooltip.

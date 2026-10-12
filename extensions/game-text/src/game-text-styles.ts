@@ -36,7 +36,6 @@ export const styles = stylex.create({
 		fontFamily: tokens.fontBody
 	},
 	toolbar: {
-		position: "relative",
 		display: "flex",
 		flexWrap: "wrap",
 		alignItems: "center",
@@ -48,7 +47,21 @@ export const styles = stylex.create({
 		borderBottomColor: tokens.colorBorder
 	},
 	heading: { margin: 0, fontSize: 14, color: tokens.colorTextStrong, fontWeight: 600 },
-	indexProgress: { color: tokens.colorAccent },
+	indexProgress: {
+		display: "inline-flex",
+		alignItems: "center",
+		gap: 8,
+		maxWidth: "100%",
+		height: 18,
+		verticalAlign: "top",
+		color: tokens.colorAccent
+	},
+	scanReadout: {
+		minWidth: 0,
+		overflow: "hidden",
+		textOverflow: "ellipsis",
+		whiteSpace: "nowrap"
+	},
 	headerActions: {
 		display: "flex",
 		flexWrap: "wrap",
