@@ -1,7 +1,8 @@
 import { spawn, spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import { createServer } from "node:http";
-import { mkdir, readFile, readdir, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
 import { dirname, join, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { parseJsonObject, type JsonObject } from "./json.ts";
@@ -23,7 +24,8 @@ const materializer = join(
 	"adoption",
 	"materialize.mjs"
 );
-const targetRoot = join(repositoryRoot, "test-results", "data-authoring-adoption");
+// An external workspace cannot inherit dependencies from the source checkout.
+const targetRoot = await mkdtemp(join(tmpdir(), "ue-shed-data-authoring-adoption-"));
 const cargoTargetDirectory = process.env.CARGO_TARGET_DIR ?? join(targetRoot, "target");
 
 function fail(message: string): never {
@@ -214,7 +216,6 @@ const commit = spawnSync("git.exe", ["rev-parse", "HEAD"], {
 if (commit.status !== 0) fail("could not resolve the source commit");
 const sourceCommit = commit.stdout.trim();
 
-await rm(targetRoot, { force: true, recursive: true });
 await mkdir(dirname(targetRoot), { recursive: true });
 run(process.execPath, [materializer, "--target", targetRoot, "--source-commit", sourceCommit]);
 
