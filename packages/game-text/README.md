@@ -68,6 +68,13 @@ filter selections while preserving concurrent group pages;
 independent callers should leave it false. Cancellation does not evict completed query results.
 The synchronous `query.search(request)` API remains available.
 
+Retained desktop models separate preparation from publication. `makeRetainedGameTextIndex()`
+returns `refresh` and `release`; prepare inside an operation scope, publish the result and run
+its `retain` effect together, then borrow it in each operation that reads lazy projections.
+Active borrowers keep the previous reader and worker alive through replacement. Rejected
+preparations leave the published model usable. See `ADOPTING.md` for the ownership contract.
+The raw indexed corpus includes empty-source units; searchable exports keep their visibility rules.
+
 `summary().counts` uses that same query path with no active filters. `summary().searchable` counts
 only lines with searchable source and their saved locations. `TextCorpus.coverage` retains raw scan
 provenance, including empty FText values; it is not a count of writer-visible lines. Character counts

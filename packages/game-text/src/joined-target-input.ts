@@ -92,7 +92,7 @@ export const loadJoinFile = Effect.fn("JoinedTarget.file")(function* (
 	failure?: string
 ) {
 	const columns: Record<string, Uint32Array> = {};
-	if (!reader.manifest.active[name])
+	if (failure !== undefined || !reader.manifest.active[name])
 		return {
 			name,
 			missing: failure === undefined || failure === "file_missing",

@@ -34,8 +34,7 @@ const makeGameTextLocalization = (...args: Parameters<typeof indexedGameTextLoca
 					})
 				)
 			)
-		),
-		Effect.scoped
+		)
 	);
 
 it.effect("returns a recoverable reader failure without exposing file authority", () =>

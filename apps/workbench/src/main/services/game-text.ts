@@ -23,6 +23,7 @@ import {
 	openInvestigation,
 	investigationFailure
 } from "./investigation-files.js";
+import { scopedGameTextOperation as scoped } from "./game-text-scope.js";
 import {
 	decodeGameTextRuleDocumentJson,
 	evaluateGameTextSourceQuality,
@@ -49,8 +50,7 @@ import {
 	type LocalizationFocusResult,
 	type TextCorpusFocusRequest,
 	type TextCorpusFocusResult,
-	type TextCorpusQuery,
-	type GameTextIndexRefreshResult,
+	type RetainedGameTextIndexResult,
 	type TextCorpusQueryRunResult,
 	type TextCorpusRunResult,
 	type TextCorpusSearchRequest,
@@ -67,7 +67,7 @@ import {
 import { makeGameTextLocalization } from "./game-text-localization.js";
 import type { SavedAssetScan } from "@ue-shed/unreal-assets";
 import type { LocalizationTarget } from "@ue-shed/localization";
-import { Cache, Context, Data, Duration, Effect, Layer, Ref } from "effect";
+import { Cache, Context, Data, Duration, Effect, Layer, Ref, type Scope } from "effect";
 import type { WorkbenchTaskProgress } from "../project-workspace-contract.js";
 import { ElectronDialog } from "../adapters/electron-dialog.js";
 import { LocalFiles } from "../adapters/local-files.js";
@@ -188,7 +188,7 @@ export const WorkbenchGameTextLive = Layer.effect(
 							: undefined
 				)
 			);
-		const guardScan = <A, B>(scan: Effect.Effect<A>, unavailable: () => B) =>
+		const guardScan = <A, B, R>(scan: Effect.Effect<A, never, R>, unavailable: () => B) =>
 			Effect.uninterruptibleMask((restore) =>
 				Effect.gen(function* () {
 					const admitted = yield* Ref.modify(activity, (value) =>
@@ -204,11 +204,9 @@ export const WorkbenchGameTextLive = Layer.effect(
 					);
 				})
 			);
-		const retainedCorpus = yield* Ref.make<TextCorpus | undefined>(undefined);
-		const queryModel = yield* Ref.make<TextCorpusQuery | undefined>(undefined);
-		const querySearch = yield* Ref.make<GameTextIndexRefreshResult["search"] | undefined>(
-			undefined
-		);
+		const retainedCorpus = (index: RetainedGameTextIndexResult) => index.corpus;
+		const queryModel = (index: RetainedGameTextIndexResult) => index.query;
+		const querySearch = (index: RetainedGameTextIndexResult) => index.search;
 		const qualityModel = yield* Ref.make<TextQualityQuery | undefined>(undefined);
 		const qualityDocument = yield* Ref.make<GameTextRuleDocument | undefined>(undefined);
 		const qualityRulePath = yield* Ref.make<
@@ -228,7 +226,10 @@ export const WorkbenchGameTextLive = Layer.effect(
 			};
 		});
 		const scanCorpus = (projectRoot: string, _index: SavedAssetScan) =>
-			refreshIndex({ projectRoot }).pipe(Effect.map((result) => result.corpus));
+			refreshIndex.refresh({ projectRoot }).pipe(
+				Effect.map((result) => ({ ...result.corpus })),
+				Effect.scoped
+			);
 
 		const runScan = (projectRoot: string, index: SavedAssetScan) =>
 			scanCorpus(projectRoot, index).pipe(
@@ -256,20 +257,31 @@ export const WorkbenchGameTextLive = Layer.effect(
 
 		const scanRevision = yield* Ref.make(0);
 		const modelSelection = yield* Ref.make<
-			{ readonly projectRoot: string; readonly generation: number } | undefined
+			| {
+					readonly projectRoot: string;
+					readonly generation: number;
+					readonly indexed: RetainedGameTextIndexResult;
+			  }
+			| undefined
 		>(undefined);
-		const currentModel = <A>(ref: Ref.Ref<A | undefined>) =>
-			Effect.gen(function* () {
-				const selected = yield* project.current();
-				const owner = yield* Ref.get(modelSelection);
-				if (
-					selected.status !== "ready" ||
-					selected.project.projectRoot !== owner?.projectRoot ||
-					(selected.project.generation ?? 0) !== owner.generation
-				)
-					return undefined;
-				return yield* Ref.get(ref);
-			});
+		const currentIndex = Effect.fn("Workbench.GameText.currentIndex")(function* () {
+			const selected = yield* project.current();
+			const owner = yield* Ref.get(modelSelection);
+			if (
+				selected.status !== "ready" ||
+				selected.project.projectRoot !== owner?.projectRoot ||
+				(selected.project.generation ?? 0) !== owner.generation
+			)
+				return undefined;
+			yield* owner.indexed.borrow;
+			return owner.indexed;
+		});
+		const currentModel = <A>(read: (index: RetainedGameTextIndexResult) => A) =>
+			currentIndex().pipe(Effect.map((index) => (index ? read(index) : undefined)));
+		const currentValue = <A>(ref: Ref.Ref<A | undefined>) =>
+			currentIndex().pipe(
+				Effect.flatMap((index) => (index ? Ref.get(ref) : Effect.succeed(undefined)))
+			);
 		// Review records name who set them; the OS account is the honest default for a desktop host.
 		const reviewer = () => {
 			try {
@@ -290,7 +302,7 @@ export const WorkbenchGameTextLive = Layer.effect(
 							: Effect.succeed(undefined)
 					)
 				),
-			() => currentModel(qualityDocument)
+			() => currentValue(qualityDocument)
 		);
 		const runRefresh = (projectRoot: string, index: WorkbenchProjectCandidates) =>
 			Effect.gen(function* () {
@@ -306,7 +318,7 @@ export const WorkbenchGameTextLive = Layer.effect(
 						"The selected project changed.",
 						"Retry in the selected project."
 					);
-				return yield* refreshIndex({ projectRoot }).pipe(
+				return yield* refreshIndex.refresh({ projectRoot }).pipe(
 					Effect.flatMap((indexed) =>
 						Effect.gen(function* () {
 							const report = indexed.corpus;
@@ -342,9 +354,6 @@ export const WorkbenchGameTextLive = Layer.effect(
 								...(rules ? { rules } : undefined)
 							});
 							yield* Effect.all([
-								Ref.set(retainedCorpus, report),
-								Ref.set(queryModel, next),
-								Ref.set(querySearch, indexed.search),
 								Ref.set(
 									qualityModel,
 									rules
@@ -358,10 +367,12 @@ export const WorkbenchGameTextLive = Layer.effect(
 							]);
 							yield* Ref.set(modelSelection, {
 								projectRoot,
-								generation: index.generation
+								generation: index.generation,
+								indexed
 							});
+							yield* indexed.retain;
 							return { summary: next.summary(), status: "completed" as const };
-						})
+						}).pipe(Effect.uninterruptible)
 					),
 					Effect.catch((error) =>
 						Effect.succeed({
@@ -497,7 +508,7 @@ export const WorkbenchGameTextLive = Layer.effect(
 			);
 		const search = Effect.fn("Workbench.WorkbenchGameText.search")(function* (
 			input: TextCorpusSearchRequest
-		): Effect.fn.Return<TextCorpusSearchResult> {
+		): Effect.fn.Return<TextCorpusSearchResult, never, Scope.Scope> {
 			const request = yield* projectRelativeRequest(input);
 			if (request.localization) return yield* localization.search(request);
 			const search = yield* currentModel(querySearch);
@@ -830,7 +841,7 @@ export const WorkbenchGameTextLive = Layer.effect(
 
 		const qualitySearch = Effect.fn("Workbench.WorkbenchGameText.qualitySearch")(
 			(request: TextQualitySearchRequest) =>
-				currentModel(qualityModel).pipe(
+				currentValue(qualityModel).pipe(
 					Effect.map((model) =>
 						model === undefined
 							? { status: "not_ready" as const }
@@ -841,7 +852,7 @@ export const WorkbenchGameTextLive = Layer.effect(
 
 		const qualityFocus = Effect.fn("Workbench.WorkbenchGameText.qualityFocus")(
 			(request: TextQualityFocusRequest) =>
-				currentModel(qualityModel).pipe(
+				currentValue(qualityModel).pipe(
 					Effect.map((model) => {
 						if (model === undefined) return { status: "not_ready" as const };
 						const result = model.focus(request);
@@ -858,6 +869,7 @@ export const WorkbenchGameTextLive = Layer.effect(
 				const current = yield* project.current();
 				if (
 					!snapshot ||
+					(yield* currentModel(retainedCorpus)) !== snapshot.corpus ||
 					current.status !== "ready" ||
 					current.project.projectRoot !== snapshot.source.projectRoot ||
 					(current.project.generation ?? 0) !== snapshot.source.generation
@@ -962,7 +974,7 @@ export const WorkbenchGameTextLive = Layer.effect(
 		);
 
 		return WorkbenchGameText.of({
-			operationTarget: localization.operationTarget,
+			operationTarget: scoped(localization.operationTarget),
 			operationBusyReason,
 			beginOperation: () =>
 				Ref.modify(activity, (value) =>
@@ -972,35 +984,42 @@ export const WorkbenchGameTextLive = Layer.effect(
 				),
 			endOperation: () => Ref.update(activity, (value) => ({ ...value, operation: false })),
 			refreshAfterOperation: (target, gather) =>
-				Effect.gen(function* () {
-					if (gather && (yield* configuredRefresh(true)).status !== "completed")
-						return false;
-					if (!gather) yield* localization.reset();
-					return (yield* localization.select(target)).status === "ready";
-				}),
-			localizationBeforeGather: localization.beforeGather,
-			localizationQualitySearch: localization.qualitySearch,
-			localizationQualityFocus: localization.qualityFocus,
-			localizationChanges: localization.changes,
-			localizationEdits: localization.edits,
-			localizationReview: (request) => localization.review(request, reviewer()),
-			localizationReport: localization.report,
-			localizationReportFile: (request) => localization.reportFile(request, dialog, files),
+				Effect.scoped(
+					Effect.gen(function* () {
+						if (gather && (yield* configuredRefresh(true)).status !== "completed")
+							return false;
+						if (!gather) yield* localization.reset();
+						return (yield* localization.select(target)).status === "ready";
+					})
+				),
+			localizationBeforeGather: scoped(localization.beforeGather),
+			localizationQualitySearch: scoped(localization.qualitySearch),
+			localizationQualityFocus: scoped(localization.qualityFocus),
+			localizationChanges: scoped(localization.changes),
+			localizationEdits: scoped(localization.edits),
+			localizationReview: (request) =>
+				Effect.scoped(localization.review(request, reviewer())),
+			localizationReport: scoped(localization.report),
+			localizationReportFile: (request) =>
+				Effect.scoped(localization.reportFile(request, dialog, files)),
 			localizationLinesFile: (input) =>
 				projectRelativeRequest(input).pipe(
-					Effect.flatMap((request) => localization.linesFile(request, dialog, files))
+					Effect.flatMap((request) => localization.linesFile(request, dialog, files)),
+					Effect.scoped
 				),
-			localizationTargets: localization.targets,
-			localizationTarget: localization.select,
-			localizationFocus: localization.focus,
-			investigationExport,
-			investigationSave,
-			investigationOpen,
+			localizationTargets: scoped(localization.targets),
+			localizationTarget: scoped(localization.select),
+			localizationFocus: scoped(localization.focus),
+			investigationExport: scoped(investigationExport),
+			investigationSave: scoped(investigationSave),
+			investigationOpen: scoped(investigationOpen),
 			chooseAndRefresh: () =>
-				guardScan(chooseAndRefresh(), () =>
-					unavailableQueryProject(
-						"An Unreal localization step is running.",
-						"Cancel it or wait before scanning."
+				Effect.scoped(
+					guardScan(chooseAndRefresh(), () =>
+						unavailableQueryProject(
+							"An Unreal localization step is running.",
+							"Cancel it or wait before scanning."
+						)
 					)
 				),
 			chooseAndScan: () =>
@@ -1011,14 +1030,16 @@ export const WorkbenchGameTextLive = Layer.effect(
 					)
 				),
 			configuredRefresh: (refresh = true) =>
-				refresh
-					? guardScan(configuredRefresh(true), () =>
-							unavailableQueryProject(
-								"An Unreal localization step is running.",
-								"Cancel it or wait before scanning."
+				Effect.scoped(
+					refresh
+						? guardScan(configuredRefresh(true), () =>
+								unavailableQueryProject(
+									"An Unreal localization step is running.",
+									"Cancel it or wait before scanning."
+								)
 							)
-						)
-					: configuredRefresh(false),
+						: configuredRefresh(false)
+				),
 			configuredScan: () =>
 				guardScan(configuredScan(), () =>
 					unavailableProject(
@@ -1026,16 +1047,16 @@ export const WorkbenchGameTextLive = Layer.effect(
 						"Cancel it or wait before scanning."
 					)
 				),
-			focus,
+			focus: scoped(focus),
 			progress,
-			search,
-			chooseQualityRules,
-			reloadQualityRules,
-			createStarterRules,
-			qualityFocus,
-			qualitySearch,
-			previewQualityRules,
-			saveQualityRules
+			search: scoped(search),
+			chooseQualityRules: scoped(chooseQualityRules),
+			reloadQualityRules: scoped(reloadQualityRules),
+			createStarterRules: scoped(createStarterRules),
+			qualityFocus: scoped(qualityFocus),
+			qualitySearch: scoped(qualitySearch),
+			previewQualityRules: scoped(previewQualityRules),
+			saveQualityRules: scoped(saveQualityRules)
 		});
 	})
 );

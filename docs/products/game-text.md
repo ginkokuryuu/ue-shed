@@ -26,7 +26,11 @@ Game Text and localization hosts query the shared index through `GameTextIndexRe
 compares the Project Index's package-and-sidecar signatures and localization file stat/content
 keys, reads changed inputs, then publishes a joined generation. `loc gate` refreshes the named
 changed files. Rescan with unchanged inputs reuses the index. Review and PO writes invalidate the
-affected localization layers and join; open readers keep their pinned generation until replaced.
+affected localization layers and join. Hosts publish a replacement before retiring the previous
+owner, and active query users keep that generation pinned until they finish. A failed or superseded
+preparation leaves the published model usable. A failed current localization read makes that input
+unavailable to the new join even when a historical layer remains; missing and malformed evidence
+retain distinct states. Raw scans preserve empty-source units independently of search visibility.
 
 The CLI cache is under `UE_SHED_PROJECT_INDEX_CACHE_ROOT`, defaulting to `.cache/ue-shed` in the
 user's home directory. Workbench uses `project-catalogs-v1` under its existing Electron user-data

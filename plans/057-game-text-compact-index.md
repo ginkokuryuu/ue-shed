@@ -1393,3 +1393,30 @@ Rust formatting and Clippy pass. Native IO checks pass 104 tests with one intent
 test. The focused protocol, saved-world, package-record/layer/reader and refresh suite passes
 78 tests across six files after rerunning the updated reader expectation. All six pre-commit
 stages pass after rebuilding package outputs for the incoming saved-world schema.
+
+### Pullfrog review fixes: current evidence and reader ownership
+
+Failed current manifest, archive and PO reads now make that input unavailable to the new join,
+even when its last successful layer remains in storage. Missing and malformed files retain
+distinct evidence states. The join cache key advances to `joined-v12` so previously cached joins
+rebuild once; the WTF-8 snapshot format remains v4. Historical pinned readers keep their own evidence.
+
+Retained models now prepare in a request scope, publish the replacement, then transfer a host pin
+and retire the previous owner. Every operation borrows its published generation for its full scope.
+Outstanding queries keep their reader and search worker alive through replacement; rejected or
+superseded preparations release only the candidate. Workbench publishes corpus, query and search
+through one model reference. Localization target selection follows the same ownership contract.
+Raw corpus hydration now retains empty and whitespace-only sources, including empty-source String
+Table references, independently of the existing search and export visibility rules.
+
+Eight new regressions reproduce all three review findings against the prior implementation and
+pass with the fixes. They use persisted indexes, real localization file reads and the production
+search worker. The focused join/query/host suite passes **92 tests across 11 files** (116.90 s).
+After the final host refactor, **38 affected tests across six files** pass again (26.26 s). All six
+pre-commit stages and the Effect architecture check pass. The Workbench build and packaged desktop
+flow pass at both viewport sizes (32.1 s). Artifacts are under `test-results/codex/pr-62-*.log`.
+
+UE 5.7 and 5.8 runtime lanes were not rerun for these TypeScript ownership and corpus changes;
+parser, codegen and Unreal integration inputs are unchanged. No scale measurements, 10× runs or
+native-builder-tree edits were made. Performance acceptance and the existing open issues above
+remain unchanged.

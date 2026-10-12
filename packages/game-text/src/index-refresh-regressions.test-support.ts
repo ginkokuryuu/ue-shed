@@ -1,0 +1,142 @@
+import { mkdtemp, realpath, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { Effect, Layer, Schema, Stream } from "effect";
+import {
+	LocalizationEvidence,
+	LocalizationEvidenceNodeLive,
+	LocalizationTarget
+} from "@ue-shed/localization";
+import type { SavedAssetPackageTextRecord } from "@ue-shed/unreal-assets";
+import { emptyPackageTextRecord } from "./package-text-record.js";
+import { target } from "./localization.test-support.js";
+import { GameTextIndexSource, gameTextIndexRefreshLayer } from "./index-refresh.js";
+import { typeScriptIndexBuilderLayer } from "./index-builder.js";
+import { textCorpusFromExtractionEvents } from "./corpus.js";
+
+export const makeIndexRegressionFixture = Effect.fn("Test.GameText.indexFixture")(function* () {
+	const directory = yield* Effect.acquireRelease(
+		Effect.promise(() => mkdtemp(join(tmpdir(), "ue-shed-index-regressions-"))),
+		(directory) => Effect.promise(() => rm(directory, { recursive: true, force: true }))
+	);
+	const projectRoot = yield* Effect.promise(() => realpath(directory));
+	const authored = Schema.decodeUnknownSync(LocalizationTarget)({
+		...target,
+		name: "Review",
+		outputPaths: {
+			...target.outputPaths,
+			manifest: "Review.manifest",
+			archives: { en: "en.archive", de: "de.archive" },
+			portableObjects: { en: "en.po", de: "de.po" }
+		}
+	});
+	const contents = {
+		manifest: JSON.stringify({
+			FormatVersion: 1,
+			Namespace: "UI",
+			Children: [
+				{
+					Source: { Text: "Source" },
+					Keys: [{ Key: "K", Path: "/Game/Text/Table.Table.Label" }]
+				}
+			]
+		}),
+		archive: JSON.stringify({
+			FormatVersion: 2,
+			Namespace: "UI",
+			Children: [{ Key: "K", Source: { Text: "Source" }, Translation: { Text: "Shipped" } }]
+		}),
+		po: 'msgctxt "UI,K"\nmsgid "Source"\nmsgstr "Shipped"\n'
+	};
+	yield* Effect.promise(async () => {
+		await writeFile(join(projectRoot, "Review.manifest"), contents.manifest);
+		for (const culture of authored.cultures) {
+			await writeFile(join(projectRoot, `${culture}.archive`), contents.archive);
+			await writeFile(join(projectRoot, `${culture}.po`), contents.po);
+		}
+	});
+	const path = join(projectRoot, "Content/Text/Table.uasset");
+	let record: SavedAssetPackageTextRecord = {
+		...emptyPackageTextRecord(path),
+		occurrences: [
+			{
+				source: "Source",
+				dev_notes: "",
+				identity: { status: "resolved", namespace: "UI", key: "K" },
+				location: {
+					kind: "asset_property",
+					object_path: "/Game/Text/Table.Table",
+					class_path: "/Script/Engine.DataAsset",
+					property_path: "Label"
+				},
+				edit_capability: "read_only"
+			}
+		]
+	};
+	let signature = 0;
+	let targets: readonly LocalizationTarget[] = [authored];
+	const source = Layer.succeed(GameTextIndexSource, {
+		inventory: () =>
+			Effect.succeed([
+				{
+					path,
+					signature: String(signature),
+					headerData: {
+						packageFlags: 0x00040000,
+						gatherableTextDataCount: 1,
+						gatherableTextDataOffset: 1,
+						hasTextProperty: true
+					}
+				}
+			]),
+		read: () => Stream.succeed(record)
+	});
+	const evidence = Layer.effect(
+		LocalizationEvidence,
+		Effect.gen(function* () {
+			const live = yield* LocalizationEvidence;
+			return LocalizationEvidence.of({
+				...live,
+				discover: () => Effect.succeed({ schemaVersion: 1, targets, diagnostics: [] })
+			});
+		})
+	).pipe(Layer.provide(LocalizationEvidenceNodeLive));
+	const layer = (worker = false) =>
+		gameTextIndexRefreshLayer(join(projectRoot, "cache"), {
+			searchWorker: worker
+		}).pipe(
+			Layer.provide(source),
+			Layer.provide(typeScriptIndexBuilderLayer),
+			Layer.provide(evidence)
+		);
+	return {
+		projectRoot,
+		target: authored,
+		contents,
+		evidence,
+		layer,
+		addTarget: (name: string) => {
+			const next = Schema.decodeUnknownSync(LocalizationTarget)({ ...authored, name });
+			targets = [...targets, next];
+			return next;
+		},
+		request: { projectRoot, targetName: authored.name },
+		raw: () =>
+			textCorpusFromExtractionEvents({
+				projectRoot,
+				discoveredPackages: 1,
+				events: [record]
+			}),
+		setSource: (source: string) => {
+			record = {
+				...record,
+				occurrences: record.occurrences.map((item) => ({ ...item, source }))
+			};
+			signature++;
+		},
+		update: (occurrences: SavedAssetPackageTextRecord["occurrences"]) => {
+			record = { ...record, occurrences };
+			signature++;
+		}
+	};
+});

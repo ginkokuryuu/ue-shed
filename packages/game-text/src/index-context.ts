@@ -54,7 +54,9 @@ export function indexedTextCorpus(joined: JoinedTargetReader, query: TextCorpusQ
 		status: summary.status,
 		coverage: summary.coverage,
 		get units() {
-			return (units ??= query.export({ query: "", capability: "all" }).units);
+			return (units ??= Array.from(data.column("query.raw.order"), (row) =>
+				data.unit("raw", row)
+			));
 		},
 		get diagnostics() {
 			return readMetadata().diagnostics;

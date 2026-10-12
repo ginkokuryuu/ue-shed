@@ -1,4 +1,4 @@
-import { Effect, Layer, Option } from "effect";
+import { Effect, Layer, Option, type Scope } from "effect";
 import {
 	GameTextIndexRefresh,
 	GameTextIndexError,
@@ -22,7 +22,9 @@ import {
 import { WorkbenchProject } from "./project-workspace.js";
 
 /** The event-built implementation stays in host tests as the behavioral oracle. */
-export function oracleGameTextIndexLayer<E>(read: (root: string) => Effect.Effect<TextCorpus, E>) {
+export function oracleGameTextIndexLayer<E>(
+	read: (root: string) => Effect.Effect<TextCorpus, E, Scope.Scope>
+) {
 	return Layer.effect(
 		GameTextIndexRefresh,
 		Effect.gen(function* () {
@@ -175,6 +177,5 @@ export const makeGameTextLocalizationOracle = (
 					})
 				)
 			)
-		),
-		Effect.scoped
+		)
 	);
