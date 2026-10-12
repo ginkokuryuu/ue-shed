@@ -8,6 +8,7 @@ import { GameTextIndexRefresh } from "./index-refresh.js";
 import { makeIndexRegressionFixture } from "./index-refresh-regressions.test-support.js";
 import { joinLocalizationTarget } from "./localization.js";
 import { textCorpusQuery } from "./query.js";
+import { SharedIndex, sharedIndexDirectory, sharedIndexNodeLayer } from "./shared-index.js";
 
 // Facts are unordered flags; all evidence, primary states and unknown reasons compare exactly.
 const orderedFacts = (join: ReturnType<typeof joinLocalizationTarget>) => ({
@@ -20,6 +21,88 @@ const orderedFacts = (join: ReturnType<typeof joinLocalizationTarget>) => ({
 		}))
 	}))
 });
+
+it.live(
+	"shares package extraction across source and targets while preserving each joined view",
+	() =>
+		Effect.gen(function* () {
+			const fixture = yield* makeIndexRegressionFixture();
+			const other = fixture.addTarget("Other");
+			yield* Effect.gen(function* () {
+				const service = yield* GameTextIndexRefresh;
+				const source = yield* service.refresh({ projectRoot: fixture.projectRoot });
+				expect(fixture.packageReads()).toBe(1);
+				const localized = yield* service.refresh(fixture.request);
+				const secondTarget = yield* service.refresh({
+					projectRoot: fixture.projectRoot,
+					targetName: other.name
+				});
+				expect(fixture.packageReads()).toBe(1);
+				expect(localized.packages.readPackages).toBe(0);
+				expect(secondTarget.packages.readPackages).toBe(0);
+				const sourceAgain = yield* service.refresh({ projectRoot: fixture.projectRoot });
+				const targetAgain = yield* service.refresh(fixture.request);
+				expect(sourceAgain.join.rebuilt).toBe(false);
+				expect(targetAgain.join.rebuilt).toBe(false);
+				expect(sourceAgain.join.key).toBe(source.join.key);
+				expect(targetAgain.join.key).toBe(localized.join.key);
+				yield* service.invalidate(fixture.request);
+				expect(
+					(yield* service.refresh({ projectRoot: fixture.projectRoot })).join.rebuilt
+				).toBe(false);
+				expect((yield* service.refresh(fixture.request)).join.rebuilt).toBe(true);
+				const search = { query: "Source", capability: "all" as const, pageSize: 10 };
+				const pinned = source.query.search(search);
+				fixture.setSource("Updated");
+				const changedTarget = yield* service.refresh(fixture.request);
+				expect(fixture.packageReads()).toBe(2);
+				const changedSource = yield* service.refresh({ projectRoot: fixture.projectRoot });
+				expect(fixture.packageReads()).toBe(2);
+				expect(changedSource.packages.readPackages).toBe(0);
+				expect(changedTarget.join.rebuilt).toBe(true);
+				expect(changedSource.query.search({ ...search, query: "Updated" }).total).toBe(1);
+				expect(source.query.search(search)).toEqual(pinned);
+				expect(localized.localizationJoin.target).toBe(fixture.target.name);
+				expect(secondTarget.localizationJoin.target).toBe(other.name);
+				yield* Effect.scoped(
+					Effect.gen(function* () {
+						const store = yield* SharedIndex;
+						yield* (yield* store.writer()).compact(true);
+					})
+				).pipe(
+					Effect.provide(
+						sharedIndexNodeLayer({
+							cacheRoot: join(fixture.projectRoot, "cache"),
+							projectKey: fixture.projectRoot,
+							targetKey: "SavedText",
+							projectView: { kind: "source" }
+						})
+					)
+				);
+				const compacted = yield* service.refresh(fixture.request);
+				expect(fixture.packageReads()).toBe(2);
+				expect(compacted.localizationJoin.target).toBe(fixture.target.name);
+				expect(source.query.search(search)).toEqual(pinned);
+			}).pipe(Effect.provide(fixture.layer()));
+			const configuration = {
+				cacheRoot: fixture.projectRoot,
+				projectKey: fixture.projectRoot
+			};
+			expect(
+				sharedIndexDirectory({
+					...configuration,
+					targetKey: "SavedText",
+					projectView: { kind: "source" }
+				})
+			).toBe(
+				sharedIndexDirectory({
+					...configuration,
+					targetKey: fixture.target.name,
+					projectView: { kind: "localization", target: fixture.target.name }
+				})
+			);
+		}).pipe(Effect.scoped)
+);
 
 it.live.each(["manifest", "archive", "po"] as const)(
 	"keeps failed current %s input distinct from pinned historical evidence and repairs",

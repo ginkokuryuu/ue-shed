@@ -15,6 +15,7 @@ import { isAbsolute, relative, resolve, sep, join, dirname } from "node:path";
 import { performance } from "node:perf_hooks";
 import { writeSnapshotFile } from "./snapshot-file.js";
 import { importColdLocalizationTarget } from "./localization-cold-import.js";
+import { GameTextIndexProgressReporter } from "./index-progress.js";
 import { Context, Effect, Metric, Option, Result, Schema } from "effect";
 import {
 	LocalizationError,
@@ -34,7 +35,12 @@ import {
 	LocalizationImportLimits
 } from "./localization-stream.js";
 import { SnapshotStoreError } from "./snapshot-store.js";
-import { SharedIndex, sharedIndexNodeLayer, sharedIndexDirectory } from "./shared-index.js";
+import {
+	SharedIndex,
+	sharedIndexNodeLayer,
+	sharedIndexDirectory,
+	type SharedIndexOptions
+} from "./shared-index.js";
 import { SnapshotFormatError } from "./snapshot-format.js";
 import {
 	LocalizationImportSession,
@@ -102,7 +108,8 @@ const FileRequest = Options.pipe(
 		cacheRoot: Schema.NonEmptyString,
 		limits: Schema.optionalKey(LocalizationImportLimits),
 		chunkBytes: Schema.optionalKey(Positive),
-		sharedTargetKey: Schema.optionalKey(Schema.NonEmptyString)
+		sharedTargetKey: Schema.optionalKey(Schema.NonEmptyString),
+		projectScoped: Schema.optionalKey(Schema.Boolean)
 	})
 );
 export type LocalizationFileImportRequest = typeof FileRequest.Type;
@@ -259,7 +266,7 @@ const importFile = Effect.fn("LocalizationSnapshot.importFile")(function* (
 		return key;
 	}
 	function storeOptions() {
-		return {
+		const configuration: SharedIndexOptions = {
 			cacheRoot: request.cacheRoot,
 			projectKey: actualRoot,
 			targetKey: request.sharedTargetKey ?? "localization",
@@ -267,6 +274,9 @@ const importFile = Effect.fn("LocalizationSnapshot.importFile")(function* (
 				rootReadBytes += bytes;
 			}
 		};
+		if (request.projectScoped)
+			Object.assign(configuration, { projectView: { kind: "source" } });
+		return configuration;
 	}
 	const indexLayer =
 		(yield* localizationImportLayer(storeOptions())) ?? sharedIndexNodeLayer(storeOptions());
@@ -569,6 +579,8 @@ const TargetRequest = LocalizationProjectRequest.pipe(
 	Schema.fieldsAssign({
 		cacheRoot: Schema.NonEmptyString,
 		targetName: Schema.NonEmptyString,
+		sharedTargetKey: Schema.optionalKey(Schema.NonEmptyString),
+		projectScoped: Schema.optionalKey(Schema.Boolean),
 		importLimits: Schema.optionalKey(LocalizationImportLimits)
 	})
 );
@@ -577,6 +589,8 @@ export type LocalizationTargetImportRequest = typeof TargetRequest.Type;
 export const importLocalizationTarget = Effect.fn("LocalizationSnapshot.importTarget")(function* (
 	input: LocalizationTargetImportRequest
 ) {
+	const reportProgress = yield* GameTextIndexProgressReporter;
+	reportProgress({ phase: "localization", completed: 0, total: 0 });
 	const boundary = Schema.decodeUnknownResult(TargetRequest)(input);
 	if (Result.isFailure(boundary))
 		return yield* Effect.fail(importFailure("target", "invalid_schema"));
@@ -605,19 +619,32 @@ export const importLocalizationTarget = Effect.fn("LocalizationSnapshot.importTa
 		])
 	];
 	const actualRoot = yield* io("target", () => realpath(request.projectRoot));
-	const configuration = {
+	const configuration: SharedIndexOptions = {
 		cacheRoot: request.cacheRoot,
 		projectKey: actualRoot,
-		targetKey: target.name
+		targetKey: request.sharedTargetKey ?? target.name
 	};
+	if (request.projectScoped)
+		Object.assign(configuration, {
+			projectView: { kind: "localization", target: target.name }
+		});
 	const indexLayer =
 		(yield* localizationImportLayer(configuration)) ?? sharedIndexNodeLayer(configuration);
 	const session = yield* Effect.serviceOption(LocalizationImportSession);
 	const selectedFiles = Option.isSome(session) ? session.value.files : undefined;
+	const total = coldRequests.filter(
+		(file) =>
+			file.relativePath &&
+			(selectedFiles === undefined || selectedFiles.includes(file.relativePath))
+	).length;
+	let completed = 0;
+	reportProgress({ phase: "localization", completed, total });
 	const empty = yield* Effect.scoped(
 		Effect.gen(function* () {
 			const index = yield* (yield* SharedIndex).inspect();
-			return index.segments.length === 0 && Object.keys(index.layers).length === 0;
+			return coldRequests.every(
+				(file) => !file.relativePath || !index.active[file.relativePath]
+			);
 		})
 	).pipe(
 		Effect.provide(indexLayer),
@@ -652,7 +679,8 @@ export const importLocalizationTarget = Effect.fn("LocalizationSnapshot.importTa
 				format: file.format,
 				poFormat: target.poFormat,
 				collapseMode: target.collapseMode,
-				sharedTargetKey: target.name
+				sharedTargetKey: configuration.targetKey,
+				projectScoped: request.projectScoped ?? false
 			};
 			if (request.importLimits) Object.assign(fileRequest, { limits: request.importLimits });
 			return fileRequest;
@@ -691,7 +719,8 @@ export const importLocalizationTarget = Effect.fn("LocalizationSnapshot.importTa
 			format,
 			poFormat: target.poFormat,
 			collapseMode: target.collapseMode,
-			sharedTargetKey: target.name
+			sharedTargetKey: configuration.targetKey,
+			projectScoped: request.projectScoped ?? false
 		};
 		if (request.importLimits) Object.assign(fileRequest, { limits: request.importLimits });
 		const result = yield* importLocalizationFile(fileRequest).pipe(Effect.result);
@@ -700,6 +729,8 @@ export const importLocalizationTarget = Effect.fn("LocalizationSnapshot.importTa
 				return yield* Effect.fail(result.failure);
 			diagnostics.push({ relativePath, error: result.failure });
 		} else files.push(result.success);
+		completed++;
+		reportProgress({ phase: "localization", completed, total });
 	});
 	yield* add(target.outputPaths.manifest, "manifest");
 	for (const culture of target.cultures) {

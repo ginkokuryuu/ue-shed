@@ -10,6 +10,69 @@ subsections below describe earlier revisions; they do not supersede the latest
 Cold/refresh results use **TypeScript builder; native builder pending**. Earlier Phase 6 cold
 discovery measurements with explicit worker heap limits are superseded by default-worker runs.
 
+## Project-wide extraction: actual desktop comparison (2026-10-12)
+
+Two sequential local runs used the owner's saved project, the same native reader, Node 26.11.1,
+and the production Electron Workbench. Each had an isolated profile and an empty derived cache;
+OS caches were not evicted. These are individual observations, not repeated-run medians.
+The baseline used separate source and localization-target stores. The changed build shares
+package extraction and strings, retains separate target joins, and reuses committed inventory
+pages within the same catalog generation.
+
+The scan timer starts when clicking **Scan project**. It ends when the first result rows are
+visible, Rescan is enabled, and the progress indicator is gone. This includes package extraction,
+source indexing, localization import, target indexing, and the first rendered query. Launch timing
+also includes startup and navigation before clicking Scan project.
+
+| Actual Workbench operation            | Separate stores | Shared project store |
+| ------------------------------------- | --------------: | -------------------: |
+| Scan click to usable results          |        605.38 s |             366.23 s |
+| Launch to usable results              |        620.59 s |             380.96 s |
+| Unchanged rescan to usable results    |    Not recorded |              39.40 s |
+| Observed peak aggregate Workbench RSS |    3,239.54 MiB |         3,226.62 MiB |
+
+Sharing saves **239.15 seconds (39.5%)** in this paired observation. The second package extraction
+pass disappears; source and target index construction still run separately. Both runs return
+237,921 lines, 15,445 inspected assets, 14,695 assets not fully read, and matching displayed
+translation-state counts. The catalog contains 166,699 assets. Matching displayed counts are a
+measurement sanity check; target isolation, invalidation, changed-package reuse, pinned readers,
+and compaction have separate regression tests.
+
+The ignored artifacts live under `test-results/game-text-shared-extraction/`: `benchmark.mjs`,
+`before-retry/result.json`, and `after/result.json`, with phase samples and ready-state screenshots.
+The harness hides only its own isolated window and preserves the user's running Workbench.
+The baseline has two transient renderer-context errors in its metrics observer; the scan completed.
+The changed run has no observer errors. Concurrent local checks and retained OS caches mean this
+is not a controlled machine-wide performance guarantee. The 39-second unchanged rescan and
+roughly 3.2 GiB peak RSS remain material performance limitations.
+
+### Composable steps follow-up
+
+A third fresh-profile run measures the refactor at commit `183dd2a0`. Workbench refreshes the
+project once, then imports, builds, and opens the localization view using that verified revision.
+This uses the same project and native reader as the paired runs above, with an empty derived
+cache and retained OS caches. No build or test process ran alongside this timing run.
+
+| Actual Workbench operation            | Composable steps |
+| ------------------------------------- | ---------------: |
+| Scan click to usable results          |         347.95 s |
+| Launch to usable results              |         363.68 s |
+| Unchanged rescan to usable results    |          32.46 s |
+| Observed peak aggregate Workbench RSS |     3,237.55 MiB |
+
+The scan observation is 257.43 seconds (42.5%) below the original separate-store baseline.
+There is one inventory/extraction pass, followed by source indexing and localization preparation.
+All displayed corpus, coverage, and translation-state counts match the previous runs. This is
+another individual local observation, not evidence of a repeatable 18-second improvement over
+the initial sharing implementation. Artifacts are `after-refactor/result.json` and `ready.png`
+under the same ignored measurement directory. The observer records no errors before completion;
+closing the isolated app afterwards produces existing IPC/worker teardown diagnostics.
+
+Verification includes 497 targeted package, CLI, Workbench service, and component tests; the
+precommit gate; the built desktop Game Text workflow; and packed-package conformance with the
+public steps and search worker in a clean consumer. These do not constitute a full `pnpm check`
+or a new Unreal engine matrix run; parser and native protocol code are unchanged.
+
 ## Phase 6 final recorded host measurements
 
 The host harness calls the production CLI refresh/query and headless Workbench main service.

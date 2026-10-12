@@ -20,7 +20,7 @@ import {
 	unit,
 	cultureCode
 } from "./game-text-localization.test-support.js";
-import { oracleGameTextIndexLayer } from "./game-text-index.test-support.js";
+import { oracleGameTextIndexLayer, oracleProjectIndex } from "./game-text-index.test-support.js";
 import { makeGameTextLocalization as indexedGameTextLocalization } from "./game-text-localization.js";
 
 const makeGameTextLocalization = (...args: Parameters<typeof indexedGameTextLocalization>) =>
@@ -42,7 +42,7 @@ it.effect("returns a recoverable reader failure without exposing file authority"
 		const saved = corpus();
 		const localization = yield* makeGameTextLocalization(
 			() => Effect.succeed(saved),
-			() => Effect.succeed("C:/Project")
+			() => Effect.succeed(oracleProjectIndex("C:/Project"))
 		).pipe(
 			Effect.provide(
 				makeLocalizationEvidenceTestLayer({
@@ -71,7 +71,7 @@ it.effect("discovers no-target projects without reading evidence", () =>
 		const saved = corpus();
 		const localization = yield* makeGameTextLocalization(
 			() => Effect.succeed(saved),
-			() => Effect.succeed("C:/Project")
+			() => Effect.succeed(oracleProjectIndex("C:/Project"))
 		);
 		expect(yield* localization.targets()).toEqual({ status: "ready", targets: [] });
 	}).pipe(
@@ -103,7 +103,7 @@ it.effect(
 			});
 			const localization = yield* makeGameTextLocalization(
 				() => Ref.get(text),
-				() => Effect.succeed("C:/Project")
+				() => Effect.succeed(oracleProjectIndex("C:/Project"))
 			).pipe(Effect.provide(api));
 			expect(yield* localization.targets()).toMatchObject({
 				status: "ready",
@@ -152,7 +152,7 @@ it.effect("discards evidence loaded for a corpus that changed during the read", 
 		const result = yield* Deferred.make<ReturnType<typeof evidence>>();
 		const localization = yield* makeGameTextLocalization(
 			() => Ref.get(text),
-			() => Effect.succeed("C:/Project")
+			() => Effect.succeed(oracleProjectIndex("C:/Project"))
 		).pipe(
 			Effect.provide(
 				makeLocalizationEvidenceTestLayer({
@@ -200,7 +200,7 @@ it.live("reviews and writes staged edits into the PO file, then reports them as 
 		const saved = corpus([]);
 		const localization = yield* makeGameTextLocalization(
 			() => Effect.succeed(saved),
-			() => Effect.succeed(root)
+			() => Effect.succeed(oracleProjectIndex(root))
 		);
 		const name = LocalizationTargetName.make("FixtureGame");
 		const selected = yield* localization.select(name);
@@ -256,7 +256,7 @@ it.live("writes review flags and shows a later edit as changed since review", ()
 		const saved = corpus([]);
 		const localization = yield* makeGameTextLocalization(
 			() => Effect.succeed(saved),
-			() => Effect.succeed(root)
+			() => Effect.succeed(oracleProjectIndex(root))
 		);
 		const name = LocalizationTargetName.make("FixtureGame");
 		yield* localization.select(name);
@@ -339,7 +339,7 @@ it.live("pairs a key that changed across a gather it ran, keeping the trimmed tr
 		const saved = corpus([]);
 		const localization = yield* makeGameTextLocalization(
 			() => Effect.succeed(saved),
-			() => Effect.succeed(root)
+			() => Effect.succeed(oracleProjectIndex(root))
 		);
 		const name = LocalizationTargetName.make("FixtureGame");
 		yield* localization.select(name);

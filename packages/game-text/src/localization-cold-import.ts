@@ -10,6 +10,7 @@ import { SharedIndex, sharedIndexDirectory } from "./shared-index.js";
 import { SnapshotStoreError } from "./snapshot-store.js";
 import { SnapshotFormatError } from "./snapshot-format.js";
 import { openSnapshotFile, type SnapshotFileReader } from "./snapshot-file.js";
+import { GameTextIndexProgressReporter } from "./index-progress.js";
 import type {
 	LocalizationFileImportRequest,
 	LocalizationFileSnapshotKey
@@ -78,6 +79,11 @@ function prepare(worker: Worker, request: LocalizationFileImportRequest, stagedF
 /** The target owns the writer lock and parser pool until all staged layers are published. */
 export const importColdLocalizationTarget = Effect.fn("LocalizationSnapshot.importColdTarget")(
 	function* (requests: readonly LocalizationFileImportRequest[]) {
+		const reportProgress = yield* GameTextIndexProgressReporter;
+		let completed = 0;
+		const report = () =>
+			reportProgress({ phase: "localization", completed, total: requests.length });
+		report();
 		const store = yield* SharedIndex,
 			writer = yield* store.writer();
 		const result = yield* Effect.acquireRelease(
@@ -114,6 +120,8 @@ export const importColdLocalizationTarget = Effect.fn("LocalizationSnapshot.impo
 							join(staging, `file-${largest}.snapshot`)
 						);
 						const measuredWorkerRss = Math.max(1, replies[largest]!.rss - baselineRss);
+						completed++;
+						report();
 						// Reserve 4 GB for the coordinator/sort, round each worker up to at least 2 GB.
 						const workerBudget = Math.max(2_000_000_000, measuredWorkerRss * 1.5);
 						const workerCount = Math.max(
@@ -128,12 +136,15 @@ export const importColdLocalizationTarget = Effect.fn("LocalizationSnapshot.impo
 						while (workers.length < workerCount) workers.push(parserWorker());
 						await Promise.all(
 							workers.map(async (worker) => {
-								for (let task = order.shift(); task; task = order.shift())
+								for (let task = order.shift(); task; task = order.shift()) {
 									replies[task.row] = await prepare(
 										worker,
 										requests[task.row]!,
 										join(staging, `file-${task.row}.snapshot`)
 									);
+									completed++;
+									report();
+								}
 							})
 						);
 						await Promise.all(workers.map((worker) => worker.terminate()));
@@ -190,6 +201,7 @@ export const importColdLocalizationTarget = Effect.fn("LocalizationSnapshot.impo
 			}
 		}));
 		const publishStarted = performance.now();
+		reportProgress({ phase: "joining", completed: 0, total: 0 });
 		const records = yield* writer.publishCold(entries);
 		const metrics = writer.metrics();
 		yield* Effect.annotateCurrentSpan({

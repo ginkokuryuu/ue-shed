@@ -31,6 +31,7 @@ export interface WorkbenchProjectFailure extends Schema.Schema.Type<
 
 /** A bounded Workbench operation whose completed count comes from the underlying scanner. */
 export const WorkbenchTaskProgress = Schema.Struct({
+	detail: Schema.optionalKey(Schema.NonEmptyString),
 	cacheHits: Schema.optionalKey(Schema.Int.check(Schema.isGreaterThanOrEqualTo(0))),
 	completed: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
 	phase: Schema.Literals(["idle", "enumerating", "scanning", "ready", "failed"]),

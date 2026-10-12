@@ -4,7 +4,10 @@ import { expect } from "vitest";
 import { makeLocalizationEvidenceTestLayer } from "@ue-shed/localization";
 import { corpus, evidence, cultureCode } from "./game-text-localization.test-support.js";
 import { GameTextRuleDocument } from "@ue-shed/game-text";
-import { makeGameTextLocalizationOracle as makeGameTextLocalization } from "./game-text-index.test-support.js";
+import {
+	makeGameTextLocalizationOracle as makeGameTextLocalization,
+	oracleProjectIndex
+} from "./game-text-index.test-support.js";
 import { ElectronDialog } from "../adapters/electron-dialog.js";
 import { LocalFiles, makeLocalFilesTestLayer } from "../adapters/local-files.js";
 
@@ -58,7 +61,7 @@ it.effect(
 			const text = yield* Ref.make(fixture.text);
 			const host = yield* makeGameTextLocalization(
 				() => Ref.get(text),
-				() => Effect.succeed("C:/Project"),
+				() => Effect.succeed(oracleProjectIndex("C:/Project")),
 				() => Ref.get(document)
 			);
 			yield* host.select(fixture.join.target);
@@ -107,7 +110,7 @@ it.effect(
 			const files = yield* LocalFiles;
 			const host = yield* makeGameTextLocalization(
 				() => Effect.succeed(fixture.text),
-				() => Effect.succeed("C:/Project")
+				() => Effect.succeed(oracleProjectIndex("C:/Project"))
 			);
 			yield* host.select(fixture.join.target);
 			const baselinePath = "C:/Exports/baseline.json",
@@ -165,7 +168,7 @@ it.effect("keeps no-target projects free of quality and report authority", () =>
 	Effect.gen(function* () {
 		const host = yield* makeGameTextLocalization(
 			() => Effect.succeed(fixture.text),
-			() => Effect.succeed("C:/Project")
+			() => Effect.succeed(oracleProjectIndex("C:/Project"))
 		);
 		expect(yield* host.targets()).toEqual({ status: "ready", targets: [] });
 		expect(yield* host.qualitySearch({ target: fixture.join.target, filter: "all" })).toEqual({

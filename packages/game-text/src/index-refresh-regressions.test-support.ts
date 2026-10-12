@@ -74,10 +74,14 @@ export const makeIndexRegressionFixture = Effect.fn("Test.GameText.indexFixture"
 		]
 	};
 	let signature = 0;
+	let packageReads = 0;
+	let inventories = 0;
+	let readGate = Effect.void;
 	let targets: readonly LocalizationTarget[] = [authored];
 	const source = Layer.succeed(GameTextIndexSource, {
-		inventory: () =>
-			Effect.succeed([
+		inventory: () => {
+			inventories++;
+			return Effect.succeed([
 				{
 					path,
 					signature: String(signature),
@@ -88,8 +92,12 @@ export const makeIndexRegressionFixture = Effect.fn("Test.GameText.indexFixture"
 						hasTextProperty: true
 					}
 				}
-			]),
-		read: () => Stream.succeed(record)
+			]);
+		},
+		read: () => {
+			packageReads++;
+			return Stream.fromEffect(readGate.pipe(Effect.as(record)));
+		}
 	});
 	const evidence = Layer.effect(
 		LocalizationEvidence,
@@ -113,7 +121,13 @@ export const makeIndexRegressionFixture = Effect.fn("Test.GameText.indexFixture"
 		projectRoot,
 		target: authored,
 		contents,
+		packageReads: () => packageReads,
+		inventories: () => inventories,
+		pauseReads: (gate: Effect.Effect<void>) => {
+			readGate = gate;
+		},
 		evidence,
+		source,
 		layer,
 		addTarget: (name: string) => {
 			const next = Schema.decodeUnknownSync(LocalizationTarget)({ ...authored, name });

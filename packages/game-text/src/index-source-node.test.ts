@@ -31,13 +31,13 @@ it.each([true, false])(
 				// Rust's canonical JSON has sorted keys; comparison must not depend on key order.
 				return { modifiedMs: Number(value.mtimeNs) / 1_000_000, size: Number(value.size) };
 			};
-			const signature = JSON.stringify([
+			let signature = JSON.stringify([
 				await stamp(absolute),
 				await stamp(sidecar),
 				null,
 				null
 			]);
-			const summary: ProjectIndexSummary = {
+			let summary: ProjectIndexSummary = {
 				projectId: ProjectIdentity.make(root),
 				generation: ProjectIndexGeneration.make(1),
 				packageCount: 1,
@@ -48,7 +48,8 @@ it.each([true, false])(
 				diagnostics: []
 			};
 			let refreshes = 0,
-				reads = 0;
+				reads = 0,
+				queries = 0;
 			const catalog = makeProjectIndexTestLayer({
 				rebuild: () => Stream.die("unused"),
 				refresh: () => {
@@ -59,8 +60,9 @@ it.each([true, false])(
 				},
 				status: () => Effect.succeed({ status: "ready", summary }),
 				query: (request) => {
+					queries++;
 					expect(request._tag).toBe("Inventory");
-					expect(request.expectedGeneration).toBe(1);
+					expect(request.expectedGeneration).toBe(summary.generation);
 					return Effect.succeed({
 						projectId: summary.projectId,
 						generation: summary.generation,
@@ -90,6 +92,8 @@ it.each([true, false])(
 						const service = yield* GameTextIndexSource;
 						const inventory = yield* service.inventory({ projectRoot: root });
 						expect(refreshes).toBe(refreshProjectIndex ? 1 : 0);
+						expect(yield* service.inventory({ projectRoot: root })).toBe(inventory);
+						expect(queries).toBe(1);
 						const events = Array.from(
 							yield* Stream.runCollect(service.read(root, inventory))
 						);
@@ -101,6 +105,20 @@ it.each([true, false])(
 						).pipe(Effect.flip);
 						expect(failure.operation).toBe("signature");
 						expect(reads).toBe(1);
+						summary = { ...summary, generation: ProjectIndexGeneration.make(2) };
+						signature = yield* Effect.promise(async () =>
+							JSON.stringify([
+								await stamp(absolute),
+								await stamp(sidecar),
+								null,
+								null
+							])
+						);
+						const updated = yield* service.inventory({ projectRoot: root });
+						expect(queries).toBe(2);
+						expect(updated).not.toBe(inventory);
+						yield* Stream.runDrain(service.read(root, updated));
+						expect(reads).toBe(2);
 					})
 				).pipe(Effect.provide(source))
 			);

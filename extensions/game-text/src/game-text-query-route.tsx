@@ -102,6 +102,10 @@ function scanTime(value: string | undefined): string {
 	);
 }
 
+function elapsedTime(seconds: number): string {
+	return `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, "0")}`;
+}
+
 function focusStats(focus: TextCorpusFocus): string {
 	return [
 		textCountLabel(focus.unit.characterCount, "character"),
@@ -144,6 +148,9 @@ export function GameTextRoute(props: {
 	const [searching, setSearching] = createSignal(true);
 	const [queryMs, setQueryMs] = createSignal<number>();
 	const [loading, setLoading] = createSignal(true);
+	const [preparing, setPreparing] = createSignal(true);
+	const [elapsedSeconds, setElapsedSeconds] = createSignal(0);
+	const [preparationSeconds, setPreparationSeconds] = createSignal<number>();
 	const [memoryReady, setMemoryReady] = createSignal(false);
 	const [projectKey, setProjectKey] = createSignal(untrack(() => props.projectKey));
 	const [error, setError] = createSignal<string>();
@@ -179,6 +186,7 @@ export function GameTextRoute(props: {
 	const memoryAction = createEffectAction();
 	const persistAction = createEffectAction();
 	const progressSubscription = createEffectSubscription();
+	const elapsedSubscription = createEffectSubscription();
 	let searchGeneration = 0;
 	let focusGeneration = 0;
 	const localization = createGameTextLocalizationState({
@@ -187,12 +195,55 @@ export function GameTextRoute(props: {
 		summary,
 		selectedUnit: selectedId,
 		onPending: () => {
+			setPreparing(true);
 			searchGeneration++;
 			searchAction.cancel();
 			setSearching(true);
 			setPage(undefined);
 		}
 	});
+	const indexBusy = () =>
+		loading() || Boolean(summary() && preparing() && !localization.error() && !error());
+	const progressLabel = () =>
+		!loading() && localization.ready()
+			? "Loading first results"
+			: (progress().detail ??
+				(progress().stage === "project_index"
+					? "Discovering saved packages"
+					: progress().phase === "scanning"
+						? "Inspecting text-bearing packages"
+						: !loading()
+							? "Loading translations"
+							: "Preparing saved text index"));
+	let observingProgress = false;
+	let preparationStarted = 0;
+	createEffect(indexBusy, (busy) => {
+		if (busy === observingProgress) return;
+		observingProgress = busy;
+		if (!busy) {
+			progressSubscription.cancel();
+			elapsedSubscription.cancel();
+			if (untrack(() => page() && !error() && !localization.error())) {
+				setPreparationSeconds(Math.floor((performance.now() - preparationStarted) / 1000));
+			}
+			return;
+		}
+		const started = performance.now();
+		preparationStarted = started;
+		setElapsedSeconds(0);
+		progressSubscription.subscribe(
+			Stream.fromEffectSchedule(props.client.progress(), Schedule.spaced("250 millis")),
+			{ onValue: setProgress }
+		);
+		elapsedSubscription.subscribe(
+			Stream.fromEffectSchedule(
+				Effect.sync(() => Math.floor((performance.now() - started) / 1000)),
+				Schedule.spaced("1 second")
+			),
+			{ onValue: setElapsedSeconds }
+		);
+	});
+	const progressTotal = () => (!loading() && localization.ready() ? 0 : progress().total);
 	const operations = createGameTextOperations({
 		client: props.client,
 		target: localization.target,
@@ -569,6 +620,7 @@ export function GameTextRoute(props: {
 			{
 				onFailure: (cause) => {
 					if (generation === searchGeneration) {
+						if (!untrack(loading)) setPreparing(false);
 						setSearching(false);
 						setPage(undefined);
 						setError(String(cause));
@@ -576,6 +628,7 @@ export function GameTextRoute(props: {
 				},
 				onSuccess: (result) => {
 					if (generation !== searchGeneration) return;
+					if (!untrack(loading)) setPreparing(false);
 					if (result.status === "ready") {
 						setQueryMs(performance.now() - started);
 						setPage((previous) =>
@@ -618,26 +671,22 @@ export function GameTextRoute(props: {
 	};
 
 	const load = (refresh: boolean, choose = false) => {
+		setPreparing(true);
 		setLoading(true);
 		setError(undefined);
 		setScanNotice(undefined);
 		setProgress({ completed: 0, total: 0, phase: "idle", stage: "game_text" });
-		progressSubscription.subscribe(
-			Stream.fromEffectSchedule(props.client.progress(), Schedule.spaced("100 millis")),
-			{ onValue: setProgress }
-		);
 		refreshAction.run(
 			choose
 				? props.client.chooseProjectAndScan()
 				: props.client.loadConfiguredProject(refresh),
 			{
 				onFailure: (cause) => {
-					progressSubscription.cancel();
+					setPreparing(false);
 					setLoading(false);
 					setError(String(cause));
 				},
 				onSuccess: (result: TextCorpusQueryRunResult) => {
-					progressSubscription.cancel();
 					setLoading(false);
 					if (result.status === "completed") {
 						localization.load();
@@ -648,10 +697,12 @@ export function GameTextRoute(props: {
 							});
 						}
 					} else if (result.status === "failed") {
+						setPreparing(false);
 						setError(result.error.message + " " + result.error.recovery);
 					} else if (result.status === "cancelled") {
+						setPreparing(false);
 						setScanNotice("Project selection was cancelled. Choose a project to scan.");
-					}
+					} else setPreparing(false);
 				}
 			}
 		);
@@ -1041,13 +1092,17 @@ export function GameTextRoute(props: {
 								· scanned {scanTime(current().scannedAt)}
 							</Show>
 							<ReadProblems summary={current()} />
+							<Show when={!indexBusy() && preparationSeconds() !== undefined}>
+								{" · ready in "}
+								{elapsedTime(preparationSeconds() ?? 0)}
+							</Show>
 						</span>
 					)}
 				</Show>
 				<Show when={summary()}>
 					<Button
 						size="compact"
-						disabled={loading() || operations.busy()}
+						disabled={indexBusy() || operations.busy()}
 						title={operations.reason()}
 						onClick={() => load(true)}
 					>
@@ -1055,26 +1110,31 @@ export function GameTextRoute(props: {
 					</Button>
 				</Show>
 			</div>
-			<Show when={loading()}>
+			<Show when={indexBusy()}>
 				<progress
-					aria-label={
-						progress().phase === "scanning"
-							? "Inspecting text-bearing packages"
-							: "Preparing saved text index"
-					}
-					aria-valuenow={progress().total > 0 ? progress().completed : undefined}
-					aria-valuemax={progress().total > 0 ? progress().total : undefined}
-					max={progress().total || 1}
-					value={progress().total > 0 ? progress().completed : undefined}
+					aria-label={progressLabel()}
+					aria-valuenow={progressTotal() > 0 ? progress().completed : undefined}
+					aria-valuemax={progressTotal() > 0 ? progressTotal() : undefined}
+					max={progressTotal() || 1}
+					value={progressTotal() > 0 ? progress().completed : undefined}
 					{...stylex.attrs(styles.progress)}
 				/>
 				<p role="status" {...stylex.attrs(styles.indexProgress)}>
-					{summary() ? "Rescanning" : "Opening saved text index"}
-					<Show when={progress().total > 0}>
+					<span>
+						{loading()
+							? summary()
+								? "Rescanning"
+								: "Opening saved text index"
+							: "Preparing translations and results"}
+					</span>
+					{" · "}
+					{progressLabel()}
+					<Show when={progressTotal() > 0}>
 						{" · "}
-						{progress().completed.toLocaleString()} /{" "}
-						{progress().total.toLocaleString()}
+						{progress().completed.toLocaleString()} / {progressTotal().toLocaleString()}
 					</Show>
+					{" · "}
+					{elapsedTime(elapsedSeconds())} elapsed
 				</p>
 			</Show>
 			<Show when={mode() === "corpus"}>

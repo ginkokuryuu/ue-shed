@@ -443,7 +443,8 @@ describe("Game Text localization", () => {
 		expect(
 			screen.getByText(
 				(_text, element) =>
-					element?.tagName === "SPAN" && element.textContent === "3 lines · 1 asset"
+					element?.tagName === "SPAN" &&
+					element.textContent?.startsWith("3 lines · 1 asset") === true
 			)
 		).toBeDefined();
 		// Translation work in the Filter menu, counted from the page.

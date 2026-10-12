@@ -1,4 +1,5 @@
 import { encodeWtf8 } from "./wtf8.js";
+import { projectIndexViewLayer, type GameTextProjectView } from "./project-index-view.js";
 import { randomUUID, createHash } from "node:crypto";
 import { join } from "node:path";
 import { readdir, unlink, mkdtemp, rm } from "node:fs/promises";
@@ -77,11 +78,17 @@ const initial = (): SharedIndexManifest => ({
 	segments: [],
 	layers: {}
 });
-const configuration = (options: SnapshotStoreOptions) => ({
+export interface SharedIndexOptions extends SnapshotStoreOptions {
+	/** Omit for an independent legacy target store; explicit views share one project store. */
+	readonly projectView?: GameTextProjectView;
+}
+const configuration = (options: SharedIndexOptions) => ({
 	...options,
-	targetKey: `shared-index-v2:${options.targetKey}`
+	targetKey: options.projectView
+		? "shared-project-text-v1"
+		: `shared-index-v2:${options.targetKey}`
 });
-export const sharedIndexDirectory = (options: SnapshotStoreOptions) =>
+export const sharedIndexDirectory = (options: SharedIndexOptions) =>
 	snapshotStoreDirectory(configuration(options));
 
 export interface SharedIndexReader {
@@ -195,7 +202,11 @@ function readIndex(reader: SnapshotReader) {
 }
 
 /** One lock and atomic root for segments and every layer; individual cache keys remain independent. */
-export function sharedIndexNodeLayer(options: SnapshotStoreOptions) {
+export function sharedIndexNodeLayer(options: SharedIndexOptions) {
+	return projectIndexViewLayer(options.projectView, makeSharedIndexNodeLayer(options));
+}
+
+function makeSharedIndexNodeLayer(options: SharedIndexOptions) {
 	const directory = sharedIndexDirectory(options);
 	return Layer.effect(
 		SharedIndex,

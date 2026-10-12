@@ -1,6 +1,10 @@
 import { Effect, Layer, Option, type Scope } from "effect";
 import {
 	GameTextIndexRefresh,
+	GameTextIndexSteps,
+	type GameTextProjectIndex,
+	type GameTextTargetIndex,
+	type GameTextIndexRefreshRequest,
 	GameTextIndexError,
 	TextCorpusService,
 	joinLocalizationTarget,
@@ -25,7 +29,7 @@ import { WorkbenchProject } from "./project-workspace.js";
 export function oracleGameTextIndexLayer<E>(
 	read: (root: string) => Effect.Effect<TextCorpus, E, Scope.Scope>
 ) {
-	return Layer.effect(
+	const legacy = Layer.effect(
 		GameTextIndexRefresh,
 		Effect.gen(function* () {
 			const evidence = yield* LocalizationEvidence;
@@ -107,6 +111,7 @@ export function oracleGameTextIndexLayer<E>(
 						: undefined;
 					const query = textCorpusQuery(corpus, undefined, join);
 					return {
+						project: oracleProjectIndex(request.projectRoot),
 						corpus,
 						query,
 						search: (request) => Effect.sync(() => query.search(request)),
@@ -145,6 +150,7 @@ export function oracleGameTextIndexLayer<E>(
 			});
 		})
 	);
+	return oracleIndexStepsLayer.pipe(Layer.provideMerge(legacy));
 }
 
 export const workbenchGameTextIndexOracleLayer = Layer.unwrap(
@@ -179,3 +185,114 @@ export const makeGameTextLocalizationOracle = (
 			)
 		)
 	);
+
+/** Object-oracle handles model host ownership without exercising the compact store. */
+export function oracleProjectIndex(projectRoot: string): GameTextProjectIndex {
+	return {
+		projectRoot,
+		cacheRoot: "oracle",
+		generation: "oracle",
+		packageKey: "oracle",
+		get packages(): GameTextProjectIndex["packages"] {
+			throw new Error("Unused compact-store evidence in object oracle");
+		}
+	};
+}
+const oracleIndexStepsLayer = Layer.effect(
+	GameTextIndexSteps,
+	Effect.gen(function* () {
+		const legacy = yield* GameTextIndexRefresh;
+		const evidence = yield* LocalizationEvidence;
+		const requests = new WeakMap<GameTextTargetIndex, GameTextIndexRefreshRequest>();
+		return GameTextIndexSteps.of({
+			openProject: (request) => Effect.succeed(oracleProjectIndex(request.projectRoot)),
+			refreshProject: (request) => Effect.succeed(oracleProjectIndex(request.projectRoot)),
+			importTarget: (project, request = {}) =>
+				Effect.gen(function* () {
+					const target =
+						request.targetName === undefined
+							? undefined
+							: (yield* evidence.discover({
+									projectRoot: project.projectRoot
+								})).targets.find((target) => target.name === request.targetName);
+					if (!target && request.targetName !== undefined)
+						return yield* Effect.fail(
+							new GameTextIndexError({
+								operation: "target_not_found",
+								message: "Target not found",
+								recovery: "Select an available target."
+							})
+						);
+					return {
+						project,
+						view:
+							request.targetName === undefined
+								? { kind: "source" as const }
+								: { kind: "localization" as const, target: request.targetName },
+						imported: {
+							get target() {
+								if (!target)
+									throw new Error("Source oracle has no localization target");
+								return target;
+							},
+							files: [],
+							diagnostics: [],
+							profile: null
+						},
+						fileKeys: {},
+						fileErrors: {},
+						fileProvenances: {},
+						fileDiagnostics: {},
+						targetName: request.targetName
+					};
+				}).pipe(
+					Effect.mapError((cause) =>
+						cause instanceof GameTextIndexError
+							? cause
+							: new GameTextIndexError({
+									operation: cause.code,
+									message: cause.message,
+									recovery: cause.recovery
+								})
+					)
+				),
+			buildTarget: (project, imported, request = {}) =>
+				Effect.sync(() => {
+					const target: GameTextTargetIndex = {
+						project,
+						view: imported.view,
+						imported: imported.imported,
+						generation: "oracle",
+						fileKeys: {},
+						get join(): GameTextTargetIndex["join"] {
+							throw new Error("Unused compact join in object oracle");
+						},
+						get review(): GameTextTargetIndex["review"] {
+							throw new Error("Unused compact review in object oracle");
+						}
+					};
+					const preparation: GameTextIndexRefreshRequest = {
+						projectRoot: imported.project.projectRoot,
+						...request
+					};
+					if (imported.view.kind === "localization")
+						Object.assign(preparation, { targetName: imported.view.target });
+					requests.set(target, preparation);
+					return target;
+				}),
+			openTarget: (target) => {
+				const request = requests.get(target);
+				return request
+					? legacy
+							.refresh(request)
+							.pipe(
+								Effect.map((result) =>
+									Object.assign(result, { project: target.project })
+								)
+							)
+					: Effect.die("Missing oracle request");
+			},
+			invalidate: legacy.invalidate
+		});
+	})
+);

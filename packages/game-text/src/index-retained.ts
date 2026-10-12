@@ -1,4 +1,5 @@
 import { Effect, Exit, RcRef, Ref, Scope } from "effect";
+import { GameTextIndexProgressReporter } from "./index-progress.js";
 import {
 	GameTextIndexRefresh,
 	type GameTextIndexRefreshRequest,
@@ -13,8 +14,13 @@ export interface RetainedGameTextIndexResult extends GameTextIndexRefreshResult 
 }
 
 /** Preparation belongs to the operation; publication transfers a pin to the host. */
-export const makeRetainedGameTextIndex = Effect.fn("GameTextIndex.retain")(function* () {
-	const service = yield* GameTextIndexRefresh;
+export const makeRetainedGameTextIndexWith = Effect.fn("GameTextIndex.retain")(function* (
+	prepare: (
+		request: GameTextIndexRefreshRequest
+	) => ReturnType<typeof GameTextIndexRefresh.Service.refresh>
+) {
+	const acquire = prepare;
+	const reportProgress = yield* GameTextIndexProgressReporter;
 	const hostScope = yield* Effect.scope;
 	const current = yield* Ref.make<
 		{ readonly owner: Scope.Closeable; readonly retired: Ref.Ref<boolean> } | undefined
@@ -42,11 +48,12 @@ export const makeRetainedGameTextIndex = Effect.fn("GameTextIndex.retain")(funct
 									Effect.andThen(Scope.close(lifetime, Exit.void))
 								)
 							);
-							return yield* service
-								.refresh(request)
-								.pipe(
-									Effect.onError(() => Scope.close(acquisitionScope, Exit.void))
-								);
+							return yield* acquire(request).pipe(
+								Effect.provideService(GameTextIndexProgressReporter, (progress) => {
+									if (!Ref.getUnsafe(retired)) reportProgress(progress);
+								}),
+								Effect.onError(() => Scope.close(acquisitionScope, Exit.void))
+							);
 						})
 					}).pipe(Effect.provideService(Scope.Scope, lifetime));
 					const result = yield* restore(RcRef.get(resource)).pipe(
@@ -78,6 +85,7 @@ export const makeRetainedGameTextIndex = Effect.fn("GameTextIndex.retain")(funct
 						})
 					);
 					return {
+						project: result.project,
 						get joined() {
 							return result.joined;
 						},
@@ -115,4 +123,10 @@ export const makeRetainedGameTextIndex = Effect.fn("GameTextIndex.retain")(funct
 			)
 	);
 	return { refresh, release };
+});
+
+/** Compatibility retainer for the convenience refresh service. */
+export const makeRetainedGameTextIndex = Effect.fn("GameTextIndex.retainedRefresh")(function* () {
+	const service = yield* GameTextIndexRefresh;
+	return yield* makeRetainedGameTextIndexWith(service.refresh);
 });

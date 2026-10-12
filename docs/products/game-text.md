@@ -22,7 +22,8 @@ file. The saved-asset reader allows 10 GiB of cumulative protocol output and def
 scans to 50 minutes. A failed read names its cause and recovery; only a missing manifest asks for
 an Unreal gather.
 
-Game Text and localization hosts query the shared index through `GameTextIndexRefresh`. A refresh
+Game Text and localization hosts compose the public `GameTextIndexSteps` operations; the
+`GameTextIndexRefresh` convenience workflow remains available. A project refresh
 compares the Project Index's package-and-sidecar signatures and localization file stat/content
 keys, reads changed inputs, then publishes a joined generation. `loc gate` refreshes the named
 changed files. Rescan with unchanged inputs reuses the index. Review and PO writes invalidate the
@@ -32,12 +33,30 @@ preparation leaves the published model usable. A failed current localization rea
 unavailable to the new join even when a historical layer remains; missing and malformed evidence
 retain distinct states. Raw scans preserve empty-source units independently of search visibility.
 
+Source and localization targets share each project's package extraction and string store.
+Loading translations reuses unchanged package layers rather than extracting those packages a
+second time. Each target retains its own joined view. Inventory pages are reused within a complete
+Project Index generation and fetched again when that generation changes.
+Hosts choose step ordering and requested views. A verified project revision can be reused for
+multiple targets; target import and construction do not refresh package inventory. The library
+checks revision validity and owns per-step locking, publication, and scoped query resources.
+
 The CLI cache is under `UE_SHED_PROJECT_INDEX_CACHE_ROOT`, defaulting to `.cache/ue-shed` in the
 user's home directory. Workbench uses `project-catalogs-v1` under its existing Electron user-data
 root. The `game-text-v1` descendants are disposable; close the affected hosts before deleting those
 cache directories, then refresh to rebuild. This removes derived data without changing saved
 packages, localization evidence, review state or authored rules. Format version 4 preserves UTF-16
 strings with canonical WTF-8. Older cache generations are rejected and rebuilt.
+
+Workbench keeps scan progress visible through localization preparation and the first results
+query. It shows the current stage, completed package/file counts when known, and elapsed time from
+starting the operation until results are usable. Index construction and opening use indeterminate
+progress rather than an invented overall percentage or ETA. The completed duration remains visible
+as `ready in`. Library hosts can observe the same index stages through the optional,
+operation-scoped `GameTextIndexProgressReporter`.
+
+Staged translation review keeps its edit list in a bounded, keyboard-scrollable area. Close,
+check and write controls stay visible; closing the panel preserves the staged drafts.
 
 `GameTextIndexBuilder` is the build capability supplied by each host. The TypeScript layer remains
 the tested oracle and fallback; the native layer is being developed as the default. Queries are
