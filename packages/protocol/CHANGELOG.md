@@ -1,5 +1,48 @@
 # @ue-shed/protocol
 
+## 0.11.0
+
+### Minor Changes
+
+- 1f01e74: Add the opt-in uasset-io v1.8 package-text extraction operation and public reader stream.
+  Each decoded package carries occurrences, complete gap counts and at most three diagnostic
+  samples. Preserve the existing extraction stream and add a corpus adapter for package records.
+
+    Negotiate uasset-io v1.9 package flags and gatherable-text summary count/offset in saved headers and Project Index
+    header pages. Rebuild disposable Catalog caches for header profile 2. Candidate helpers use
+    Unreal's gather flag, non-empty summary and saved external-package relationships; the fixture
+    audit proves that TextProperty adds no candidates and every decoded occurrence is retained.
+
+    Add optional corpus coverage for `not_gatherable` packages and exclusion diagnostics, retained
+    in bounded localization status reports and Game Text coverage notes, with an optional excluded
+    count in validated query summaries. This release also adopts the signature-keyed shared
+    package-text layer in CLI and Workbench.
+
+- a545cd5: Keep a local Unreal editor responsive while a UE Shed host is in the foreground. The Core v1
+  foreground responsiveness contract (`EditorForegroundLeaseRequest`, `EditorForegroundLeaseResult`,
+  `EditorForegroundStateRequest`, `EditorForegroundStateResult`) and the manifest's
+  `foregroundResponsivenessObjectPath` describe UE Shed Core's Windows-only
+  `editor.foreground-responsiveness.v1` lease. `EditorForegroundResponsiveness.hold` holds a lease as a
+  scoped resource: it refuses a non-loopback endpoint before sending anything, renews at a third of
+  the TTL, re-acquires after a lost lease or an editor restart, degrades quietly to Unreal's normal
+  policy, and releases when the scope closes. `isLoopbackEndpoint` is the shared local-only rule.
+- 580442c: Expose bounded, generation-checked Project Index inventory pages with opaque package and sidecar signatures and saved header gather eligibility. Game Text refreshes use this committed inventory; Workbench reuses its project refresh instead of enumerating disk again.
+- 67a611c: Saved-world reads now produce contract 2.1, which only adds optional fields. Each actor reports
+  `decode` (`partial` when its export or a subobject failed or kept a property value undecoded), its
+  saved `parentComponent`, and `heldBy` when a child-actor component that names it in `ChildActor`
+  belongs to another saved actor. The result lists every unreadable package or export in
+  `packageErrors`, with its category, detail and whether an actor may have been lost, instead of only
+  counting them in a diagnostic. Exports that decoded with undecoded property values are summarized in
+  one `skipped_property` entry per package, with `count`, `exports` and the most frequent types; they
+  do not make the package partial. `uasset saved-world --skipped-properties export` lists one entry
+  per export instead. 2.0 documents still decode; consumers that pin `minor: 0` must accept `1`.
+
+    The reader decodes `FIntPoint`, `FColor`, `FLinearColor`, `FBox2D` and `FMatrix` inside arrays,
+    sets and maps, where they are always binary. An unknown struct inside a container decodes as a
+    tagged stream only when the container's tag proves it; otherwise only its property is skipped, with
+    the reason recorded, rather than failing the export or guessing. Landscape heightmap edge-fixup exports, which hold only native binary, are
+    skipped instead of reported as failures.
+
 ## 0.10.0
 
 ### Minor Changes

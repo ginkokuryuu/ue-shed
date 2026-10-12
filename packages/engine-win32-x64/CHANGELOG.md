@@ -1,5 +1,7 @@
 # @ue-shed/engine-win32-x64
 
+## 0.11.0
+
 ## 0.10.0
 
 No direct behavioral change. Align with the UE Shed 0.10.0 suite and exact internal dependency pins.

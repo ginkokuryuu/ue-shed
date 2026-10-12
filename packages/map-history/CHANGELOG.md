@@ -1,5 +1,18 @@
 # @ue-shed/map-history
 
+## 0.11.0
+
+### Patch Changes
+
+- Updated dependencies [982743f]
+- Updated dependencies [1f01e74]
+- Updated dependencies [a545cd5]
+- Updated dependencies [580442c]
+- Updated dependencies [67a611c]
+- Updated dependencies [9b08c67]
+    - @ue-shed/unreal-assets@0.11.0
+    - @ue-shed/protocol@0.11.0
+
 ## 0.10.0
 
 No direct behavioral change. Align with the UE Shed 0.10.0 suite and exact internal dependency pins.

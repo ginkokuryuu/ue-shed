@@ -9,5 +9,8 @@
 		"verify": "node scripts/verify-adoption.mjs",
 		"verify:host": "node scripts/verify-host.mjs"
 	},
+	"devDependencies": {
+		"@types/node": "^24.6.0"
+	},
 	"packageManager": "pnpm@11.17.0"
 }
