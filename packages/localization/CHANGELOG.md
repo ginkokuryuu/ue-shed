@@ -1,5 +1,38 @@
 # @ue-shed/localization
 
+## 0.11.0
+
+### Minor Changes
+
+- 6218a5c: Change-set review treats an absent and an empty previous translation as the same: both mean no
+  translation ships. A translation carried to a changed key before Unreal's gather stays current
+  after the gather gives that key an empty translation.
+
+    Add the `prepare` operation: Unreal's gather, then its PO export, in one GatherText process.
+
+- 580442c: Share typed localization failure recovery between the event reader and streamed index importer.
+  Malformed manifests, archives and PO files retain the existing recovery guidance through indexed
+  CLI and Workbench workflows, with file and position details from the streaming reader.
+
+### Patch Changes
+
+- 982743f: Raise localization evidence and saved-reader limits tenfold, apply entry limits per file, and preserve read failure causes and recovery guidance in Game Text and the CLI.
+- 580442c: Match UE 5.7 and 5.8 localization loaders by rejecting escaped unpaired UTF-16 surrogates in manifests and archives. Both the event parser and streaming index importer report the file, character offset, and typed malformed-manifest or malformed-archive failure. Saved package strings remain lossless WTF-8.
+- 23c8d9c: Speed up localization file parsing and retain compact PO evidence for large targets. Byte-exact PO parsing and serialization remain available; applying translations rereads and checks the file before writing.
+
+    Target PO evidence now exposes decoded entries in `value.entries`. Use `projectPOEvidence` to convert a full parsed document when constructing evidence; `parsePO` and `serializePO` keep their existing types and results.
+
+- 02b5128: Match saved text carrying Unreal package namespaces to gathered localization identities, so
+  translations, key changes, review fingerprints and gates use the same namespace and key as Unreal.
+  Preserve full saved namespaces for asset inspection and detect shared identities and source
+  conflicts across packages without false duplicate-source findings.
+- 656ecf5: Import Unreal manifest, archive and PO files into Game Text snapshots by streaming, keyed by
+  content hash, with a file-stat check that skips unchanged files without opening them. The PO
+  parser exposes block decoding for streaming callers and takes a faster path for unescaped fields.
+- Updated dependencies [a545cd5]
+    - @ue-shed/engine@0.11.0
+    - @ue-shed/config-explorer@0.11.0
+
 ## 0.10.0
 
 ### Minor Changes

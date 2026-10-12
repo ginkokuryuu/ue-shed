@@ -1,5 +1,18 @@
 # @ue-shed/observatory
 
+## 0.11.0
+
+### Patch Changes
+
+- Updated dependencies [1f01e74]
+- Updated dependencies [a545cd5]
+- Updated dependencies [580442c]
+- Updated dependencies [67a611c]
+    - @ue-shed/protocol@0.11.0
+    - @ue-shed/engine@0.11.0
+    - @ue-shed/unreal-connection@0.11.0
+    - @ue-shed/observability@0.11.0
+
 ## 0.10.0
 
 No direct behavioral change. Align with the UE Shed 0.10.0 suite and exact internal dependency pins.
