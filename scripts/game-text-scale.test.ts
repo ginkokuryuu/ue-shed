@@ -329,7 +329,33 @@ describe("generated scale harness", () => {
 			expect(await childWorkingSet(child.pid!)).toBeGreaterThan(32 * 1024 * 1024);
 			await killBenchmarkTree(child);
 			await closed;
-			expect(() => process.kill(pid, 0)).toThrow();
+			// Linux can retain a dead orphan's PID until init reaps its zombie entry.
+			await expect
+				.poll(async () => {
+					if (process.platform === "linux") {
+						try {
+							const stat = await readFile(`/proc/${pid}/stat`, "utf8");
+							return stat.slice(stat.lastIndexOf(")") + 2).startsWith("Z");
+						} catch (cause) {
+							if (
+								cause instanceof Error &&
+								"code" in cause &&
+								cause.code === "ENOENT"
+							)
+								return true;
+							throw cause;
+						}
+					}
+					try {
+						process.kill(pid, 0);
+						return false;
+					} catch (cause) {
+						if (cause instanceof Error && "code" in cause && cause.code === "ESRCH")
+							return true;
+						throw cause;
+					}
+				})
+				.toBe(true);
 		} finally {
 			await killBenchmarkTree(child);
 			await closed;
