@@ -154,6 +154,61 @@ it.live("unchanged partial imports reuse failed observations from the published 
 	}).pipe(Effect.scoped)
 );
 
+it.live.each(["missing", "malformed"] as const)(
+	"partial imports cannot resurrect %s failures after another target repairs a shared input",
+	(broken) =>
+		Effect.gen(function* () {
+			const fixture = yield* makeIndexRegressionFixture();
+			const other = fixture.addTarget("Other");
+			yield* Effect.gen(function* () {
+				const steps = yield* GameTextIndexSteps;
+				const project = yield* steps.refreshProject({ projectRoot: fixture.projectRoot });
+				yield* steps.buildTarget(
+					project,
+					yield* steps.importTarget(project, fixture.request)
+				);
+				yield* Effect.promise(() =>
+					broken === "missing"
+						? unlink(join(fixture.projectRoot, "de.po"))
+						: writeFile(join(fixture.projectRoot, "de.po"), "not a PO file")
+				);
+				yield* steps.buildTarget(
+					project,
+					yield* steps.importTarget(project, fixture.request)
+				);
+				yield* Effect.promise(() =>
+					writeFile(join(fixture.projectRoot, "de.po"), fixture.contents.po)
+				);
+				const repaired = yield* steps.buildTarget(
+					project,
+					yield* steps.importTarget(project, { targetName: other.name })
+				);
+				expect(
+					yield* steps
+						.importTarget(project, { ...fixture.request, changedFiles: [] })
+						.pipe(Effect.flip)
+				).toMatchObject({
+					_tag: "GameTextIndexError",
+					operation: "localization"
+				});
+				expect(
+					(yield* steps.openTarget(repaired)).evidence.cultures.find(
+						(item) => item.culture === "de"
+					)?.po.status
+				).toBe("read");
+				const refreshed = yield* steps.openTarget(
+					yield* steps.buildTarget(
+						project,
+						yield* steps.importTarget(project, fixture.request)
+					)
+				);
+				expect(
+					refreshed.evidence.cultures.find((item) => item.culture === "de")?.po.status
+				).toBe("read");
+			}).pipe(Effect.provide(fixture.layer()));
+		}).pipe(Effect.scoped)
+);
+
 it.live("imports and validates localization without starting package discovery", () =>
 	Effect.gen(function* () {
 		const fixture = yield* makeIndexRegressionFixture();

@@ -55,7 +55,10 @@ import type { refreshJoinedTarget, JoinedTargetInput } from "./joined-target.js"
 import type { LocalizationReviewSnapshot } from "@ue-shed/localization";
 import type { GameTextProjectView } from "./project-index-view.js";
 import { encodeWtf8 } from "./wtf8.js";
-import { observeGameTextImport } from "./index-import-observation.js";
+import {
+	observeGameTextImport,
+	checkRetainedImportObservations
+} from "./index-import-observation.js";
 
 export const GameTextProjectRefreshRequest = Schema.Struct(
 	Struct.pick(GameTextIndexRefreshRequest.fields, [
@@ -345,6 +348,7 @@ export const makeGameTextIndexSteps = (
 								return yield* readJoinedTarget(yield* index.open(), true);
 							})
 						);
+						yield* checkRetainedImportObservations(previous.meta, request.changedFiles);
 						fileErrors = { ...previous.meta.input.fileErrors };
 						fileProvenances = { ...previous.meta.input.fileProvenances };
 						fileDiagnostics = { ...previous.meta.input.fileDiagnostics };

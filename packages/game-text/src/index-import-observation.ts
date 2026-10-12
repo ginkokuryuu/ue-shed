@@ -4,6 +4,8 @@ import { SharedIndex } from "./shared-index.js";
 import type { ColdLayerSource } from "./shared-string-sort.js";
 import type { GameTextTargetImport } from "./index-steps.js";
 import { encodeWtf8 } from "./wtf8.js";
+import { GameTextIndexError } from "./index-contract.js";
+import type { JoinedTargetMeta } from "./joined-target-reader.js";
 
 const hash = <Value>(value: Value) =>
 	createHash("sha256")
@@ -15,6 +17,46 @@ type MutableImportDependencies = {
 const fileObservationName = (path: string) => `localization.observation.${hash(path)}`;
 const ordered = <A>(values: Readonly<Record<string, A>>) =>
 	Object.entries(values).sort(([left], [right]) => (left < right ? -1 : left > right ? 1 : 0));
+
+/** Partial imports may reuse historical evidence only while its shared observations still match. */
+export const checkRetainedImportObservations = Effect.fn("GameTextIndex.checkRetainedImport")(
+	function* (previous: JoinedTargetMeta, changedFiles: readonly string[]) {
+		const writer = yield* (yield* SharedIndex).writer();
+		const active = writer.manifest().active;
+		const changed = new Set(changedFiles);
+		const stale = () =>
+			Effect.fail(
+				new GameTextIndexError({
+					operation: "localization",
+					retrySafe: true,
+					message: "A retained localization input was superseded by another import.",
+					recovery: "Import the complete localization target again before rebuilding it."
+				})
+			);
+		for (const [path, provenance] of Object.entries(previous.input.fileProvenances ?? {})) {
+			if (changed.has(path)) continue;
+			const key = previous.dependencies[path];
+			const observation = active[fileObservationName(path)];
+			if (
+				active[path] !== key ||
+				(observation !== undefined && observation !== hash([path, "read", key, provenance]))
+			)
+				return yield* stale();
+		}
+		for (const path of Object.keys(previous.input.fileErrors ?? {})) {
+			if (changed.has(path)) continue;
+			const error = previous.input.fileDiagnostics?.[path];
+			const observation = active[fileObservationName(path)];
+			if (
+				observation !== undefined &&
+				(!error ||
+					observation !==
+						hash([path, "failed", error.code, error.message, error.recovery]))
+			)
+				return yield* stale();
+		}
+	}
+);
 
 /** Completed observations include failures even when a historical successful layer remains active. */
 export const observeGameTextImport = Effect.fn("GameTextIndex.observeImport")(function* (
