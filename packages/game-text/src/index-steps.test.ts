@@ -7,6 +7,7 @@ import { GameTextIndexSteps, gameTextIndexStepsLayer } from "./index-steps.js";
 import { GameTextIndexRefresh, GameTextIndexSource } from "./index-refresh.js";
 import { typeScriptIndexBuilderLayer } from "./index-builder.js";
 import { SharedIndex, sharedIndexNodeLayer } from "./shared-index.js";
+import { makeRetainedGameTextIndex } from "./index-retained.js";
 import { makeIndexRegressionFixture } from "./index-refresh-regressions.test-support.js";
 
 it.live(
@@ -215,5 +216,37 @@ it.live("a paused project writer does not block a different project's refresh", 
 				)
 			)
 		);
+	}).pipe(Effect.scoped)
+);
+
+it.live("retains existing refresh adapters that do not return project-step metadata", () =>
+	Effect.gen(function* () {
+		const fixture = yield* makeIndexRegressionFixture();
+		const legacy = Layer.effect(
+			GameTextIndexRefresh,
+			Effect.gen(function* () {
+				const real = yield* GameTextIndexRefresh;
+				return GameTextIndexRefresh.of({
+					invalidate: real.invalidate,
+					refresh: (request) =>
+						real.refresh(request).pipe(
+							Effect.map((result) => {
+								const value = { ...result };
+								delete value.project;
+								return value;
+							})
+						)
+				});
+			})
+		).pipe(Layer.provide(fixture.layer()));
+		yield* Effect.gen(function* () {
+			const retained = yield* makeRetainedGameTextIndex();
+			const model = yield* retained.refresh({ projectRoot: fixture.projectRoot });
+			yield* model.retain;
+			expect(model.project).toBeUndefined();
+			expect(
+				(yield* model.search({ query: "Source", capability: "all", pageSize: 10 })).total
+			).toBe(1);
+		}).pipe(Effect.provide(legacy));
 	}).pipe(Effect.scoped)
 );

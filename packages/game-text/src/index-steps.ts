@@ -124,6 +124,9 @@ export interface GameTextTargetIndex {
 	readonly review: LocalizationReviewSnapshot;
 	readonly generation: string;
 }
+export interface GameTextIndexModel extends GameTextIndexRefreshResult {
+	readonly project: GameTextProjectIndex;
+}
 
 const failure = (operation: string, message: string, recovery: string) =>
 	new GameTextIndexError({ operation, message, recovery, retrySafe: true });
@@ -486,7 +489,7 @@ export const makeGameTextIndexSteps = (
 
 		const openTarget = Effect.fn("GameTextIndex.openTarget")(function* (
 			target: GameTextTargetIndex
-		): Effect.fn.Return<GameTextIndexRefreshResult, IndexFailure, Scope.Scope> {
+		): Effect.fn.Return<GameTextIndexModel, IndexFailure, Scope.Scope> {
 			const reportProgress = yield* GameTextIndexProgressReporter;
 			const configuration = configurationFor(
 				cacheRoot,

@@ -68,7 +68,7 @@ the initial sharing implementation. Artifacts are `after-refactor/result.json` a
 under the same ignored measurement directory. The observer records no errors before completion;
 closing the isolated app afterwards produces existing IPC/worker teardown diagnostics.
 
-Verification includes 496 targeted package, CLI, Workbench service, and component tests; the
+Verification includes 497 targeted package, CLI, Workbench service, and component tests; the
 precommit gate; the built desktop Game Text workflow; and packed-package conformance with the
 public steps and search worker in a clean consumer. These do not constitute a full `pnpm check`
 or a new Unreal engine matrix run; parser and native protocol code are unchanged.

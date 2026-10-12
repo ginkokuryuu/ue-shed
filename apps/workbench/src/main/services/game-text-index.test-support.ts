@@ -281,7 +281,15 @@ const oracleIndexStepsLayer = Layer.effect(
 				}),
 			openTarget: (target) => {
 				const request = requests.get(target);
-				return request ? legacy.refresh(request) : Effect.die("Missing oracle request");
+				return request
+					? legacy
+							.refresh(request)
+							.pipe(
+								Effect.map((result) =>
+									Object.assign(result, { project: target.project })
+								)
+							)
+					: Effect.die("Missing oracle request");
 			},
 			invalidate: legacy.invalidate
 		});
