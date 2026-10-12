@@ -1420,3 +1420,15 @@ UE 5.7 and 5.8 runtime lanes were not rerun for these TypeScript ownership and c
 parser, codegen and Unreal integration inputs are unchanged. No scale measurements, 10× runs or
 native-builder-tree edits were made. Performance acceptance and the existing open issues above
 remain unchanged.
+
+The next review reproduced supersession while asynchronous localization reader retirement was
+pending. Workbench now validates the scan revision and project again after that cleanup, under a
+single publication permit covering associated state, the model reference and retained ownership.
+Cleanup remains outside the permit so a newer refresh can publish while an older cleanup waits.
+The new production-reader/worker regression fails on `8ad4fb57` and passes with the correction;
+all **34 host tests across four files** pass (17.10 s), along with all six pre-commit stages and
+the Effect architecture check. The Workbench rebuild and packaged desktop flow also pass (30.7 s).
+The full local packed-package rerun remains unavailable because
+this resumed Windows session cannot traverse the Rust/WASM tool links and temporary consumer
+dependency links. Hosted portable checks on `8ad4fb57` pass; the fresh CI result for this correction
+is tracked on PR #62.

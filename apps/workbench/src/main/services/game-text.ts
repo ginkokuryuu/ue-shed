@@ -67,7 +67,7 @@ import {
 import { makeGameTextLocalization } from "./game-text-localization.js";
 import type { SavedAssetScan } from "@ue-shed/unreal-assets";
 import type { LocalizationTarget } from "@ue-shed/localization";
-import { Cache, Context, Data, Duration, Effect, Layer, Ref, type Scope } from "effect";
+import { Cache, Context, Data, Duration, Effect, Layer, Ref, Semaphore, type Scope } from "effect";
 import type { WorkbenchTaskProgress } from "../project-workspace-contract.js";
 import { ElectronDialog } from "../adapters/electron-dialog.js";
 import { LocalFiles } from "../adapters/local-files.js";
@@ -256,6 +256,7 @@ export const WorkbenchGameTextLive = Layer.effect(
 		>(undefined);
 
 		const scanRevision = yield* Ref.make(0);
+		const publication = yield* Semaphore.make(1);
 		const modelSelection = yield* Ref.make<
 			| {
 					readonly projectRoot: string;
@@ -334,44 +335,57 @@ export const WorkbenchGameTextLive = Layer.effect(
 									"Refresh to read the current project generation."
 								);
 							yield* localization.reset();
-							const next = indexed.query;
-							const owner = yield* Ref.get(modelSelection);
-							const rules =
-								owner?.projectRoot === projectRoot
-									? yield* Ref.get(qualityDocument)
-									: undefined;
-							const rulePath =
-								owner?.projectRoot === projectRoot
-									? yield* Ref.get(qualityRulePath)
-									: undefined;
-							yield* Ref.set(investigationSnapshot, {
-								source: {
+							return yield* Effect.gen(function* () {
+								const latest = yield* project.current();
+								if (
+									(yield* Ref.get(scanRevision)) !== revision ||
+									latest.status !== "ready" ||
+									latest.project.projectRoot !== projectRoot ||
+									(latest.project.generation ?? 0) !== index.generation
+								)
+									return unavailableQueryProject(
+										"The project changed during the scan.",
+										"Refresh to read the current project generation."
+									);
+								const next = indexed.query;
+								const owner = yield* Ref.get(modelSelection);
+								const rules =
+									owner?.projectRoot === projectRoot
+										? yield* Ref.get(qualityDocument)
+										: undefined;
+								const rulePath =
+									owner?.projectRoot === projectRoot
+										? yield* Ref.get(qualityRulePath)
+										: undefined;
+								yield* Ref.set(investigationSnapshot, {
+									source: {
+										projectRoot,
+										generation: index.generation,
+										authority: "project_files"
+									},
+									corpus: report,
+									...(rules ? { rules } : undefined)
+								});
+								yield* Effect.all([
+									Ref.set(
+										qualityModel,
+										rules
+											? textQualityQuery(
+													evaluateGameTextSourceQuality(report, rules)
+												)
+											: undefined
+									),
+									Ref.set(qualityDocument, rules),
+									Ref.set(qualityRulePath, rulePath)
+								]);
+								yield* Ref.set(modelSelection, {
 									projectRoot,
 									generation: index.generation,
-									authority: "project_files"
-								},
-								corpus: report,
-								...(rules ? { rules } : undefined)
-							});
-							yield* Effect.all([
-								Ref.set(
-									qualityModel,
-									rules
-										? textQualityQuery(
-												evaluateGameTextSourceQuality(report, rules)
-											)
-										: undefined
-								),
-								Ref.set(qualityDocument, rules),
-								Ref.set(qualityRulePath, rulePath)
-							]);
-							yield* Ref.set(modelSelection, {
-								projectRoot,
-								generation: index.generation,
-								indexed
-							});
-							yield* indexed.retain;
-							return { summary: next.summary(), status: "completed" as const };
+									indexed
+								});
+								yield* indexed.retain;
+								return { summary: next.summary(), status: "completed" as const };
+							}).pipe(publication.withPermit);
 						}).pipe(Effect.uninterruptible)
 					),
 					Effect.catch((error) =>

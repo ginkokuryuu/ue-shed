@@ -10,7 +10,7 @@ import { makeLocalFilesTestLayer } from "../adapters/local-files.js";
 import { makeGameTextLocalization } from "./game-text-localization.js";
 
 const makeHost = Effect.fn("Test.GameText.productionHost")(function* (
-	mode: "retirement" | "search" | "rejected"
+	mode: "retirement" | "search" | "rejected" | "localization"
 ) {
 	const fixture = yield* makeIndexRegressionFixture();
 	const retiring = yield* Deferred.make<void>();
@@ -37,6 +37,14 @@ const makeHost = Effect.fn("Test.GameText.productionHost")(function* (
 									mode === "retirement" && pauseRetirement
 										? Deferred.await(allowRetirement)
 										: Effect.void
+								)
+							)
+						);
+					if (mode === "localization" && request.targetName === fixture.target.name)
+						yield* Effect.addFinalizer(() =>
+							Deferred.succeed(retiring, undefined).pipe(
+								Effect.andThen(
+									pauseRetirement ? Deferred.await(allowRetirement) : Effect.void
 								)
 							)
 						);
@@ -291,6 +299,40 @@ it.live(
 				Effect.ensuring(Deferred.succeed(allowSearch, undefined)),
 				Effect.provide(indexed),
 				Effect.provide(fixture.evidence)
+			);
+		}),
+	15000
+);
+
+it.live(
+	"supersession during localization retirement preserves the newer published generation",
+	() =>
+		Effect.gen(function* () {
+			const test = yield* makeHost("localization");
+			yield* Effect.gen(function* () {
+				const host = yield* WorkbenchGameText;
+				expect((yield* host.configuredRefresh()).status).toBe("completed");
+				expect((yield* host.localizationTarget(test.fixture.target.name)).status).toBe(
+					"ready"
+				);
+				test.armRetirement();
+				test.fixture.setSource("Older");
+				const older = yield* host.configuredRefresh().pipe(Effect.forkChild);
+				yield* Deferred.await(test.retiring);
+				yield* Ref.set(test.generation, 1);
+				test.fixture.setSource("Newer");
+				expect((yield* host.configuredRefresh()).status).toBe("completed");
+				const current = yield* host.search(request);
+				expect(current).toMatchObject({
+					status: "ready",
+					page: { units: [{ source: { value: "Newer" } }] }
+				});
+				yield* Deferred.succeed(test.allowRetirement, undefined);
+				expect((yield* Fiber.join(older)).status).toBe("failed");
+				expect(yield* host.search(request)).toEqual(current);
+			}).pipe(
+				Effect.ensuring(Deferred.succeed(test.allowRetirement, undefined)),
+				Effect.provide(test.layer)
 			);
 		}),
 	15000

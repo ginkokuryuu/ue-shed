@@ -47,7 +47,9 @@ concurrent callers. Worker startup and searches have 30-second bounds. Bundled h
 
 Use `makeRetainedGameTextIndex()` when a host publishes persistent models. Its `refresh(request)`
 prepares a candidate in the calling operation's scope. Validate the candidate, publish one model
-reference and run `candidate.retain` together in an uninterruptible publication step. A rejected
+reference and run `candidate.retain` together in an uninterruptible publication step. Serialize
+competing publications and validate the revision and project after asynchronous cleanup, before
+changing published state. Uninterruptibility alone does not provide mutual exclusion. A rejected
 candidate releases with its operation and leaves the published model usable. Before reading a
 published candidate's lazy corpus, join or synchronous query, run `candidate.borrow` inside the
 scope covering the entire operation. The retained `search` adapter also borrows automatically.
