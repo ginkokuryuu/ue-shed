@@ -91,6 +91,13 @@ import { WhereFilter, textWhere } from "./game-text-where.js";
 export { CopyButton } from "./game-text-copy-button.js";
 export type { GameTextPreferences } from "./game-text-preferences.js";
 
+const localizationProblems = new Set([
+	"key_changed",
+	"not_gathered",
+	"changed_since_gather",
+	"translation"
+]);
+
 /** Line states that are facts rather than problems; they filter through the selection. */
 const LINE_FACT_STATES: readonly LocalizationState[] = [
 	"gathered_only",
@@ -646,21 +653,14 @@ export function GameTextRoute(props: {
 		const selected = localization.selection();
 		const clauses = selected
 			? filter()
-			: filter().filter(
-					(clause) =>
-						clause.field !== "translation" &&
-						!(
-							clause.field === "problem" &&
-							clause.values.some((value) =>
-								[
-									"key_changed",
-									"not_gathered",
-									"changed_since_gather",
-									"translation"
-								].includes(value)
-							)
-						)
-				);
+			: filter().flatMap((clause): TextFilter => {
+					if (clause.field === "translation") return [];
+					if (clause.field !== "problem") return [clause];
+					const values = clause.values.filter(
+						(value) => !localizationProblems.has(value)
+					);
+					return values.length ? [{ ...clause, values }] : [];
+				});
 		return {
 			query: query(),
 			capability: capability(),
@@ -1478,11 +1478,17 @@ export function GameTextRoute(props: {
 				when={
 					!localization.active() &&
 					!localization.error() &&
-					filter().some((clause) => clause.field === "translation")
+					filter().some(
+						(clause) =>
+							clause.field === "translation" ||
+							(clause.field === "problem" &&
+								clause.values.some((value) => localizationProblems.has(value)))
+					)
 				}
 			>
 				<p role="note">
-					Translation filters are paused until a localization target is available.
+					Localization-dependent filter values are paused until a target is available.
+					Source filters still apply.
 				</p>
 			</Show>
 			<Show when={scanNotice()}>

@@ -141,6 +141,8 @@ View switches, list tools, exports and per-culture review flags use compact stro
 descriptive tooltips on hover and keyboard focus. Selected tools remain highlighted; applied filters,
 quality finding counts and unsaved rules retain visible badges. Accessible names and toggle states
 remain available without a tooltip. The primary **Sync with Unreal** action keeps its text label.
+When a target is unavailable, only localization-dependent filter values are paused. Source predicates
+and their inclusion or exclusion operator still apply to the list, exports and saved presets.
 
 ### Problems
 

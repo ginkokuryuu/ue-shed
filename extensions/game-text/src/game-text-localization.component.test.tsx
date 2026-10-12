@@ -5,6 +5,7 @@ import {
 	joinLocalizationTarget,
 	localizationFocusPage,
 	textCorpusQuery,
+	makeTextOccurrenceId,
 	LocalizationJoin,
 	LocalizationSelection,
 	GameTextInvestigationPreset,
@@ -14,6 +15,7 @@ import {
 	type LocalizationEditResult,
 	type LocalizationReviewRequest,
 	type TextCorpusSearchRequest,
+	type TextFilter,
 	applyLocalizationKeyChanges,
 	applyLocalizationReview,
 	localizationKeyChanges,
@@ -1581,3 +1583,106 @@ it("returns to source browsing when a rescan removes every localization target",
 	expect(requests.at(-1)?.filter?.some((clause) => clause.field === "translation")).toBeFalsy();
 	expect(screen.queryByRole("alert")).toBeNull();
 });
+
+it.each([
+	{ op: "is", removeTarget: false },
+	{ op: "is_not", removeTarget: false },
+	{ op: "is", removeTarget: true },
+	{ op: "is_not", removeTarget: true }
+] as const)(
+	"keeps source predicates in mixed $op Problem filters without a target (rescan removal: $removeTarget)",
+	async ({ op, removeTarget }) => {
+		const savedFilter: TextFilter = [
+			{ field: "problem", op, values: ["conflicting_source", "translation"] }
+		];
+		const effectiveFilter: TextFilter = [
+			{ field: "problem", op, values: ["conflicting_source"] }
+		];
+		window.localStorage.setItem(
+			"ue-shed:game-text:localization-project",
+			JSON.stringify({ filter: savedFilter })
+		);
+		const conflict = unit("Conflict", "First source");
+		const query = textCorpusQuery(
+			corpus([
+				{
+					...conflict,
+					source: { status: "conflicting", values: ["First source", "Second source"] },
+					occurrences: [
+						...conflict.occurrences,
+						...conflict.occurrences.map((occurrence) => ({
+							...occurrence,
+							id: makeTextOccurrenceId(`${occurrence.id}:other`),
+							source: "Second source"
+						}))
+					]
+				},
+				unit("Fresh", "Fresh line")
+			])
+		);
+		expect(
+			query.search({ query: "", capability: "all", pageSize: 50, filter: effectiveFilter })
+				.total
+		).toBe(1);
+		const base = client();
+		const inventory = base.localizationTargets;
+		if (!inventory) throw new Error("Missing target inventory");
+		let empty = !removeTarget;
+		const requests: TextCorpusSearchRequest[] = [];
+		const files: GameTextInvestigationQuery[] = [];
+		mount({
+			...base,
+			loadConfiguredProject: () =>
+				Effect.succeed({ status: "completed", summary: query.summary() }),
+			localizationTargets: () =>
+				empty ? Effect.succeed({ status: "ready", targets: [] }) : inventory(),
+			search: (request) => {
+				requests.push(request);
+				const { localization: _localization, ...sourceRequest } = request;
+				return Effect.succeed({ status: "ready", page: query.search(sourceRequest) });
+			},
+			investigations: {
+				export: (selection) => {
+					files.push(selection);
+					return Effect.succeed({ status: "cancelled" });
+				},
+				save: (selection) => {
+					files.push(selection);
+					return Effect.succeed({ status: "cancelled" });
+				},
+				open: () => Effect.succeed({ status: "cancelled" })
+			}
+		});
+		const user = userEvent.setup();
+		await screen.findByText("1 match");
+		if (removeTarget) {
+			await screen.findByRole("button", { name: /^Culture:/u });
+			empty = true;
+			await user.click(screen.getByRole("button", { name: "Rescan" }));
+		}
+		await waitFor(() => {
+			expect(screen.queryByRole("button", { name: /^Culture:/u })).toBeNull();
+			expect(requests.at(-1)?.filter).toEqual(effectiveFilter);
+			expect(requests.at(-1)?.localization).toBeUndefined();
+		});
+		await screen.findByText("1 match");
+		expect(screen.getByRole("region", { name: "Results" }).textContent).toContain(
+			op === "is_not" ? "Fresh line" : "First source"
+		);
+		await screen.findByText(/Localization-dependent filter values are paused/u);
+		await user.click(screen.getByRole("button", { name: "Export" }));
+		await user.click(await screen.findByRole("button", { name: "CSV" }));
+		await user.click(screen.getByRole("button", { name: "Presets" }));
+		await user.click(await screen.findByRole("button", { name: /^Save preset/u }));
+		await waitFor(() => expect(files).toHaveLength(2));
+		for (const selection of files) {
+			expect(selection.filter).toEqual(effectiveFilter);
+			expect(selection.localization).toBeUndefined();
+		}
+		expect(
+			decodeGameTextPreferences(
+				window.localStorage.getItem("ue-shed:game-text:localization-project") ?? "{}"
+			).filter
+		).toEqual(savedFilter);
+	}
+);

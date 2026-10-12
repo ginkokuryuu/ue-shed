@@ -1,12 +1,16 @@
 import { cleanup, fireEvent, render, screen, waitFor } from "@solidjs/testing-library";
 import { userEvent } from "@testing-library/user-event";
 import { createSignal } from "solid-js";
-import { afterEach, expect, it } from "vitest";
+import { afterEach, expect, it, vi } from "vitest";
 import { AnchoredPopover } from "./anchored-popover.js";
 import { ToolButton } from "./tool-button.js";
 import { ToolIcon } from "./tool-icon.js";
 
-afterEach(cleanup);
+afterEach(() => {
+	cleanup();
+	vi.useRealTimers();
+	vi.restoreAllMocks();
+});
 
 it("labels an icon tool and shows a dismissible tooltip on keyboard focus", async () => {
 	render(() => (
@@ -98,4 +102,51 @@ it("forwards a popover's trigger ref and restores keyboard focus when its menu c
 	await waitFor(() =>
 		expect(document.activeElement).toBe(screen.getByRole("button", { name: "Display" }))
 	);
+});
+
+it("cancels a pending hover delay when the tool unmounts", () => {
+	vi.useFakeTimers();
+	const view = render(() => (
+		<ToolButton label="Filter" tooltip="Narrow lines by state or location.">
+			<ToolIcon name="filter" />
+		</ToolButton>
+	));
+	const anchor = screen.getByRole("button", { name: "Filter" }).parentElement;
+	if (!anchor) throw new Error("The icon tool has no hover anchor.");
+	fireEvent.pointerEnter(anchor);
+	expect(vi.getTimerCount()).toBe(1);
+	view.unmount();
+	expect(vi.getTimerCount()).toBe(0);
+	vi.runAllTimers();
+	expect(screen.queryByRole("tooltip")).toBeNull();
+});
+
+it("releases open-tooltip listeners and positioning frames when the tool unmounts", async () => {
+	const addDocument = vi.spyOn(document, "addEventListener");
+	const removeDocument = vi.spyOn(document, "removeEventListener");
+	const addWindow = vi.spyOn(window, "addEventListener");
+	const removeWindow = vi.spyOn(window, "removeEventListener");
+	const frames = vi.spyOn(globalThis, "requestAnimationFrame");
+	const cancelFrame = vi.spyOn(globalThis, "cancelAnimationFrame");
+	const view = render(() => (
+		<ToolButton label="Display" tooltip="Change list grouping.">
+			<ToolIcon name="display" />
+		</ToolButton>
+	));
+	await userEvent.setup().tab();
+	await screen.findByRole("tooltip");
+	const escape = addDocument.mock.calls.find(([name]) => name === "keydown")?.[1];
+	const resize = addWindow.mock.calls.find(([name]) => name === "resize")?.[1];
+	const scroll = addWindow.mock.calls.find(([name]) => name === "scroll")?.[1];
+	const frame = frames.mock.results.find((result) => result.type === "return")?.value;
+	expect(escape).toBeDefined();
+	expect(resize).toBeDefined();
+	expect(scroll).toBeDefined();
+	expect(frame).toBeDefined();
+	view.unmount();
+	expect(removeDocument).toHaveBeenCalledWith("keydown", escape);
+	expect(removeWindow).toHaveBeenCalledWith("resize", resize);
+	expect(removeWindow).toHaveBeenCalledWith("scroll", scroll, true);
+	expect(cancelFrame).toHaveBeenCalledWith(frame);
+	expect(screen.queryByRole("tooltip")).toBeNull();
 });
