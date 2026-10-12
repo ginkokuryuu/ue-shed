@@ -60,6 +60,10 @@ quality fast path deliberately falls back for non-ASCII case-insensitive input. 
 Kelvin sign, long s, dotted/dotless I, Greek sigma, literal regex punctuation and frozen inputs.
 The search oracle also covers combining-dot queries, supplementary characters and lone surrogates.
 
+A final repeat on the current ASCII-property spelling confirms identical report hashes: terminology
+**663.46 → 71.23 ms**, shared 16k occurrences **681.32 → 3.88 ms**, shared 32k occurrences
+**2,688.12 → 5.12 ms**. Its seven samples per variant are in `finalQualityRepeat` in the evidence JSON.
+
 ## Whole pipeline results
 
 | Same-input operation                   |  Baseline | Native changes only | TypeScript changes only |  Combined |
