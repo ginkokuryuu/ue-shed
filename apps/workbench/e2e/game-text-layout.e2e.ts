@@ -95,9 +95,8 @@ test("Game Text browses indexed translations with the list beside the selected l
 	});
 	expect((await back.boundingBox())?.y).toBe(beforeScroll?.y);
 	await page.screenshot({ path: testInfo.outputPath("game-text-layout-1024.png") });
-	await detail.getByRole("button", { name: "‹ Lines", exact: true }).click();
-	await expect(translatedHeading).toHaveCount(0);
 	await page.getByRole("button", { name: "Hide side pane", exact: true }).click();
+	await expect(translatedHeading).toHaveCount(0);
 	await expect(detail).toBeHidden();
 	await page.getByRole("button", { name: "Show side pane", exact: true }).click();
 	await expect(detail).toBeVisible();

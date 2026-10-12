@@ -142,6 +142,7 @@ export function GameTextRoute(props: {
 	const [scanRevision, setScanRevision] = createSignal(0);
 	const [summary, setSummary] = createSignal<TextCorpusQuerySummary>();
 	const [page, setPage] = createSignal<TextCorpusSearchPage>();
+	const [committedRequest, setCommittedRequest] = createSignal<TextCorpusSearchRequest>();
 	const [focus, setFocus] = createSignal<TextCorpusFocus>();
 	const [searching, setSearching] = createSignal(true);
 	const [queryMs, setQueryMs] = createSignal<number>();
@@ -153,6 +154,13 @@ export function GameTextRoute(props: {
 	const [memoryReady, setMemoryReady] = createSignal(false);
 	const [projectKey, setProjectKey] = createSignal(untrack(() => props.projectKey));
 	const [error, setError] = createSignal<string>();
+	const [retryError, setRetryError] = createSignal<() => void>();
+	const [searchFailed, setSearchFailed] = createSignal(false);
+	const showError = (message: string, retry: () => void, search = false) => {
+		setError(message);
+		setRetryError(() => retry);
+		setSearchFailed(search);
+	};
 	const [scanNotice, setScanNotice] = createSignal<string>();
 	const [qualityFailure, setQualityFailure] =
 		createSignal<Extract<TextQualityQueryRunResult, { status: "failed" }>["error"]>();
@@ -284,7 +292,8 @@ export function GameTextRoute(props: {
 			}),
 			{
 				onFailure: (cause) => {
-					if (generation === focusGeneration) setError(String(cause));
+					if (generation === focusGeneration)
+						showError(String(cause), () => requestFocus(id, cursor));
 				},
 				onSuccess: (result) => {
 					if (generation !== focusGeneration) return;
@@ -628,13 +637,19 @@ export function GameTextRoute(props: {
 	};
 	const searchRequest = createMemo((): TextCorpusSearchRequest => {
 		const selected = localization.selection();
+		const clauses =
+			!selected && localization.error()
+				? filter().filter(
+						(clause) => clause.field !== "translation" && clause.field !== "problem"
+					)
+				: filter();
 		return {
 			query: query(),
 			capability: capability(),
 			lens: lens(),
 			withoutNotes: withoutNotes(),
 			...whereField(),
-			...(filter().length > 0 ? { filter: filter() } : undefined),
+			...(clauses.length > 0 ? { filter: clauses } : undefined),
 			...groupField(),
 			facets: {
 				folder: facetFolder(),
@@ -670,7 +685,7 @@ export function GameTextRoute(props: {
 	);
 	const moreResults = () => {
 		const current = untrack(page);
-		const request = searchRequest();
+		const request = committedRequest() ?? searchRequest();
 		if (current?.localization?.nextCursor)
 			requestPage({ ...request, localizationCursor: current.localization.nextCursor });
 		else if (current?.nextCursor) requestPage({ ...request, cursor: current.nextCursor });
@@ -696,6 +711,7 @@ export function GameTextRoute(props: {
 			pendingStep = undefined;
 		}
 		setError(undefined);
+		setSearchFailed(false);
 		setSearching(true);
 		searchAction.run(
 			(debounce ? Effect.sleep("120 millis") : Effect.void).pipe(
@@ -749,13 +765,14 @@ export function GameTextRoute(props: {
 					if (generation === searchGeneration) {
 						if (!untrack(loading)) setPreparing(false);
 						setSearching(false);
-						setError(String(cause));
+						showError(String(cause), () => requestPage(request), true);
 					}
 				},
 				onSuccess: (result) => {
 					if (generation !== searchGeneration) return;
 					if (!untrack(loading)) setPreparing(false);
 					if (result.status === "ready") {
+						setCommittedRequest(baseRequest);
 						setQueryMs(performance.now() - started);
 						setPage((previous) =>
 							(request.cursor || request.localizationCursor) && previous
@@ -779,7 +796,10 @@ export function GameTextRoute(props: {
 						setSearching(false);
 					} else {
 						setSearching(false);
-						setError("The saved assets changed. Rescan the project to search again.");
+						showError(
+							"The saved assets changed. Rescan the project to search again.",
+							() => load(true)
+						);
 					}
 				}
 			}
@@ -799,6 +819,7 @@ export function GameTextRoute(props: {
 		setPreparing(true);
 		setLoading(true);
 		setError(undefined);
+		setSearchFailed(false);
 		setScanNotice(undefined);
 		setProgress({ completed: 0, total: 0, phase: "idle", stage: "game_text" });
 		refreshAction.run(
@@ -809,7 +830,7 @@ export function GameTextRoute(props: {
 				onFailure: (cause) => {
 					setPreparing(false);
 					setLoading(false);
-					setError(String(cause));
+					showError(String(cause), () => load(refresh, choose));
 				},
 				onSuccess: (result: TextCorpusQueryRunResult) => {
 					setLoading(false);
@@ -824,7 +845,9 @@ export function GameTextRoute(props: {
 						}
 					} else if (result.status === "failed") {
 						setPreparing(false);
-						setError(result.error.message + " " + result.error.recovery);
+						showError(result.error.message + " " + result.error.recovery, () =>
+							load(refresh, choose)
+						);
 					} else if (result.status === "cancelled") {
 						setPreparing(false);
 						setScanNotice("Project selection was cancelled. Choose a project to scan.");
@@ -898,7 +921,8 @@ export function GameTextRoute(props: {
 						setQualitySummary(reviewed.summary);
 					} else applyQuality(reviewed);
 				},
-				onFailure: (cause) => setError(String(cause))
+				onFailure: (cause) =>
+					showError(String(cause), () => editor.run("preview", document))
 			});
 		}
 	);
@@ -1026,7 +1050,7 @@ export function GameTextRoute(props: {
 			if (!operation) return;
 			qualityAction.run(operation, {
 				onSuccess: applyQuality,
-				onFailure: (cause) => setError(String(cause))
+				onFailure: (cause) => showError(String(cause), () => loadRules(create))
 			});
 		});
 	const reloadRules = () =>
@@ -1036,7 +1060,7 @@ export function GameTextRoute(props: {
 				props.client.reloadQualityRules?.() ?? props.client.chooseQualityRules(),
 				{
 					onSuccess: applyQuality,
-					onFailure: (cause) => setError(String(cause))
+					onFailure: (cause) => showError(String(cause), reloadRules)
 				}
 			);
 		});
@@ -1413,11 +1437,7 @@ export function GameTextRoute(props: {
 				{(message) => (
 					<div role="alert" {...stylex.attrs(styles.card)}>
 						{message()}
-						<Button
-							onClick={() => (summary() ? requestPage(searchRequest()) : load(true))}
-						>
-							Retry
-						</Button>
+						<Button onClick={() => retryError()?.()}>Retry</Button>
 					</div>
 				)}
 			</Show>
@@ -1586,7 +1606,7 @@ export function GameTextRoute(props: {
 										<span role="status" {...stylex.attrs(styles.count)}>
 											{localization.error() && !localization.ready()
 												? "Translations unavailable"
-												: error()
+												: searchFailed()
 													? "Search failed"
 													: searching() || !page()
 														? "Searching…"
@@ -1652,7 +1672,11 @@ export function GameTextRoute(props: {
 											size="compact"
 											tone="quiet"
 											aria-pressed={paneCollapsed() ? "false" : "true"}
-											onClick={() => setPaneCollapsed(!paneCollapsed())}
+											onClick={() => {
+												const hide = !paneCollapsed();
+												setPaneCollapsed(hide);
+												if (hide) closeLine();
+											}}
 										>
 											{paneCollapsed() ? "Show side pane" : "Hide side pane"}
 										</Button>
@@ -1736,7 +1760,7 @@ export function GameTextRoute(props: {
 													by={groups().by}
 													groups={groups().entries}
 													more={groups().more}
-													request={searchRequest()}
+													request={committedRequest() ?? searchRequest()}
 													client={props.client}
 													culture={localization.culture()}
 													cultures={localization.cultures()}

@@ -821,25 +821,38 @@ describe("Game Text localization", () => {
 		expect(screen.queryByText(/not synced/u)).toBeNull();
 	});
 
-	it("shows a failed evidence read without leaving a false loading or zero state", async () => {
-		mount(
-			client({
-				target: () =>
-					Effect.succeed({
-						status: "failed",
-						code: "file_unreadable",
-						message: "Localization files could not be loaded.",
-						recovery: "Rescan to try again."
+	it.each([false, true])(
+		"keeps source browsing available after a failed evidence read (saved filters: %s)",
+		async (filtered) => {
+			if (filtered)
+				window.localStorage.setItem(
+					"ue-shed:game-text:localization-project",
+					JSON.stringify({
+						filter: [
+							{ field: "translation", op: "is", values: ["to_update"] },
+							{ field: "problem", op: "is", values: ["key_changed"] }
+						]
 					})
-			})
-		);
-		await screen.findByRole("alert");
-		await screen.findByText("2 matches");
-		expect(screen.getByRole("button", { name: "Retry translations" })).toBeDefined();
-		expect(screen.queryByText("Loading translations…")).toBeNull();
-		expect(screen.queryByText("0 matches")).toBeNull();
-		expect(screen.queryByText("No text matches these filters.")).toBeNull();
-	});
+				);
+			mount(
+				client({
+					target: () =>
+						Effect.succeed({
+							status: "failed",
+							code: "file_unreadable",
+							message: "Localization files could not be loaded.",
+							recovery: "Rescan to try again."
+						})
+				})
+			);
+			await screen.findByRole("alert");
+			await screen.findByText("2 matches");
+			expect(screen.getByRole("button", { name: "Retry translations" })).toBeDefined();
+			expect(screen.queryByText("Loading translations…")).toBeNull();
+			expect(screen.queryByText("0 matches")).toBeNull();
+			expect(screen.queryByText("No text matches these filters.")).toBeNull();
+		}
+	);
 });
 
 describe("Game Text line page", () => {

@@ -1649,3 +1649,31 @@ describe("Game Text audit recovery", () => {
 		expect(document.activeElement).toBe(trigger);
 	});
 });
+
+it("retries a failed rescan while keeping the current search results", async () => {
+	const base = makeClient();
+	let failed = false;
+	const scan = vi.fn((refresh = false) => {
+		if (refresh && !failed) {
+			failed = true;
+			return Effect.fail(
+				new GameTextClientError({
+					operation: "scan",
+					cause: "temporary scan failure",
+					recovery: "Retry the rescan."
+				})
+			);
+		}
+		return base.loadConfiguredProject(refresh);
+	});
+	mount({ ...base, loadConfiguredProject: scan });
+	const user = userEvent.setup();
+	await screen.findByText("2 matches");
+	await user.click(screen.getByRole("button", { name: "Rescan" }));
+	await screen.findByRole("button", { name: /^Retry$/u });
+	expect(screen.getByText("2 matches")).toBeDefined();
+	await user.click(screen.getByRole("button", { name: /^Retry$/u }));
+	await waitFor(() =>
+		expect(scan.mock.calls.map(([refresh]) => refresh)).toEqual([false, true, true])
+	);
+});
