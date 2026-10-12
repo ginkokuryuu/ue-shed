@@ -22,7 +22,14 @@ import {
 	type LocalizationState,
 	LocalizationReviewLens
 } from "@ue-shed/game-text/browser";
-import { Button, Chip, createEffectAction, createEffectSubscription } from "@ue-shed/ui";
+import {
+	Button,
+	Chip,
+	ToolButton,
+	ToolIcon,
+	createEffectAction,
+	createEffectSubscription
+} from "@ue-shed/ui";
 import { InvestigationActions } from "@ue-shed/ui/investigation-actions";
 import type { TaskProgress } from "@ue-shed/ui/task-progress";
 import { Effect, Schedule, Stream } from "effect";
@@ -1283,51 +1290,58 @@ export function GameTextRoute(props: {
 						tabs[next]?.focus();
 					}}
 				>
-					<button
-						type="button"
+					<ToolButton
+						label="Text"
+						tooltip="Browse source lines and translations."
 						role="tab"
 						id="game-text-tab-corpus"
 						aria-controls="game-text-panel-corpus"
 						tabindex={mode() === "corpus" ? 0 : -1}
 						aria-selected={mode() === "corpus" ? "true" : "false"}
 						onClick={() => setMode("corpus")}
-						{...stylex.attrs(styles.button, mode() === "corpus" && styles.selected)}
 					>
-						Text
-					</button>
-					<button
-						type="button"
+						<ToolIcon name="text" />
+					</ToolButton>
+					<ToolButton
+						label={
+							"Quality checks" +
+							(editor.dirty() ? " · Unsaved" : "") +
+							(qualityFailure()?.code === "invalid_rules"
+								? " (rules invalid)"
+								: qualityTabCount() !== undefined
+									? " (" + qualityTabCount() + ")"
+									: "")
+						}
+						tooltip="Inspect findings and edit character limits and terminology rules."
+						badge={
+							qualityFailure()?.code === "invalid_rules"
+								? "!"
+								: editor.dirty()
+									? "•"
+									: qualityTabCount() || undefined
+						}
 						role="tab"
 						id="game-text-tab-quality"
 						aria-controls="game-text-panel-quality"
 						tabindex={mode() === "quality" ? 0 : -1}
 						aria-selected={mode() === "quality" ? "true" : "false"}
 						onClick={() => setMode("quality")}
-						{...stylex.attrs(styles.button, mode() === "quality" && styles.selected)}
 					>
-						Quality checks{editor.dirty() ? " · Unsaved" : ""}
-						{qualityFailure()?.code === "invalid_rules"
-							? " (rules invalid)"
-							: qualityTabCount() !== undefined
-								? " (" + qualityTabCount() + ")"
-								: ""}
-					</button>
+						<ToolIcon name="checks" />
+					</ToolButton>
 					<Show when={localization.active()}>
-						<button
-							type="button"
+						<ToolButton
+							label="Reports"
+							tooltip="Inspect localization progress and target reports."
 							role="tab"
 							id="game-text-tab-reports"
 							aria-controls="game-text-panel-reports"
 							tabindex={mode() === "reports" ? 0 : -1}
 							aria-selected={mode() === "reports" ? "true" : "false"}
 							onClick={() => setMode("reports")}
-							{...stylex.attrs(
-								styles.button,
-								mode() === "reports" && styles.selected
-							)}
 						>
-							Reports
-						</button>
+							<ToolIcon name="reports" />
+						</ToolButton>
 					</Show>
 				</div>
 				<div {...stylex.attrs(styles.headerActions)}>
@@ -1346,55 +1360,92 @@ export function GameTextRoute(props: {
 					<UnrealSteps model={operations} />
 
 					<Show when={summary()}>
-						<Button
-							size="compact"
+						<ToolButton
+							label="Rescan"
+							tooltip={
+								operations.reason() ??
+								"Refresh saved text and translations from the project. Keeps your current list and drafts."
+							}
 							disabled={indexBusy() || operations.busy()}
-							title={operations.reason()}
 							onClick={() => load(true)}
 						>
-							Rescan
-						</Button>
+							<ToolIcon name="refresh" />
+						</ToolButton>
 					</Show>
 				</div>
-				<Show when={summary()}>
-					{(current) => (
-						<span {...stylex.attrs(styles.coverage)}>
-							<Show
-								when={localization.ready()}
-								fallback={
-									<span role="status">
-										{localization.error()
-											? "Translations unavailable"
-											: "Loading translations…"}
-									</span>
-								}
-							>
-								<b>
-									{(
-										localization.active()?.lines ?? current().counts.all
-									).toLocaleString()}
-								</b>{" "}
-								{(localization.active()?.lines ?? current().counts.all) === 1
-									? "line"
-									: "lines"}{" "}
-								{localization.active() ? "· " : "in "}
+				<span aria-label="Index status" {...stylex.attrs(styles.coverage)}>
+					<Show
+						when={indexBusy()}
+						fallback={
+							<Show when={summary()} fallback="Ready to scan project">
+								{(current) => (
+									<>
+										<Show
+											when={localization.ready()}
+											fallback={
+												<span role="status">
+													{localization.error()
+														? "Translations unavailable"
+														: "Loading translations…"}
+												</span>
+											}
+										>
+											<b>
+												{(
+													localization.active()?.lines ??
+													current().counts.all
+												).toLocaleString()}
+											</b>{" "}
+											{(localization.active()?.lines ??
+												current().counts.all) === 1
+												? "line"
+												: "lines"}{" "}
+											{localization.active() ? "· " : "in "}
+										</Show>
+										<b>
+											{current().coverage.inspectedPackages.toLocaleString()}
+										</b>{" "}
+										{current().coverage.inspectedPackages === 1
+											? "asset"
+											: "assets"}
+										<Show when={current().scannedAt}>
+											{" "}
+											· scanned {scanTime(current().scannedAt)}
+										</Show>
+										<ReadProblems summary={current()} />
+										<Show
+											when={
+												!indexBusy() && preparationSeconds() !== undefined
+											}
+										>
+											{" · ready in "}
+											{elapsedTime(preparationSeconds() ?? 0)}
+										</Show>
+									</>
+								)}
 							</Show>
-							<b>{current().coverage.inspectedPackages.toLocaleString()}</b>{" "}
-							{current().coverage.inspectedPackages === 1 ? "asset" : "assets"}
-							<Show when={current().scannedAt}>
-								{" "}
-								· scanned {scanTime(current().scannedAt)}
+						}
+					>
+						<span role="status" {...stylex.attrs(styles.indexProgress)}>
+							<span>
+								{loading()
+									? summary()
+										? "Rescanning"
+										: "Opening saved text index"
+									: "Preparing translations and results"}
+							</span>
+							{" · "}
+							{progressLabel()}
+							<Show when={progressTotal() > 0}>
+								{" · "}
+								{progress().completed.toLocaleString()} /{" "}
+								{progressTotal().toLocaleString()}
 							</Show>
-							<ReadProblems summary={current()} />
-							<Show when={!indexBusy() && preparationSeconds() !== undefined}>
-								{" · ready in "}
-								{elapsedTime(preparationSeconds() ?? 0)}
-							</Show>
+							{" · "}
+							{elapsedTime(elapsedSeconds())} elapsed
 						</span>
-					)}
-				</Show>
-			</div>
-			<div {...stylex.attrs(styles.progressSlot)}>
+					</Show>
+				</span>
 				<Show when={indexBusy()}>
 					<progress
 						aria-label={progressLabel()}
@@ -1404,24 +1455,6 @@ export function GameTextRoute(props: {
 						value={progressTotal() > 0 ? progress().completed : undefined}
 						{...stylex.attrs(styles.progress)}
 					/>
-					<p role="status" {...stylex.attrs(styles.indexProgress)}>
-						<span>
-							{loading()
-								? summary()
-									? "Rescanning"
-									: "Opening saved text index"
-								: "Preparing translations and results"}
-						</span>
-						{" · "}
-						{progressLabel()}
-						<Show when={progressTotal() > 0}>
-							{" · "}
-							{progress().completed.toLocaleString()} /{" "}
-							{progressTotal().toLocaleString()}
-						</Show>
-						{" · "}
-						{elapsedTime(elapsedSeconds())} elapsed
-					</p>
 				</Show>
 			</div>
 			<Show when={mode() === "corpus"}>
@@ -1652,16 +1685,24 @@ export function GameTextRoute(props: {
 											localization.cultures().length > 0
 										}
 									>
-										<Chip
+										<ToolButton
 											label="Search translations"
-											toggle
-											selected={localization.searchTranslations()}
+											tooltip={
+												localization.searchTranslations()
+													? "On. Search source text and translations in the picked cultures."
+													: "Off. Search source text only. Turn on to include the picked cultures' translations."
+											}
+											aria-pressed={
+												localization.searchTranslations() ? "true" : "false"
+											}
 											onClick={() =>
 												localization.setSearchTranslations(
 													!localization.searchTranslations()
 												)
 											}
-										/>
+										>
+											<ToolIcon name="translations" />
+										</ToolButton>
 									</Show>
 									<div {...stylex.attrs(styles.browseActions)}>
 										<WhereFilter
@@ -1692,9 +1733,17 @@ export function GameTextRoute(props: {
 												/>
 											)}
 										/>
-										<Button
-											size="compact"
-											tone="quiet"
+										<ToolButton
+											label={
+												paneCollapsed()
+													? "Show side pane"
+													: "Hide side pane"
+											}
+											tooltip={
+												paneCollapsed()
+													? "Restore line details and browse facets beside the list."
+													: "Give the full width to the line list. Your selection and drafts are kept."
+											}
 											aria-pressed={paneCollapsed() ? "false" : "true"}
 											onClick={() => {
 												const hide = !paneCollapsed();
@@ -1702,8 +1751,8 @@ export function GameTextRoute(props: {
 												if (hide) closeLine();
 											}}
 										>
-											{paneCollapsed() ? "Show side pane" : "Hide side pane"}
-										</Button>
+											<ToolIcon name="panel" />
+										</ToolButton>
 										<DisplayMenu
 											group={
 												group() === "none" ? undefined : groupField()?.group

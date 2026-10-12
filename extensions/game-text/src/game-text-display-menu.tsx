@@ -1,6 +1,6 @@
 import * as stylex from "@stylexjs/stylex";
 import { TextGroupBy } from "@ue-shed/game-text/browser";
-import { AnchoredPopover, Button } from "@ue-shed/ui";
+import { AnchoredPopover, ToolButton, ToolIcon } from "@ue-shed/ui";
 import { tokens } from "@ue-shed/ui-theme/tokens.stylex.js";
 import { For, createSignal, createUniqueId } from "solid-js";
 
@@ -30,9 +30,14 @@ export function DisplayMenu(props: {
 			placement="bottom-end"
 			style={styles.panel}
 			trigger={(trigger) => (
-				<Button {...trigger} type="button" size="compact" disabled={props.disabled}>
-					Display
-				</Button>
+				<ToolButton
+					{...trigger}
+					label="Display"
+					tooltip={`Group lines by ${props.group ? GROUP_LABELS[props.group].toLowerCase() : "nothing"}. Change list grouping.`}
+					disabled={props.disabled}
+				>
+					<ToolIcon name="display" />
+				</ToolButton>
 			)}
 		>
 			<div role="radiogroup" aria-label="Group by" {...stylex.attrs(styles.group)}>

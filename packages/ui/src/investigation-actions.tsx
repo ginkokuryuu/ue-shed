@@ -4,6 +4,8 @@ import { Effect } from "effect";
 import { Show, createSignal, createUniqueId } from "solid-js";
 import { createEffectAction } from "./effect-solid.js";
 import { Button } from "./button.js";
+import { ToolButton } from "./tool-button.js";
+import { ToolIcon } from "./tool-icon.js";
 import { AnchoredPopover } from "./anchored-popover.js";
 
 type FileFeedback =
@@ -172,15 +174,18 @@ export function InvestigationActions<Query, Preset, Error>(props: {
 						placement="bottom-end"
 						style={styles.menu}
 						trigger={(triggerProps) => (
-							<Button
+							<ToolButton
 								{...triggerProps}
-								type="button"
-								size="compact"
-								tone="quiet"
+								label="Export"
+								tooltip={
+									props.disabled && props.disabledReason
+										? props.disabledReason
+										: "Export the matching results as CSV or JSON."
+								}
 								disabled={pending() || props.disabled || props.blocked}
 							>
-								Export
-							</Button>
+								<ToolIcon name="export" />
+							</ToolButton>
 						)}
 					>
 						<Button
@@ -223,15 +228,14 @@ export function InvestigationActions<Query, Preset, Error>(props: {
 						placement="bottom-end"
 						style={styles.menu}
 						trigger={(triggerProps) => (
-							<Button
+							<ToolButton
 								{...triggerProps}
-								type="button"
-								size="compact"
-								tone="quiet"
+								label="Presets"
+								tooltip="Save this view's filters and rules, or open a saved view."
 								disabled={pending() || props.blocked}
 							>
-								Presets
-							</Button>
+								<ToolIcon name="presets" />
+							</ToolButton>
 						)}
 					>
 						<Button

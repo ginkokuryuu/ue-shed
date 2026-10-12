@@ -5,7 +5,7 @@ import type {
 	TextFilterField,
 	TextGroupList
 } from "@ue-shed/game-text/browser";
-import { AnchoredPopover, Button } from "@ue-shed/ui";
+import { AnchoredPopover, Button, ToolButton, ToolIcon } from "@ue-shed/ui";
 import { tokens } from "@ue-shed/ui-theme/tokens.stylex.js";
 import { For, Show, createMemo, createSignal, createUniqueId } from "solid-js";
 import type { JSX } from "@solidjs/web";
@@ -232,9 +232,15 @@ export function FilterMenu(props: {
 			placement="bottom-end"
 			style={styles.panel}
 			trigger={(trigger) => (
-				<Button {...trigger} type="button" size="compact" disabled={props.disabled}>
-					Filter
-				</Button>
+				<ToolButton
+					{...trigger}
+					label="Filter"
+					tooltip="Narrow lines by state, problem, location, or review flags."
+					badge={props.filter.length || undefined}
+					disabled={props.disabled}
+				>
+					<ToolIcon name="filter" />
+				</ToolButton>
 			)}
 		>
 			<input

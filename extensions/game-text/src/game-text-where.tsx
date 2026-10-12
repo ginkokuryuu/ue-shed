@@ -8,7 +8,7 @@ import {
 	type TextOriginKind,
 	type TextWhere
 } from "@ue-shed/game-text/browser";
-import { AnchoredPopover, Button, Chip } from "@ue-shed/ui";
+import { AnchoredPopover, Button, Chip, ToolButton, ToolIcon } from "@ue-shed/ui";
 import { tokens } from "@ue-shed/ui-theme/tokens.stylex.js";
 import { For, Show, createSignal, createUniqueId } from "solid-js";
 
@@ -141,21 +141,45 @@ export function WhereFilter(props: {
 				placement="bottom-end"
 				style={styles.panel}
 				trigger={(trigger) => (
-					<Button
-						{...trigger}
-						type="button"
-						size="compact"
-						tone="quiet"
-						disabled={props.disabled}
-						aria-pressed={
-							(props.filesOnly ? files() === undefined : props.where === undefined)
-								? "false"
-								: "true"
+					<Show
+						when={props.filesOnly}
+						fallback={
+							<Button
+								{...trigger}
+								type="button"
+								size="compact"
+								tone="quiet"
+								disabled={props.disabled}
+								aria-pressed={
+									(
+										props.filesOnly
+											? files() === undefined
+											: props.where === undefined
+									)
+										? "false"
+										: "true"
+								}
+								title={props.fileScope ? fileScopeLine(props.fileScope) : undefined}
+							>
+								{triggerLabel()}
+							</Button>
 						}
-						title={props.fileScope ? fileScopeLine(props.fileScope) : undefined}
 					>
-						{triggerLabel()}
-					</Button>
+						<ToolButton
+							{...trigger}
+							label={triggerLabel()}
+							tooltip={
+								props.fileScope
+									? `${fileScopeLine(props.fileScope)}. Edit the file list used to scope these lines.`
+									: "Paste changed file paths to review only their text. Your pasted list is kept when this closes."
+							}
+							badge={files()}
+							disabled={props.disabled}
+							aria-pressed={files() !== undefined ? "true" : "false"}
+						>
+							<ToolIcon name="files" />
+						</ToolButton>
+					</Show>
 				)}
 			>
 				<Show when={!props.filesOnly}>

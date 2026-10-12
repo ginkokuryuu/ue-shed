@@ -790,7 +790,7 @@ describe("Game Text localization", () => {
 		const user = userEvent.setup();
 		const pending = await Effect.runPromise(Deferred.make<LocalizationTargetResult>());
 		mount(client({ target: () => Deferred.await(pending) }));
-		await screen.findByText("Loading translations…");
+		await screen.findByRole("progressbar", { name: "Loading translations" });
 		expect(screen.queryByText("No text matches these filters.")).toBeNull();
 		expect(screen.queryByText("0 matches")).toBeNull();
 		expect(screen.queryByRole("button", { name: /Not synced/ })).toBeNull();

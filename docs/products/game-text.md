@@ -135,7 +135,12 @@ Rescan shows inline progress and retains the current list for browsing and searc
 new index is prepared. The footer reports the last successful query round trip, excluding the typing debounce, and
 the culture count. Matching lines and inspected assets remain in the header; the footer appears
 only in Text. Search retains at least 150 px of input space. At 1024 px, columns fit the available
-list width and the side pane can be hidden. Progress reserves its space so rescans do not shift rows.
+list width and the side pane can be hidden. Scan progress replaces the header's coverage text and
+draws its bar inside the header's bottom edge, so rescans neither reserve empty space nor shift rows.
+View switches, list tools, exports and per-culture review flags use compact stroke icons with
+descriptive tooltips on hover and keyboard focus. Selected tools remain highlighted; applied filters,
+quality finding counts and unsaved rules retain visible badges. Accessible names and toggle states
+remain available without a tooltip. The primary **Sync with Unreal** action keeps its text label.
 
 ### Problems
 

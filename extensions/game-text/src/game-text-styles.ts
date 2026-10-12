@@ -36,6 +36,7 @@ export const styles = stylex.create({
 		fontFamily: tokens.fontBody
 	},
 	toolbar: {
+		position: "relative",
 		display: "flex",
 		flexWrap: "wrap",
 		alignItems: "center",
@@ -47,9 +48,17 @@ export const styles = stylex.create({
 		borderBottomColor: tokens.colorBorder
 	},
 	heading: { margin: 0, fontSize: 14, color: tokens.colorTextStrong, fontWeight: 600 },
-	indexProgress: { margin: 0, padding: "6px 16px", color: tokens.colorAccent, fontSize: 12 },
-	progressSlot: { height: 34, flexShrink: 0, overflow: "hidden" },
-	progress: { width: "100%", height: 3, flexShrink: 0, accentColor: tokens.colorAccent },
+	indexProgress: { color: tokens.colorAccent },
+	progress: {
+		position: "absolute",
+		bottom: 0,
+		left: 0,
+		width: "100%",
+		height: 3,
+		margin: 0,
+		pointerEvents: "none",
+		accentColor: tokens.colorAccent
+	},
 	headerActions: {
 		display: "flex",
 		flexWrap: "wrap",
@@ -64,7 +73,7 @@ export const styles = stylex.create({
 		gap: 6,
 		minWidth: 0,
 		flexGrow: 1,
-		flexBasis: { default: "auto", "@media (max-width: 1150px)": "100%" }
+		flexBasis: "auto"
 	},
 	browseBar: {
 		padding: "10px 16px",
@@ -75,6 +84,9 @@ export const styles = stylex.create({
 	coverage: {
 		flexBasis: "100%",
 		order: 1,
+		minWidth: 0,
+		height: 18,
+		lineHeight: "18px",
 		whiteSpace: "nowrap",
 		overflow: "hidden",
 		textOverflow: "ellipsis",

@@ -244,8 +244,12 @@ describe("Game Text writing workspace", () => {
 			})
 		);
 		await screen.findByText("2 matches");
+		const status = screen.getByLabelText("Index status");
+		await waitFor(() => expect(status.textContent).toContain("assets"));
 		await user.click(screen.getByRole("button", { name: "Rescan" }));
 		await screen.findByText("Rescanning");
+		expect(within(status).getByRole("status").textContent).toContain("elapsed");
+		expect(status.textContent).not.toContain("assets");
 		const search = screen.getByRole("searchbox");
 		expect(search).toHaveProperty("disabled", false);
 		expect(screen.queryByRole("dialog")).toBeNull();
@@ -259,6 +263,8 @@ describe("Game Text writing workspace", () => {
 			Deferred.succeed(response, { status: "completed", summary: query.summary() })
 		);
 		await waitFor(() => expect(screen.queryByText("Rescanning")).toBeNull());
+		expect(screen.getByLabelText("Index status")).toBe(status);
+		await waitFor(() => expect(status.textContent).toContain("assets"));
 		expect(search).toHaveProperty("value", "Quit");
 	});
 
@@ -574,7 +580,7 @@ describe("Game Text writing workspace", () => {
 		expect(results.getByText("Quit game?")).toBeDefined();
 		const trigger = screen.getByRole("button", { name: "Changed files: 2" });
 		expect(trigger.getAttribute("aria-pressed")).toBe("true");
-		await waitFor(() => expect(trigger.getAttribute("title")).toBe("2 files · 1 with text"));
+		await screen.findByText("2 files · 1 with text");
 		expect(saved.at(-1)?.where).toBeUndefined();
 
 		await user.click(trigger);
