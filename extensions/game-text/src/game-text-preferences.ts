@@ -19,6 +19,11 @@ import {
 import { legacyFilter } from "./game-text-filter-model.js";
 import type { RuleEditorState } from "./game-text-rule-state.js";
 
+const TranslationDraft = LocalizationEdit.mapFields((fields) => ({
+	...fields,
+	translation: Schema.String
+}));
+
 export const GameTextEditSession = Schema.Struct({
 	staged: Schema.Array(
 		Schema.Struct({
@@ -30,7 +35,7 @@ export const GameTextEditSession = Schema.Struct({
 	drafts: Schema.Array(
 		Schema.Struct({
 			target: LocalizationSelection.fields.target,
-			edit: LocalizationEdit,
+			edit: TranslationDraft,
 			source: Schema.String
 		})
 	)

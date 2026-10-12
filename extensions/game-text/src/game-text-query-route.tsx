@@ -637,12 +637,23 @@ export function GameTextRoute(props: {
 	};
 	const searchRequest = createMemo((): TextCorpusSearchRequest => {
 		const selected = localization.selection();
-		const clauses =
-			!selected && localization.error()
-				? filter().filter(
-						(clause) => clause.field !== "translation" && clause.field !== "problem"
-					)
-				: filter();
+		const clauses = selected
+			? filter()
+			: filter().filter(
+					(clause) =>
+						clause.field !== "translation" &&
+						!(
+							clause.field === "problem" &&
+							clause.values.some((value) =>
+								[
+									"key_changed",
+									"not_gathered",
+									"changed_since_gather",
+									"translation"
+								].includes(value)
+							)
+						)
+				);
 		return {
 			query: query(),
 			capability: capability(),
@@ -1150,7 +1161,9 @@ export function GameTextRoute(props: {
 							lens: lens(),
 							withoutNotes: withoutNotes(),
 							...whereField(),
-							...(filter().length > 0 ? { filter: filter() } : undefined),
+							...(searchRequest().filter
+								? { filter: searchRequest().filter }
+								: undefined),
 							...groupField(),
 							// Problem and translation pills need the target, as the list does.
 							...localizationField(),
@@ -1426,6 +1439,17 @@ export function GameTextRoute(props: {
 					<Button size="compact" onClick={localization.load}>
 						Retry translations
 					</Button>
+				</p>
+			</Show>
+			<Show
+				when={
+					!localization.active() &&
+					!localization.error() &&
+					filter().some((clause) => clause.field === "translation")
+				}
+			>
+				<p role="note">
+					Translation filters are paused until a localization target is available.
 				</p>
 			</Show>
 			<Show when={scanNotice()}>

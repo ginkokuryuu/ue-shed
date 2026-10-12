@@ -1,6 +1,6 @@
 import * as stylex from "@stylexjs/stylex";
 import {
-	type LocalizationEdit,
+	LocalizationEdit,
 	type LocalizationEditOutcome,
 	type LocalizationEditResult,
 	type LocalizationFocus,
@@ -8,7 +8,7 @@ import {
 	type LocalizationTranslation
 } from "@ue-shed/game-text/browser";
 import { Button, createEffectAction } from "@ue-shed/ui";
-import { Effect } from "effect";
+import { Effect, Schema } from "effect";
 import { For, Show, createMemo, createSignal } from "solid-js";
 import type { GameTextClientApi } from "./game-text-client.js";
 import { tokens } from "@ue-shed/ui-theme/tokens.stylex.js";
@@ -111,12 +111,19 @@ export function createGameTextEdits(input: {
 		setMessage(undefined);
 	};
 	const stage = (edit: LocalizationEdit, source: string) => {
+		if (!Schema.is(LocalizationEdit.fields.translation)(edit.translation)) {
+			setMessage(
+				"This draft is too long to stage. Shorten it to 65,536 characters or fewer. The typed draft is retained."
+			);
+			return false;
+		}
 		const next = new Map(staged());
 		const target = input.target();
-		if (!target) return;
+		if (!target) return false;
 		next.set(keyFor(edit), { edit, source, target });
 		setStaged(next);
 		resetReview();
+		return true;
 	};
 	// Many edits at once, such as a selection's carried translations, in one update.
 	const stageAll = (
@@ -524,8 +531,7 @@ export function TranslationEditor(props: {
 	const stage = () => {
 		const item = draftItem();
 		if (!item || item.edit.translation === item.edit.seenTranslation) return;
-		props.model.stage(item.edit, item.source);
-		cancel();
+		if (props.model.stage(item.edit, item.source)) cancel();
 	};
 	return (
 		<Show when={props.model.editable(props.detail, props.translation)}>

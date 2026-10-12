@@ -40,11 +40,7 @@ export function createGameTextRuleState(options: {
 		action.cancel();
 		baseline = document;
 		setFileAttached(persisted && document !== undefined);
-		setState(
-			document
-				? { draft: document, savedDocument: persisted ? document : undefined }
-				: undefined
-		);
+		setState(document ? { draft: document, savedDocument: document } : undefined);
 		setBusy(false);
 		setFeedback({ status: "idle" });
 	};
@@ -52,7 +48,7 @@ export function createGameTextRuleState(options: {
 		setState((current) => ({ draft, savedDocument: current?.savedDocument }));
 		setFeedback({ status: "idle" });
 	};
-	const run = (operation: "preview" | "save", document?: GameTextRuleDocument) => {
+	const run = (operation: "preview" | "save" | "discard", document?: GameTextRuleDocument) => {
 		const submitted = document ?? state()?.draft;
 		if (!submitted || busy()) return;
 		const issues = draftProblems(submitted);
@@ -66,7 +62,7 @@ export function createGameTextRuleState(options: {
 		setBusy(true);
 		setFeedback({ status: "idle" });
 		action.run(
-			operation === "preview"
+			operation !== "save"
 				? options.client.previewQualityRules(submitted)
 				: options.client.saveQualityRules(submitted),
 			{
@@ -83,10 +79,19 @@ export function createGameTextRuleState(options: {
 									? result.document
 									: (current?.draft ?? result.document),
 							savedDocument:
-								operation === "save" ? result.document : current?.savedDocument
+								operation === "save" || operation === "discard"
+									? result.document
+									: current?.savedDocument
 						}));
 						options.onReviewed(result);
-						setFeedback({ status: operation === "save" ? "saved" : "previewed" });
+						setFeedback({
+							status:
+								operation === "save"
+									? "saved"
+									: operation === "discard"
+										? "idle"
+										: "previewed"
+						});
 					} else if (result.status === "failed") {
 						setFeedback({
 							message: result.error.message,
@@ -119,9 +124,11 @@ export function createGameTextRuleState(options: {
 		setFeedback({ status: "idle" });
 	};
 	const discard = () => {
-		const saved = state()?.savedDocument;
-		const attached = fileAttached();
-		replace(saved ?? baseline, attached);
+		const document = state()?.savedDocument ?? baseline;
+		if (!document || busy()) return;
+		setState({ draft: document, savedDocument: document });
+		setFeedback({ status: "idle" });
+		run("discard", document);
 	};
 	return {
 		state,

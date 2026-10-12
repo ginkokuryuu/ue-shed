@@ -271,3 +271,43 @@ it("does not remove a newer staged draft when an earlier write finishes", async 
 	await user.click(screen.getByRole("button", { name: "1 staged" }));
 	expect(screen.getByText("Newer draft")).toBeDefined();
 });
+
+it("retains an oversized typed draft and refuses to stage it as a PO edit", async () => {
+	const target = LocalizationSelection.fields.target.make("Game");
+	const edit = LocalizationEdit.make({
+		culture: LocalizationEdit.fields.culture.make("fr"),
+		namespace: LocalizationEdit.fields.namespace.make("UI"),
+		key: LocalizationEdit.fields.key.make("Long"),
+		seenTranslation: null,
+		translation: "Initial"
+	});
+	const draft = { ...edit, translation: "x".repeat(65_537) };
+	function LongDraft() {
+		const model = createGameTextEdits({
+			client: {},
+			target: () => target,
+			nativeCulture: () => "en",
+			busy: () => false,
+			onWritten: () => undefined,
+			initial: { staged: [], drafts: [{ target, edit: draft, source: "Source" }] }
+		});
+		return (
+			<>
+				<button onClick={() => model.stage(draft, "Source")}>Stage long draft</button>
+				<span>Draft length {model.draftFor(edit)?.edit.translation.length}</span>
+				<StagedEditsButton model={model} />
+				<StagedEditsPanel model={model} />
+			</>
+		);
+	}
+	render(() => (
+		<EffectRuntimeProvider runtime={runtime}>
+			<LongDraft />
+		</EffectRuntimeProvider>
+	));
+	const user = userEvent.setup();
+	await user.click(screen.getByRole("button", { name: "Stage long draft" }));
+	await screen.findByText(/too long to stage/u);
+	expect(screen.getByText("Draft length 65537")).toBeDefined();
+	expect(screen.queryByRole("button", { name: "1 staged" })).toBeNull();
+});

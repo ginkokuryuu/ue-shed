@@ -1553,3 +1553,31 @@ it("keeps typed translations across a rescan, review writes and a fresh mount", 
 	await user.keyboard("{Escape}");
 	await waitFor(() => expect(document.activeElement?.hasAttribute("data-row")).toBe(true));
 });
+
+it("returns to source browsing when a rescan removes every localization target", async () => {
+	const user = userEvent.setup();
+	const base = client();
+	let empty = false;
+	const requests: TextCorpusSearchRequest[] = [];
+	const targets = base.localizationTargets;
+	if (!targets) throw new Error("Missing target inventory");
+	mount({
+		...base,
+		localizationTargets: () =>
+			empty ? Effect.succeed({ status: "ready", targets: [] }) : targets(),
+		search: (request) => {
+			requests.push(request);
+			return base.search(request);
+		}
+	});
+	await screen.findByText("3 matches");
+	await chooseFilter(user, "Translation", /^Needs update/u);
+	await screen.findByText("1 match");
+	empty = true;
+	await user.click(screen.getByRole("button", { name: "Rescan" }));
+	await screen.findByText("2 matches");
+	expect(screen.queryByRole("button", { name: /^Culture:/u })).toBeNull();
+	expect(requests.at(-1)?.localization).toBeUndefined();
+	expect(requests.at(-1)?.filter?.some((clause) => clause.field === "translation")).toBeFalsy();
+	expect(screen.queryByRole("alert")).toBeNull();
+});

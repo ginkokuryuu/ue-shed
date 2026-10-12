@@ -150,6 +150,8 @@ export function createGameTextLocalizationState(props: {
 					result.targets[0];
 				if (chosen) selectTarget(chosen.name);
 				else {
+					setActive(undefined);
+					setDetail(undefined);
 					setTarget(undefined);
 					setPicked([]);
 					setState(undefined);

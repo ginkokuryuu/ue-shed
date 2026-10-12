@@ -16,14 +16,16 @@ import {
 	type TextCorpus,
 	type TextCorpusQueryRunResult,
 	type TextCorpusSearchResult,
-	type LocalizationTargetsResult
+	type LocalizationTargetsResult,
+	LocalizationSelection,
+	LocalizationEdit
 } from "@ue-shed/game-text/browser";
 import { EffectRuntimeProvider } from "@ue-shed/ui";
 import { Deferred, Effect, Layer, ManagedRuntime } from "effect";
 import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { GameTextClientError, type GameTextClientApi } from "./game-text-client.js";
 import { GameTextRoute, type GameTextPreferences } from "./game-text-query-route.js";
-import { decodeGameTextPreferences } from "./game-text-preferences.js";
+import { decodeGameTextPreferences, saveGameTextPreferences } from "./game-text-preferences.js";
 
 const corpus: TextCorpus = {
 	coverage: {
@@ -1676,4 +1678,89 @@ it("retries a failed rescan while keeping the current search results", async () 
 	await waitFor(() =>
 		expect(scan.mock.calls.map(([refresh]) => refresh)).toEqual([false, true, true])
 	);
+});
+
+it("recovers a 65,537-character typed translation alongside staged edits and incomplete rules", async () => {
+	const edit = LocalizationEdit.make({
+		culture: LocalizationEdit.fields.culture.make("fr"),
+		namespace: LocalizationEdit.fields.namespace.make("UI"),
+		key: LocalizationEdit.fields.key.make("K"),
+		seenTranslation: null,
+		translation: "Valid staged edit"
+	});
+	const target = LocalizationSelection.fields.target.make("Game");
+	const incomplete = {
+		...rulesDocument,
+		rules: rulesDocument.rules.map((rule) =>
+			rule.kind === "character_budget" ? { ...rule, maximumCharacters: 0 } : rule
+		)
+	};
+	const preferences: GameTextPreferences = {
+		query: "Retained query",
+		capability: "all",
+		lens: "all",
+		selectedId: undefined,
+		qualityDocument: rulesDocument,
+		qualityEditor: { draft: incomplete, savedDocument: rulesDocument },
+		editSession: {
+			staged: [{ target, edit, source: "Source" }],
+			drafts: [
+				{
+					target,
+					edit: {
+						...edit,
+						key: LocalizationEdit.fields.key.make("Long"),
+						translation: "x".repeat(65_537)
+					},
+					source: "Other source"
+				}
+			]
+		}
+	};
+	expect(await Effect.runPromise(saveGameTextPreferences("long-draft", preferences))).toBe(true);
+	const recovered = decodeGameTextPreferences(
+		window.localStorage.getItem("ue-shed:game-text:long-draft") ?? "{}"
+	);
+	expect(recovered.query).toBe("Retained query");
+	expect(recovered.editSession?.drafts[0]?.edit.translation).toHaveLength(65_537);
+	expect(recovered.editSession?.staged[0]?.edit.translation).toBe("Valid staged edit");
+	expect(recovered.qualityEditor?.draft.rules[0]).toMatchObject({ maximumCharacters: 0 });
+});
+
+it("discarding recovered rule edits clears dirty state without attaching a file", async () => {
+	const user = userEvent.setup();
+	const incomplete = {
+		...rulesDocument,
+		rules: rulesDocument.rules.map((rule) =>
+			rule.kind === "character_budget" ? { ...rule, maximumCharacters: 0 } : rule
+		)
+	};
+	const preview = vi.fn(makeClient().previewQualityRules);
+	mount(
+		{ ...makeClient(), previewQualityRules: preview },
+		{
+			query: "",
+			capability: "all",
+			lens: "all",
+			selectedId: undefined,
+			mode: "quality",
+			qualityDocument: rulesDocument,
+			qualityEditor: { draft: incomplete, savedDocument: rulesDocument }
+		}
+	);
+	await user.click(await screen.findByRole("button", { name: "Edit rules" }));
+	await user.click(screen.getByRole("button", { name: "Discard edits" }));
+	await screen.findByText("No rule file", { exact: true });
+	await waitFor(() =>
+		expect(screen.getByRole("button", { name: "Discard edits" })).toHaveProperty(
+			"disabled",
+			true
+		)
+	);
+	expect(screen.queryByText("Unsaved changes")).toBeNull();
+	expect(screen.getByRole("button", { name: "Save" })).toHaveProperty("disabled", true);
+	expect(preview.mock.calls.at(-1)?.[0]).toEqual(rulesDocument);
+	expect(
+		screen.getByRole("spinbutton", { name: "Maximum characters for example-limit" })
+	).toHaveProperty("value", "4");
 });
