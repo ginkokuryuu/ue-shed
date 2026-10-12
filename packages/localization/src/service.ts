@@ -203,14 +203,20 @@ export const LocalizationEvidenceLive = Layer.effect(
 			const projection = makeEvidenceProjection();
 			const manifest = yield* readEvidence(
 				target.outputPaths.manifest,
-				(bytes) => parseManifest(bytes, limits).pipe(Result.map(projection.manifest)),
+				(bytes) =>
+					parseManifest(bytes, limits, target.outputPaths.manifest ?? undefined).pipe(
+						Result.map(projection.manifest)
+					),
 				(value) => value.entries.length
 			);
 			const cultures: LocalizationTargetEvidence["cultures"][number][] = [];
 			for (const culture of target.cultures) {
 				const archive = yield* readEvidence(
 					target.outputPaths.archives[culture],
-					(bytes) => parseArchive(bytes, limits).pipe(Result.map(projection.archive)),
+					(bytes) =>
+						parseArchive(bytes, limits, target.outputPaths.archives[culture]).pipe(
+							Result.map(projection.archive)
+						),
 					(value) => value.entries.length
 				);
 				const po = yield* readEvidence(

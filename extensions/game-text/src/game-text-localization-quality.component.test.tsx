@@ -135,6 +135,25 @@ function mount(api = client(), extra: Partial<GameTextPreferences> = {}) {
 		</EffectRuntimeProvider>
 	));
 }
+it("keeps text search available without starting a full localization quality check", async () => {
+	const api = client();
+	const qualitySearch = vi.fn(() => Effect.never);
+	const textSearch = vi.fn(api.search);
+	const user = userEvent.setup();
+	mount(
+		{ ...api, search: textSearch, localizationQualitySearch: qualitySearch },
+		{ mode: "corpus" }
+	);
+	await screen.findByRole("region", { name: "Results" });
+	await waitFor(() => expect(screen.queryByText("Searching…")).toBeNull());
+	expect(qualitySearch).not.toHaveBeenCalled();
+	const initialSearches = textSearch.mock.calls.length;
+	await user.type(screen.getByRole("searchbox", { name: "Search game text" }), "welcome");
+	await waitFor(() => expect(textSearch.mock.calls.length).toBeGreaterThan(initialSearches));
+	expect(qualitySearch).not.toHaveBeenCalled();
+	await user.click(screen.getByRole("tab", { name: "Quality checks" }));
+	await waitFor(() => expect(qualitySearch).toHaveBeenCalled());
+});
 beforeEach(() => {
 	const values = new Map<string, string>();
 	vi.stubGlobal("localStorage", {

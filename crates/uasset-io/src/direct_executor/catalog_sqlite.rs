@@ -12,12 +12,12 @@ use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
-const CATALOG_DIRECTORY: &str = "catalogs-v3";
+const CATALOG_DIRECTORY: &str = "catalogs-oracle-v4";
 const MANIFEST_FILE: &str = "manifest.json";
 const MANIFEST_SCHEMA_VERSION: u32 = 1;
-const SNAPSHOT_SCHEMA_VERSION: u32 = 1;
+const SNAPSHOT_SCHEMA_VERSION: u32 = 2;
 const MAX_QUARANTINE_SLOTS: u32 = 64;
-const ENTRY_COLUMNS: &str = "relative_path,kind,size,modified_nanos,is_map,profile_version,package_name,failure_code,classes,serialized_names,reversed_classes";
+const ENTRY_COLUMNS: &str = "relative_path,kind,size,modified_nanos,is_map,profile_version,package_name,failure_code,classes,serialized_names,reversed_classes,header_data";
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub(crate) struct CatalogWriteCounts {
@@ -254,11 +254,12 @@ impl Catalog for SqliteCatalog {
     }
     fn lookup_committed(&self, path: &str) -> Option<(PackageSignature, Option<HeaderEvidence>)> {
         let connection = self.committed_connection().ok().flatten()?;
-        connection.query_row("SELECT kind,size,modified_nanos,profile_version,package_name,failure_code,json(classes),json(serialized_names) FROM entry WHERE relative_path=?", [path], |r| {
+        connection.query_row("SELECT kind,size,modified_nanos,profile_version,package_name,failure_code,json(classes),json(serialized_names),header_data FROM entry WHERE relative_path=?", [path], |r| {
             let version: Option<u32> = r.get(3)?;
             let header = match version {
                 None => None,
-                Some(profile_version) => Some(HeaderEvidence { profile_version, package_name:r.get(4)?, failure_code:r.get(5)?, classes:decode_json(r.get(6)?)?, serialized_names:decode_json(r.get(7)?)? })
+                Some(profile_version) => Some(HeaderEvidence {
+                header_data: decode_json(r.get(8)?)?, profile_version, package_name:r.get(4)?, failure_code:r.get(5)?, classes:decode_json(r.get(6)?)?, serialized_names:decode_json(r.get(7)?)? })
             };
             Ok((PackageSignature { relative_path:path.into(),kind:decode_kind(r.get(0)?),size:decode_unsigned(r.get(1)?)?,modified_nanos:decode_unsigned(r.get(2)?)? },header))
         }).optional().ok().flatten()
@@ -315,7 +316,7 @@ impl Catalog for SqliteCatalog {
             .collect::<Vec<_>>();
         connection
             .prepare_cached(
-                &format!("INSERT INTO entry({ENTRY_COLUMNS}) VALUES (?,?,?,?,?,?,?,?,jsonb(?),jsonb(?),jsonb(?)) ON CONFLICT(relative_path) DO UPDATE SET kind=excluded.kind,size=excluded.size,modified_nanos=excluded.modified_nanos,is_map=excluded.is_map,profile_version=excluded.profile_version,package_name=excluded.package_name,failure_code=excluded.failure_code,classes=excluded.classes,serialized_names=excluded.serialized_names,reversed_classes=excluded.reversed_classes"),
+                &format!("INSERT INTO entry({ENTRY_COLUMNS}) VALUES (?,?,?,?,?,?,?,?,jsonb(?),jsonb(?),jsonb(?),?) ON CONFLICT(relative_path) DO UPDATE SET kind=excluded.kind,size=excluded.size,modified_nanos=excluded.modified_nanos,is_map=excluded.is_map,profile_version=excluded.profile_version,package_name=excluded.package_name,failure_code=excluded.failure_code,classes=excluded.classes,serialized_names=excluded.serialized_names,reversed_classes=excluded.reversed_classes,header_data=excluded.header_data"),
             )
             .map_err(storage_error("prepare staged entry"))?
             .execute(params![
@@ -332,7 +333,8 @@ impl Catalog for SqliteCatalog {
                     .and_then(|h| h.failure_code.as_deref()),
                 serde_json::to_string(classes).unwrap(),
                 serde_json::to_string(names).unwrap(),
-                serde_json::to_string(&reversed).unwrap()
+                serde_json::to_string(&reversed).unwrap(),
+                serde_json::to_string(&entry.header.as_ref().and_then(|h| h.header_data.as_ref())).unwrap()
             ])
             .map_err(storage_error("stage entry"))?;
         if staging.prior_snapshot.is_some() {
@@ -486,13 +488,29 @@ impl Catalog for SqliteCatalog {
             .map_err(storage_error("prepare bounded query"))?;
         let rows = statement
             .query_map(params_from_iter(args), |row| {
-                if matches!(request.kind, QueryKind::Maps) {
+                if matches!(request.kind, QueryKind::Inventory) {
+                    let mut parts = [None; 4];
+                    for (index, part) in parts.iter_mut().enumerate() {
+                        if let Some(size) = row.get::<_, Option<Vec<u8>>>(2 + index * 2)? {
+                            *part = Some((
+                                decode_unsigned(size)?,
+                                decode_unsigned(row.get(3 + index * 2)?)?,
+                            ));
+                        }
+                    }
+                    Ok(QueryItem::Inventory {
+                        package_path: row.get(0)?,
+                        signature: super::catalog::bundle_signature(parts),
+                        header_data: decode_json(row.get(1)?)?,
+                    })
+                } else if matches!(request.kind, QueryKind::Maps) {
                     Ok(QueryItem::Map {
                         map_path: row.get(0)?,
                         package_name: row.get(1)?,
                     })
                 } else {
                     Ok(QueryItem::Header {
+                        header_data: decode_json(row.get(4)?)?,
                         package_path: row.get(0)?,
                         package_name: row.get(1)?,
                         classes: decode_json(row.get(2)?)?,
@@ -559,7 +577,7 @@ fn writer(staging: &mut Staging) -> Result<&Connection, CatalogError> {
             .execute_batch("PRAGMA journal_mode=DELETE; PRAGMA synchronous=FULL; BEGIN")
             .map_err(storage_error("begin unpublished snapshot"))?;
         if staging.prior_snapshot.is_none() {
-            connection.execute_batch("CREATE TABLE entry(id INTEGER PRIMARY KEY,relative_path TEXT NOT NULL UNIQUE,kind INTEGER NOT NULL,size BLOB NOT NULL CHECK(length(size)=8),modified_nanos BLOB NOT NULL CHECK(length(modified_nanos)=8),is_map INTEGER NOT NULL,profile_version INTEGER,package_name TEXT,failure_code TEXT,classes BLOB NOT NULL,serialized_names BLOB NOT NULL,reversed_classes BLOB NOT NULL)")
+            connection.execute_batch("CREATE TABLE entry(id INTEGER PRIMARY KEY,relative_path TEXT NOT NULL UNIQUE,kind INTEGER NOT NULL,size BLOB NOT NULL CHECK(length(size)=8),modified_nanos BLOB NOT NULL CHECK(length(modified_nanos)=8),is_map INTEGER NOT NULL,profile_version INTEGER,package_name TEXT,failure_code TEXT,classes BLOB NOT NULL,serialized_names BLOB NOT NULL,reversed_classes BLOB NOT NULL,header_data TEXT NOT NULL)")
                 .map_err(storage_error("create unpublished snapshot"))?;
         }
         staging.connection = Some(connection);
@@ -574,7 +592,7 @@ fn open_connection(path: &Path, flags: OpenFlags) -> Result<Connection, CatalogE
         .map_err(storage_error("configure SQLite"))?;
     Ok(connection)
 }
-fn decode_json(value: String) -> rusqlite::Result<Vec<String>> {
+fn decode_json<T: serde::de::DeserializeOwned>(value: String) -> rusqlite::Result<T> {
     serde_json::from_str(&value).map_err(|e| {
         rusqlite::Error::FromSqlConversionFailure(0, rusqlite::types::Type::Text, Box::new(e))
     })
@@ -589,6 +607,16 @@ fn decode_unsigned(value: Vec<u8>) -> rusqlite::Result<u64> {
 }
 fn query_sql(kind: &QueryKind, cursor: String, limit: usize) -> (String, Vec<Value>) {
     let mut args = vec![Value::Text(cursor)];
+    if matches!(kind, QueryKind::Inventory) {
+        args.push(Value::Integer(limit as i64));
+        let stem = "substr(e.relative_path,1,length(e.relative_path)-CASE WHEN lower(e.relative_path) LIKE '%.umap' THEN 5 ELSE 7 END)";
+        return (
+            format!(
+                "SELECT e.relative_path,e.header_data,e.size,e.modified_nanos,x.size,x.modified_nanos,b.size,b.modified_nanos,t.size,t.modified_nanos FROM entry e LEFT JOIN entry x ON x.relative_path={stem}||'.uexp' LEFT JOIN entry b ON b.relative_path={stem}||'.ubulk' LEFT JOIN entry t ON t.relative_path={stem}||'.uptnl' WHERE e.relative_path>? AND e.kind=0 ORDER BY e.relative_path LIMIT ?"
+            ),
+            args,
+        );
+    }
     if let QueryKind::SerializedNames { values } = kind {
         let predicate = if values.is_empty() {
             "0".to_owned()
@@ -599,7 +627,7 @@ fn query_sql(kind: &QueryKind, cursor: String, limit: usize) -> (String, Vec<Val
         args.push(Value::Integer(limit as i64));
         return (
             format!(
-                "SELECT relative_path,COALESCE(package_name,''),json(classes),json(serialized_names) FROM entry WHERE relative_path>? AND kind=0 AND EXISTS (SELECT 1 FROM json_each(entry.serialized_names) WHERE {predicate}) ORDER BY relative_path LIMIT ?"
+                "SELECT relative_path,COALESCE(package_name,''),json(classes),json(serialized_names),header_data FROM entry WHERE relative_path>? AND kind=0 AND EXISTS (SELECT 1 FROM json_each(entry.serialized_names) WHERE {predicate}) ORDER BY relative_path LIMIT ?"
             ),
             args,
         );
@@ -613,7 +641,7 @@ fn query_sql(kind: &QueryKind, cursor: String, limit: usize) -> (String, Vec<Val
         QueryKind::SerializedNames { .. } => unreachable!(),
         QueryKind::ClassPrefixes { values } => (0, values, true, false),
         QueryKind::ClassNameSuffixes { values } => (2, values, true, true),
-        QueryKind::Maps => unreachable!(),
+        QueryKind::Maps | QueryKind::Inventory => unreachable!(),
     };
     let mut clauses = Vec::new();
     for value in values {
@@ -657,7 +685,7 @@ fn query_sql(kind: &QueryKind, cursor: String, limit: usize) -> (String, Vec<Val
     };
     (
         format!(
-            "WITH candidates AS MATERIALIZED (SELECT DISTINCT e.id,e.relative_path FROM posting p JOIN entry e USING(id) WHERE e.relative_path>? AND p.kind={index_kind} AND ({predicate}) ORDER BY e.relative_path LIMIT ?) SELECT e.relative_path,COALESCE(e.package_name,''),json(e.classes),json(e.serialized_names) FROM candidates c JOIN entry e USING(id) ORDER BY e.relative_path"
+            "WITH candidates AS MATERIALIZED (SELECT DISTINCT e.id,e.relative_path FROM posting p JOIN entry e USING(id) WHERE e.relative_path>? AND p.kind={index_kind} AND ({predicate}) ORDER BY e.relative_path LIMIT ?) SELECT e.relative_path,COALESCE(e.package_name,''),json(e.classes),json(e.serialized_names),e.header_data FROM candidates c JOIN entry e USING(id) ORDER BY e.relative_path"
         ),
         args,
     )

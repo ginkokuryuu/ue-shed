@@ -1,4 +1,5 @@
 import { Config, Context, Effect, Layer, Option, Schema, Stream } from "effect";
+import { PackageHeaderData } from "@ue-shed/protocol";
 import { findValidatedPage, retainValidatedPage } from "./project-index-page-validation.js";
 
 export const PROJECT_INDEX_MAX_PAGE_SIZE = 1024;
@@ -85,6 +86,7 @@ const QueryBase = {
 };
 
 export const ProjectIndexQuery = Schema.TaggedUnion({
+	Inventory: QueryBase,
 	Maps: QueryBase,
 	ExactClasses: { ...QueryBase, values: QueryValues },
 	ClassPrefixes: { ...QueryBase, values: QueryValues },
@@ -127,6 +129,7 @@ export const ProjectIndexMap = Schema.Struct({
 export interface ProjectIndexMap extends Schema.Schema.Type<typeof ProjectIndexMap> {}
 
 export const ProjectIndexHeader = Schema.Struct({
+	headerData: Schema.optionalKey(PackageHeaderData),
 	classes: Schema.Array(QueryValue).check(Schema.isMaxLength(64)),
 	kind: Schema.Literal("header"),
 	packageName: BoundedPath,
@@ -135,7 +138,18 @@ export const ProjectIndexHeader = Schema.Struct({
 });
 export interface ProjectIndexHeader extends Schema.Schema.Type<typeof ProjectIndexHeader> {}
 
-export const ProjectIndexItem = Schema.Union([ProjectIndexMap, ProjectIndexHeader]);
+export const ProjectIndexInventory = Schema.Struct({
+	kind: Schema.Literal("inventory"),
+	packagePath: BoundedPath,
+	signature: Schema.String.check(Schema.isMaxLength(8192)),
+	headerData: Schema.optionalKey(PackageHeaderData)
+});
+export interface ProjectIndexInventory extends Schema.Schema.Type<typeof ProjectIndexInventory> {}
+export const ProjectIndexItem = Schema.Union([
+	ProjectIndexMap,
+	ProjectIndexHeader,
+	ProjectIndexInventory
+]);
 export type ProjectIndexItem = typeof ProjectIndexItem.Type;
 
 export const ProjectIndexPage = Schema.Struct({

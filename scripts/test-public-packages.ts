@@ -150,6 +150,9 @@ try {
 		.filter(Boolean);
 	assert.ok(gameTextFiles.includes("package/ADOPTING.md"));
 	assert.ok(gameTextFiles.includes("package/adoption.manifest.json"));
+	assert.ok(gameTextFiles.includes("package/dist/search-worker.js"));
+	assert.ok(gameTextFiles.includes("package/dist/search-worker-node.js"));
+	assert.ok(gameTextFiles.includes("package/dist/search-worker-protocol.js"));
 	const gameTextAdoption = JSON.parse(
 		run(
 			"tar",

@@ -41,11 +41,39 @@ guidance.
 The `@ue-shed/game-text/browser` entry point contains only schemas and pure query helpers. It does
 not expose filesystem, process, Electron, Perforce, or Unreal authority.
 
+The package also exports a pure compact snapshot codec from both entry points and the Effect
+`SnapshotStore` with `snapshotStoreNodeLayer` from the Node entry point. These support the
+upcoming persistent corpus layers; current query hosts still use the in-memory model. See the
+[snapshot engineering guide](../../docs/engineering/game-text-snapshots.md) for the format, caps,
+immutable publication and recovery behavior. `reader.domain()` bulk-loads one source, identity,
+translation or path domain; `reader.strings()` keeps page reads limited to touched blocks.
+`SharedIndex` with `sharedIndexNodeLayer` stores one deduplicated string ID space per project and
+target. Localization imports use independent content keys, immutable string segments and atomic
+generation publication; compaction remaps active layers while existing readers retain their handles.
+Strings use immutable A64 segments: byte-sorted ranks, front coding in 64-string blocks, a sparse
+index and binary GUIDs with exact case recovery. Refresh reuses the previous file's string IDs and
+probes only unresolved strings. `reader.range(prefix)` returns matching ID ranges per segment.
+
 Search pages include fixed-size `counts` for the current source query, capability, review filter,
 and `withoutNotes` toggle. `counts.all` equals the page's full `total`, independent of pagination.
 Review counts intersect every active filter; a toggle's count excludes that toggle itself so callers
 can show how many lines are available when it is enabled. Notes match only when every saved location
 has empty notes after trimming. An omitted `withoutNotes` means false.
+
+Compact-index hosts can select worker search with
+`gameTextIndexRefreshLayer(cacheRoot, { searchWorker: true })`. The retained result's
+`search(request)` returns an Effect and keeps scans off the caller's thread. Its scope closes
+the worker and pinned reader together. `latestSearchOnly: true` cancels replaced pages and older
+filter selections while preserving concurrent group pages;
+independent callers should leave it false. Cancellation does not evict completed query results.
+The synchronous `query.search(request)` API remains available.
+
+Retained desktop models separate preparation from publication. `makeRetainedGameTextIndex()`
+returns `refresh` and `release`; prepare inside an operation scope, publish the result and run
+its `retain` effect together, then borrow it in each operation that reads lazy projections.
+Active borrowers keep the previous reader and worker alive through replacement. Rejected
+preparations leave the published model usable. See `ADOPTING.md` for the ownership contract.
+The raw indexed corpus includes empty-source units; searchable exports keep their visibility rules.
 
 `summary().counts` uses that same query path with no active filters. `summary().searchable` counts
 only lines with searchable source and their saved locations. `TextCorpus.coverage` retains raw scan
@@ -235,3 +263,38 @@ APIs never write PO, manifests, archives, locres or locmeta. Workbench policy/re
 - Required: a project root containing saved packages and a configured saved-asset reader.
 - Optional: a separate host capability may locate a selected occurrence in Unreal.
 - Not required: Workbench, Perforce, a running editor, or any UE Shed Unreal plugin.
+
+Plan 057's opt-in package-text reader preserves today's occurrence fields and aggregated coverage.
+`textCorpusFromExtractionEvents` can hydrate either legacy events or v1.8 package records for
+small callers and semantic oracles. `packageTextRecordsFromEvents` is a small-input migration/test
+adapter; it retains pending occurrences and must not replay the 10× stream in memory. Production
+native aggregation happens before transport. TextCorpusService still uses the legacy reader.
+`importColdPackageTextLayer` prepares bounded record shards in workers and sorts their strings once
+with the other shared-store inputs. `refreshPackageTextLayer` takes a complete, sorted signature
+inventory and a selected-package reader stream. The caller supplies the Project Index's exact opaque
+package-and-sidecar signature and header evidence from the same generation. It reads changed/new
+eligible packages, reuses unchanged records, drops removed paths, and updates exclusions when
+eligibility changes. All affected shards publish under one shared root. Occurrences and coverage
+samples use shared source, identity and path IDs; excluded packages retain `not_gatherable` status.
+`textCorpusFromPackageTextLayer` is the bounded fixture/Phase 5 oracle adapter.
+
+`refreshJoinedTarget({ projectRoot, target, review?, fileErrors? })` runs under `SharedIndex` and
+merges package and localization identities as shared IDs. It publishes line/culture state, review,
+key-change, problem and facet columns. A matching dependency key returns `rebuilt: false`. Stable
+source/PO edits update at most 8,192 affected lines in one flat overlay over a retained full layer;
+this includes creating, editing and resolving source conflicts. Variable query source lists use
+bounded row replacements (at most 8,192 rows and source IDs per raw/slice projection). Readers
+reconstruct packed numeric columns without hydrating the whole join. These overlays use joined
+metadata v4; full layers and older fixed-size overlays retain supported metadata v3. The physical
+snapshot's WTF-8 format v4 is unchanged. Short-source, visibility and split-unit edits still use
+a full merge, as do edits that exceed the overlay bounds.
+The shared refresh service also reuses immutable query buffers by physical layer key across
+incremental generations and decodes only newly needed source IDs for its eager search arena.
+Patched values remain private to each query, and dictionary compaction or a changed full base
+resets reuse. The source arena rebuilds when retained obsolete IDs or bytes exceed their bounds.
+Identity, coverage, manifest/archive, review, generation and absence-candidate changes use a full
+merge. `force: true` requests a full rebuild for validation. No authored file is written.
+`openJoinedTarget` rejects stale inputs; `hydrateJoinedTarget(reader, start, maximum)` reconstructs
+at most 10,000 oracle-shaped lines from their original file row references. `inspectJoinedTarget`
+checks column references, culture completeness, key-change pairs and folder coverage. These APIs
+are independent of Workbench. Existing host queries migrate in Phase 6.

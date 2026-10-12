@@ -1,3 +1,4 @@
+import { invalidateCliGameTextIndex } from "./game-text-index.js";
 import { Effect, Metric, Result, Schema } from "effect";
 import {
 	CultureCode,
@@ -159,6 +160,18 @@ export const runLocalizationReview = Effect.fn("Cli.workflow.localization_review
 						updates,
 						{ by: command.by, at: new Date().toISOString() },
 						snapshot
+					);
+					yield* invalidateCliGameTextIndex({
+						projectRoot: command.projectRoot,
+						targetName: target.name,
+						changedFiles: [written.relativePath]
+					}).pipe(
+						Effect.catch((cause) =>
+							Effect.logWarning(
+								"Game Text write succeeded but cache invalidation failed",
+								{ message: cause.message, recovery: cause.recovery }
+							)
+						)
 					);
 					yield* Metric.update(
 						Metric.counter("cli.localization.review.updates"),

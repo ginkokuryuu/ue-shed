@@ -125,6 +125,7 @@ pub(crate) fn sidecar(path: &str, size: u64, modified_nanos: u64) -> PackageSign
 
 pub(crate) fn header(package_name: &str, classes: &[&str], names: &[&str]) -> HeaderEvidence {
     HeaderEvidence {
+        header_data: None,
         profile_version: INDEX_PROFILE_VERSION,
         package_name: package_name.to_owned(),
         classes: classes.iter().map(|value| (*value).to_owned()).collect(),
@@ -217,7 +218,18 @@ pub(crate) fn cold_refresh_then_warm_noop_reads_zero_headers<C: CatalogSnapshot>
     make: impl Fn() -> C,
 ) {
     let mut catalog = make();
-    let scanner = refresh_fixture();
+    let mut scanner = refresh_fixture();
+    let header_data = uasset_inspection::package_header::PackageHeaderData {
+        package_flags: 0x0004_0000,
+        gatherable_text_data_count: 2,
+        gatherable_text_data_offset: 1234,
+        has_text_property: true,
+    };
+    scanner
+        .headers
+        .get_mut("Content/Data/DT_Items.uasset")
+        .unwrap()
+        .header_data = Some(header_data.clone());
 
     let cold = refresh(
         &mut catalog,
@@ -236,6 +248,13 @@ pub(crate) fn cold_refresh_then_warm_noop_reads_zero_headers<C: CatalogSnapshot>
     assert_eq!(cold_summary.completeness, Completeness::Complete);
     assert_eq!(scanner.header_reads.get(), 2);
 
+    let retained = catalog
+        .lookup_committed("Content/Data/DT_Items.uasset")
+        .unwrap()
+        .1
+        .unwrap();
+    assert_eq!(retained.header_data, Some(header_data.clone()));
+
     let warm = refresh(
         &mut catalog,
         &scanner,
@@ -249,6 +268,27 @@ pub(crate) fn cold_refresh_then_warm_noop_reads_zero_headers<C: CatalogSnapshot>
     assert_eq!(warm_summary.changed_packages, 0);
     assert_eq!(warm_summary.removed_packages, 0);
     assert_eq!(scanner.header_reads.get(), 2);
+
+    let page = query(
+        &catalog,
+        &request(
+            Generation::new(2),
+            QueryKind::ExactClasses {
+                values: vec!["/Script/Engine.DataTable".into()],
+            },
+            10,
+            None,
+        ),
+    )
+    .unwrap();
+    let QueryItem::Header {
+        header_data: queried,
+        ..
+    } = &page.items[0]
+    else {
+        panic!("header expected")
+    };
+    assert_eq!(*queried, Some(header_data));
 
     match catalog.status() {
         CatalogStatus::Ready { summary } => assert_eq!(summary, warm_summary),
@@ -677,6 +717,7 @@ pub(crate) fn every_query_kind_answers_from_committed_evidence<C: CatalogSnapsho
     );
     match &exact[0] {
         QueryItem::Header {
+            header_data: _,
             package_name,
             classes,
             serialized_names,
@@ -686,7 +727,9 @@ pub(crate) fn every_query_kind_answers_from_committed_evidence<C: CatalogSnapsho
             assert_eq!(classes, &vec!["/Script/Engine.World".to_owned()]);
             assert!(serialized_names.is_empty());
         }
-        QueryItem::Map { .. } => panic!("class queries return header items"),
+        QueryItem::Map { .. } | QueryItem::Inventory { .. } => {
+            panic!("class queries return header items")
+        }
     }
 }
 
@@ -835,6 +878,7 @@ pub(crate) fn stale_index_profile_rebuilds_header_evidence_only<C: CatalogSnapsh
             StagedPackage {
                 signature: signature.clone(),
                 header: Some(HeaderEvidence {
+                    header_data: None,
                     profile_version: INDEX_PROFILE_VERSION.saturating_sub(1),
                     package_name: "/Game/A".to_owned(),
                     classes: Vec::new(),
@@ -944,12 +988,67 @@ pub(crate) fn warm_refresh_retries_failed_headers<C: CatalogSnapshot>(make: impl
 }
 
 /// Run the adapter-neutral Catalog conformance suite against one adapter factory.
+pub(crate) fn inventory_retains_package_and_sidecar_signatures<C: CatalogSnapshot>(
+    make: impl Fn() -> C,
+) {
+    let mut catalog = make();
+    let mut scanner = refresh_fixture();
+    let path = scanner
+        .entries
+        .iter()
+        .find(|entry| entry.kind == EntryKind::Package)
+        .unwrap()
+        .relative_path
+        .clone();
+    let stem = path.rsplit_once('.').unwrap().0;
+    scanner
+        .entries
+        .push(sidecar(&format!("{stem}.uexp"), 123, 456_000_000));
+    let events = refresh(
+        &mut catalog,
+        &scanner,
+        FIXTURE_PROJECT_ROOT,
+        &CancellationToken::new(),
+        |_| {},
+    )
+    .unwrap();
+    let summary = completed_summary(&events);
+    let reads = scanner.header_reads.get();
+    let inventory = collect_pages(&catalog, summary.generation, QueryKind::Inventory, 1);
+    assert_eq!(inventory.len() as u64, summary.package_count);
+    let item = inventory
+        .iter()
+        .find(|item| item_path(item) == path)
+        .unwrap();
+    let QueryItem::Inventory { signature, .. } = item else {
+        panic!("inventory row")
+    };
+    let stamps: serde_json::Value = serde_json::from_str(signature).unwrap();
+    assert_eq!(stamps[1]["size"], 123.0);
+    assert_eq!(stamps[1]["modifiedMs"], 456.0);
+    assert!(stamps[2].is_null() && stamps[3].is_null());
+    assert_eq!(scanner.header_reads.get(), reads);
+    let page = catalog.query(&QueryRequest {
+        project_id: summary.project_id,
+        expected_generation: summary.generation.next(),
+        kind: QueryKind::Inventory,
+        limit: 1,
+        cursor: None,
+    });
+    assert!(matches!(page, Err(CatalogError::StaleGeneration { .. })));
+}
+
 macro_rules! catalog_conformance_tests {
     ($module:ident, $make:expr) => {
         mod $module {
             #[allow(unused_imports)]
             use super::*;
             use crate::direct_executor::catalog_conformance as conformance;
+
+            #[test]
+            fn inventory_retains_package_and_sidecar_signatures() {
+                conformance::inventory_retains_package_and_sidecar_signatures($make);
+            }
 
             #[test]
             fn warm_refresh_retries_failed_headers() {

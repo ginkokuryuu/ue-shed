@@ -33,15 +33,16 @@ use crate::protocol::{Operation, ProjectSelection, Request, ScanDepth, ScanFilte
 use crate::protocol_result::{
     Completeness, ManifestEntryKind, ProjectionStatus, ResultFrame, SavedAssetHeader,
     SavedAssetHeaderExport, SavedAssetHeaderPackage, SavedAssetManifestEntry,
-    SavedAssetProjectionDiagnostic, SavedAssetScanEntry, SavedAssetScanSummary,
-    SavedAssetTextExtractionEvent, SavedAssetTextureExtractionEvent, SavedWorld,
-    SavedWorldAuthority, SavedWorldContract, SavedWorldContractName, SavedWorldContractVersion,
-    SavedWorldDiagnostic, SavedWorldPackageError, SavedWorldSourceKind, SavedWorldSummary,
-    ScanSummaryDepth,
+    SavedAssetPackageTextEvent, SavedAssetPackageTextRecord, SavedAssetProjectionDiagnostic,
+    SavedAssetScanEntry, SavedAssetScanSummary, SavedAssetTextExtractionEvent,
+    SavedAssetTextureExtractionEvent, SavedWorld, SavedWorldAuthority, SavedWorldContract,
+    SavedWorldContractName, SavedWorldContractVersion, SavedWorldDiagnostic,
+    SavedWorldPackageError, SavedWorldSourceKind, SavedWorldSummary, ScanSummaryDepth,
+    TextGapCounts,
 };
 
 const SCHEMA_VERSION: u8 = 8;
-const SCAN_CACHE_VERSION: u32 = 2;
+const SCAN_CACHE_VERSION: u32 = 3;
 const DEFAULT_SAVED_WORLD_MAXIMUM_ASSETS: u64 = 100_000;
 
 #[derive(Clone)]
@@ -62,6 +63,8 @@ struct ScanHeaderExport {
 
 #[derive(Clone, Deserialize, Serialize)]
 struct ScanHeaderCacheEntry {
+    #[serde(default)]
+    header_data: Option<uasset_inspection::package_header::PackageHeaderData>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     failure_code: Option<String>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
@@ -514,7 +517,15 @@ pub(crate) fn extract_text_with_cancellation(
     request: &Request,
     cancellation: &CancellationToken,
 ) -> Result<ProjectionOutput, Failure> {
-    projection(request, ProjectionKind::Text, cancellation)
+    projection(
+        request,
+        if matches!(request.operation, Operation::ExtractTextPackages { .. }) {
+            ProjectionKind::TextPackages
+        } else {
+            ProjectionKind::Text
+        },
+        cancellation,
+    )
 }
 
 pub(crate) fn extract_texture(request: &Request) -> Result<ProjectionOutput, Failure> {
@@ -531,6 +542,7 @@ pub(crate) fn extract_texture_with_cancellation(
 #[derive(Clone, Copy)]
 enum ProjectionKind {
     Text,
+    TextPackages,
     Texture,
 }
 
@@ -541,6 +553,7 @@ fn projection(
 ) -> Result<ProjectionOutput, Failure> {
     let selection = match (&request.operation, kind) {
         (Operation::ExtractText { selection }, ProjectionKind::Text)
+        | (Operation::ExtractTextPackages { selection }, ProjectionKind::TextPackages)
         | (Operation::ExtractTexture { selection }, ProjectionKind::Texture) => selection,
         _ => {
             return Err(Failure {
@@ -621,7 +634,7 @@ fn projection(
         results.extend(result.results);
     }
     let depth = match kind {
-        ProjectionKind::Text => ScanSummaryDepth::Text,
+        ProjectionKind::Text | ProjectionKind::TextPackages => ScanSummaryDepth::Text,
         ProjectionKind::Texture => ScanSummaryDepth::Texture,
     };
     let summary = SavedAssetScanSummary {
@@ -643,6 +656,11 @@ fn projection(
         skipped_assets,
     };
     let summary_result = match kind {
+        ProjectionKind::TextPackages => ResultFrame::ExtractTextPackages {
+            event: SavedAssetPackageTextEvent::Summary {
+                summary: summary.clone(),
+            },
+        },
         ProjectionKind::Text => ResultFrame::ExtractText {
             event: SavedAssetTextExtractionEvent::TextSummary {
                 summary: summary.clone(),
@@ -765,6 +783,16 @@ fn project_one_path(
     let mut occurrence_count = 0_u64;
     let mut coverage_gap_count = 0_u64;
     let mut texture_count = 0_u64;
+    let mut record = SavedAssetPackageTextRecord {
+        file_bytes: bytes.len() as u64,
+        path: path_string.clone(),
+        schema_version: 1,
+        status: ProjectionStatus::Complete,
+        decode_errors: 0,
+        occurrences: Vec::new(),
+        gap_counts: TextGapCounts::default(),
+        gap_samples: Vec::new(),
+    };
     for export in &package.exports {
         checkpoint(cancellation, "parsing")?;
         if matches!(kind, ProjectionKind::Texture)
@@ -777,12 +805,21 @@ fn project_one_path(
         checkpoint(cancellation, "inspection")?;
         match decode_export(export, &context) {
             Ok(Some(asset)) => match kind {
-                ProjectionKind::Text => {
+                ProjectionKind::Text | ProjectionKind::TextPackages => {
                     let projection = project_text_asset(&package, &asset);
                     checkpoint(cancellation, "inspection")?;
                     occurrence_count += projection.occurrences.len() as u64;
                     coverage_gap_count += projection.coverage_gaps.len() as u64;
-                    results.extend(text_results(&path_string, bytes.len() as u64, projection));
+                    if matches!(kind, ProjectionKind::TextPackages) {
+                        record
+                            .occurrences
+                            .extend(projection.occurrences.into_iter().map(text_occurrence));
+                        for gap in projection.coverage_gaps {
+                            record.push_gap(text_coverage_gap(gap));
+                        }
+                    } else {
+                        results.extend(text_results(&path_string, bytes.len() as u64, projection));
+                    }
                 }
                 ProjectionKind::Texture => {
                     if let Some(record) =
@@ -796,18 +833,22 @@ fn project_one_path(
             },
             Ok(None) => {}
             Err(error) => {
-                if matches!(kind, ProjectionKind::Text)
+                if matches!(kind, ProjectionKind::Text | ProjectionKind::TextPackages)
                     && let Some(gap) = text_feature_version_gap(&package, export, &error)
                 {
                     coverage_gap_count += 1;
-                    results.extend(text_results(
-                        &path_string,
-                        bytes.len() as u64,
-                        TextAssetProjection {
-                            occurrences: Vec::new(),
-                            coverage_gaps: vec![gap],
-                        },
-                    ));
+                    if matches!(kind, ProjectionKind::TextPackages) {
+                        record.push_gap(text_coverage_gap(gap));
+                    } else {
+                        results.extend(text_results(
+                            &path_string,
+                            bytes.len() as u64,
+                            TextAssetProjection {
+                                occurrences: Vec::new(),
+                                coverage_gaps: vec![gap],
+                            },
+                        ));
+                    }
                 }
                 diagnostics.push(projection_diagnostic(export, error.kind(), error.message()))
             }
@@ -816,6 +857,17 @@ fn project_one_path(
     checkpoint(cancellation, "inspection")?;
     let partial = !diagnostics.is_empty() || coverage_gap_count != 0;
     match kind {
+        ProjectionKind::TextPackages => {
+            record.status = if partial {
+                ProjectionStatus::Partial
+            } else {
+                ProjectionStatus::Complete
+            };
+            record.decode_errors = diagnostics.len() as u64;
+            results.push(ResultFrame::ExtractTextPackages {
+                event: SavedAssetPackageTextEvent::Package { record },
+            });
+        }
         ProjectionKind::Text => results.push(ResultFrame::ExtractText {
             event: SavedAssetTextExtractionEvent::TextPackage {
                 file_bytes: bytes.len() as u64,
@@ -934,7 +986,7 @@ fn projection_filters(kind: ProjectionKind, implicit_selection: bool) -> ScanFil
         };
     }
     match kind {
-        ProjectionKind::Text => ScanFilters {
+        ProjectionKind::Text | ProjectionKind::TextPackages => ScanFilters {
             class_name_suffixes: None,
             class_prefixes: None,
             classes: Some(vec!["/Script/Engine.StringTable".to_owned()]),
@@ -1028,6 +1080,7 @@ fn read_scan_header(
         Ok(package) => package,
         Err(error) if error.code != "cancelled" => {
             return Ok(ScanHeaderCacheEntry {
+                header_data: None,
                 failure_code: Some(error.code),
                 exports: Vec::new(),
                 matched_names: Vec::new(),
@@ -1073,6 +1126,9 @@ fn read_scan_header(
         .collect::<Vec<_>>();
     checkpoint(cancellation, "inspection")?;
     Ok(ScanHeaderCacheEntry {
+        header_data: Some(
+            uasset_inspection::package_header::PackageHeaderData::from_package(&package),
+        ),
         failure_code: None,
         matched: filters_empty(filters) || !exports.is_empty() || !matched_names.is_empty(),
         exports,
@@ -1119,6 +1175,7 @@ fn header_result(entry: &ScanHeaderCacheEntry) -> SavedAssetHeader {
         matched_names: Some(entry.matched_names.clone()),
         package: SavedAssetHeaderPackage {
             name: entry.package_name.clone(),
+            header_data: entry.header_data.clone(),
         },
         path: entry.path.clone(),
         schema_version: SCHEMA_VERSION,

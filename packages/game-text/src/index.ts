@@ -1,4 +1,31 @@
 export * from "./corpus.js";
+export * from "./package-text-record.js";
+export * from "./package-text-candidates.js";
+export * from "./snapshot-format.js";
+export * from "./localization-import.js";
+export * from "./shared-index.js";
+export type { SnapshotLoadedDomain } from "./snapshot-file.js";
+export {
+	snapshotColumnsSource,
+	type SnapshotSource,
+	type SnapshotSourceColumn
+} from "./snapshot-file.js";
+export {
+	SnapshotStore,
+	SnapshotStoreError,
+	snapshotStoreNodeLayer,
+	snapshotStoreDirectory,
+	snapshotStoreMetrics,
+	GAME_TEXT_SNAPSHOT_NAMESPACE,
+	SNAPSHOT_ZSTD_LEVEL,
+	SNAPSHOT_STRING_ZSTD_LEVEL,
+	snapshotCompressionLevel,
+	type SnapshotStoreApi,
+	type SnapshotStoreOptions,
+	type SnapshotReader,
+	type SnapshotWriter,
+	type SnapshotManifest
+} from "./snapshot-store.js";
 export * from "./quality-schema.js";
 export * from "./quality-rules-v2.js";
 export * from "./localization-reports.js";
@@ -33,3 +60,20 @@ export * from "./starter-rules.js";
 export * from "./rules-file.js";
 export * from "./operation-query.js";
 export * from "./corpus-summary.js";
+export * from "./package-text-columns.js";
+export * from "./package-text-layer.js";
+export * from "./package-text-cold.js";
+export { refreshJoinedTarget, type JoinedTargetInput } from "./joined-target.js";
+export * from "./index-builder.js";
+export * from "./index-refresh.js";
+export * from "./index-source-node.js";
+export * from "./index-context.js";
+export * from "./index-retained.js";
+export { makeGameTextSearchWorker } from "./search-worker-node.js";
+export { columnarTextCorpusQuery } from "./columnar-query.js";
+export {
+	openJoinedTarget,
+	hydrateJoinedTarget,
+	inspectJoinedTarget,
+	type JoinedTargetReader
+} from "./joined-target-reader.js";

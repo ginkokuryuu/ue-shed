@@ -2,12 +2,9 @@ import * as stylex from "@stylexjs/stylex";
 import { tokens } from "@ue-shed/ui-theme/tokens.stylex.js";
 
 export const styles = stylex.create({
-	gridPage: { gridTemplateColumns: "minmax(0, 1fr)" },
-	hidden: { display: "none" },
 	pageBody: {
-		display: "grid",
-		gridTemplateColumns: "minmax(0, 1fr) minmax(240px, 320px)",
-		alignItems: "start"
+		display: "flex",
+		flexDirection: "column"
 	},
 	grow: { flex: 1 },
 	calloutBox: { paddingInline: tokens.space4, paddingTop: tokens.space4 },
@@ -32,14 +29,32 @@ export const styles = stylex.create({
 		flexDirection: "column",
 		height: "100%",
 		boxSizing: "border-box",
-		overflow: "hidden",
+		overflow: "clip",
 		minHeight: 0,
-		padding: tokens.space4,
-		gap: tokens.space2,
+		backgroundColor: tokens.colorCanvas,
 		color: tokens.colorText,
 		fontFamily: tokens.fontBody
 	},
-	toolbar: { display: "flex", alignItems: "center", gap: tokens.space2, flexShrink: 0 },
+	toolbar: {
+		display: "flex",
+		flexWrap: "wrap",
+		alignItems: "center",
+		gap: tokens.space2,
+		flexShrink: 0,
+		padding: "10px 16px",
+		borderBottomWidth: 1,
+		borderBottomStyle: "solid",
+		borderBottomColor: tokens.colorBorder
+	},
+	heading: { margin: 0, fontSize: 14, color: tokens.colorTextStrong, fontWeight: 600 },
+	indexProgress: { margin: 0, padding: "6px 16px", color: tokens.colorAccent, fontSize: 12 },
+	progress: { width: "100%", height: 3, flexShrink: 0, accentColor: tokens.colorAccent },
+	browseBar: {
+		padding: "10px 16px",
+		borderBottomWidth: 1,
+		borderBottomStyle: "solid",
+		borderBottomColor: tokens.colorBorder
+	},
 	coverage: { flex: 1, textAlign: "right", color: tokens.colorTextMuted, fontSize: 12 },
 	muted: { color: tokens.colorTextMuted, fontSize: 12 },
 	keyChange: {
@@ -59,8 +74,8 @@ export const styles = stylex.create({
 		flex: 1,
 		minHeight: 0,
 		minWidth: 0,
-		overflow: "hidden",
-		gap: tokens.space2
+		overflow: "clip",
+		gap: 0
 	},
 	bar: { display: "flex", flexWrap: "wrap", alignItems: "center", gap: 6, flexShrink: 0 },
 	exports: { marginLeft: "auto" },
@@ -120,13 +135,13 @@ export const styles = stylex.create({
 	},
 	grid: {
 		display: "grid",
-		gridTemplateColumns: "minmax(280px, 1fr) minmax(300px, .85fr)",
+		gridTemplateColumns: "minmax(0, 1fr) minmax(320px, 400px)",
 		gridTemplateRows: "minmax(0, 1fr)",
 		flex: 1,
 		minHeight: 0,
 		minWidth: 0,
-		overflow: "hidden",
-		gap: tokens.space2
+		overflow: "clip",
+		gap: 0
 	},
 	pane: {
 		minHeight: 0,
@@ -137,7 +152,7 @@ export const styles = stylex.create({
 		borderWidth: 1,
 		borderStyle: "solid",
 		borderColor: tokens.colorBorder,
-		borderRadius: tokens.radiusControl
+		borderRadius: 0
 	},
 	row: {
 		display: "flex",

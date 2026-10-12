@@ -421,12 +421,23 @@ export const SavedAssetHeaderExport = Schema.Struct({
 }).annotate({ identifier: "SavedAssetHeaderExport" });
 export type SavedAssetHeaderExport = Schema.Schema.Type<typeof SavedAssetHeaderExport>;
 
+export const PackageHeaderData = Schema.Struct({
+	packageFlags: NonNegativeInt,
+	gatherableTextDataCount: NonNegativeInt,
+	gatherableTextDataOffset: NonNegativeInt,
+	hasTextProperty: Schema.Boolean
+}).annotate({ identifier: "PackageHeaderData" });
+export type PackageHeaderData = typeof PackageHeaderData.Type;
+
 export const SavedAssetHeader = Schema.Struct({
 	exports: Schema.Array(SavedAssetHeaderExport).pipe(
 		Schema.withDecodingDefaultKey(Effect.succeed([]))
 	),
 	matched_names: Schema.optionalKey(Schema.Array(Schema.String)),
-	package: Schema.Struct({ name: Schema.String }),
+	package: Schema.Struct({
+		name: Schema.String,
+		header_data: Schema.optionalKey(PackageHeaderData)
+	}),
 	path: Schema.String,
 	schema_version: Schema.Literal(8)
 }).annotate({ identifier: "SavedAssetHeader" });
@@ -621,6 +632,36 @@ export const SavedAssetTextExtractionEvent = Schema.Union([
 export type SavedAssetTextExtractionEvent = Schema.Schema.Type<
 	typeof SavedAssetTextExtractionEvent
 >;
+
+/** v1.8 opt-in package evidence. Sampling matches the legacy corpus fold exactly. */
+export const SavedAssetPackageTextRecord = Schema.Struct({
+	event: Schema.Literal("text_package_record"),
+	fileBytes: NonNegativeInt,
+	path: Schema.String,
+	schema_version: Schema.Literal(1),
+	status: Schema.Literals(["complete", "partial"]),
+	decodeErrors: NonNegativeInt,
+	occurrences: Schema.Array(SavedAssetTextOccurrence),
+	gapCounts: Schema.Struct({
+		unsupported_text_history: NonNegativeInt,
+		legacy_container_element_without_type_information: NonNegativeInt,
+		feature_unavailable_for_engine_version: NonNegativeInt,
+		property_decoder_rejected: NonNegativeInt
+	}),
+	gapSamples: Schema.Array(SavedAssetTextCoverageGap).check(Schema.isMaxLength(3))
+}).annotate({ identifier: "SavedAssetPackageTextRecord" });
+export type SavedAssetPackageTextRecord = typeof SavedAssetPackageTextRecord.Type;
+
+export const SavedAssetPackageTextEvent = Schema.Union([
+	SavedAssetPackageTextRecord,
+	Schema.Struct({
+		event: Schema.Literal("text_summary"),
+		...SavedAssetScanSummary.fields,
+		depth: Schema.Literal("text")
+	}),
+	ScanFailureLine
+]).annotate({ identifier: "SavedAssetPackageTextEvent" });
+export type SavedAssetPackageTextEvent = typeof SavedAssetPackageTextEvent.Type;
 
 const TextureExtractionEvidence = <S extends Schema.Top>(value: S) =>
 	Schema.Union([

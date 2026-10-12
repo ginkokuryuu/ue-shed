@@ -126,6 +126,8 @@ const toWireQuery = (request: ProjectIndexQuery): UAssetIoProjectIndexQuery => {
 		...(request.cursor === undefined ? undefined : { cursor: request.cursor })
 	};
 	switch (request._tag) {
+		case "Inventory":
+			return { kind: "inventory", ...base };
 		case "Maps":
 			return { kind: "maps", ...base };
 		case "ExactClasses":
@@ -169,7 +171,7 @@ const makeRequest = (
 				operation.kind === "project_index_count"
 					? 4
 					: operation.kind === "project_index_query"
-						? 3
+						? 9
 						: 1
 		}
 	);

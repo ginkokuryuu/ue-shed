@@ -6,6 +6,7 @@ import {
 	type ProjectIndexCursor,
 	type ProjectIndexGeneration,
 	type ProjectIndexHeader,
+	type ProjectIndexInventory,
 	type ProjectIndexItem,
 	type ProjectIndexMap,
 	type ProjectIndexPage,
@@ -29,6 +30,7 @@ import {
 } from "./project-index.js";
 
 export interface ProjectIndexMemorySeed {
+	readonly inventory?: readonly ProjectIndexInventory[];
 	readonly headers?: readonly ProjectIndexHeader[];
 	readonly maps?: readonly ProjectIndexMap[];
 	readonly projectId: ProjectIdentity;
@@ -40,6 +42,7 @@ export interface ProjectIndexMemoryOptions {
 }
 
 interface CommittedCatalog {
+	readonly inventory: readonly ProjectIndexInventory[];
 	readonly headers: readonly ProjectIndexHeader[];
 	readonly maps: readonly ProjectIndexMap[];
 	readonly summary: ProjectIndexSummary;
@@ -66,6 +69,8 @@ const className = (classPath: string): string => {
 
 const matchesHeader = (request: ProjectIndexQuery, header: ProjectIndexHeader): boolean => {
 	switch (request._tag) {
+		case "Inventory":
+			return false;
 		case "Maps":
 			return false;
 		case "ExactClasses":
@@ -135,6 +140,7 @@ const buildCatalog = (
 	const packageCount = maps.length + headers.length;
 	return {
 		headers,
+		inventory: seed?.inventory ?? previous?.inventory ?? [],
 		maps,
 		summary: {
 			changedPackages: previous === undefined ? packageCount : 0,
@@ -225,9 +231,11 @@ const makeMemoryService = (state: Ref.Ref<MemoryState>): ProjectIndexApi => {
 			);
 		}
 		const items: readonly ProjectIndexItem[] =
-			decoded._tag === "Maps"
-				? catalog.maps
-				: catalog.headers.filter((header) => matchesHeader(decoded, header));
+			decoded._tag === "Inventory"
+				? catalog.inventory
+				: decoded._tag === "Maps"
+					? catalog.maps
+					: catalog.headers.filter((header) => matchesHeader(decoded, header));
 		return yield* pageItems(
 			items,
 			decoded,

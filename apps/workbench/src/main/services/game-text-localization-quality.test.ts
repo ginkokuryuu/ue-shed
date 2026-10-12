@@ -4,7 +4,7 @@ import { expect } from "vitest";
 import { makeLocalizationEvidenceTestLayer } from "@ue-shed/localization";
 import { corpus, evidence, cultureCode } from "./game-text-localization.test-support.js";
 import { GameTextRuleDocument } from "@ue-shed/game-text";
-import { makeGameTextLocalization } from "./game-text-localization.js";
+import { makeGameTextLocalizationOracle as makeGameTextLocalization } from "./game-text-index.test-support.js";
 import { ElectronDialog } from "../adapters/electron-dialog.js";
 import { LocalFiles, makeLocalFilesTestLayer } from "../adapters/local-files.js";
 

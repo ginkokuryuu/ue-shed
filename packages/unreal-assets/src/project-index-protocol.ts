@@ -12,6 +12,7 @@ import {
 	type ProjectIndexError,
 	ProjectIndexGeneration,
 	ProjectIndexHeader,
+	ProjectIndexInventory,
 	PROJECT_INDEX_MAX_PAGE_SIZE,
 	ProjectIndexIncompatibleWorker,
 	ProjectIndexInvalidRequest,
@@ -64,20 +65,22 @@ export function decodeProjectIndexWireSummary(
 }
 
 export function decodeProjectIndexWirePage(page: UAssetIoProjectIndexPage): ProjectIndexPage {
-	const items = page.items.map((item): ProjectIndexMap | ProjectIndexHeader =>
-		item.kind === "map"
-			? {
-					kind: "map",
-					mapPath: item.mapPath,
-					packageName: item.packageName
-				}
-			: {
-					classes: [...item.classes],
-					kind: "header",
-					packageName: item.packageName,
-					packagePath: item.packagePath,
-					serializedNames: [...item.serializedNames]
-				}
+	const items = page.items.map(
+		(item): ProjectIndexMap | ProjectIndexHeader | ProjectIndexInventory => {
+			if (item.kind === "inventory") return item;
+			if (item.kind === "map")
+				return { kind: "map", mapPath: item.mapPath, packageName: item.packageName };
+			const header: ProjectIndexHeader = {
+				classes: [...item.classes],
+				kind: "header",
+				packageName: item.packageName,
+				packagePath: item.packagePath,
+				serializedNames: [...item.serializedNames]
+			};
+			if (item.headerData !== undefined)
+				Object.assign(header, { headerData: item.headerData });
+			return header;
+		}
 	);
 	return {
 		generation: ProjectIndexGeneration.make(page.generation),
@@ -97,6 +100,7 @@ const DictionaryDomainPage = Schema.Struct({
 	items: Schema.Array(
 		Schema.Union([
 			ProjectIndexMap,
+			ProjectIndexInventory,
 			Schema.Struct({
 				...ProjectIndexHeader.fields,
 				classes: DictionaryReferences,
@@ -136,7 +140,7 @@ export function decodeProjectIndexDictionaryPage(
 	return retainValidatedPage({
 		generation: page.generation,
 		items: page.items.map((item) =>
-			item.kind === "map"
+			item.kind !== "header"
 				? item
 				: {
 						...item,

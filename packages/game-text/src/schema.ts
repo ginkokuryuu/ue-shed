@@ -90,7 +90,8 @@ export const TextCorpusDiagnostic = Schema.Struct({
 	code: Schema.Literals([
 		"package_inspection_failed",
 		"package_partially_decoded",
-		"unsupported_text_history"
+		"unsupported_text_history",
+		"package_not_gatherable"
 	]),
 	message: Schema.String,
 	packageFile: Schema.String,
@@ -103,7 +104,7 @@ export type TextCorpusDiagnostic = Schema.Schema.Type<typeof TextCorpusDiagnosti
 /** Package completion is needed to prove absence, including packages with zero text. */
 export const TextPackageCoverage = Schema.Struct({
 	packageFile: Schema.String,
-	status: Schema.Literals(["complete", "partial", "failed"])
+	status: Schema.Literals(["complete", "partial", "failed", "not_gatherable"])
 });
 export type TextPackageCoverage = typeof TextPackageCoverage.Type;
 
@@ -366,7 +367,15 @@ export const TextUnitContext = Schema.Struct({
 export interface TextUnitContext extends Schema.Schema.Type<typeof TextUnitContext> {}
 
 export const TextUnitSearchResult = Schema.Struct({
-	localization: Schema.optionalKey(Schema.Array(LocalizationCultureMark)),
+	localization: Schema.optionalKey(
+		Schema.Array(
+			LocalizationCultureMark.pipe(
+				Schema.fieldsAssign({
+					translation: Schema.optionalKey(Schema.NullOr(Schema.String))
+				})
+			)
+		)
+	),
 	contexts: Schema.Array(TextUnitContext).check(Schema.isMaxLength(3)),
 	id: TextUnitId,
 	source: TextUnit.fields.source,
@@ -415,6 +424,7 @@ export const TextCorpusQuerySummary = Schema.Struct({
 	schemaVersion: Schema.Literal(1),
 	status: Schema.Literals(["complete", "partial"]),
 	coverage: TextCorpus.fields.coverage,
+	notGatherablePackages: Schema.optionalKey(Schema.Int.check(Schema.isGreaterThanOrEqualTo(0))),
 	diagnosticCount: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
 	review: Schema.Struct({
 		all: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),

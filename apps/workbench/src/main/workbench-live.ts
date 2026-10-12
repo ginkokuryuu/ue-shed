@@ -17,7 +17,11 @@ import {
 	LocalizationEvidenceNodeLive,
 	LocalizationOperationsNodeLive
 } from "@ue-shed/localization";
-import { TextCorpusServiceLive } from "@ue-shed/game-text";
+import {
+	gameTextIndexRefreshLayer,
+	gameTextIndexSourceNodeLayer,
+	typeScriptIndexBuilderLayer
+} from "@ue-shed/game-text";
 import {
 	EditorWindowActivationLive,
 	EditorForegroundPermissionLive,
@@ -177,7 +181,24 @@ function domainCatalogLayer(hosts: WorkbenchHosts) {
 		WorkbenchEditorHandoffLive,
 		WorkbenchEditorResponsivenessLive,
 		TextureAuditLive,
-		TextCorpusServiceLive,
+		Layer.unwrap(
+			Effect.gen(function* () {
+				const app = yield* ElectronApp;
+				const cacheRoot = join(yield* app.getPath("userData"), "project-catalogs-v1");
+				return gameTextIndexRefreshLayer(cacheRoot, {
+					searchWorker: true,
+					latestSearchOnly: true
+				}).pipe(
+					Layer.provide(
+						gameTextIndexSourceNodeLayer(cacheRoot, {
+							refreshProjectIndex: false
+						}).pipe(Layer.provide(projectIndexLive))
+					),
+					Layer.provide(typeScriptIndexBuilderLayer),
+					Layer.provide(LocalizationEvidenceNodeLive)
+				);
+			})
+		),
 		LocalizationEvidenceNodeLive,
 		EnhancedInputServiceLive,
 		CustodianNodeLive,

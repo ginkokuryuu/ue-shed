@@ -6,7 +6,7 @@
 use std::fmt;
 
 /// Versioned set of package-header probes shared by current Project Index consumers.
-pub const INDEX_PROFILE_VERSION: u32 = 1;
+pub const INDEX_PROFILE_VERSION: u32 = 2;
 /// Bounded page size shared by Rust, TypeScript, and the language-neutral protocol contract.
 pub const PROJECT_INDEX_MAX_PAGE_SIZE: usize = 1024;
 pub const PROJECT_INDEX_MAX_DIAGNOSTICS: usize = 64;
@@ -65,6 +65,7 @@ pub struct PackageSignature {
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct HeaderEvidence {
+    pub header_data: Option<uasset_inspection::package_header::PackageHeaderData>,
     pub profile_version: u32,
     pub package_name: String,
     pub classes: Vec<String>,
@@ -121,6 +122,7 @@ pub struct CatalogSnapshotEntry {
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum QueryKind {
+    Inventory,
     Maps,
     ExactClasses { values: Vec<String> },
     ClassPrefixes { values: Vec<String> },
@@ -154,11 +156,17 @@ pub struct CountResult {
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum QueryItem {
+    Inventory {
+        package_path: String,
+        signature: String,
+        header_data: Option<uasset_inspection::package_header::PackageHeaderData>,
+    },
     Map {
         map_path: String,
         package_name: String,
     },
     Header {
+        header_data: Option<uasset_inspection::package_header::PackageHeaderData>,
         package_path: String,
         package_name: String,
         classes: Vec<String>,
@@ -272,7 +280,8 @@ pub trait Catalog {
                 for item in page.items {
                     paths.insert(match item {
                         QueryItem::Map { map_path, .. } => map_path,
-                        QueryItem::Header { package_path, .. } => package_path,
+                        QueryItem::Header { package_path, .. }
+                        | QueryItem::Inventory { package_path, .. } => package_path,
                     });
                 }
                 cursor = page.next_cursor;
@@ -383,8 +392,15 @@ pub(crate) fn parse_page_cursor(cursor: Option<&str>) -> Result<String, CatalogE
 pub(crate) fn item_path(item: &QueryItem) -> &str {
     match item {
         QueryItem::Map { map_path, .. } => map_path.as_str(),
-        QueryItem::Header { package_path, .. } => package_path.as_str(),
+        QueryItem::Header { package_path, .. } | QueryItem::Inventory { package_path, .. } => {
+            package_path.as_str()
+        }
     }
+}
+
+/// Opaque package plus sidecar stamps; consumers may verify selected bundles without enumerating.
+pub(crate) fn bundle_signature(parts: [Option<(u64, u64)>; 4]) -> String {
+    serde_json::to_string(&parts.map(|part| part.map(|(size, modified)| serde_json::json!({"size": size as f64, "modifiedMs": modified as f64 / 1_000_000.0})))).expect("finite signature stamps")
 }
 
 #[cfg(test)]

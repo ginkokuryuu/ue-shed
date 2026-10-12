@@ -2,12 +2,9 @@ import { resolve } from "node:path";
 import { it } from "@effect/vitest";
 import { Effect, Layer, Ref, Schema } from "effect";
 import { LocalizationTargetsReport } from "@ue-shed/localization/browser";
-import {
-	LocalizationEvidence,
-	LocalizationEvidenceNodeLive,
-	defaultLocalizationLimits,
-	makeLocalizationEvidenceTestLayer
-} from "@ue-shed/localization";
+import { LocalizationEvidenceNodeLive } from "@ue-shed/localization";
+import { GameTextIndexRefresh, GameTextIndexError } from "@ue-shed/game-text";
+import { LocalizationError } from "@ue-shed/localization";
 import { expect } from "vitest";
 import { CliRuntime } from "./cli-runtime.js";
 import { runCli } from "./command.js";
@@ -66,15 +63,28 @@ it.effect("loc status provides safe recovery for missing manifests and reader fa
 
 it.effect("a manifest over the byte limit keeps its cause and recovery before scanning", () =>
 	Effect.gen(function* () {
-		const reader = yield* LocalizationEvidence;
-		const limited = makeLocalizationEvidenceTestLayer({
-			...reader,
-			read: (request) =>
-				reader.read({
-					...request,
-					limits: { ...defaultLocalizationLimits, maxFileBytes: 1 }
-				})
-		});
+		const limited = Layer.succeed(
+			GameTextIndexRefresh,
+			GameTextIndexRefresh.of({
+				invalidate: () => Effect.void,
+				refresh: () =>
+					Effect.fail(
+						new GameTextIndexError({
+							operation: "manifest",
+							message: "Localization evidence could not be read (limit_exceeded).",
+							recovery:
+								"Reduce the input or explicitly increase the localization reader limits.",
+							localizationError: new LocalizationError({
+								code: "limit_exceeded",
+								message:
+									"Localization evidence could not be read (limit_exceeded).",
+								recovery:
+									"Reduce the input or explicitly increase the localization reader limits."
+							})
+						})
+					)
+			})
+		);
 		const error = yield* loadLocalizationContext({
 			_tag: "LocalizationStatus",
 			projectRoot: resolve("fixtures/unreal-427-localization"),

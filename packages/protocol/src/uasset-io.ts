@@ -4,11 +4,13 @@ import { BlueprintGraphProjection } from "./blueprint-graph.js";
 import { LevelSequenceProjection } from "./level-sequence.js";
 import { SavedWorld } from "./saved-world.js";
 import {
+	PackageHeaderData,
 	SavedAssetInspection,
 	SavedAssetManifestEntry,
 	SavedAssetScanEntry,
 	SavedAssetScanSummary,
 	SavedAssetTextExtractionEvent,
+	SavedAssetPackageTextEvent,
 	SavedAssetTextureExtractionEvent
 } from "./uasset-inspection.js";
 
@@ -77,6 +79,7 @@ const UAssetIoProjectIndexQueryBase = {
 };
 
 export const UAssetIoProjectIndexQuery = Schema.Union([
+	Schema.Struct({ kind: Schema.Literal("inventory"), ...UAssetIoProjectIndexQueryBase }),
 	Schema.Struct({
 		kind: Schema.Literal("maps"),
 		...UAssetIoProjectIndexQueryBase
@@ -169,6 +172,7 @@ export interface UAssetIoProjectIndexMap extends Schema.Schema.Type<
 > {}
 
 export const UAssetIoProjectIndexHeader = Schema.Struct({
+	headerData: Schema.optionalKey(PackageHeaderData),
 	classes: Schema.Array(NonEmptyString).check(Schema.isMaxLength(64)),
 	kind: Schema.Literal("header"),
 	packageName: NonEmptyString,
@@ -179,9 +183,16 @@ export interface UAssetIoProjectIndexHeader extends Schema.Schema.Type<
 	typeof UAssetIoProjectIndexHeader
 > {}
 
+const UAssetIoProjectIndexInventory = Schema.Struct({
+	kind: Schema.Literal("inventory"),
+	packagePath: NonEmptyString,
+	signature: NonEmptyString,
+	headerData: Schema.optionalKey(PackageHeaderData)
+});
 export const UAssetIoProjectIndexItem = Schema.Union([
 	UAssetIoProjectIndexMap,
-	UAssetIoProjectIndexHeader
+	UAssetIoProjectIndexHeader,
+	UAssetIoProjectIndexInventory
 ]).annotate({ identifier: "UAssetIoProjectIndexItem" });
 export type UAssetIoProjectIndexItem = Schema.Schema.Type<typeof UAssetIoProjectIndexItem>;
 
@@ -207,7 +218,11 @@ const UAssetIoProjectIndexDictionaryHeader = Schema.Struct({
 export const UAssetIoProjectIndexDictionaryPage = Schema.Struct({
 	...UAssetIoProjectIndexPage.fields,
 	items: Schema.Array(
-		Schema.Union([UAssetIoProjectIndexMap, UAssetIoProjectIndexDictionaryHeader])
+		Schema.Union([
+			UAssetIoProjectIndexMap,
+			UAssetIoProjectIndexDictionaryHeader,
+			UAssetIoProjectIndexInventory
+		])
 	).check(Schema.isMaxLength(UASSET_IO_PROJECT_INDEX_MAX_PAGE_SIZE)),
 	strings: Schema.Array(NonEmptyString).check(
 		Schema.isMaxLength(UASSET_IO_PROJECT_INDEX_MAX_PAGE_SIZE * 128)
@@ -217,7 +232,11 @@ export interface UAssetIoProjectIndexDictionaryPage extends Schema.Schema.Type<
 	typeof UAssetIoProjectIndexDictionaryPage
 > {}
 
-export const UAssetIoOperation = Schema.Union([
+const PackageTextOperation = Schema.Struct({
+	...UAssetIoProjectSelection.fields,
+	kind: Schema.Literal("extract_text_packages")
+});
+const ExistingOperation = Schema.Union([
 	Schema.Struct({
 		assetPath: NonEmptyString,
 		kind: Schema.Literal("inspect")
@@ -275,15 +294,32 @@ export const UAssetIoOperation = Schema.Union([
 		pageEncoding: Schema.optionalKey(Schema.Literal("dictionary")),
 		query: UAssetIoProjectIndexQuery
 	})
+]);
+export const UAssetIoOperation = Schema.Union([
+	...ExistingOperation.members,
+	PackageTextOperation
 ]).annotate({ identifier: "UAssetIoOperation" });
 export type UAssetIoOperation = Schema.Schema.Type<typeof UAssetIoOperation>;
 
-export const UAssetIoRequest = Schema.Struct({
-	contract: UAssetIoContract,
+const RequestFields = {
 	limits: UAssetIoResourceLimits,
-	operation: UAssetIoOperation,
 	requestId: NonEmptyString
-}).annotate({ identifier: "UAssetIoRequest" });
+};
+export const UAssetIoRequest = Schema.Union([
+	Schema.Struct({ ...RequestFields, contract: UAssetIoContract, operation: ExistingOperation }),
+	Schema.Struct({
+		...RequestFields,
+		contract: UAssetIoContract.pipe(
+			Schema.fieldsAssign({
+				version: Schema.Struct({
+					major: UAssetIoContract.fields.version.fields.major,
+					minor: Schema.Int.check(Schema.isGreaterThanOrEqualTo(8))
+				})
+			})
+		).annotate({ identifier: "UAssetIoPackageTextContract" }),
+		operation: PackageTextOperation
+	})
+]).annotate({ identifier: "UAssetIoRequest" });
 export type UAssetIoRequest = Schema.Schema.Type<typeof UAssetIoRequest>;
 
 const UAssetIoOperationKind = Schema.Literals([
@@ -293,6 +329,7 @@ const UAssetIoOperationKind = Schema.Literals([
 	"authoring",
 	"scan",
 	"extract_text",
+	"extract_text_packages",
 	"extract_texture",
 	"saved_world",
 	"project_index_status",
@@ -317,6 +354,10 @@ export const UAssetIoResult = Schema.Union([
 	Schema.Struct({ entry: SavedAssetManifestEntry, kind: Schema.Literal("scan_inventory") }),
 	Schema.Struct({ kind: Schema.Literal("scan_summary"), summary: SavedAssetScanSummary }),
 	Schema.Struct({ event: SavedAssetTextExtractionEvent, kind: Schema.Literal("extract_text") }),
+	Schema.Struct({
+		event: SavedAssetPackageTextEvent,
+		kind: Schema.Literal("extract_text_packages")
+	}),
 	Schema.Struct({
 		event: SavedAssetTextureExtractionEvent,
 		kind: Schema.Literal("extract_texture")

@@ -7588,6 +7588,30 @@
 			"required": ["object_path"],
 			"additionalProperties": false
 		},
+		"PackageHeaderData": {
+			"type": "object",
+			"properties": {
+				"packageFlags": {
+					"$ref": "#/$defs/UAssetInspectionNonNegativeInt"
+				},
+				"gatherableTextDataCount": {
+					"$ref": "#/$defs/UAssetInspectionNonNegativeInt"
+				},
+				"gatherableTextDataOffset": {
+					"$ref": "#/$defs/UAssetInspectionNonNegativeInt"
+				},
+				"hasTextProperty": {
+					"type": "boolean"
+				}
+			},
+			"required": [
+				"packageFlags",
+				"gatherableTextDataCount",
+				"gatherableTextDataOffset",
+				"hasTextProperty"
+			],
+			"additionalProperties": false
+		},
 		"SavedAssetHeader": {
 			"type": "object",
 			"properties": {
@@ -7608,6 +7632,9 @@
 					"properties": {
 						"name": {
 							"type": "string"
+						},
+						"header_data": {
+							"$ref": "#/$defs/PackageHeaderData"
 						}
 					},
 					"required": ["name"],
@@ -8048,6 +8075,202 @@
 						"coverage_gaps"
 					],
 					"additionalProperties": false
+				},
+				{
+					"type": "object",
+					"properties": {
+						"event": {
+							"type": "string",
+							"enum": ["text_summary"]
+						},
+						"cacheHits": {
+							"$ref": "#/$defs/UAssetInspectionNonNegativeInt"
+						},
+						"depth": {
+							"type": "string",
+							"enum": ["text"]
+						},
+						"diagnostics": {
+							"type": "array",
+							"items": {
+								"type": "object",
+								"properties": {
+									"code": {
+										"type": "string"
+									},
+									"message": {
+										"type": "string"
+									},
+									"path": {
+										"type": "string"
+									},
+									"retrySafe": {
+										"type": "boolean"
+									}
+								},
+								"required": ["code", "message", "path", "retrySafe"],
+								"additionalProperties": false
+							}
+						},
+						"emittedAssets": {
+							"$ref": "#/$defs/UAssetInspectionNonNegativeInt"
+						},
+						"failedAssets": {
+							"$ref": "#/$defs/UAssetInspectionNonNegativeInt"
+						},
+						"inventoryComplete": {
+							"type": "boolean"
+						},
+						"inventoryFiles": {
+							"$ref": "#/$defs/UAssetInspectionNonNegativeInt"
+						},
+						"partialAssets": {
+							"$ref": "#/$defs/UAssetInspectionNonNegativeInt"
+						},
+						"projectRoot": {
+							"type": "string"
+						},
+						"roots": {
+							"type": "array",
+							"items": {
+								"type": "string"
+							}
+						},
+						"scannedAssets": {
+							"$ref": "#/$defs/UAssetInspectionNonNegativeInt"
+						},
+						"schema_version": {
+							"type": "number",
+							"enum": [8]
+						},
+						"skippedAssets": {
+							"$ref": "#/$defs/UAssetInspectionNonNegativeInt"
+						}
+					},
+					"required": [
+						"event",
+						"cacheHits",
+						"depth",
+						"diagnostics",
+						"emittedAssets",
+						"failedAssets",
+						"partialAssets",
+						"projectRoot",
+						"roots",
+						"scannedAssets",
+						"schema_version",
+						"skippedAssets"
+					],
+					"additionalProperties": false
+				},
+				{
+					"type": "object",
+					"properties": {
+						"code": {
+							"type": "string"
+						},
+						"event": {
+							"type": "string",
+							"enum": ["error"]
+						},
+						"message": {
+							"type": "string"
+						},
+						"path": {
+							"type": "string"
+						},
+						"retrySafe": {
+							"type": "boolean"
+						}
+					},
+					"required": ["code", "event", "message", "path", "retrySafe"],
+					"additionalProperties": false
+				}
+			]
+		},
+		"SavedAssetPackageTextRecord": {
+			"type": "object",
+			"properties": {
+				"event": {
+					"type": "string",
+					"enum": ["text_package_record"]
+				},
+				"fileBytes": {
+					"$ref": "#/$defs/UAssetInspectionNonNegativeInt"
+				},
+				"path": {
+					"type": "string"
+				},
+				"schema_version": {
+					"type": "number",
+					"enum": [1]
+				},
+				"status": {
+					"type": "string",
+					"enum": ["complete", "partial"]
+				},
+				"decodeErrors": {
+					"$ref": "#/$defs/UAssetInspectionNonNegativeInt"
+				},
+				"occurrences": {
+					"type": "array",
+					"items": {
+						"$ref": "#/$defs/SavedAssetTextOccurrence"
+					}
+				},
+				"gapCounts": {
+					"type": "object",
+					"properties": {
+						"unsupported_text_history": {
+							"$ref": "#/$defs/UAssetInspectionNonNegativeInt"
+						},
+						"legacy_container_element_without_type_information": {
+							"$ref": "#/$defs/UAssetInspectionNonNegativeInt"
+						},
+						"feature_unavailable_for_engine_version": {
+							"$ref": "#/$defs/UAssetInspectionNonNegativeInt"
+						},
+						"property_decoder_rejected": {
+							"$ref": "#/$defs/UAssetInspectionNonNegativeInt"
+						}
+					},
+					"required": [
+						"unsupported_text_history",
+						"legacy_container_element_without_type_information",
+						"feature_unavailable_for_engine_version",
+						"property_decoder_rejected"
+					],
+					"additionalProperties": false
+				},
+				"gapSamples": {
+					"type": "array",
+					"items": {
+						"$ref": "#/$defs/SavedAssetTextCoverageGap"
+					},
+					"allOf": [
+						{
+							"maxItems": 3
+						}
+					]
+				}
+			},
+			"required": [
+				"event",
+				"fileBytes",
+				"path",
+				"schema_version",
+				"status",
+				"decodeErrors",
+				"occurrences",
+				"gapCounts",
+				"gapSamples"
+			],
+			"additionalProperties": false
+		},
+		"SavedAssetPackageTextEvent": {
+			"anyOf": [
+				{
+					"$ref": "#/$defs/SavedAssetPackageTextRecord"
 				},
 				{
 					"type": "object",
@@ -9215,6 +9438,9 @@
 		"UAssetIoProjectIndexHeader": {
 			"type": "object",
 			"properties": {
+				"headerData": {
+					"$ref": "#/$defs/PackageHeaderData"
+				},
 				"classes": {
 					"type": "array",
 					"items": {
@@ -9258,6 +9484,26 @@
 				},
 				{
 					"$ref": "#/$defs/UAssetIoProjectIndexHeader"
+				},
+				{
+					"type": "object",
+					"properties": {
+						"kind": {
+							"type": "string",
+							"enum": ["inventory"]
+						},
+						"packagePath": {
+							"$ref": "#/$defs/UAssetIoNonEmptyString"
+						},
+						"signature": {
+							"$ref": "#/$defs/UAssetIoNonEmptyString"
+						},
+						"headerData": {
+							"$ref": "#/$defs/PackageHeaderData"
+						}
+					},
+					"required": ["kind", "packagePath", "signature"],
+					"additionalProperties": false
 				}
 			]
 		},
@@ -9291,6 +9537,9 @@
 		"UAssetIoProjectIndexDictionaryHeader": {
 			"type": "object",
 			"properties": {
+				"headerData": {
+					"$ref": "#/$defs/PackageHeaderData"
+				},
 				"classes": {
 					"type": "array",
 					"items": {
@@ -9342,6 +9591,26 @@
 							},
 							{
 								"$ref": "#/$defs/UAssetIoProjectIndexDictionaryHeader"
+							},
+							{
+								"type": "object",
+								"properties": {
+									"kind": {
+										"type": "string",
+										"enum": ["inventory"]
+									},
+									"packagePath": {
+										"$ref": "#/$defs/UAssetIoNonEmptyString"
+									},
+									"signature": {
+										"$ref": "#/$defs/UAssetIoNonEmptyString"
+									},
+									"headerData": {
+										"$ref": "#/$defs/PackageHeaderData"
+									}
+								},
+								"required": ["kind", "packagePath", "signature"],
+								"additionalProperties": false
 							}
 						]
 					},
@@ -9504,6 +9773,20 @@
 					"type": "object",
 					"properties": {
 						"event": {
+							"$ref": "#/$defs/SavedAssetPackageTextEvent"
+						},
+						"kind": {
+							"type": "string",
+							"enum": ["extract_text_packages"]
+						}
+					},
+					"required": ["event", "kind"],
+					"additionalProperties": false
+				},
+				{
+					"type": "object",
+					"properties": {
+						"event": {
 							"$ref": "#/$defs/SavedAssetTextureExtractionEvent"
 						},
 						"kind": {
@@ -9613,6 +9896,7 @@
 								"authoring",
 								"scan",
 								"extract_text",
+								"extract_text_packages",
 								"extract_texture",
 								"saved_world",
 								"project_index_status",

@@ -7,8 +7,8 @@ requiring a running editor. The product preserves Unreal text identity, authored
 evidence, and parser coverage instead of presenting strings as an unexplained flat list.
 
 Saved game text is read-only. UE Shed discovers it through the shared saved-project index and
-compact text extraction path, builds one `TextCorpus`, and exposes scan, search, focus, and quality
-review through public package and CLI surfaces. Workbench is a bounded client of the same query
+compact text extraction path, refreshes a persistent column index, and exposes scan, search, focus,
+and quality review through public package and CLI surfaces. Workbench is a bounded client of the same query
 model; it is not a second corpus or policy authority. Project-authored quality rule documents are
 the one editable artifact in this slice: users may inspect, preview, and save them without changing
 game text or localization resources.
@@ -22,10 +22,26 @@ file. The saved-asset reader allows 10 GiB of cumulative protocol output and def
 scans to 50 minutes. A failed read names its cause and recovery; only a missing manifest asks for
 an Unreal gather.
 
-Every localization command still builds the corpus and join in memory. A target of about 130,000
-keys and 10 cultures in a project of 166,000 packages needs about 7 GB of Node heap, more than
-Node's default; run the CLI with `NODE_OPTIONS=--max-old-space-size=8192` for projects of that
-size. A compact, persistent index that refreshes only changed files replaces this in-memory build.
+Game Text and localization hosts query the shared index through `GameTextIndexRefresh`. A refresh
+compares the Project Index's package-and-sidecar signatures and localization file stat/content
+keys, reads changed inputs, then publishes a joined generation. `loc gate` refreshes the named
+changed files. Rescan with unchanged inputs reuses the index. Review and PO writes invalidate the
+affected localization layers and join. Hosts publish a replacement before retiring the previous
+owner, and active query users keep that generation pinned until they finish. A failed or superseded
+preparation leaves the published model usable. A failed current localization read makes that input
+unavailable to the new join even when a historical layer remains; missing and malformed evidence
+retain distinct states. Raw scans preserve empty-source units independently of search visibility.
+
+The CLI cache is under `UE_SHED_PROJECT_INDEX_CACHE_ROOT`, defaulting to `.cache/ue-shed` in the
+user's home directory. Workbench uses `project-catalogs-v1` under its existing Electron user-data
+root. The `game-text-v1` descendants are disposable; close the affected hosts before deleting those
+cache directories, then refresh to rebuild. This removes derived data without changing saved
+packages, localization evidence, review state or authored rules. Format version 4 preserves UTF-16
+strings with canonical WTF-8. Older cache generations are rejected and rebuilt.
+
+`GameTextIndexBuilder` is the build capability supplied by each host. The TypeScript layer remains
+the tested oracle and fallback; the native layer is being developed as the default. Queries are
+independent of the chosen builder. Refresh measurements currently use the TypeScript builder.
 
 Tagged-property text extraction supports classic, uncooked, versioned editor packages from UE 4.27
 and UE 5.0–5.3, alongside the existing UE 5.4+ reader. The legacy window includes String Tables,
@@ -64,6 +80,14 @@ properties. Unsupported evidence and diagnostics remain visible in search/focus 
 reports. A zero-finding report never implies complete project coverage unless its attached corpus
 coverage does.
 
+The optional `packageCoverage` evidence also accepts `not_gatherable`: excluded because Unreal's
+gather flag, saved gatherable-text summary and external-package relationships do not select the
+package. This status does not prove absence of text. Candidate-layer helpers report the excluded
+set with `package_not_gatherable` diagnostics; `loc status` includes an optional exclusion count
+and bounded package rows, and Game Text shows the reason in Read problems. Fixture audits retain
+the full reader's excluded gap locations separately, so `OpaqueValue.Value` is reported as
+excluded because Unreal does not gather it rather than as an inspected, empty package.
+
 The compact corpus path is governed by Plan 033:
 
 - the shared project index performs the only project-wide enumeration;
@@ -82,6 +106,16 @@ thousands of lines, hundreds of problems and a dozen cultures. The toolbar holds
 matches source text as you type, then **Changed files…**, **Filter**, **Display**, **Export** and
 **Presets**. Every count comes from the same query as the list (see [Counting](#counting)).
 
+The compact list has **Key**, **Source**, **Translation** and **State** columns. Pick one culture
+to preview its translations and states; with several cultures picked, the state column retains
+the culture strip. **All**, **Translated**, **Stale**, **Missing** and **Outside target** filter
+the real localization states, with other states still available through Filter. The translation
+summary counts matching lines in the picked cultures; counts can overlap across cultures and
+are not presented as percentages of one total. **Ctrl K** (or **Cmd K**) focuses search.
+Rescan shows inline progress and retains the current list for browsing and searching while the
+new index is prepared. The footer reports the last successful query round trip, excluding the
+typing debounce, and actual matching-line, culture and inspected-asset counts.
+
 ### Problems
 
 Each line is classified by what it needs, worst first:
@@ -96,10 +130,11 @@ Each line is classified by what it needs, worst first:
    localizable.
 7. **Up to date**.
 
-A line counts once for each problem it has and is grouped under its worst. Colour marks severity
-only: red for key problems, amber for lines waiting on Unreal and translation work, blue for
+A line counts once for each problem it has and is grouped under its worst. Problem groups mark
+severity: red for key problems, amber for lines waiting on Unreal and translation work, blue for
 translations not yet in Unreal. Findings and facts such as "Gathered only" or "Not found in the
-project" stay grey; facts are not problems.
+project" stay grey; facts are not problems. In a single-culture browse row, the labelled state
+badge and dot use green for translated, amber for stale, red for missing and blue for not synced.
 
 ### Filter
 
@@ -130,6 +165,12 @@ preferences and presets saved before pills open with their toggles, lenses and s
 pills.
 
 ### Display and groups
+
+Workbench's Text view uses the shared package's scoped worker adapter so scans leave the desktop main
+thread available. Typing waits for 120 ms of quiet before requesting a page; pressing Enter searches
+immediately. New searches cancel obsolete scans while independent group pages can load together.
+Case-insensitive source matching reuses prepared source bytes. Completed query pages remain cached
+when another request is cancelled.
 
 **Display** groups the list by problem (the default), folder, asset, origin or namespace, or not at
 all. Groups are listed worst first with their line counts and, outside problem grouping, how many
@@ -174,14 +215,15 @@ A changed-file list lasts for the session.
 
 ### The line page
 
-Opening a line shows its **page** in place of the list; **‹ Lines** returns to the list as it was,
-with its groups and loaded pages. The header says where the line sits ("2 of 58") and steps to the
+Opening a line shows its **page** beside the list; **‹ Lines** closes the detail while retaining
+the list's groups and loaded pages. The header says where the line sits ("2 of 58") and steps to the
 line before or after it, opening the next group or loading its next page when needed.
 
 The page says the line's worst problem first, in plain words and its severity colour, with what
-resolves it. It keeps the text, key, **Where it appears**, every culture's translation (with
-editing, review and key-change carrying), and read problems together, and lists the line's
-properties beside them: problems, namespace and key, origin, asset and folder, editing, translator
+resolves it. It keeps the text, key, every culture's translation (with editing, review and
+key-change carrying), **Where it appears** and read problems together. The picked culture's
+translation comes first. It lists the line's
+properties below them: problems, namespace and key, origin, asset and folder, editing, translator
 notes, length and findings. **Show in Unreal** reports success only when the editor confirms asset
 navigation.
 

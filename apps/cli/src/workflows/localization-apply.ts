@@ -1,3 +1,4 @@
+import { invalidateCliGameTextIndex } from "./game-text-index.js";
 import { Effect, FileSystem, Metric, Result, Schema, Stream } from "effect";
 import {
 	applyLocalizationChangeSet,
@@ -97,6 +98,21 @@ export const applyLocalizationChanges = Effect.fn("Cli.workflow.localization_app
 						changeSet,
 						skipStale: command.skipStale
 					});
+					if (target)
+						yield* invalidateCliGameTextIndex({
+							projectRoot: command.projectRoot,
+							targetName: target.name,
+							changedFiles: receipt.files
+								.filter((file) => file.error === null)
+								.map((file) => file.relativePath)
+						}).pipe(
+							Effect.catch((cause) =>
+								Effect.logWarning(
+									"Game Text write succeeded but cache invalidation failed",
+									{ message: cause.message, recovery: cause.recovery }
+								)
+							)
+						);
 					const output = {
 						schemaVersion: 1,
 						type: "receipt",

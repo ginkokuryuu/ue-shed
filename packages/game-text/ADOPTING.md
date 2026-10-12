@@ -35,6 +35,33 @@ Workbench unless a named verification failure leaves the public package contract
 
 ## Required and optional capabilities
 
+For a desktop host using the compact index, compose
+`gameTextIndexRefreshLayer(cacheRoot, { searchWorker: true, latestSearchOnly: true })` and call
+the retained refresh result's Effect-shaped `search(request)`. The host scope owns the worker
+and its pinned reader. `latestSearchOnly` fits a single search view and preserves concurrent group
+pages while cancelling replaced pages and older filter selections; leave it false for independent
+concurrent callers. Worker startup and searches have 30-second bounds. Bundled hosts must emit
+`dist/search-worker.js` from the installed package beside the bundle that resolves it through
+`import.meta.url`. Verify the packaged worker through the host transport. The synchronous
+`query.search` remains available for headless batch use and bounded direct queries.
+
+Use `makeRetainedGameTextIndex()` when a host publishes persistent models. Its `refresh(request)`
+prepares a candidate in the calling operation's scope. Validate the candidate, publish one model
+reference and run `candidate.retain` together in an uninterruptible publication step. Serialize
+competing publications and validate the revision and project after asynchronous cleanup, before
+changing published state. Uninterruptibility alone does not provide mutual exclusion. A rejected
+candidate releases with its operation and leaves the published model usable. Before reading a
+published candidate's lazy corpus, join or synchronous query, run `candidate.borrow` inside the
+scope covering the entire operation. The retained `search` adapter also borrows automatically.
+Replacing or releasing the published owner interrupts new work on the old model; existing borrowers
+keep its reader and worker alive until they finish. Remove the model reference before calling the
+retainer's `release()` when clearing a view. The host's outer scope releases everything on shutdown.
+
+Raw `corpus.units` preserves empty and whitespace-only source evidence. Search and query exports
+retain their existing visibility filters. Failed current localization reads never use a previous
+successful layer as current evidence; missing and malformed inputs keep their distinct states.
+Joined cache keys use `joined-v12`, rebuilding older joins while preserving snapshot format v4.
+
 The core audit requires saved project packages and a configured reader. It does not require a
 running editor, Perforce, `UEShedCore`, or any other UE Shed Unreal plugin.
 

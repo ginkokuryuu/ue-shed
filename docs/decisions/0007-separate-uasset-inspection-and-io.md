@@ -167,3 +167,32 @@ The [binary engineering guide](../engineering/binary-project-index.md) owns curr
 limits; the [hardening report](../research/custom-catalog-hardening-2026-09-05.md) records the
 measurements, recovery tests, and platform evidence. Current native npm publication remains Windows
 x64 only. Linux execution is tested locally; macOS execution and hosted CI savings remain unverified.
+
+## Amendment: opt-in package text records
+
+Added for Plan 057 Phase 4 on 2026-10-10. Protocol v1.8 adds `extract_text_packages`,
+negotiated by the requested minor and distinct operation/result kind. New workers require minor
+8; old workers reject the unknown operation before acceptance. The existing `extract_text`
+stream remains unchanged for TextCorpusService, localization and CLI/Workbench consumers,
+scale replay and the native diagnostic command. No published consumer loses its migration path.
+
+IO aggregates while projecting each package: every occurrence retains its original fields;
+coverage retains status, decode-error count, complete gap counts by reason and at most three
+samples. Preserve the first sample and prefer unsupported histories in the two other slots,
+matching the legacy corpus fold. Outer scan diagnostics and summaries keep their meaning.
+This reduces transport and native event retention without changing portable parsing/inspection.
+
+Choose records over native shared-store writes. Game Text owns corpus normalization and the
+Phase 3 shared domains, cold sort and atomic publication; duplicating that storage in Rust would
+couple IO to product storage and require coordinating two dictionary writers. Signature-aware
+candidate refresh and persistent ID columns are unfinished. The reader/corpus oracles cover
+this completed transport step; they do not establish column-layer or scale acceptance.
+
+Phase 4's gather-rule continuation exposes already-decoded raw package flags and gatherable-text
+summary fields through a portable `PackageHeaderData` projection, saved-header scans and optional
+`headerData` on both Project Index page encodings. The exact TextProperty probe uses the complete
+name map. IO owns persistence and rebuilds incompatible disposable caches (`catalogs-v5`, header
+profile 2); Game Text owns eligibility and excluded-package coverage. These fields require minor
+9 and are suppressed for older minors, preserving strict old wire decoding. Candidate pruning
+requires paired workers with this evidence; its absence is
+an upgrade failure, never permission to assume an empty package. No Unreal save behavior changes.

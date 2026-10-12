@@ -27,6 +27,14 @@ const catalogOwned = new Set([
 ]);
 
 const approvedRuntimeExits = new Set([
+	// The Node index adapter preserves the published synchronous TextCorpusQuery API over
+	// scoped pinned file handles and Effect.Cache. It rejects async work; hosts keep their
+	// existing Effect runtimes and never perform a runtime exit in query/focus handlers.
+	"packages/game-text/src/joined-query-node.ts",
+	// Node worker messages are foreign callbacks; the target scope owns and terminates the pool.
+	"packages/game-text/src/localization-import-worker.ts",
+	// Search messages are a Node boundary; the host scope terminates its pinned worker reader.
+	"packages/game-text/src/search-worker.ts",
 	// The browser worker is a foreign entrypoint; each read's scope terminates its runtime.
 	"apps/site/src/blueprints/blueprint.worker.ts",
 	"apps/cli/src/index.ts",
@@ -55,6 +63,24 @@ const approvedRuntimeExits = new Set([
 	"packages/unreal-assets/src/protocol-transport.ts"
 ]);
 const approvedPromiseAdapters = new Set([
+	// The search adapter bridges Node worker messages once; callers receive scoped Effects.
+	"packages/game-text/src/search-worker-node.ts",
+	// The cold importer adapts worker messages and staged snapshot handles below SharedIndex.
+	"packages/game-text/src/localization-cold-import.ts",
+	// Package cold import owns the same worker-message Promise bridge under Effect.acquireRelease;
+	// callers receive only a scoped Effect, and workers/readers/staging close on every exit.
+	"packages/game-text/src/package-text-cold.ts",
+	// Shared immutable string segments and ID layers adapt positioned Node IO below the Effect store.
+	"packages/game-text/src/shared-string-file.ts",
+	"packages/game-text/src/shared-index.ts",
+	// Localization import owns bounded stat/hash/parse IO behind scoped Effect operations.
+	"packages/game-text/src/localization-import.ts",
+	// Column producers adapt bounded spill blocks to the snapshot writer's Promise load port.
+	"packages/game-text/src/localization-columns.ts",
+	// Game Text owns bounded Node filesystem, zstd and cross-process locks behind an Effect store.
+	"packages/game-text/src/snapshot-store.ts",
+	// Positioned section reads and streaming publication are the Node adapter below that store.
+	"packages/game-text/src/snapshot-file.ts",
 	// Native foreground permission adapts Node execFile once behind an Effect-only service;
 	// the request AbortSignal and a bounded timeout own the short-lived helper process.
 	"packages/engine/src/editor-window-activation.ts",
@@ -135,6 +161,19 @@ const approvedRawFetchAdapters = new Set([
 	"packages/unreal-connection/src/remote-control-client.ts"
 ]);
 const approvedResourceAdapters = new Set([
+	// Ctrl+K belongs to the Solid owner and is removed by onSettled cleanup.
+	"extensions/game-text/src/game-text-query-route.tsx",
+	// Search listeners and cancellation flags belong to the pinned reader's worker scope.
+	"packages/game-text/src/search-worker-node.ts",
+	"packages/game-text/src/search-worker.ts",
+	// Parser workers and their listeners are closed on success, failure and scope cancellation.
+	"packages/game-text/src/localization-cold-import.ts",
+	// Package workers, reply/abort listeners, readers and staging belong to the cold-import scope.
+	"packages/game-text/src/package-text-cold.ts",
+	// The worker's parentPort listener lives only until that owning scope terminates the worker.
+	"packages/game-text/src/package-text-worker.ts",
+	// RSS sampling belongs to one worker message and is cleared before its reply completes.
+	"packages/game-text/src/localization-import-worker.ts",
 	// Site navigation owns click/popstate listeners through onSettled cleanup.
 	"apps/site/src/navigation.ts",
 	// Popover DOM listeners and animation frames are released by Solid effect/onSettled cleanup;

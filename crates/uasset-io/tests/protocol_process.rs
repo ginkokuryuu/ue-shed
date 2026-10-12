@@ -4,6 +4,35 @@ use std::process::{Command, Stdio};
 use serde_json::Value;
 use uasset_io::protocol::{Event, decode_event, validate_event_sequence};
 
+#[test]
+fn header_gather_evidence_is_negotiated_and_legacy_output_stays_unchanged() {
+    let project_root =
+        std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../fixtures/unreal-project");
+    for minor in [0, 8, 9] {
+        let mut request = base_request(serde_json::json!({
+            "kind": "scan", "depth": "header", "paths": ["Content/Fixture/Text/ST_Game.uasset"],
+            "projectRoot": project_root.to_string_lossy()
+        }));
+        request["contract"]["version"]["minor"] = minor.into();
+        let (success, events, stderr) = run_request(request);
+        assert!(success, "header scan failed: {stderr}");
+        assert_valid_events(&events);
+        let header = &events
+            .iter()
+            .find(|event| event["result"]["kind"] == "scan_asset")
+            .unwrap()["result"]["entry"]["header"];
+        let data = header["package"].get("header_data");
+        if minor < 9 {
+            assert!(data.is_none());
+        } else {
+            let data = data.unwrap();
+            assert!(data["gatherableTextDataCount"].as_u64().unwrap() > 0);
+            assert!(data["gatherableTextDataOffset"].as_u64().unwrap() > 0);
+            assert_eq!(data["hasTextProperty"], false);
+        }
+    }
+}
+
 fn run_request(request: Value) -> (bool, Vec<Value>, String) {
     let mut child = Command::new(env!("CARGO_BIN_EXE_uasset"))
         .arg("protocol")
@@ -38,6 +67,27 @@ fn base_request(operation: Value) -> Value {
         "operation": operation,
         "requestId": "process-test"
     })
+}
+
+#[test]
+fn package_text_requires_minor_eight_and_preserves_empty_selection() {
+    let root =
+        std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../fixtures/unreal-project");
+    let operation =
+        serde_json::json!({ "kind": "extract_text_packages", "paths": [], "projectRoot": root });
+    let request = base_request(operation);
+    let (success, events, stderr) = run_request(request.clone());
+    assert!(!success);
+    assert!(events.is_empty());
+    assert!(stderr.contains("v1.8"));
+    let mut request = request;
+    request["contract"]["version"]["minor"] = serde_json::json!(8);
+    let (success, events, stderr) = run_request(request);
+    assert!(success, "{stderr}");
+    assert_valid_events(&events);
+    assert_eq!(events[1]["result"]["kind"], "extract_text_packages");
+    assert_eq!(events[1]["result"]["event"]["scannedAssets"], 0);
+    assert_eq!(events.last().unwrap()["kind"], "completed");
 }
 
 fn write_session_request(writer: &mut impl Write, request: &Value) {

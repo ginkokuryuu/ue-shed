@@ -50,6 +50,20 @@ exception also requires a repeatable benchmark, explicit cleanup ownership, and 
   `@ue-shed/ui`'s Effect adapter.
 - Node sockets, Electron callbacks, preload IPC, and browser lifecycle callbacks are foreign adapters.
   Their files own registration and cleanup and are named explicitly by the architecture checker.
+- The Game Text Node query adapter in `packages/game-text/src/joined-query-node.ts` preserves
+  the published synchronous `TextCorpusQuery` API over pinned positioned Node reads and the
+  bounded Effect cache. It accepts effects without service requirements and rejects asynchronous
+  work. The caller's shared-index scope owns and closes the pinned handles; query data and hosts
+  do not own additional runtimes or reader lifetimes.
+- The Game Text search worker is a Node message boundary. The host's retained index scope owns
+  startup, its separately pinned reader and termination; only bounded, schema-validated search
+  pages cross the boundary. Shared cancellation flags interrupt scans without waiting for a
+  worker message. Failed or interrupted query-cache lookups have zero TTL; completed pages stay
+  cached. The Workbench and CLI keep their existing runtimes.
+- Retained Game Text models use `RcRef` for reader and worker pins. A preparation scope holds the
+  candidate until an uninterruptible publication transfers a pin to its host owner. Each operation
+  borrows the published generation for its complete scope; retiring an owner does not close active
+  borrowers. Rejected preparations release their candidate without retiring the published model.
 
 ## Tests
 

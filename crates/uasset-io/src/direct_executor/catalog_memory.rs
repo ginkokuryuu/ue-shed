@@ -278,6 +278,34 @@ impl CatalogSnapshot for MemoryCatalog {
 
 fn collect_items(rows: &BTreeMap<String, CommittedRow>, kind: &QueryKind) -> Vec<QueryItem> {
     match kind {
+        QueryKind::Inventory => rows
+            .values()
+            .filter(|row| row.signature.kind == EntryKind::Package)
+            .map(|row| {
+                let path = &row.signature.relative_path;
+                let stem = path
+                    .rsplit_once('.')
+                    .map_or(path.as_str(), |(stem, _)| stem);
+                let paths = [
+                    path.clone(),
+                    format!("{stem}.uexp"),
+                    format!("{stem}.ubulk"),
+                    format!("{stem}.uptnl"),
+                ];
+                let parts = paths.map(|path| {
+                    rows.get(&path)
+                        .map(|row| (row.signature.size, row.signature.modified_nanos))
+                });
+                QueryItem::Inventory {
+                    package_path: path.clone(),
+                    signature: super::catalog::bundle_signature(parts),
+                    header_data: row
+                        .header
+                        .as_ref()
+                        .and_then(|header| header.header_data.clone()),
+                }
+            })
+            .collect(),
         QueryKind::Maps => rows
             .values()
             .filter(|row| {
@@ -336,6 +364,7 @@ fn header_items(
                 return None;
             }
             Some(QueryItem::Header {
+                header_data: header.header_data.clone(),
                 package_path: row.signature.relative_path.clone(),
                 package_name: header.package_name.clone(),
                 classes: header.classes.clone(),
