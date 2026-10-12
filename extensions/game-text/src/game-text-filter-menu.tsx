@@ -86,8 +86,7 @@ export function FilterMenu(props: {
 		const clause = makeClause(field, value);
 		if (clause !== undefined) props.onChange(toggleValue(props.filter, clause));
 	};
-	const chosen = (field: TextFilterField, value: string) =>
-		hasValue(props.filter, field, value) || hasValue(props.filter, field, value, "is_not");
+	const chosen = (field: TextFilterField, value: string) => hasValue(props.filter, field, value);
 	const choiceField = (field: ChoiceField): Field => ({
 		key: field,
 		label: FIELD_LABELS[field],
@@ -189,10 +188,14 @@ export function FilterMenu(props: {
 					return options.length === 0 ? [] : [{ field, options }];
 				})
 	);
-	const openField = (key: string, row: HTMLElement) => {
+	let activeRow: HTMLElement | undefined;
+	let submenu: HTMLDivElement | undefined;
+	const openField = (key: string, row: HTMLElement, focus = false) => {
+		activeRow = row;
 		if (active() !== key) setSubTyped("");
 		setActive(key);
 		setSubTop(row.offsetTop);
+		if (focus) queueMicrotask(() => submenu?.querySelector<HTMLInputElement>("input")?.focus());
 	};
 	return (
 		<AnchoredPopover
@@ -209,13 +212,7 @@ export function FilterMenu(props: {
 			placement="bottom-end"
 			style={styles.panel}
 			trigger={(trigger) => (
-				<Button
-					{...trigger}
-					type="button"
-					size="compact"
-					disabled={props.disabled}
-					aria-keyshortcuts="F"
-				>
+				<Button {...trigger} type="button" size="compact" disabled={props.disabled}>
 					Filter
 				</Button>
 			)}
@@ -263,17 +260,27 @@ export function FilterMenu(props: {
 												active() === field.key ? "true" : "false"
 											}
 											onPointerEnter={(event) =>
-												openField(field.key, event.currentTarget)
+												openField(
+													field.key,
+													event.currentTarget,
+													event.detail === 0
+												)
 											}
 											onClick={(event) =>
-												openField(field.key, event.currentTarget)
+												openField(
+													field.key,
+													event.currentTarget,
+													event.detail === 0
+												)
 											}
 											onKeyDown={(event) => {
 												if (
 													event.key === "ArrowRight" ||
 													event.key === "Enter"
-												)
-													openField(field.key, event.currentTarget);
+												) {
+													event.preventDefault();
+													openField(field.key, event.currentTarget, true);
+												}
 											}}
 											{...stylex.attrs(
 												styles.field,
@@ -308,11 +315,16 @@ export function FilterMenu(props: {
 				{(field) => (
 					<div
 						role="menu"
+						ref={(element) => {
+							submenu = element;
+						}}
 						aria-label={field().label}
 						onKeyDown={(event) => {
 							if (event.key === "ArrowLeft" || event.key === "Escape") {
+								event.preventDefault();
 								event.stopPropagation();
 								setActive(undefined);
+								queueMicrotask(() => activeRow?.focus());
 							}
 						}}
 						{...stylex.attrs(styles.submenu)}

@@ -127,13 +127,15 @@ matches source text as you type, then **Changed files…**, **Filter**, **Displa
 
 The compact list has **Key**, **Source**, **Translation** and **State** columns. Pick one culture
 to preview its translations and states; with several cultures picked, the state column retains
-the culture strip. **All**, **Translated**, **Stale**, **Missing** and **Outside target** filter
-the real localization states, with other states still available through Filter. The translation
+the culture strip. **Filter** is the single entry point for translation states and line facts. Translation values
+read **Not translated**, **Needs update** and **Not synced**; line facts include **Outside this target**. The translation
 summary counts matching lines in the picked cultures; counts can overlap across cultures and
 are not presented as percentages of one total. **Ctrl K** (or **Cmd K**) focuses search.
 Rescan shows inline progress and retains the current list for browsing and searching while the
-new index is prepared. The footer reports the last successful query round trip, excluding the
-typing debounce, and actual matching-line, culture and inspected-asset counts.
+new index is prepared. The footer reports the last successful query round trip, excluding the typing debounce, and
+the culture count. Matching lines and inspected assets remain in the header; the footer appears
+only in Text. Search retains at least 150 px of input space. At 1024 px, columns fit the available
+list width and the side pane can be hidden. Progress reserves its space so rescans do not shift rows.
 
 ### Problems
 
@@ -161,7 +163,7 @@ badge and dot use green for translated, amber for stale, red for missing and blu
 typing at the first level finds values across every field:
 
 - **Problem**, as above.
-- **Translation**: missing, to update, not synced, in the cultures shown.
+- **Translation**: not translated, needs update, not synced, in the cultures shown.
 - **Finding**: used in several places, same text with different keys, long text, not localizable.
 - **Folder**, **Asset** and **Origin** (String table, Data table, Asset, C++, Other source). A
   String Table reference inside an asset counts as the asset; gathered-only lines take their
@@ -236,7 +238,9 @@ A changed-file list lasts for the session.
 
 Opening a line shows its **page** beside the list; **‹ Lines** closes the detail while retaining
 the list's groups and loaded pages. The header says where the line sits ("2 of 58") and steps to the
-line before or after it, opening the next group or loading its next page when needed.
+line before or after it, opening the next group or loading its next page when needed. Its header
+stays visible while scrolling. Opening moves focus to the page; Escape returns it to the line, and
+Alt+Up / Alt+Down step between lines and keep the selected row visible.
 
 The page says the line's worst problem first, in plain words and its severity colour, with what
 resolves it. It keeps the text, key, every culture's translation (with editing, review and
@@ -256,7 +260,8 @@ bar under the list acts on every ticked line:
 - **Export for translators** writes the all-languages CSV for just those lines, with the native
   culture and the picked cultures (every culture when none is picked);
 - **Mark reviewed (n)** sets "Reviewed" on each picked culture's translation that has text to
-  review and is not reviewed yet, through the project's review file, 500 changes per request;
+  review, whose source is current, and is not reviewed yet, through the project's review file,
+  500 changes per request, with confirmation and progress;
 - **Carry translations (n)** stages the earlier keys' translations for ticked lines whose key
   changed, skipping pairs whose source text changed (the line page offers those one at a time), up
   to the 500 edits that can be staged at once;
@@ -363,7 +368,18 @@ none. Selecting a finding highlights the matched term and explains **How to fix*
 and translator notes** opens the line in Text. **Edit rules** retains character limits, forbidden
 and preferred terms, alternatives, case sensitivity and recovery guidance, with **Preview** and
 **Save** actions. Rule IDs, assigned roles and scopes remain inspectable beside the editable
-fields. Scan coverage and read problems remain available throughout.
+fields. **Discard edits** restores the loaded rules. All invalid fields are reported with their
+rule and recovery guidance; preview selects the first offending rule. New culture glossary entries
+start blank and cannot be previewed or saved until filled in. Scan coverage and read problems remain
+available throughout.
+
+Rule drafts and translation drafts are recovered per project from validated local preferences,
+including incomplete rule fields. Translation drafts and staged changes also retain their target,
+culture, namespace and key. Rescans, review writes, PO writes and closing a line retain drafts,
+group toggles, loaded pages and list scroll. Reloading, choosing or creating rules, and opening a
+preset require an explicit discard choice when rules are dirty. Preset and recovered rules have no
+attached file until a file is loaded; Save explains this prerequisite. Unstage and Discard all offer
+Undo. A partial PO write retains unwritten changes and requires a fresh check before retrying.
 
 ## Agent operation and adoption
 
@@ -388,7 +404,9 @@ unchanged. A capability filter selects units; exported units retain all their oc
 context. Coverage, role counts, rule counts, and diagnostics retain whole-scan scope.
 
 Workbench's **Export → CSV** produces a spreadsheet for people: one row per saved location in
-**Text**, or one row per finding and affected location in **Quality checks**. Columns retain exact
+**Text**, or one row per source finding and affected location in **Quality checks**. With a
+localization target selected, Quality checks exports one row per matching finding summary, retaining
+the target, culture, readable check name, source excerpt, problem, context and scan status. Columns retain exact
 Unreal names, keys, translator notes where applicable, and package files. Every cell is quoted,
 embedded quotes are doubled, and text starting with optional whitespace then `=`, `+`, `-` or
 `@` receives a leading apostrophe. Output has a UTF-8 BOM and CRLF endings, including the last row.
@@ -397,8 +415,12 @@ the existing provenance document; `gameTextInvestigationCsv` keeps its documente
 
 Use **Presets → Save preset… / Open preset…** to retain or restore the current settings.
 A preset stores the corpus/quality view, search text, filter pills and grouping (or, in presets saved before pills, capability, **No translator notes**, origin and path filters and review lens), finding-type
-filter, existing domain sort order, and optional quality rules. Quality mode requires a rule
-document, including semantic validation of rule and role identities. Workbench captures the
+filter, existing domain sort order, and optional quality rules. Source quality mode requires a rule document, including semantic validation
+of rule and role identities. Localization quality presets additionally carry `workspaceFilter`,
+the target and optional culture, and built-in checks can run without a rules file. Their
+`localization_quality` exports retain all matching finding summaries, selection, scan status and
+coverage through `WorkspaceQualityReport`. `localizationQualityWorkspace.export` and
+`workspaceQualityCsv` provide the same report and spreadsheet to headless clients. Workbench captures the
 current corpus, rules, project, and catalog generation before opening an export dialog. The
 renderer receives only file-operation feedback. Opening a preset uses the selected project's
 corpus, and exposes failures without applying invalid rules.

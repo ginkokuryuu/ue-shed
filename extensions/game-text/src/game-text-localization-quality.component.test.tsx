@@ -365,7 +365,10 @@ describe("localization quality and reports", () => {
 			save = vi.fn(api.saveQualityRules);
 		mount({ ...api, previewQualityRules: preview, saveQualityRules: save });
 		await user.click(await screen.findByRole("button", { name: "Edit rules" }));
-		await user.click(screen.getByRole("button", { name: /Budget.*translation.limit/u }));
+		await user.click(screen.getByRole("button", { name: "Load rules" }));
+		await user.click(
+			screen.getByRole("button", { name: /Character limits.*translation.limit/u })
+		);
 		await user.clear(screen.getByRole("spinbutton", { name: "Maximum characters for de" }));
 		await user.type(
 			screen.getByRole("spinbutton", { name: "Maximum characters for de" }),
@@ -441,10 +444,16 @@ describe("localization quality and reports", () => {
 			schemaVersion: 1
 		});
 		mount(
-			{ ...api, previewQualityRules: preview, saveQualityRules: save },
+			{
+				...api,
+				chooseQualityRules: () => preview(v1),
+				previewQualityRules: preview,
+				saveQualityRules: save
+			},
 			{ qualityDocument: v1 }
 		);
 		await user.click(await screen.findByRole("button", { name: "Edit rules" }));
+		await user.click(screen.getByRole("button", { name: "Load rules" }));
 		await user.click(screen.getByRole("button", { name: "Upgrade to version 2" }));
 		await screen.findByText("Preview updated. Changes are not saved yet.");
 		expect(preview.mock.calls.at(-1)?.[0]).toMatchObject({ schemaVersion: 2, rules: v1.rules });

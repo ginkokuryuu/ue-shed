@@ -3,6 +3,7 @@ import {
 	type GameTextInvestigationQuery,
 	type GameTextInvestigationPresetResult,
 	exportGameTextInvestigation,
+	workspaceQualityCsv,
 	gameTextCsv,
 	gameTextQualityCsv,
 	createStarterTextRules,
@@ -928,11 +929,24 @@ export const WorkbenchGameTextLive = Layer.effect(
 					query.localization === undefined
 						? yield* currentModel(queryModel)
 						: yield* localization.targetQuery(query.localization.target);
+				const workspace =
+					query.mode === "quality" &&
+					query.localization &&
+					query.workspaceFilter !== undefined
+						? yield* localization.qualityExport({
+								target: query.localization.target,
+								filter: query.workspaceFilter,
+								...(query.localization.culture
+									? { culture: query.localization.culture }
+									: undefined)
+							})
+						: undefined;
 				const document = yield* exportGameTextInvestigation(
 					snapshot.corpus,
 					preset,
 					snapshot.source,
-					localized
+					localized,
+					workspace
 				);
 				return { document, corpus: snapshot.corpus };
 			}
@@ -950,7 +964,9 @@ export const WorkbenchGameTextLive = Layer.effect(
 												{ ...corpus, units: document.result.corpus.units },
 												corpus
 											)
-										: gameTextQualityCsv(document.result.report, corpus),
+										: document.result.mode === "localization_quality"
+											? workspaceQualityCsv(document.result.report)
+											: gameTextQualityCsv(document.result.report, corpus),
 							extension: format,
 							rowCount:
 								format === "json"
@@ -962,11 +978,13 @@ export const WorkbenchGameTextLive = Layer.effect(
 												(count, unit) => count + unit.occurrences.length,
 												0
 											)
-										: document.result.report.findings.reduce(
-												(count, finding) =>
-													count + finding.affectedOccurrences.length,
-												0
-											)
+										: document.result.mode === "localization_quality"
+											? document.result.report.findings.length
+											: document.result.report.findings.reduce(
+													(count, finding) =>
+														count + finding.affectedOccurrences.length,
+													0
+												)
 						})
 					),
 					Effect.catch((error) => Effect.succeed(investigationFailure(error)))

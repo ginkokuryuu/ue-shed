@@ -13,6 +13,7 @@ import {
 } from "@ue-shed/unreal-assets/investigation";
 import { TextCorpus, TextCorpusSearchRequest } from "./schema.js";
 import { TextCorpusReport, textCorpusReport } from "./corpus-summary.js";
+import { WorkspaceQualityFilter, WorkspaceQualityReport } from "./localization-workspace.js";
 import { TextQualityReport } from "./quality-schema.js";
 import { textCorpusQuery, type TextCorpusQuery } from "./query.js";
 import { textQualityQuery, TextQualityFilter } from "./quality-query.js";
@@ -32,7 +33,8 @@ export const GameTextInvestigationQuery = Schema.Struct({
 	 * pills need it, so the export joins the target's files as the list does.
 	 */
 	localization: TextCorpusSearchRequest.fields.localization,
-	qualityFilter: TextQualityFilter
+	qualityFilter: TextQualityFilter,
+	workspaceFilter: Schema.optionalKey(WorkspaceQualityFilter)
 });
 export type GameTextInvestigationQuery = Schema.Schema.Type<typeof GameTextInvestigationQuery>;
 export const GameTextInvestigationPreset = Schema.Struct({
@@ -42,7 +44,12 @@ export const GameTextInvestigationPreset = Schema.Struct({
 	query: GameTextInvestigationQuery,
 	rules: Schema.optionalKey(GameTextRuleDocument)
 }).check(
-	Schema.makeFilter((preset) => preset.query.mode !== "quality" || preset.rules !== undefined)
+	Schema.makeFilter(
+		(preset) =>
+			preset.query.mode !== "quality" ||
+			preset.rules !== undefined ||
+			preset.query.workspaceFilter !== undefined
+	)
 );
 export type GameTextInvestigationPreset = Schema.Schema.Type<typeof GameTextInvestigationPreset>;
 export const GameTextInvestigationPresetResult = Schema.Union([
@@ -65,7 +72,11 @@ export const GameTextInvestigationExport = Schema.Struct({
 	coverageScope: Schema.Literal("whole_scan"),
 	result: Schema.Union([
 		Schema.Struct({ mode: Schema.Literal("corpus"), corpus: TextCorpusReport }),
-		Schema.Struct({ mode: Schema.Literal("quality"), report: TextQualityReport })
+		Schema.Struct({ mode: Schema.Literal("quality"), report: TextQualityReport }),
+		Schema.Struct({
+			mode: Schema.Literal("localization_quality"),
+			report: WorkspaceQualityReport
+		})
 	])
 });
 export type GameTextInvestigationExport = Schema.Schema.Type<typeof GameTextInvestigationExport>;
@@ -79,7 +90,8 @@ export function exportGameTextInvestigation(
 	corpus: TextCorpus,
 	preset: GameTextInvestigationPreset,
 	source: InvestigationSource,
-	localized?: TextCorpusQuery
+	localized?: TextCorpusQuery,
+	workspace?: WorkspaceQualityReport
 ): Effect.Effect<GameTextInvestigationExport, InvestigationError> {
 	const corpusExport = Effect.gen(function* () {
 		const target = preset.query.localization?.target;
@@ -101,11 +113,35 @@ export function exportGameTextInvestigation(
 		});
 	});
 	return Effect.gen(function* () {
-		if (preset.query.mode === "quality" && preset.rules === undefined)
+		if (
+			preset.query.mode === "quality" &&
+			preset.rules === undefined &&
+			preset.query.workspaceFilter === undefined
+		)
 			return yield* Effect.fail(
 				new InvestigationError({
 					message: "Quality exports require a rule document.",
 					recovery: "Load quality rules before exporting findings."
+				})
+			);
+		if (preset.query.workspaceFilter !== undefined && !workspace)
+			return yield* Effect.fail(
+				new InvestigationError({
+					message: "The localization quality workspace is unavailable.",
+					recovery: "Load the selected target and retry the export."
+				})
+			);
+		if (
+			workspace &&
+			preset.query.workspaceFilter !== undefined &&
+			(workspace.filter !== preset.query.workspaceFilter ||
+				workspace.target !== preset.query.localization?.target ||
+				workspace.culture !== preset.query.localization?.culture)
+		)
+			return yield* Effect.fail(
+				new InvestigationError({
+					message: "The quality report does not match this preset's selection.",
+					recovery: "Reevaluate the target, culture and finding filter before exporting."
 				})
 			);
 		const rules =
@@ -127,14 +163,16 @@ export function exportGameTextInvestigation(
 			preset,
 			coverageScope: "whole_scan",
 			result:
-				preset.query.mode === "quality" && rules !== undefined
-					? {
-							mode: "quality",
-							report: textQualityQuery(
-								evaluateGameTextSourceQuality(corpus, rules)
-							).export(preset.query.qualityFilter)
-						}
-					: { mode: "corpus", corpus: textCorpusReport(yield* corpusExport) }
+				preset.query.mode === "quality" && workspace
+					? { mode: "localization_quality", report: workspace }
+					: preset.query.mode === "quality" && rules !== undefined
+						? {
+								mode: "quality",
+								report: textQualityQuery(
+									evaluateGameTextSourceQuality(corpus, rules)
+								).export(preset.query.qualityFilter)
+							}
+						: { mode: "corpus", corpus: textCorpusReport(yield* corpusExport) }
 		} satisfies GameTextInvestigationExport;
 	});
 }
@@ -160,6 +198,21 @@ export function gameTextInvestigationCsv(document: GameTextInvestigationExport):
 				JSON.stringify(unit.identity),
 				unit.occurrences.length,
 				JSON.stringify(unit.occurrences)
+			])
+		);
+	}
+	if (document.result.mode === "localization_quality") {
+		const { findings, ...scan } = document.result.report;
+		return investigationTable(
+			{ ...base, scan },
+			["finding_id", "kind", "culture", "source", "problem", "context"],
+			findings.map((finding) => [
+				finding.id,
+				finding.filter,
+				finding.culture ?? "",
+				finding.source,
+				finding.problem,
+				finding.context
 			])
 		);
 	}

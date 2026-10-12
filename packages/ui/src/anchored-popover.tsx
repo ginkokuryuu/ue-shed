@@ -72,6 +72,15 @@ export function AnchoredPopover(props: AnchoredPopoverProps) {
 
 	createEffect(open, (isOpen) => {
 		if (!isOpen) return;
+		queueMicrotask(() => {
+			if (!open() || !panel) return;
+			if (panel.contains(document.activeElement)) return;
+			panel
+				.querySelector<HTMLElement>(
+					'input:not([disabled]), button:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex="0"]'
+				)
+				?.focus();
+		});
 		const frame = requestAnimationFrame(updatePosition);
 		window.addEventListener("resize", updatePosition);
 		window.addEventListener("scroll", updatePosition, true);
@@ -95,7 +104,10 @@ export function AnchoredPopover(props: AnchoredPopoverProps) {
 			if (open() && !isWithinPopover(event)) close();
 		};
 		const closeFromEscape = (event: KeyboardEvent) => {
-			if (event.key === "Escape" && open()) close(true);
+			if (event.key === "Escape" && open())
+				queueMicrotask(() => {
+					if (!event.defaultPrevented && !event.cancelBubble) close(true);
+				});
 		};
 		ownerDocument.addEventListener("pointerdown", closeFromOutside, true);
 		ownerDocument.addEventListener("focusin", closeFromOutside, true);
@@ -130,6 +142,56 @@ export function AnchoredPopover(props: AnchoredPopoverProps) {
 							panel = element;
 						}}
 						role="dialog"
+						onKeyDown={(event) => {
+							if (event.key === "Tab" && panel && trigger) {
+								const selector =
+									'button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), a[href], [tabindex="0"]';
+								const inside = Array.from(
+									panel.querySelectorAll<HTMLElement>(selector)
+								);
+								const boundary = event.shiftKey ? inside[0] : inside.at(-1);
+								if (event.target === boundary) {
+									event.preventDefault();
+									const outside = Array.from(
+										document.querySelectorAll<HTMLElement>(selector)
+									).filter((element) => !panel?.contains(element));
+									const next = event.shiftKey
+										? trigger
+										: (outside[outside.indexOf(trigger) + 1] ?? trigger);
+									close();
+									queueMicrotask(() => next.focus());
+								}
+								return;
+							}
+							if (!["ArrowDown", "ArrowUp", "Home", "End"].includes(event.key))
+								return;
+							const target = event.target;
+							if (event.defaultPrevented || !(target instanceof HTMLElement)) return;
+							if (
+								target instanceof HTMLTextAreaElement ||
+								(target instanceof HTMLInputElement && target.type !== "search")
+							)
+								return;
+							const menu = target.closest('[role="menu"]') ?? panel;
+							const items = Array.from(
+								menu?.querySelectorAll<HTMLElement>(
+									'button:not([disabled]), input[type="radio"]:not([disabled])'
+								) ?? []
+							);
+							if (!items.length) return;
+							event.preventDefault();
+							const index = items.indexOf(target);
+							const next =
+								event.key === "Home"
+									? 0
+									: event.key === "End"
+										? items.length - 1
+										: (index +
+												(event.key === "ArrowUp" ? -1 : 1) +
+												items.length) %
+											items.length;
+							items[next]?.focus();
+						}}
 						style={{
 							left: `${position().left}px`,
 							position: "fixed",

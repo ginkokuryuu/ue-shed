@@ -295,9 +295,7 @@ export function GameTextQualityWorkspace(props: {
 									<span {...stylex.attrs(styles.rowText)}>
 										{finding.sourceExcerpt}
 									</span>
-									<span {...stylex.attrs(styles.warning)}>
-										{problem(finding)}
-									</span>
+									<span {...stylex.attrs(styles.muted)}>{problem(finding)}</span>
 									<span
 										title={finding.location?.objectPath}
 										{...stylex.attrs(styles.context, styles.mono)}
@@ -312,7 +310,10 @@ export function GameTextQualityWorkspace(props: {
 							)}
 						</For>
 						<Show when={!loading() && page()?.findings.length === 0}>
-							<p {...stylex.attrs(styles.empty)}>No findings match this filter.</p>
+							<p {...stylex.attrs(styles.empty)}>
+								No findings match this filter. Results cover the scanned, readable
+								text; an incomplete scan can miss findings.
+							</p>
 						</Show>
 						<Show when={loading()}>
 							<p role="status" {...stylex.attrs(styles.empty)}>

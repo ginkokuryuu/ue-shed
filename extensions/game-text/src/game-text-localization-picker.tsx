@@ -8,6 +8,7 @@ export function LocalizationPicker(props: {
 	readonly value: string;
 	readonly values: readonly string[];
 	readonly disabled?: boolean;
+	readonly reason?: string | undefined;
 	readonly onSelect: (value: string) => void;
 }) {
 	const id = createUniqueId();
@@ -35,6 +36,7 @@ export function LocalizationPicker(props: {
 					tone="quiet"
 					aria-label={props.label + ": " + props.value}
 					disabled={props.disabled}
+					title={props.reason}
 					ref={(element) => {
 						anchor = element;
 						trigger.ref(element);

@@ -63,6 +63,14 @@ function needsAttention(state: LocalizationState): boolean {
 	return state !== "translated" && state !== "outside_target" && state !== "gathered_only";
 }
 
+function localizationTone(state: LocalizationState) {
+	if (state === "not_synced") return styles.accent;
+	if (state === "not_translated") return styles.danger;
+	if (["needs_update", "not_gathered", "changed_since_gather"].includes(state))
+		return styles.warning;
+	return styles.muted;
+}
+
 function displayedState(detail: LocalizationFocus, translation: LocalizationTranslation) {
 	return detail.scopeSummary ? translation.cultureState : translation.state;
 }
@@ -123,7 +131,7 @@ export function LocalizationControls(props: {
 							<span
 								role="status"
 								title="Translations saved in PO files that Unreal has not imported yet"
-								{...stylex.attrs(styles.muted, styles.warning)}
+								{...stylex.attrs(styles.muted, styles.accent)}
 							>
 								{active().notSynced.toLocaleString()} not synced
 							</span>
@@ -213,10 +221,7 @@ export function LocalizationRow(props: {
 							when={mark().translation?.trim()}
 							fallback={
 								<span
-									{...stylex.attrs(
-										styles.muted,
-										needsAttention(mark().state) && styles.warning
-									)}
+									{...stylex.attrs(styles.muted, localizationTone(mark().state))}
 								>
 									{localizationLabels[mark().state]}
 								</span>
@@ -225,7 +230,7 @@ export function LocalizationRow(props: {
 							{mark().translation}
 						</Show>
 						<Show when={mark().facts.includes("not_synced")}>
-							<span {...stylex.attrs(styles.warning)}> · Not synced</span>
+							<span {...stylex.attrs(styles.accent)}> · Not synced</span>
 						</Show>
 						<Show
 							when={
@@ -234,12 +239,7 @@ export function LocalizationRow(props: {
 								mark().state !== "not_synced"
 							}
 						>
-							<span
-								{...stylex.attrs(
-									styles.muted,
-									needsAttention(mark().state) && styles.warning
-								)}
-							>
+							<span {...stylex.attrs(styles.muted, localizationTone(mark().state))}>
 								{" "}
 								· {localizationLabels[mark().state]}
 							</span>
@@ -270,7 +270,7 @@ export function TranslationsDetail(props: {
 			<section aria-label="Translations" {...stylex.attrs(styles.detailSection)}>
 				<h3 {...stylex.attrs(styles.section)}>Translations</h3>
 				<Show
-					when={props.focus || !props.model.detailLoading()}
+					when={props.focus || props.model.detail() || !props.model.detailLoading()}
 					fallback={
 						<span role="status" {...stylex.attrs(styles.muted)}>
 							Loading translations…
@@ -280,12 +280,21 @@ export function TranslationsDetail(props: {
 					<Show when={props.focus ?? props.model.detail()}>
 						{(detail) => (
 							<>
-								<Show when={detail().scopeSummary}>
+								<Show
+									when={
+										props.focus ||
+										!["not_gathered", "changed_since_gather"].includes(
+											detail().scopeSummary?.state ?? ""
+										)
+											? detail().scopeSummary
+											: undefined
+									}
+								>
 									{(summary) => (
 										<p
 											{...stylex.attrs(
 												styles.muted,
-												needsAttention(summary().state) && styles.warning
+												localizationTone(summary().state)
 											)}
 										>
 											{summary().message}
@@ -296,6 +305,8 @@ export function TranslationsDetail(props: {
 								<For each={visibleTranslations(detail(), props.model.culture())}>
 									{(translation) => (
 										<article
+											dir="auto"
+											lang={translation.culture}
 											aria-label={"Translation " + translation.culture}
 											{...stylex.attrs(styles.card)}
 										>
@@ -306,8 +317,7 @@ export function TranslationsDetail(props: {
 														<span
 															{...stylex.attrs(
 																styles.muted,
-																needsAttention(state()) &&
-																	styles.warning
+																localizationTone(state())
 															)}
 														>
 															{localizationLabels[state()]}
@@ -321,7 +331,7 @@ export function TranslationsDetail(props: {
 														translation.poTranslation !== null
 													}
 												>
-													<span {...stylex.attrs(styles.warning)}>
+													<span {...stylex.attrs(styles.accent)}>
 														Not synced
 													</span>
 												</Show>
@@ -358,7 +368,7 @@ export function TranslationsDetail(props: {
 												</p>
 											</Show>
 											<Show when={translation.poTranslation !== null}>
-												<span {...stylex.attrs(styles.warning)}>
+												<span {...stylex.attrs(styles.accent)}>
 													In PO, not synced
 												</span>
 												<p {...stylex.attrs(styles.notes)}>
@@ -408,7 +418,7 @@ export function TranslationsDetail(props: {
 											</Show>
 											<For each={translation.unknownReasons}>
 												{(reason) => (
-													<span {...stylex.attrs(styles.warning)}>
+													<span {...stylex.attrs(styles.muted)}>
 														{unknownLabels[reason]}
 													</span>
 												)}

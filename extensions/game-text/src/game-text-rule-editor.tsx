@@ -121,7 +121,11 @@ export function GameTextRuleEditor(props: {
 	const dirty = () => props.editor.dirty();
 	const feedback = () => props.editor.feedback();
 	const changeDraft = (document: GameTextRuleDocument) => props.editor.changeDraft(document);
-	const run = (operation: "preview" | "save") => props.editor.run(operation);
+	const run = (operation: "preview" | "save") => {
+		const first = props.editor.problems()[0];
+		if (first) setSelectedRuleId(rules().find((rule) => rule.id === first.ruleId)?.id);
+		props.editor.run(operation);
+	};
 	const [selectedRuleId, setSelectedRuleId] = createSignal<TextQualityRule["id"]>();
 	const failedFeedback = createMemo(() => {
 		const current = feedback();
@@ -213,7 +217,7 @@ export function GameTextRuleEditor(props: {
 								<b>
 									{rule.kind === "character_budget" ||
 									rule.kind === "localization_character_budget"
-										? "Budget"
+										? "Character limits"
 										: "Terms"}
 								</b>
 								<em {...stylex.attrs(styles.panelCount)}>
@@ -231,6 +235,21 @@ export function GameTextRuleEditor(props: {
 				<Show when={selectedRule()}>
 					{(rule) => (
 						<>
+							<Show
+								when={props.editor
+									.problems()
+									.some((issue) => issue.ruleId === rule().id)}
+							>
+								<ul id={"rule-errors-" + rule().id} role="alert">
+									<For
+										each={props.editor
+											.problems()
+											.filter((issue) => issue.ruleId === rule().id)}
+									>
+										{(issue) => <li>{issue.message}</li>}
+									</For>
+								</ul>
+							</Show>
 							<header {...stylex.attrs(styles.formHeader)}>
 								<h3 {...stylex.attrs(styles.formTitle)}>{rule().id}</h3>
 								<span
@@ -239,7 +258,11 @@ export function GameTextRuleEditor(props: {
 										dirty() && styles.unsavedState
 									)}
 								>
-									{dirty() ? "Unsaved changes" : "Saved"}
+									{dirty()
+										? "Unsaved changes"
+										: props.editor.fileAttached()
+											? "Saved"
+											: "No rule file"}
 								</span>
 							</header>
 							<Show when={selectedBudgetRule()}>
@@ -250,6 +273,18 @@ export function GameTextRuleEditor(props: {
 										min="1"
 										step="1"
 										aria-label={`Maximum characters for ${rule().id}`}
+										aria-invalid={
+											props.editor
+												.problems()
+												.some(
+													(issue) =>
+														issue.ruleId === rule().id &&
+														issue.field === "maximumCharacters"
+												)
+												? "true"
+												: "false"
+										}
+										aria-describedby={"rule-errors-" + rule().id}
 										{...stylex.attrs(styles.input)}
 										value={selectedBudgetRule()?.maximumCharacters ?? ""}
 										onInput={(event) => {
@@ -307,6 +342,10 @@ export function GameTextRuleEditor(props: {
 												</b>
 												<input
 													aria-label={`${term().kind === "forbidden" ? "Forbidden" : "Preferred"} term ${index + 1}`}
+													aria-invalid={
+														term().term.trim() === "" ? "true" : "false"
+													}
+													aria-describedby={"rule-errors-" + rule().id}
 													{...stylex.attrs(styles.inputCompact)}
 													value={term().term}
 													onInput={(event) =>
@@ -465,6 +504,7 @@ export function GameTextRuleEditor(props: {
 									{(current) => (
 										<CultureRuleFields
 											rule={current()}
+											problems={props.editor.problems()}
 											onChange={(updated) =>
 												changeDraft(
 													replaceLocalizationRule(draft(), updated)
@@ -478,6 +518,18 @@ export function GameTextRuleEditor(props: {
 								<span>Recovery guidance</span>
 								<textarea
 									aria-label={`Recovery guidance for ${rule().id}`}
+									aria-invalid={
+										props.editor
+											.problems()
+											.some(
+												(issue) =>
+													issue.ruleId === rule().id &&
+													issue.field === "recovery"
+											)
+											? "true"
+											: "false"
+									}
+									aria-describedby={"rule-errors-" + rule().id}
 									{...stylex.attrs(styles.textarea)}
 									value={rule().recovery}
 									onInput={(event) =>
@@ -493,6 +545,12 @@ export function GameTextRuleEditor(props: {
 							</label>
 						</>
 					)}
+				</Show>
+				<Show when={!props.editor.fileAttached()}>
+					<p role="note">
+						These rules have no file to save to. Load or create a rules file first.
+						Drafts are recovered locally.
+					</p>
 				</Show>
 				<footer {...stylex.attrs(styles.actions)}>
 					<Switch>
@@ -514,6 +572,14 @@ export function GameTextRuleEditor(props: {
 						</Match>
 					</Switch>
 					<div {...stylex.attrs(styles.actionButtons)}>
+						<button
+							type="button"
+							disabled={!dirty() || props.editor.busy()}
+							onClick={props.editor.discard}
+							{...stylex.attrs(styles.actionButton)}
+						>
+							Discard edits
+						</button>
 						<Show when={draft().schemaVersion === 1}>
 							<button
 								type="button"
@@ -534,7 +600,14 @@ export function GameTextRuleEditor(props: {
 						</button>
 						<button
 							type="button"
-							disabled={!dirty() || props.editor.busy()}
+							disabled={
+								!dirty() || props.editor.busy() || !props.editor.fileAttached()
+							}
+							title={
+								props.editor.fileAttached()
+									? undefined
+									: "Load or create a rules file before saving."
+							}
 							onClick={() => run("save")}
 							{...stylex.attrs(styles.actionButton)}
 						>

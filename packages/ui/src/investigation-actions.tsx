@@ -35,6 +35,8 @@ export function InvestigationActions<Query, Preset, Error>(props: {
 	/** Block every action while the host has an exclusive project operation. */
 	readonly blocked?: boolean;
 	readonly onOpen: (preset: Preset) => void;
+	readonly onRequestOpen?: (open: () => void) => void;
+	readonly disabledReason?: string | undefined;
 	readonly compact?: boolean;
 	/** A host-specific export offered beside CSV and JSON, such as one file for every language. */
 	readonly extraExport?:
@@ -103,6 +105,10 @@ export function InvestigationActions<Query, Preset, Error>(props: {
 			}
 		});
 	};
+	const requestOpen = () => {
+		if (props.onRequestOpen) props.onRequestOpen(() => run("open"));
+		else run("open");
+	};
 	const copy = () => {
 		const command = replay();
 		if (!command) return;
@@ -119,6 +125,9 @@ export function InvestigationActions<Query, Preset, Error>(props: {
 			aria-label="Investigation files"
 			{...stylex.attrs(styles.panel, props.compact && styles.compact)}
 		>
+			<Show when={props.disabled && props.disabledReason}>
+				<span role="note">{props.disabledReason}</span>
+			</Show>
 			<div {...stylex.attrs(styles.actions)}>
 				<Show
 					when={props.compact}
@@ -148,7 +157,7 @@ export function InvestigationActions<Query, Preset, Error>(props: {
 							<Button
 								type="button"
 								disabled={pending() || props.blocked}
-								onClick={() => run("open")}
+								onClick={requestOpen}
 							>
 								Open preset
 							</Button>
@@ -239,7 +248,7 @@ export function InvestigationActions<Query, Preset, Error>(props: {
 							size="compact"
 							tone="quiet"
 							disabled={props.blocked}
-							onClick={() => run("open")}
+							onClick={requestOpen}
 						>
 							Open preset…
 						</Button>

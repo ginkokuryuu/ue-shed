@@ -87,7 +87,24 @@ export function GameTextResultRows(props: {
 			context ? textContext(context.location).title : row.line?.manifestLocations[0],
 			key(row),
 			current?.translation,
-			current ? browseStateLabel(current.state) : undefined
+			current
+				? browseStateLabel(current.state)
+				: row.line
+					? cultureSummary(
+							row.line.cultures.filter(
+								(mark) =>
+									!props.cultures?.length || props.cultures.includes(mark.culture)
+							)
+						)
+					: undefined,
+			row.line?.cultures
+				.filter((mark) => !props.cultures?.length || props.cultures.includes(mark.culture))
+				.map(
+					(mark) =>
+						`${mark.culture}: ${localizationLabels[mark.state]}${mark.facts.includes("not_synced") && mark.state !== "not_synced" ? ", Not synced" : ""}`
+				)
+				.join(", "),
+			row.line?.keyChange?.direction === "to" ? "Key changed" : undefined
 		]
 			.filter(Boolean)
 			.join(" ");
@@ -142,7 +159,9 @@ export function GameTextResultRows(props: {
 											row.line?.manifestLocations[0] ?? ""
 										) === "cpp"
 											? " · C++"
-											: " · Gathered source"}
+											: row.line?.manifestLocations[0]
+												? " · Gathered source"
+												: ""}
 									</span>
 								}
 							>
@@ -294,14 +313,14 @@ function LineStatus(props: {
 }
 
 const local = stylex.create({
-	wrap: { display: "flex", minWidth: 650 },
+	wrap: { display: "flex", minWidth: 0 },
 	columns: {
 		display: "grid",
 		gridTemplateColumns:
-			"34px minmax(120px, 1fr) minmax(160px, 1.6fr) minmax(150px, 1.5fr) minmax(110px, max-content)",
-		gap: 12,
+			"34px minmax(55px, .7fr) minmax(90px, 1.4fr) minmax(70px, 1.1fr) minmax(100px, 1fr)",
+		gap: 8,
 		padding: "8px 14px",
-		minWidth: 650,
+		minWidth: 0,
 		position: "sticky",
 		top: 0,
 		zIndex: 2,
@@ -352,9 +371,9 @@ const local = stylex.create({
 		minWidth: 0,
 		display: "grid",
 		gridTemplateColumns:
-			"8px minmax(120px, 1fr) minmax(160px, 1.6fr) minmax(150px, 1.5fr) minmax(110px, max-content)",
+			"8px minmax(55px, .7fr) minmax(90px, 1.4fr) minmax(70px, 1.1fr) minmax(100px, 1fr)",
 		alignItems: "center",
-		gap: 12,
+		gap: 8,
 		minHeight: 34,
 		paddingBlock: 6
 	},

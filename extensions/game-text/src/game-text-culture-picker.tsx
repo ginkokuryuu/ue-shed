@@ -15,8 +15,8 @@ export function culturesLabel(picked: readonly string[]): string {
 function workLine(facet: TextCultureFacet | undefined): string | undefined {
 	if (facet === undefined) return undefined;
 	const parts = [
-		facet.missing > 0 ? `${facet.missing.toLocaleString()} missing` : undefined,
-		facet.toUpdate > 0 ? `${facet.toUpdate.toLocaleString()} to update` : undefined,
+		facet.missing > 0 ? `${facet.missing.toLocaleString()} not translated` : undefined,
+		facet.toUpdate > 0 ? `${facet.toUpdate.toLocaleString()} need update` : undefined,
 		facet.notSynced > 0 ? `${facet.notSynced.toLocaleString()} not synced` : undefined
 	].filter((part) => part !== undefined);
 	return parts.length > 0 ? parts.join(" · ") : "Up to date";
@@ -136,7 +136,10 @@ export function CulturePicker(props: {
 								<span
 									{...stylex.attrs(
 										styles.work,
-										line() === "Up to date" && styles.quiet
+										line() === "Up to date" && styles.quiet,
+										!workOf(culture)?.missing &&
+											!workOf(culture)?.toUpdate &&
+											styles.sync
 									)}
 								>
 									{line()}
@@ -167,6 +170,7 @@ const styles = stylex.create({
 		boxShadow: "0 12px 32px rgba(0, 0, 0, 0.45)",
 		zIndex: 20
 	},
+	sync: { color: tokens.colorAccent },
 	choice: {
 		display: "flex",
 		alignItems: "center",

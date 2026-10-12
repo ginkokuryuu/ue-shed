@@ -10,10 +10,79 @@ import {
 	TextWhere,
 	TextQualityFindingId,
 	WorkspaceQualityFilter,
-	GameTextRuleDocument
+	GameTextRuleDocument,
+	LocalizationEdit,
+	TextQualityRule,
+	TextTerminologyEntry,
+	LocalizationProjectRule
 } from "@ue-shed/game-text/browser";
 import { legacyFilter } from "./game-text-filter-model.js";
 import type { RuleEditorState } from "./game-text-rule-state.js";
+
+export const GameTextEditSession = Schema.Struct({
+	staged: Schema.Array(
+		Schema.Struct({
+			target: LocalizationSelection.fields.target,
+			edit: LocalizationEdit,
+			source: Schema.String
+		})
+	),
+	drafts: Schema.Array(
+		Schema.Struct({
+			target: LocalizationSelection.fields.target,
+			edit: LocalizationEdit,
+			source: Schema.String
+		})
+	)
+});
+export type GameTextEditSession = Schema.Schema.Type<typeof GameTextEditSession>;
+
+// Drafts validate their shape at storage boundaries while allowing incomplete authored fields.
+const [Forbidden, Preferred] = TextTerminologyEntry.members;
+const DraftTerm = Schema.Union([
+	Forbidden.mapFields((fields) => ({ ...fields, term: Schema.String })),
+	Preferred.mapFields((fields) => ({
+		...fields,
+		term: Schema.String,
+		alternatives: Schema.Array(Schema.String)
+	}))
+]);
+const [SourceBudget, SourceTerms] = TextQualityRule.members;
+const DraftSourceRule = Schema.Union([
+	SourceBudget.mapFields((fields) => ({
+		...fields,
+		recovery: Schema.String,
+		maximumCharacters: Schema.Number
+	})),
+	SourceTerms.mapFields((fields) => ({
+		...fields,
+		recovery: Schema.String,
+		terms: Schema.Array(DraftTerm)
+	}))
+]);
+const [CultureBudget, CultureTerms] = LocalizationProjectRule.members;
+const DraftLocalizationRule = Schema.Union([
+	CultureBudget.mapFields((fields) => ({
+		...fields,
+		recovery: Schema.String,
+		defaultMaximumCharacters: Schema.optionalKey(Schema.Number),
+		cultures: Schema.Record(Schema.String, Schema.Number)
+	})),
+	CultureTerms.mapFields((fields) => ({
+		...fields,
+		recovery: Schema.String,
+		cultures: Schema.Record(Schema.String, Schema.Array(DraftTerm))
+	}))
+]);
+const [DocumentV1, DocumentV2] = GameTextRuleDocument.members;
+const DraftDocument = Schema.Union([
+	DocumentV1.mapFields((fields) => ({ ...fields, rules: Schema.Array(DraftSourceRule) })),
+	DocumentV2.mapFields((fields) => ({
+		...fields,
+		rules: Schema.Array(DraftSourceRule),
+		localizationRules: Schema.optionalKey(Schema.Array(DraftLocalizationRule))
+	}))
+]);
 
 const StoredPreferences = Schema.Struct({
 	localizationTarget: Schema.optionalKey(LocalizationSelection.fields.target),
@@ -34,6 +103,13 @@ const StoredPreferences = Schema.Struct({
 	selectedId: Schema.optionalKey(TextUnitId),
 	selectedFindingId: Schema.optionalKey(TextQualityFindingId),
 	qualityDocument: Schema.optionalKey(GameTextRuleDocument),
+	editSession: Schema.optionalKey(GameTextEditSession),
+	qualityEditor: Schema.optionalKey(
+		Schema.Struct({
+			draft: DraftDocument,
+			savedDocument: Schema.optionalKey(GameTextRuleDocument)
+		})
+	),
 	filter: Schema.optionalKey(TextFilter),
 	group: Schema.optionalKey(Schema.Literals([...TextGroupBy.literals, "none"]))
 });
@@ -69,6 +145,7 @@ export interface GameTextPreferences {
 	readonly selectedFindingId?: Schema.Schema.Type<typeof TextQualityFindingId> | undefined;
 	readonly qualityDocument?: Schema.Schema.Type<typeof GameTextRuleDocument> | undefined;
 	readonly qualityEditor?: RuleEditorState | undefined;
+	readonly editSession?: GameTextEditSession | undefined;
 	/** Filter pills. Absent in preferences saved before pills; see `migratePreferences`. */
 	readonly filter?: TextFilter | undefined;
 	/** How the list groups lines; `none` lists them flat. Problem when absent. */
@@ -147,9 +224,11 @@ export const saveGameTextPreferences = Effect.fn("GameText.preferences.save")(
 	(key: string, preferences: GameTextPreferences) =>
 		Effect.try({
 			try: () => {
-				const { qualityEditor: _editor, ...stored } = preferences;
-				window.localStorage.setItem("ue-shed:game-text:" + key, JSON.stringify(stored));
+				const contents = JSON.stringify(preferences);
+				if (contents.length > 1_048_576) return false;
+				window.localStorage.setItem("ue-shed:game-text:" + key, contents);
+				return true;
 			},
 			catch: () => undefined
-		}).pipe(Effect.catch(() => Effect.void))
+		}).pipe(Effect.catch(() => Effect.succeed(false)))
 );

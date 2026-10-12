@@ -775,6 +775,8 @@ export const makeGameTextLocalization = Effect.fn("Workbench.GameText.localizati
 		targetQuery: (target: LocalizationJoin["target"]) =>
 			current(target).pipe(Effect.map((cached) => cached?.model)),
 		focus,
+		qualityExport: (request: WorkspaceQualityRequest) =>
+			quality(request).pipe(Effect.map((model) => model?.export(request))),
 		qualitySearch,
 		qualityFocus,
 		changes,

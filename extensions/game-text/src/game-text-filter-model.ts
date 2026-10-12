@@ -24,8 +24,8 @@ export const FINDING_LABELS = {
 } satisfies Record<TextFinding, string>;
 
 export const TRANSLATION_LABELS = {
-	missing: "Missing",
-	to_update: "To update",
+	missing: "Not translated",
+	to_update: "Needs update",
 	not_synced: "Not synced"
 } satisfies Record<TextTranslationState, string>;
 
@@ -112,6 +112,15 @@ export function hasValue(
 export function toggleValue(filter: TextFilter, clause: TextFilterClause): TextFilter {
 	const value = clause.values[0];
 	if (value === undefined) return filter;
+	// Moving a value to the other operator must remove its opposite first.
+	filter = filter.flatMap((item) => {
+		if (item.field !== clause.field || item.op === clause.op) return [item];
+		const kept = withValues(
+			item,
+			item.values.filter((entry) => entry !== value)
+		);
+		return kept === undefined ? [] : [kept];
+	});
 	const index = filter.findIndex((item) => item.field === clause.field && item.op === clause.op);
 	const existing = filter[index];
 	if (existing === undefined) return [...filter, clause];

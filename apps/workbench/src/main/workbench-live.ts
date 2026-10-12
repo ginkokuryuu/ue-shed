@@ -94,7 +94,7 @@ const windowOptions: WorkbenchWindowOptions = {
 	htmlPath: join(import.meta.dirname, "../renderer/index.html"),
 	iconPath: join(import.meta.dirname, "../renderer/favicon.png"),
 	minHeight: 720,
-	minWidth: 1120,
+	minWidth: 1024,
 	preloadPath: join(import.meta.dirname, "preload.cjs"),
 	title: "UE Shed Workbench",
 	width: 1540

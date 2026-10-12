@@ -2,7 +2,8 @@ import { Effect, Schema } from "effect";
 import {
 	GameTextInvestigationPreset,
 	GameTextInvestigationExport,
-	exportGameTextInvestigation
+	exportGameTextInvestigation,
+	gameTextInvestigationCsv
 } from "./investigation.js";
 import { describe, expect, it } from "vitest";
 import { qualityFixture } from "./localization-workspace.test-support.js";
@@ -23,7 +24,8 @@ import {
 	WorkspaceQualityFocusResult,
 	WorkspaceChangesResult,
 	WorkspaceReportPage,
-	localizationReportCsv
+	localizationReportCsv,
+	workspaceQualityCsv
 } from "./localization-workspace.js";
 
 describe("bounded localization workspace", () => {
@@ -185,4 +187,45 @@ describe("bounded localization workspace", () => {
 		expect(csv.split("\r\n")).toHaveLength(4);
 		expect(csv).toContain('"New words","Changed words"');
 	});
+});
+
+it("exports and replays the exact localization quality filter and culture with coverage", async () => {
+	const fixture = qualityFixture();
+	const selection = {
+		target: fixture.files.target.name,
+		culture: cultureCode("de"),
+		filter: "format_arguments" as const
+	};
+	const { export: exportReport } = fixture.workspace;
+	const report = exportReport(selection);
+	expect(report.findings).toEqual(fixture.workspace.search(selection).findings);
+	expect(report.corpusCoverage).toEqual(fixture.text.coverage);
+	expect(workspaceQualityCsv(report).startsWith('\uFEFF"Target"')).toBe(true);
+	expect(workspaceQualityCsv(report).endsWith("\r\n")).toBe(true);
+	const preset = Schema.decodeUnknownSync(GameTextInvestigationPreset)({
+		schemaVersion: 1,
+		kind: "game_text",
+		sort: "domain_order",
+		query: {
+			mode: "quality",
+			query: "",
+			capability: "all",
+			qualityFilter: "all",
+			workspaceFilter: selection.filter,
+			localization: { target: selection.target, culture: selection.culture }
+		}
+	});
+	const exported = await Effect.runPromise(
+		exportGameTextInvestigation(
+			fixture.text,
+			preset,
+			{ projectRoot: "C:/Project", generation: null, authority: "project_files" },
+			undefined,
+			report
+		)
+	);
+	expect(exported.result).toEqual({ mode: "localization_quality", report });
+	expect(Schema.decodeUnknownSync(GameTextInvestigationExport)(exported)).toEqual(exported);
+	expect(gameTextInvestigationCsv(exported)).toContain("finding_id");
+	expect(gameTextInvestigationCsv(exported)).toContain("format_arguments");
 });

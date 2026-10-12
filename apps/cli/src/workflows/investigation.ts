@@ -50,11 +50,41 @@ export const runInvestigation = Effect.fn("Cli.workflow.investigation")(
 						);
 						const corpus = indexed.corpus;
 						const localized = indexed.query;
+						const workspace =
+							preset.query.workspaceFilter !== undefined &&
+							preset.query.localization &&
+							indexed.localizationJoin
+								? text
+										.localizationQualityWorkspace(
+											preset.rules
+												? text.evaluateGameTextSourceQuality(
+														corpus,
+														preset.rules
+													)
+												: undefined,
+											text.checkLocalizationTarget(
+												corpus,
+												indexed.localizationJoin,
+												indexed.evidence,
+												{},
+												preset.rules
+											),
+											indexed.localizationJoin
+										)
+										.export({
+											target: preset.query.localization.target,
+											filter: preset.query.workspaceFilter,
+											...(preset.query.localization.culture
+												? { culture: preset.query.localization.culture }
+												: undefined)
+										})
+								: undefined;
 						const document = yield* text.exportGameTextInvestigation(
 							corpus,
 							preset,
 							source,
-							localized
+							localized,
+							workspace
 						);
 						return command.format === "json"
 							? json(document)

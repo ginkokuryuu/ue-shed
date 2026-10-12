@@ -77,7 +77,10 @@ export type LineSelection = ReturnType<typeof createLineSelection>;
  */
 export function BulkBar(props: {
 	readonly selection: LineSelection;
-	readonly client: GameTextClientApi;
+	readonly client: Pick<
+		GameTextClientApi,
+		"localizationLinesFile" | "localizationReview" | "localizationEdits"
+	>;
 	readonly localization: LocalizationSelection | undefined;
 	readonly cultures: readonly string[];
 	readonly nativeCulture: string | undefined;
@@ -87,6 +90,7 @@ export function BulkBar(props: {
 	readonly onChanged: () => void;
 }) {
 	const action = createEffectAction();
+	const [confirming, setConfirming] = createSignal(false);
 	const [working, setWorking] = createSignal(false);
 	const [message, setMessage] = createSignal<string | undefined>(undefined);
 	const lines = createMemo(() => [...props.selection.ticked().values()]);
@@ -143,10 +147,16 @@ export function BulkBar(props: {
 		const target = props.localization?.target;
 		const changes = reviews();
 		if (!request || target === undefined || changes.length === 0) return;
+		setConfirming(false);
 		// One request per batch, in order; the first failure stops the rest.
 		const write = Effect.gen(function* () {
 			let marked = 0;
 			for (const batch of batches(changes, REVIEW_BATCH)) {
+				yield* Effect.sync(() =>
+					setMessage(
+						`Marking reviewed: ${marked.toLocaleString()} / ${changes.length.toLocaleString()}`
+					)
+				);
 				const result = yield* request({ target, changes: batch });
 				if (result.status !== "written") return { marked, result };
 				marked += batch.length;
@@ -207,6 +217,15 @@ export function BulkBar(props: {
 	return (
 		<Show when={count() > 0}>
 			<div role="toolbar" aria-label="Selected lines" {...stylex.attrs(styles.bar)}>
+				<Show when={confirming()}>
+					<span>Mark {reviews().length} current translations reviewed?</span>
+					<Button size="compact" onClick={markReviewed}>
+						Confirm review
+					</Button>
+					<Button size="compact" onClick={() => setConfirming(false)}>
+						Cancel
+					</Button>
+				</Show>
 				<span {...stylex.attrs(styles.count)}>{count().toLocaleString()} selected</span>
 				<Show when={props.client.localizationLinesFile && props.localization}>
 					<Button
@@ -223,7 +242,7 @@ export function BulkBar(props: {
 						size="compact"
 						tone="quiet"
 						disabled={working() || props.busy}
-						onClick={markReviewed}
+						onClick={() => setConfirming(true)}
 					>
 						Mark reviewed ({reviews().length.toLocaleString()})
 					</Button>
@@ -232,7 +251,7 @@ export function BulkBar(props: {
 					<Button
 						size="compact"
 						tone="quiet"
-						disabled={working() || props.busy}
+						disabled={working() || props.busy || props.edits.working()}
 						onClick={carry}
 					>
 						Carry translations ({carries().length.toLocaleString()})
@@ -243,7 +262,7 @@ export function BulkBar(props: {
 				</Button>
 				<Show when={message() ?? (props.selection.capped() ? capNote : undefined)}>
 					{(text) => (
-						<span role="status" {...stylex.attrs(styles.message)}>
+						<span role="status" title={text()} {...stylex.attrs(styles.message)}>
 							{text()}
 						</span>
 					)}
@@ -271,6 +290,7 @@ const styles = stylex.create({
 		zIndex: 2,
 		display: "flex",
 		alignItems: "center",
+		flexWrap: "wrap",
 		gap: 6,
 		marginInline: 10,
 		marginBlock: 8,
@@ -294,8 +314,8 @@ const styles = stylex.create({
 	message: {
 		minWidth: 0,
 		overflow: "hidden",
-		textOverflow: "ellipsis",
-		whiteSpace: "nowrap",
+		overflowWrap: "anywhere",
+		whiteSpace: "normal",
 		color: tokens.colorTextMuted
 	},
 	close: {

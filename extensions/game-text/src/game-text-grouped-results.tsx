@@ -10,7 +10,7 @@ import type {
 } from "@ue-shed/game-text/browser";
 import { Button, createEffectAction } from "@ue-shed/ui";
 import { tokens } from "@ue-shed/ui-theme/tokens.stylex.js";
-import { For, Show, createEffect, createSignal } from "solid-js";
+import { For, Show, createEffect, createSignal, untrack } from "solid-js";
 import type { GameTextClientApi } from "./game-text-client.js";
 import { GameTextResultRows } from "./game-text-result-rows.js";
 
@@ -56,6 +56,7 @@ const WAITING = new Set(["not_gathered", "changed_since_gather", "translation"])
  * work; opening one loads its first page, and only open groups cost a request.
  */
 export function GroupedResults(props: {
+	readonly revision?: unknown;
 	readonly by: TextGroupBy;
 	readonly groups: readonly TextGroup[];
 	readonly more: number;
@@ -83,30 +84,36 @@ export function GroupedResults(props: {
 		toggled().get(group.key) ?? (fits() || index === 0);
 	return (
 		<div {...stylex.attrs(styles.list)}>
-			<For each={props.groups}>
-				{(group, index) => (
-					<GroupSection
-						by={props.by}
-						group={group}
-						open={isOpen(group, index())}
-						onToggle={() =>
-							setToggled((current) =>
-								new Map(current).set(group.key, !isOpen(group, index()))
-							)
-						}
-						request={props.request}
-						client={props.client}
-						culture={props.culture}
-						cultures={props.cultures ?? []}
-						selectedId={props.selectedId}
-						selectedLocalizationId={props.selectedLocalizationId}
-						onSelect={props.onSelect}
-						{...(props.onLoaded === undefined
-							? undefined
-							: { onLoaded: props.onLoaded })}
-						ticks={props.ticks}
-					/>
-				)}
+			<For each={props.groups.map((group) => group.key)}>
+				{(key, index) => {
+					const initial = untrack(() => props.groups[index()]);
+					if (!initial) return null;
+					const group = () => props.groups.find((entry) => entry.key === key) ?? initial;
+					return (
+						<GroupSection
+							by={props.by}
+							group={group()}
+							revision={props.revision}
+							open={isOpen(group(), index())}
+							onToggle={() =>
+								setToggled((current) =>
+									new Map(current).set(key, !isOpen(group(), index()))
+								)
+							}
+							request={props.request}
+							client={props.client}
+							culture={props.culture}
+							cultures={props.cultures ?? []}
+							selectedId={props.selectedId}
+							selectedLocalizationId={props.selectedLocalizationId}
+							onSelect={props.onSelect}
+							{...(props.onLoaded === undefined
+								? undefined
+								: { onLoaded: props.onLoaded })}
+							ticks={props.ticks}
+						/>
+					);
+				}}
 			</For>
 			<Show when={props.more > 0}>
 				<p {...stylex.attrs(styles.more)}>
@@ -118,6 +125,7 @@ export function GroupedResults(props: {
 }
 
 function GroupSection(props: {
+	readonly revision?: unknown;
 	readonly by: TextGroupBy;
 	readonly group: TextGroup;
 	readonly open: boolean;
@@ -136,6 +144,9 @@ function GroupSection(props: {
 	const action = createEffectAction();
 	const [page, setPage] = createSignal<TextCorpusSearchPage>();
 	const [loading, setLoading] = createSignal(false);
+	const [error, setError] = createSignal<string>();
+	let desired = 50;
+	let previousRequest = "";
 	// The effect passes the request and key it tracked; "Show more" reads them in its handler.
 	// `after` is the page loaded so far, passed in rather than read back from the signal, which a
 	// write in the same update has not committed yet.
@@ -154,10 +165,16 @@ function GroupSection(props: {
 					: undefined)
 		};
 		setLoading(true);
+		setError(undefined);
 		action.run(props.client.search(request), {
 			onSuccess: (result) => {
 				setLoading(false);
-				if (result.status !== "ready") return;
+				if (result.status !== "ready") {
+					setError(
+						"This group could not be loaded. Retry, or rescan if the saved assets changed."
+					);
+					return;
+				}
 				const merged = after
 					? {
 							...result.page,
@@ -177,13 +194,20 @@ function GroupSection(props: {
 					: result.page;
 				setPage(merged);
 				const next = merged.localization?.nextCursor ?? merged.nextCursor;
+				if (next !== undefined && loadedRows(merged).length < desired) {
+					load(merged, base, key);
+					return;
+				}
 				props.onLoaded?.(
 					key,
 					loadedRows(merged),
 					next === undefined ? undefined : () => load(merged, base, key)
 				);
 			},
-			onFailure: () => setLoading(false)
+			onFailure: (cause) => {
+				setLoading(false);
+				setError(String(cause));
+			}
 		});
 	};
 	createEffect(
@@ -191,13 +215,20 @@ function GroupSection(props: {
 			open: props.open,
 			request: props.request,
 			key: props.group.key,
-			count: props.group.count
+			count: props.group.count,
+			revision: props.revision
 		}),
 		({ open, request, key }) => {
-			if (open) load(undefined, request, key);
-			else {
+			if (open) {
+				const signature = JSON.stringify(request);
+				if (signature !== previousRequest) {
+					setPage(undefined);
+					desired = 50;
+				} else desired = Math.max(50, untrack(listed));
+				previousRequest = signature;
+				load(undefined, request, key);
+			} else {
 				action.cancel();
-				setPage(undefined);
 				props.onLoaded?.(key, [], undefined);
 			}
 		}
@@ -220,6 +251,7 @@ function GroupSection(props: {
 			<button
 				type="button"
 				aria-expanded={props.open ? "true" : "false"}
+				aria-label={`${label()} ${props.group.count.toLocaleString()} lines${props.group.needWork ? `, ${props.group.needWork.toLocaleString()} need work` : ""}`}
 				onClick={() => props.onToggle()}
 				{...stylex.attrs(styles.header)}
 			>
@@ -249,11 +281,22 @@ function GroupSection(props: {
 				</Show>
 			</button>
 			<Show when={props.open}>
+				<Show when={error()}>
+					<p role="alert" {...stylex.attrs(styles.more)}>
+						{error()}{" "}
+						<Button
+							size="compact"
+							onClick={() => load(undefined, props.request, props.group.key)}
+						>
+							Retry group
+						</Button>
+					</p>
+				</Show>
 				<Show
 					when={page()}
 					fallback={
 						<p role="status" {...stylex.attrs(styles.more)}>
-							Loading…
+							{error() ? "Group unavailable" : "Loading…"}
 						</p>
 					}
 				>

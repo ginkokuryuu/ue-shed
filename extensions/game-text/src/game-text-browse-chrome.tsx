@@ -5,9 +5,6 @@ import { For, Show } from "solid-js";
 import { localizationLabels } from "./game-text-localization-view.js";
 
 export function browseStateLabel(state: LocalizationState): string {
-	if (state === "not_translated") return "Missing";
-	if (state === "needs_update") return "Stale";
-	if (state === "outside_target") return "Outside target";
 	return localizationLabels[state];
 }
 

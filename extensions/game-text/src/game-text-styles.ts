@@ -48,14 +48,40 @@ export const styles = stylex.create({
 	},
 	heading: { margin: 0, fontSize: 14, color: tokens.colorTextStrong, fontWeight: 600 },
 	indexProgress: { margin: 0, padding: "6px 16px", color: tokens.colorAccent, fontSize: 12 },
+	progressSlot: { height: 34, flexShrink: 0, overflow: "hidden" },
 	progress: { width: "100%", height: 3, flexShrink: 0, accentColor: tokens.colorAccent },
+	headerActions: {
+		display: "flex",
+		flexWrap: "wrap",
+		alignItems: "center",
+		gap: 8,
+		flexShrink: 0
+	},
+	browseActions: {
+		display: "flex",
+		flexWrap: "wrap",
+		alignItems: "center",
+		gap: 6,
+		minWidth: 0,
+		flexGrow: 1,
+		flexBasis: { default: "auto", "@media (max-width: 1150px)": "100%" }
+	},
 	browseBar: {
 		padding: "10px 16px",
 		borderBottomWidth: 1,
 		borderBottomStyle: "solid",
 		borderBottomColor: tokens.colorBorder
 	},
-	coverage: { flex: 1, textAlign: "right", color: tokens.colorTextMuted, fontSize: 12 },
+	coverage: {
+		flexBasis: "100%",
+		order: 1,
+		whiteSpace: "nowrap",
+		overflow: "hidden",
+		textOverflow: "ellipsis",
+		textAlign: "right",
+		color: tokens.colorTextMuted,
+		fontSize: 12
+	},
 	muted: { color: tokens.colorTextMuted, fontSize: 12 },
 	keyChange: {
 		display: "grid",
@@ -68,6 +94,10 @@ export const styles = stylex.create({
 		fontSize: 12
 	},
 	warning: { color: tokens.colorWarning },
+	accent: { color: tokens.colorAccent },
+	danger: { color: tokens.colorDanger },
+	gridCollapsed: { gridTemplateColumns: "minmax(0, 1fr)" },
+	hiddenPane: { display: "none" },
 	workspace: {
 		display: "flex",
 		flexDirection: "column",
@@ -92,7 +122,9 @@ export const styles = stylex.create({
 		alignItems: "center",
 		gap: tokens.space2,
 		flex: 1,
-		minWidth: 200,
+		minWidth: 340,
+		flexBasis: 340,
+		flexShrink: 0,
 		padding: "6px 10px",
 		borderWidth: 1,
 		borderStyle: "solid",
@@ -118,7 +150,7 @@ export const styles = stylex.create({
 	},
 	input: {
 		flex: 1,
-		minWidth: 0,
+		minWidth: 150,
 		backgroundColor: "transparent",
 		borderWidth: 0,
 		color: tokens.colorTextStrong,
@@ -135,7 +167,10 @@ export const styles = stylex.create({
 	},
 	grid: {
 		display: "grid",
-		gridTemplateColumns: "minmax(0, 1fr) minmax(320px, 400px)",
+		gridTemplateColumns: {
+			default: "minmax(0, 1fr) minmax(280px, 400px)",
+			"@media (max-width: 1150px)": "minmax(0, 1fr) 280px"
+		},
 		gridTemplateRows: "minmax(0, 1fr)",
 		flex: 1,
 		minHeight: 0,
@@ -265,7 +300,8 @@ export const styles = stylex.create({
 		borderWidth: 0,
 		borderRadius: tokens.radiusControl,
 		backgroundColor: { default: "transparent", ":hover": tokens.colorSurfaceHover },
-		color: tokens.colorWarning,
+		color: tokens.colorTextMuted,
+		whiteSpace: "nowrap",
 		fontFamily: tokens.fontBody,
 		fontSize: 12,
 		cursor: "pointer",

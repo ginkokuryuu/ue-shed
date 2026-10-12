@@ -4,6 +4,19 @@ import { clauseParts, hasValue, legacyFilter, toggleValue } from "./game-text-fi
 import { migratePreferences } from "./game-text-preferences.js";
 
 describe("filter pills", () => {
+	it("moves a value out of the opposite operator without losing other exclusions", () => {
+		const result = toggleValue(
+			[{ field: "translation", op: "is_not", values: ["missing", "to_update"] }],
+			{ field: "translation", op: "is", values: ["missing"] }
+		);
+		expect(result).toEqual([
+			{ field: "translation", op: "is_not", values: ["to_update"] },
+			{ field: "translation", op: "is", values: ["missing"] }
+		]);
+		expect(
+			toggleValue(result, { field: "translation", op: "is_not", values: ["missing"] })
+		).toEqual([{ field: "translation", op: "is_not", values: ["to_update", "missing"] }]);
+	});
 	it("joins values of one field into one pill and drops it when empty", () => {
 		const one = toggleValue([], { field: "problem", op: "is", values: ["key_changed"] });
 		const two = toggleValue(one, { field: "problem", op: "is", values: ["not_gathered"] });
@@ -83,7 +96,7 @@ describe("culture strip", () => {
 
 	it("names one or two cultures, counts more, and says all when every culture shares it", () => {
 		expect(cultureSummary([mark("de", "not_translated"), mark("fr", "translated")])).toBe(
-			"de missing"
+			"de not translated"
 		);
 		expect(
 			cultureSummary([
@@ -92,13 +105,13 @@ describe("culture strip", () => {
 				mark("ja", "needs_update"),
 				mark("ko", "translated")
 			])
-		).toBe("3 to update");
+		).toBe("3 need update");
 		expect(cultureSummary([mark("de", "not_translated"), mark("fr", "not_translated")])).toBe(
-			"all missing"
+			"all not translated"
 		);
 		expect(
 			cultureSummary([mark("de", "translated", ["not_synced"]), mark("fr", "needs_update")])
-		).toBe("de not synced · fr to update");
+		).toBe("de not synced · fr need update");
 		expect(cultureSummary([mark("de", "translated")])).toBe("");
 	});
 

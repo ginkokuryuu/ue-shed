@@ -37,6 +37,7 @@ test("Game Text browses indexed translations with the list beside the selected l
 	await page.keyboard.press("Control+k");
 	const search = page.getByRole("searchbox", { name: "Search game text" });
 	await expect(search).toBeFocused();
+	expect((await search.boundingBox())?.width).toBeGreaterThanOrEqual(150);
 	await search.fill("Continue");
 	const row = results.locator("button[data-row]").filter({ hasText: "Continue" }).first();
 	await expect(row).toBeVisible();
@@ -72,8 +73,34 @@ test("Game Text browses indexed translations with the list beside the selected l
 	await expect(row).toBeVisible();
 	await expect(translatedHeading).toBeVisible();
 	await page.screenshot({ path: testInfo.outputPath("game-text-layout-1280.png") });
+	await application.evaluate(({ BrowserWindow }) => {
+		BrowserWindow.getAllWindows()[0]?.setContentSize(1024, 768);
+	});
+	await expect.poll(() => page.evaluate("innerWidth")).toBe(1024);
+	expect((await search.boundingBox())?.width).toBeGreaterThanOrEqual(150);
+	expect((await page.getByRole("button", { name: "Rescan", exact: true }).boundingBox())?.y).toBe(
+		(await page.getByRole("button", { name: /^Culture:/u }).boundingBox())?.y
+	);
+	expect(
+		(await page.getByRole("button", { name: "Display", exact: true }).boundingBox())?.y
+	).toBe((await page.getByRole("button", { name: "Filter", exact: true }).boundingBox())?.y);
+
+	expect(
+		await results.evaluate((element) => element.scrollWidth <= element.clientWidth + 1)
+	).toBe(true);
+	const back = detail.getByRole("button", { name: "‹ Lines", exact: true });
+	const beforeScroll = await back.boundingBox();
+	await detail.evaluate((element) => {
+		element.scrollTop = element.scrollHeight;
+	});
+	expect((await back.boundingBox())?.y).toBe(beforeScroll?.y);
+	await page.screenshot({ path: testInfo.outputPath("game-text-layout-1024.png") });
 	await detail.getByRole("button", { name: "‹ Lines", exact: true }).click();
 	await expect(translatedHeading).toHaveCount(0);
+	await page.getByRole("button", { name: "Hide side pane", exact: true }).click();
+	await expect(detail).toBeHidden();
+	await page.getByRole("button", { name: "Show side pane", exact: true }).click();
+	await expect(detail).toBeVisible();
 	await expect(row).toBeVisible();
 	await page.getByRole("button", { name: "Rescan", exact: true }).click();
 	await expect(search).toBeEnabled();

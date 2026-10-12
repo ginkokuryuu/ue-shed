@@ -378,6 +378,7 @@ export function UnrealSteps(props: { readonly model: GameTextOperationsModel }) 
 			<LocalizationPicker
 				label="Unreal steps"
 				value="Unreal steps"
+				reason={props.model.reason()}
 				values={choices().map((choice) => choice.label)}
 				disabled={props.model.busy()}
 				onSelect={(label) => {
