@@ -46,6 +46,33 @@ The changed run has no observer errors. Concurrent local checks and retained OS 
 is not a controlled machine-wide performance guarantee. The 39-second unchanged rescan and
 roughly 3.2 GiB peak RSS remain material performance limitations.
 
+### Composable steps follow-up
+
+A third fresh-profile run measures the refactor at commit `183dd2a0`. Workbench refreshes the
+project once, then imports, builds, and opens the localization view using that verified revision.
+This uses the same project and native reader as the paired runs above, with an empty derived
+cache and retained OS caches. No build or test process ran alongside this timing run.
+
+| Actual Workbench operation            | Composable steps |
+| ------------------------------------- | ---------------: |
+| Scan click to usable results          |         347.95 s |
+| Launch to usable results              |         363.68 s |
+| Unchanged rescan to usable results    |          32.46 s |
+| Observed peak aggregate Workbench RSS |     3,237.55 MiB |
+
+The scan observation is 257.43 seconds (42.5%) below the original separate-store baseline.
+There is one inventory/extraction pass, followed by source indexing and localization preparation.
+All displayed corpus, coverage, and translation-state counts match the previous runs. This is
+another individual local observation, not evidence of a repeatable 18-second improvement over
+the initial sharing implementation. Artifacts are `after-refactor/result.json` and `ready.png`
+under the same ignored measurement directory. The observer records no errors before completion;
+closing the isolated app afterwards produces existing IPC/worker teardown diagnostics.
+
+Verification includes 496 targeted package, CLI, Workbench service, and component tests; the
+precommit gate; the built desktop Game Text workflow; and packed-package conformance with the
+public steps and search worker in a clean consumer. These do not constitute a full `pnpm check`
+or a new Unreal engine matrix run; parser and native protocol code are unchanged.
+
 ## Phase 6 final recorded host measurements
 
 The host harness calls the production CLI refresh/query and headless Workbench main service.
