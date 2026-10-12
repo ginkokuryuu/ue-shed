@@ -231,6 +231,23 @@ Compaction preallocates from its census rather than doubling a multi-gigabyte ar
 stay within the supervised heap/RSS limits on the retained workloads; larger workloads can fail
 the explicit 16 GiB arena cap rather than silently wrap offsets.
 
+Cold localization starts a bounded parser pool immediately. It reserves half of the memory reported
+by `process.availableMemory()` for parsing, estimates each task at 128 MiB plus 32 times its input
+size, and admits smaller files alongside a larger one when their reservations fit. A file that
+exceeds the estimate budget runs alone. These reservations are conservative scheduling estimates,
+not a hard RSS limit; there is no largest-file calibration pass or fixed 16 GB worker allowance.
+
+Parser workers prepare 16 MiB local string runs and reuse hashes before their columns are released.
+The coordinator merges those runs, assigns shared IDs, and preserves deterministic cross-domain
+ownership. Temporary run readers target 16 MiB in aggregate with a 16 KiB minimum per reader.
+At 256 or more packages, a first package refresh spools one validated read batch into bounded shard
+buffers and uses the package worker pool. Existing and smaller package sets retain their current
+path. With at least 512 KiB of local-to-global mapping vectors, staged layer conversion runs in up
+to eight workers under an available-memory budget; smaller mappings convert in the coordinator.
+Workers receive only their own copied ID maps and cannot publish a root or acquire another lease.
+The coordinator verifies results and publishes the root atomically. Final join policy still runs in
+TypeScript; its ID comparators retain two decoded strings rather than repeatedly decoding both sides.
+
 **File refresh.** The previous key comes from the active path publication or the file's validated
 stat hint. Sorted identity mappings match old/new rows, including duplicates and reordering.
 The prior file's byte-to-ID mapping reuses unchanged content; only unresolved new/changed strings

@@ -70,6 +70,12 @@ const approvedPromiseAdapters = new Set([
 	// Package cold import owns the same worker-message Promise bridge under Effect.acquireRelease;
 	// callers receive only a scoped Effect, and workers/readers/staging close on every exit.
 	"packages/game-text/src/package-text-cold.ts",
+	// Cold worker reservations/message bridges stay below scoped import/publication Effects.
+	// The one-hour cold-index report records the measured boundary and keep/reject evidence.
+	"packages/game-text/src/cold-task-pool.ts",
+	"packages/game-text/src/cold-layer-pool.ts",
+	// Bounded worker sort-run IO implements SnapshotSource load ports without a second runtime.
+	"packages/game-text/src/shared-string-sort.ts",
 	// Shared immutable string segments and ID layers adapt positioned Node IO below the Effect store.
 	"packages/game-text/src/shared-string-file.ts",
 	"packages/game-text/src/shared-index.ts",
@@ -172,7 +178,10 @@ const approvedResourceAdapters = new Set([
 	"packages/game-text/src/package-text-cold.ts",
 	// The worker's parentPort listener lives only until that owning scope terminates the worker.
 	"packages/game-text/src/package-text-worker.ts",
-	// RSS sampling belongs to one worker message and is cleared before its reply completes.
+	// Cold layer listeners and workers terminate in the publication adapter's finally block.
+	"packages/game-text/src/cold-layer-pool.ts",
+	"packages/game-text/src/cold-layer-worker.ts",
+	// Parser parentPort listeners live only until the owning import scope terminates the worker.
 	"packages/game-text/src/localization-import-worker.ts",
 	// Site navigation owns click/popstate listeners through onSettled cleanup.
 	"apps/site/src/navigation.ts",

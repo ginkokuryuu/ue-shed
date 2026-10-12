@@ -1,5 +1,5 @@
 import { isUtf8 } from "node:buffer";
-import { encodeWtf8, hasWtf8Surrogate, isWtf8 } from "./wtf8.js";
+import { decodeWtf8, encodeWtf8, hasWtf8Surrogate, isWtf8 } from "./wtf8.js";
 import { snapshotCheck } from "./snapshot-format.js";
 export interface PackedStrings {
 	readonly bytes: Buffer;
@@ -30,6 +30,26 @@ export function packedStrings(values: readonly string[]): PackedStrings {
 }
 export function stringBytes(strings: PackedStrings, id: number): Buffer {
 	return strings.bytes.subarray(strings.offsets[id]!, strings.offsets[id + 1]!);
+}
+/** Comparators usually revisit one side of the previous pair. Retain two decoded IDs only. */
+export function packedStringReader(strings: PackedStrings) {
+	let first = -1,
+		second = -1,
+		firstValue = "",
+		secondValue = "";
+	return (row: number) => {
+		if (row === first) return firstValue;
+		if (row === second) {
+			[first, second] = [second, first];
+			[firstValue, secondValue] = [secondValue, firstValue];
+			return firstValue;
+		}
+		second = first;
+		secondValue = firstValue;
+		first = row;
+		firstValue = decodeWtf8(stringBytes(strings, row));
+		return firstValue;
+	};
 }
 export function compareBytes(a: Uint8Array, b: Uint8Array) {
 	return Buffer.compare(a, b);

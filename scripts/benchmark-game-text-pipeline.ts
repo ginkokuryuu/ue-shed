@@ -2,7 +2,7 @@
 import { fork } from "node:child_process";
 import { createHash } from "node:crypto";
 import { mkdir, mkdtemp, writeFile } from "node:fs/promises";
-import { resolve, dirname } from "node:path";
+import { resolve, dirname, join } from "node:path";
 import { performance } from "node:perf_hooks";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { parseArgs } from "node:util";
@@ -14,6 +14,9 @@ import {
 } from "../packages/localization/dist/index.js";
 import { readGeneratedPackageInventory } from "./package-text-generated.ts";
 import { killBenchmarkTree } from "./game-text-scale-safety.ts";
+import { PackageTextStored } from "../packages/game-text/src/package-text-columns.ts";
+import { packageTextJsonLines } from "../packages/game-text/src/package-text-ndjson.ts";
+import { packageTextShard } from "../packages/game-text/src/package-text-layer.ts";
 
 const { values } = parseArgs({
 	options: {
@@ -43,6 +46,11 @@ if (values.records && !values.cache)
 	throw new Error("Retained records require an existing --cache.");
 const runs = Number(values.runs);
 if (!Number.isSafeInteger(runs) || runs < 1 || runs > 20) throw new Error("--runs must be 1–20.");
+const Stage = Schema.Struct({
+	name: Schema.Literals(["localization", "packages", "join"]),
+	ms: Schema.Number,
+	sortMs: Schema.optionalKey(Schema.Number)
+});
 const Result = Schema.Struct({
 	variant: Schema.Literals(["before", "after"]),
 	round: Schema.Int,
@@ -56,7 +64,8 @@ const Result = Schema.Struct({
 	parsedFiles: Schema.Number,
 	total: Schema.Number,
 	rows: Schema.Number,
-	sha256: Schema.String
+	sha256: Schema.String,
+	stages: Schema.Array(Stage)
 });
 
 if (values.worker) {
@@ -81,13 +90,76 @@ if (values.worker) {
 						Effect.promise(() =>
 							readGeneratedPackageInventory(resolve(values.records!))
 						),
-					read: () => Stream.die("Retained warm inputs unexpectedly changed.")
+					read: (_root, entries) =>
+						Stream.fromAsyncIterable(
+							(async function* () {
+								const wanted = new Set(entries.map((entry) => entry.path));
+								const shards = [
+									...new Set(entries.map((entry) => packageTextShard(entry.path)))
+								];
+								const decode = Schema.decodeUnknownSync(
+									Schema.fromJsonString(PackageTextStored)
+								);
+								for (const shard of shards)
+									for await (const line of packageTextJsonLines(
+										join(
+											resolve(values.records!),
+											`package-text.${shard}.ndjson`
+										)
+									)) {
+										const record = decode(line);
+										if (!wanted.has(record.path)) continue;
+										if (record.evidence.event === "not_gatherable")
+											throw new Error(
+												"Reader requested an excluded package."
+											);
+										yield record.evidence;
+									}
+							})(),
+							(cause) =>
+								new module.GameTextIndexError({
+									operation: "records",
+									message: String(cause),
+									recovery: "Choose complete retained package records."
+								})
+						)
 				})
 			)
 		: module.gameTextIndexSourceNodeLayer(cacheRoot);
+	const stages: (typeof Stage.Type)[] = [];
+	const measure = <A, E, R>(
+		name: typeof Stage.Type.name,
+		effect: Effect.Effect<A, E, R>,
+		summarize: (value: A) => { sortMs?: number }
+	) =>
+		Effect.gen(function* () {
+			const start = performance.now();
+			const value = yield* effect;
+			stages.push({ name, ms: performance.now() - start, ...summarize(value) });
+			return value;
+		});
+	const builder = Layer.effect(
+		module.GameTextIndexBuilder,
+		Effect.gen(function* () {
+			const original = yield* module.GameTextIndexBuilder;
+			return module.GameTextIndexBuilder.of({
+				...original,
+				importLocalizationTarget: (request) =>
+					measure("localization", original.importLocalizationTarget(request), (value) =>
+						value.profile ? { sortMs: value.profile.sortMs } : {}
+					),
+				refreshPackageTextLayer: (request) =>
+					measure("packages", original.refreshPackageTextLayer(request), (value) => ({
+						sortMs: value.profile.sortMs
+					})),
+				refreshJoinedTarget: (request) =>
+					measure("join", original.refreshJoinedTarget(request), () => ({}))
+			});
+		}).pipe(Effect.provide(module.typeScriptIndexBuilderLayer))
+	);
 	const layer = module.gameTextIndexRefreshLayer(cacheRoot).pipe(
 		Layer.provide(source),
-		Layer.provide(module.typeScriptIndexBuilderLayer),
+		Layer.provide(builder),
 		Layer.provide(
 			assetReaderLayer({
 				executable: resolve(variant === "before" ? values["before-reader"] : values.reader)
@@ -132,7 +204,8 @@ if (values.worker) {
 					parsedFiles: opened.imported.files.filter((file) => file.parsed).length,
 					total: page.total,
 					rows: page.units.length,
-					sha256: createHash("sha256").update(JSON.stringify(page)).digest("hex")
+					sha256: createHash("sha256").update(JSON.stringify(page)).digest("hex"),
+					stages
 				});
 			})
 		).pipe(Effect.provide(layer))

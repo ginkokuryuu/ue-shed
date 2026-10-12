@@ -31,7 +31,7 @@ import { comparePackageTextPathBytes } from "./package-text-order.js";
 import { joinedQueryColumns } from "./joined-query-columns.js";
 import { joinedQueryPlaces } from "./joined-query-places.js";
 import { joinedPhysicalChunkName } from "./joined-column-chunks.js";
-import { StringArena } from "./shared-string-codec.js";
+import { StringArena, packedStringReader } from "./shared-string-codec.js";
 
 const noteMetadata = Schema.decodeUnknownOption(
 	Schema.fromJsonString(
@@ -925,10 +925,7 @@ export const refreshJoinedTarget = Effect.fn("JoinedTarget.refresh")(function* (
 	new Uint8Array(lineIdValues.buffer).set(packedLineIds.bytes);
 	queryColumns["query.line.id_utf8"] = lineIdValues;
 	queryColumns["query.line.id_starts"] = Uint32Array.from(packedLineIds.offsets);
-	const lineId = (row: number) =>
-		decodeWtf8(
-			packedLineIds.bytes.subarray(packedLineIds.offsets[row], packedLineIds.offsets[row + 1])
-		);
+	const lineId = packedStringReader(packedLineIds);
 	queryColumns["query.line.order"] = Uint32Array.from({ length: count }, (_, row) => row).sort(
 		(left, right) => lineId(left).localeCompare(lineId(right))
 	);

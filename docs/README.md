@@ -87,6 +87,9 @@ should follow [Website and illustrated guides](engineering/website.md).
 
 ## Research
 
+- [Game Text cold index continuation (2026-10-13)](research/game-text-cold-index-performance-2026-10-13.md) —
+  parallel cold preparation, conversion, repeated timings and rejected join-cache experiments.
+
 - [Game Text pipeline performance (2026-10-13)](research/game-text-pipeline-performance-2026-10-13.md) —
   two-hour Rust/TypeScript investigation, measured keep/reject decisions, memory and query parity.
 

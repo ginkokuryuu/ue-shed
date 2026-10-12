@@ -13,7 +13,7 @@ import {
 } from "node:fs/promises";
 import { isAbsolute, relative, resolve, sep, join, dirname } from "node:path";
 import { performance } from "node:perf_hooks";
-import { writeSnapshotFile } from "./snapshot-file.js";
+import { writeSnapshotFile, type SnapshotSource } from "./snapshot-file.js";
 import { importColdLocalizationTarget } from "./localization-cold-import.js";
 import { GameTextIndexProgressReporter } from "./index-progress.js";
 import { Context, Effect, Metric, Option, Result, Schema } from "effect";
@@ -196,7 +196,8 @@ function sameStamp(a: typeof Stamp.Type, b: typeof Stamp.Type) {
 /** Stat hits never open authored bytes; misses hash and parse one bounded read. */
 const importFile = Effect.fn("LocalizationSnapshot.importFile")(function* (
 	input: LocalizationFileImportRequest,
-	stagedFile?: string
+	stagedFile?: string,
+	prepareSource?: (source: SnapshotSource) => Promise<void>
 ) {
 	const boundary = Schema.decodeUnknownResult(FileRequest)(input);
 	if (Result.isFailure(boundary))
@@ -459,6 +460,7 @@ const importFile = Effect.fn("LocalizationSnapshot.importFile")(function* (
 				const source = yield* io(file, () => builder.finish());
 				stages.finishMs += performance.now() - finishStarted;
 				if (stagedFile) {
+					if (prepareSource) yield* io(file, () => prepareSource(source));
 					const written = yield* io(file, () => writeSnapshotFile(stagedFile, source, 1));
 					return { hash: content.hash, parsed: true, bytes: written.fileLength };
 				}
@@ -572,7 +574,11 @@ export const importLocalizationFile = Effect.fn("LocalizationSnapshot.importFile
 );
 /** Internal worker boundary: parse/hash once, stage local columns, publish no target or stat hints. */
 export const prepareLocalizationFile = Effect.fn("LocalizationSnapshot.prepareFile")(
-	(input: LocalizationFileImportRequest, stagedFile: string) => importFile(input, stagedFile)
+	(
+		input: LocalizationFileImportRequest,
+		stagedFile: string,
+		prepareSource?: (source: SnapshotSource) => Promise<void>
+	) => importFile(input, stagedFile, prepareSource)
 );
 
 const TargetRequest = LocalizationProjectRequest.pipe(

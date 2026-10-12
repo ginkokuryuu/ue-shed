@@ -5,11 +5,21 @@ import {
 	decodeA64Into,
 	sortBytes,
 	packedStrings,
-	stringBytes
+	stringBytes,
+	packedStringReader
 } from "./shared-string-codec.js";
 import { SnapshotFormatError } from "./snapshot-format.js";
 
 describe("A64 byte dictionary", () => {
+	it("the bounded comparator reader preserves repeated Unicode and lone surrogate IDs", () => {
+		const values = ["", "é", "😀", "\ud800", "\udc00", "ABC", "tail"];
+		const read = packedStringReader(packedStrings(values));
+		for (const row of [0, 1, 0, 1, 2, 3, 2, 4, 5, 6, 0, 3]) expect(read(row)).toBe(values[row]);
+		const order = values.map((_, row) => row).sort((a, b) => read(a).localeCompare(read(b)));
+		expect(order).toEqual(
+			values.map((_, row) => row).sort((a, b) => values[a]!.localeCompare(values[b]!))
+		);
+	});
 	it("expands directly into contiguous UTF-8 and rejects invalid entry boundaries", () => {
 		const values = ["", "café", "caféteria", "ABCDEF0123456789abcdef0123456789", "😀", "tail"];
 		const packed = packedStrings(values),
