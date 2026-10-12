@@ -1,7 +1,9 @@
 import {
 	MAX_LOCALIZATION_CULTURES,
-	makeRetainedGameTextIndex,
-	GameTextIndexRefresh,
+	makeRetainedGameTextIndexWith,
+	GameTextIndexSteps,
+	type GameTextProjectIndex,
+	GameTextIndexError,
 	localizationQualityWorkspace,
 	checkLocalizationTarget,
 	evaluateGameTextSourceQuality,
@@ -74,12 +76,27 @@ function failure(code: string) {
 /** The retained corpus reference is also the scan revision: stale readers cannot publish results. */
 export const makeGameTextLocalization = Effect.fn("Workbench.GameText.localization")(function* (
 	currentCorpus: () => Effect.Effect<TextCorpus | undefined, never, Scope.Scope>,
-	currentRoot: () => Effect.Effect<string | undefined, never, Scope.Scope>,
+	currentProject: () => Effect.Effect<GameTextProjectIndex | undefined, never, Scope.Scope>,
 	currentRules?: () => Effect.Effect<GameTextRuleDocument | undefined, never, Scope.Scope>
 ) {
 	const reader = yield* LocalizationEvidence;
-	const refreshIndex = yield* makeRetainedGameTextIndex();
-	const index = yield* GameTextIndexRefresh;
+	const index = yield* GameTextIndexSteps;
+	const currentRoot = () => currentProject().pipe(Effect.map((project) => project?.projectRoot));
+	const refreshIndex = yield* makeRetainedGameTextIndexWith(
+		Effect.fn("Workbench.GameText.prepareTarget")(function* (request) {
+			const project = yield* currentProject();
+			if (!project)
+				return yield* Effect.fail(
+					new GameTextIndexError({
+						operation: "project",
+						message: "The project index is no longer selected.",
+						recovery: "Scan the selected project again."
+					})
+				);
+			const imported = yield* index.importTarget(project, request);
+			return yield* index.openTarget(yield* index.buildTarget(project, imported, request));
+		})
+	);
 	const rules = currentRules ?? (() => Effect.succeed(undefined));
 	const baseline = yield* Ref.make<LocalizationBaseline | undefined>(undefined);
 	const qualityCache = yield* Ref.make<

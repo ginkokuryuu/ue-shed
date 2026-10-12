@@ -16,13 +16,14 @@ import { columnarTextCorpusQuery } from "./columnar-query.js";
 import { makeGameTextSearchWorker } from "./search-worker-node.js";
 import { TextCorpusSearchRequest } from "./schema.js";
 import { GameTextIndexBuilder, typeScriptIndexBuilderLayer } from "./index-builder.js";
+import { GameTextIndexProgressReporter, type GameTextIndexProgress } from "./index-progress.js";
 import {
 	GameTextIndexSource,
 	GameTextIndexRefresh,
 	gameTextIndexRefreshLayer
 } from "./index-refresh.js";
 
-it("retains readers while one refresh lease updates only selected inputs and review", async () => {
+it("retains readers across refresh steps updating selected inputs and review", async () => {
 	const directory = await mkdtemp(join(tmpdir(), "ue-shed-game-text-index-"));
 	try {
 		const projectRoot = await realpath(directory);
@@ -61,6 +62,7 @@ it("retains readers while one refresh lease updates only selected inputs and rev
 		let value = "Source";
 		const reads: string[][] = [];
 		const path = "Content/Text/Table.uasset";
+		const progress: GameTextIndexProgress[] = [];
 		const source = Layer.succeed(GameTextIndexSource, {
 			inventory: () =>
 				Effect.succeed([
@@ -131,6 +133,23 @@ it("retains readers while one refresh lease updates only selected inputs and rev
 					const refresh = yield* GameTextIndexRefresh;
 					const request = { projectRoot, targetName: authored.name };
 					const first = yield* refresh.refresh(request);
+					expect(progress.map((event) => event.phase)).toEqual(
+						expect.arrayContaining([
+							"localization",
+							"inventory",
+							"packages",
+							"joining",
+							"opening",
+							"ready"
+						])
+					);
+					expect(progress).toContainEqual({
+						phase: "localization",
+						completed: 5,
+						total: 5
+					});
+					expect(progress).toContainEqual({ phase: "packages", completed: 1, total: 1 });
+					expect(progress.at(-1)?.phase).toBe("ready");
 					const searches = [
 						{ query: "source", capability: "all" as const, pageSize: 10 },
 						{ query: "absent", capability: "all" as const, pageSize: 10 },
@@ -178,7 +197,8 @@ it("retains readers while one refresh lease updates only selected inputs and rev
 							configuration: {
 								cacheRoot: join(projectRoot, "cache"),
 								projectKey: projectRoot,
-								targetKey: authored.name
+								targetKey: authored.name,
+								projectView: { kind: "localization", target: authored.name }
 							},
 							generation: first.joined.reader.manifest.generation,
 							joinedKey: first.joined.reader.manifest.active.joined!
@@ -312,6 +332,9 @@ it("retains readers while one refresh lease updates only selected inputs and rev
 					expect(yield* hydrateJoinedTarget(full.joined)).toEqual(pinned);
 				})
 			).pipe(
+				Effect.provideService(GameTextIndexProgressReporter, (event) => {
+					progress.push(event);
+				}),
 				Effect.provide(
 					gameTextIndexRefreshLayer(join(projectRoot, "cache"), {
 						searchWorker: true

@@ -2,15 +2,15 @@ import { Context, Effect, Layer, type Scope } from "effect";
 import { importLocalizationFile, importLocalizationTarget } from "./localization-import.js";
 import { refreshPackageTextLayer } from "./package-text-layer.js";
 import { refreshJoinedTarget } from "./joined-target.js";
-import { SharedIndex, sharedIndexNodeLayer } from "./shared-index.js";
+import { SharedIndex, sharedIndexNodeLayer, type SharedIndexOptions } from "./shared-index.js";
 import { LocalizationImportSession } from "./localization-import-session.js";
 import type { SnapshotFormatError } from "./snapshot-format.js";
-import type { SnapshotStoreError, SnapshotStoreOptions } from "./snapshot-store.js";
+import type { SnapshotStoreError } from "./snapshot-store.js";
 
 type IndexFailure = SnapshotFormatError | SnapshotStoreError;
 
 export interface GameTextIndexBuildSessionRequest {
-	readonly configuration: SnapshotStoreOptions;
+	readonly configuration: SharedIndexOptions;
 	readonly files?: readonly string[];
 }
 

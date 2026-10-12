@@ -8,7 +8,16 @@ export const SearchWorkerInput = Schema.Struct({
 	configuration: Schema.Struct({
 		cacheRoot: Schema.NonEmptyString,
 		projectKey: Schema.NonEmptyString,
-		targetKey: Schema.NonEmptyString
+		targetKey: Schema.NonEmptyString,
+		projectView: Schema.optionalKey(
+			Schema.Union([
+				Schema.Struct({ kind: Schema.Literal("source") }),
+				Schema.Struct({
+					kind: Schema.Literal("localization"),
+					target: Schema.NonEmptyString
+				})
+			])
+		)
 	}),
 	generation: Schema.NonEmptyString,
 	joinedKey: Schema.NonEmptyString

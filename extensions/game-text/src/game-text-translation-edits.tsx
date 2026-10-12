@@ -15,6 +15,17 @@ import { tokens } from "@ue-shed/ui-theme/tokens.stylex.js";
 import { styles } from "./game-text-styles.js";
 
 const local = stylex.create({
+	panel: {
+		display: "flex",
+		flexDirection: "column",
+		flexShrink: 0,
+		minHeight: 0,
+		maxHeight: "min(45vh, 360px)",
+		overflow: "hidden"
+	},
+	intro: { margin: 0, flex: 1, minWidth: 0 },
+	changes: { flex: 1, minHeight: 0, overflowY: "auto", overscrollBehavior: "contain" },
+	actions: { flexShrink: 0 },
 	edit: {
 		display: "grid",
 		gap: 2,
@@ -63,7 +74,7 @@ export function seenTranslation(translation: LocalizationTranslation): string | 
 }
 
 export function createGameTextEdits(input: {
-	readonly client: GameTextClientApi;
+	readonly client: Pick<GameTextClientApi, "localizationEdits">;
 	readonly target: () => LocalizationSelection["target"] | undefined;
 	readonly nativeCulture: () => string | undefined;
 	readonly busy: () => boolean;
@@ -251,66 +262,85 @@ export function StagedEditsPanel(props: { readonly model: GameTextEdits }) {
 	return (
 		<>
 			<Show when={props.model.open() && props.model.edits().length > 0}>
-				<section aria-label="Staged translations" {...stylex.attrs(styles.card)}>
-					<p>
-						{props.model.edits().length} staged{" "}
-						{props.model.edits().length === 1 ? "translation" : "translations"}. Writing
-						changes only the PO files; Unreal imports them when you sync.
-					</p>
-					<For each={props.model.edits()}>
-						{(item) => (
-							<div {...stylex.attrs(local.edit)}>
-								<div {...stylex.attrs(styles.bar)}>
-									<strong>{item.edit.culture}</strong>
-									<span {...stylex.attrs(styles.muted)}>{item.source}</span>
-									<Show when={outcome(item)}>
-										{(result) => (
-											<span
-												{...stylex.attrs(
-													styles.muted,
-													result().outcome !== "ready" &&
-														result().outcome !== "unchanged" &&
-														styles.warning
-												)}
-											>
-												{outcomeLabels[result().outcome]}
-											</span>
-										)}
-									</Show>
-									<Button
-										size="compact"
-										tone="quiet"
-										disabled={props.model.busy()}
-										onClick={() => props.model.unstage(item.edit)}
-									>
-										Unstage
-									</Button>
+				<section
+					aria-label="Staged translations"
+					{...stylex.attrs(styles.card, local.panel)}
+				>
+					<div {...stylex.attrs(styles.bar, local.actions)}>
+						<p {...stylex.attrs(local.intro)}>
+							{props.model.edits().length} staged{" "}
+							{props.model.edits().length === 1 ? "translation" : "translations"}.
+							Writing changes only the PO files; Unreal imports them when you sync.
+						</p>
+						<Button
+							size="compact"
+							tone="quiet"
+							onClick={() => props.model.setOpen(false)}
+						>
+							Close staged translations
+						</Button>
+					</div>
+					<div
+						role="region"
+						aria-label="Staged translation changes"
+						tabindex={0}
+						{...stylex.attrs(local.changes)}
+					>
+						<For each={props.model.edits()}>
+							{(item) => (
+								<div {...stylex.attrs(local.edit)}>
+									<div {...stylex.attrs(styles.bar)}>
+										<strong>{item.edit.culture}</strong>
+										<span {...stylex.attrs(styles.muted)}>{item.source}</span>
+										<Show when={outcome(item)}>
+											{(result) => (
+												<span
+													{...stylex.attrs(
+														styles.muted,
+														result().outcome !== "ready" &&
+															result().outcome !== "unchanged" &&
+															styles.warning
+													)}
+												>
+													{outcomeLabels[result().outcome]}
+												</span>
+											)}
+										</Show>
+										<Button
+											size="compact"
+											tone="quiet"
+											disabled={props.model.busy()}
+											onClick={() => props.model.unstage(item.edit)}
+										>
+											Unstage
+										</Button>
+									</div>
+									<p {...stylex.attrs(local.diff)}>
+										<span {...stylex.attrs(local.before)}>
+											{item.edit.seenTranslation ?? "No translation"}
+										</span>
+										<span aria-hidden="true" {...stylex.attrs(styles.muted)}>
+											{" → "}
+										</span>
+										<span>{item.edit.translation}</span>
+									</p>
 								</div>
-								<p {...stylex.attrs(local.diff)}>
-									<span {...stylex.attrs(local.before)}>
-										{item.edit.seenTranslation ?? "No translation"}
-									</span>
-									<span aria-hidden="true" {...stylex.attrs(styles.muted)}>
-										{" → "}
-									</span>
-									<span>{item.edit.translation}</span>
-								</p>
-							</div>
-						)}
-					</For>
-					<Show when={reviewed()?.files.length}>
-						<span {...stylex.attrs(styles.muted)}>PO files to write</span>
-						<For each={reviewed()?.files ?? []}>
-							{(file) => (
-								<code {...stylex.attrs(styles.mono)}>{file.relativePath}</code>
 							)}
 						</For>
-						<span {...stylex.attrs(styles.muted)}>
-							Check these files out in your source control first; UE Shed does not
-							touch source control.
-						</span>
-					</Show>
-					<div {...stylex.attrs(styles.bar)}>
+						<Show when={reviewed()?.files.length}>
+							<span {...stylex.attrs(styles.muted)}>PO files to write</span>
+							<For each={reviewed()?.files ?? []}>
+								{(file) => (
+									<code {...stylex.attrs(styles.mono)}>{file.relativePath}</code>
+								)}
+							</For>
+							<span {...stylex.attrs(styles.muted)}>
+								Check these files out in your source control first; UE Shed does not
+								touch source control.
+							</span>
+						</Show>
+					</div>
+					<div {...stylex.attrs(styles.bar, local.actions)}>
 						<Button
 							size="compact"
 							disabled={props.model.busy()}

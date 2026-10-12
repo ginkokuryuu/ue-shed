@@ -1,7 +1,7 @@
 import { it } from "@effect/vitest";
 import { Deferred, Effect, Fiber, Layer, Ref } from "effect";
 import { expect } from "vitest";
-import { GameTextIndexRefresh } from "@ue-shed/game-text";
+import { GameTextIndexSteps } from "@ue-shed/game-text";
 import { makeIndexRegressionFixture } from "../../../../../packages/game-text/dist/index-refresh-regressions.test-support.js";
 import { WorkbenchGameText, WorkbenchGameTextLive } from "./game-text.js";
 import { makeWorkbenchProjectTestLayer } from "./project-workspace.js";
@@ -23,12 +23,13 @@ const makeHost = Effect.fn("Test.GameText.productionHost")(function* (
 	let calls = 0;
 	let pauseRetirement = false;
 	const indexed = Layer.effect(
-		GameTextIndexRefresh,
+		GameTextIndexSteps,
 		Effect.gen(function* () {
-			const real = yield* GameTextIndexRefresh;
-			return GameTextIndexRefresh.of({
+			const real = yield* GameTextIndexSteps;
+			return GameTextIndexSteps.of({
+				...real,
 				invalidate: real.invalidate,
-				refresh: Effect.fn("Test.GameText.productionRefresh")(function* (request) {
+				openTarget: Effect.fn("Test.GameText.productionRefresh")(function* (request) {
 					const call = ++calls;
 					if (call === 1)
 						yield* Effect.addFinalizer(() =>
@@ -40,7 +41,10 @@ const makeHost = Effect.fn("Test.GameText.productionHost")(function* (
 								)
 							)
 						);
-					if (mode === "localization" && request.targetName === fixture.target.name)
+					if (
+						mode === "localization" &&
+						request.imported.target.name === fixture.target.name
+					)
 						yield* Effect.addFinalizer(() =>
 							Deferred.succeed(retiring, undefined).pipe(
 								Effect.andThen(
@@ -48,7 +52,7 @@ const makeHost = Effect.fn("Test.GameText.productionHost")(function* (
 								)
 							)
 						);
-					const result = yield* real.refresh(request);
+					const result = yield* real.openTarget(request);
 					if (call === 2 && mode === "rejected") {
 						yield* Deferred.succeed(prepared, undefined);
 						yield* Deferred.await(allowPublication);
@@ -238,17 +242,18 @@ it.live(
 			const allowSearch = yield* Deferred.make<void>();
 			const retiring = yield* Deferred.make<void>();
 			const indexed = Layer.effect(
-				GameTextIndexRefresh,
+				GameTextIndexSteps,
 				Effect.gen(function* () {
-					const real = yield* GameTextIndexRefresh;
-					return GameTextIndexRefresh.of({
+					const real = yield* GameTextIndexSteps;
+					return GameTextIndexSteps.of({
+						...real,
 						invalidate: real.invalidate,
-						refresh: Effect.fn("Test.GameText.targetRefresh")(function* (request) {
-							if (request.targetName === fixture.target.name)
+						openTarget: Effect.fn("Test.GameText.targetRefresh")(function* (request) {
+							if (request.imported.target.name === fixture.target.name)
 								yield* Effect.addFinalizer(() =>
 									Deferred.succeed(retiring, undefined)
 								);
-							const result = yield* real.refresh(request);
+							const result = yield* real.openTarget(request);
 							return {
 								...result,
 								search: Effect.fn("Test.GameText.targetSearch")(
@@ -270,9 +275,11 @@ it.live(
 			).pipe(Layer.provide(fixture.layer(true)));
 			yield* Effect.gen(function* () {
 				const raw = fixture.raw();
+				const steps = yield* GameTextIndexSteps;
+				const project = yield* steps.refreshProject({ projectRoot: fixture.projectRoot });
 				const host = yield* makeGameTextLocalization(
 					() => Effect.succeed(raw),
-					() => Effect.succeed(fixture.projectRoot)
+					() => Effect.succeed(project)
 				);
 				expect((yield* Effect.scoped(host.select(fixture.target.name))).status).toBe(
 					"ready"

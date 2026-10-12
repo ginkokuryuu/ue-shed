@@ -4,6 +4,7 @@ import { createUniqueId, onSettled, Show } from "solid-js";
 import { Portal } from "@solidjs/web";
 
 export interface TaskProgress {
+	readonly detail?: string;
 	readonly cacheHits?: number;
 	readonly completed: number;
 	readonly phase: "idle" | "enumerating" | "scanning" | "ready" | "failed";

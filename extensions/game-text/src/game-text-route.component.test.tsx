@@ -15,7 +15,8 @@ import {
 	TextQualityRuleId,
 	type TextCorpus,
 	type TextCorpusQueryRunResult,
-	type TextCorpusSearchResult
+	type TextCorpusSearchResult,
+	type LocalizationTargetsResult
 } from "@ue-shed/game-text/browser";
 import { EffectRuntimeProvider } from "@ue-shed/ui";
 import { Deferred, Effect, Layer, ManagedRuntime } from "effect";
@@ -897,6 +898,53 @@ describe("Game Text writing workspace", () => {
 		);
 		await screen.findByText("2 matches");
 		expect(screen.queryByRole("progressbar")).toBeNull();
+	});
+
+	it("keeps progress through translations and the first results query", async () => {
+		let now = 1000;
+		const clock = vi.spyOn(performance, "now").mockImplementation(() => now);
+		const translations = await Effect.runPromise(Deferred.make<LocalizationTargetsResult>());
+		const firstPage = await Effect.runPromise(Deferred.make<TextCorpusSearchResult>());
+		const query = textCorpusQuery(corpus);
+		mount(
+			makeClient(corpus, {
+				localizationTargets: () => Deferred.await(translations),
+				localizationTarget: () => Effect.succeed({ status: "not_ready" }),
+				localizationFocus: () => Effect.succeed({ status: "not_ready" }),
+				progress: () =>
+					Effect.succeed({
+						completed: 3,
+						total: 21,
+						phase: "scanning",
+						stage: "game_text",
+						detail: "Reading localization files"
+					}),
+				search: () => Deferred.await(firstPage)
+			})
+		);
+		const progress = await screen.findByRole("progressbar", {
+			name: "Reading localization files"
+		});
+		expect(progress.getAttribute("aria-valuenow")).toBe("3");
+		expect(progress.getAttribute("aria-valuemax")).toBe("21");
+		expect(screen.getByRole("button", { name: "Rescan" })).toHaveProperty("disabled", true);
+		now = 61000;
+		await Effect.runPromise(Deferred.succeed(translations, { status: "ready", targets: [] }));
+		await screen.findByRole("progressbar", { name: "Loading first results" });
+		expect(progress.hasAttribute("value")).toBe(false);
+		expect(screen.queryByText(/ready in/u)).toBeNull();
+		now = 181000;
+		await Effect.runPromise(
+			Deferred.succeed(firstPage, {
+				status: "ready",
+				page: query.search({ query: "", capability: "all", pageSize: 50 })
+			})
+		);
+		await screen.findByText("2 matches");
+		await waitFor(() => expect(screen.queryByRole("progressbar")).toBeNull());
+		expect(screen.getByText(/ready in 3:00/u)).toBeDefined();
+		expect(screen.getByRole("button", { name: "Rescan" })).toHaveProperty("disabled", false);
+		clock.mockRestore();
 	});
 
 	it.each(["text", "quality"])(

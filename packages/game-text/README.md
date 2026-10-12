@@ -47,8 +47,10 @@ upcoming persistent corpus layers; current query hosts still use the in-memory m
 [snapshot engineering guide](../../docs/engineering/game-text-snapshots.md) for the format, caps,
 immutable publication and recovery behavior. `reader.domain()` bulk-loads one source, identity,
 translation or path domain; `reader.strings()` keeps page reads limited to touched blocks.
-`SharedIndex` with `sharedIndexNodeLayer` stores one deduplicated string ID space per project and
-target. Localization imports use independent content keys, immutable string segments and atomic
+`SharedIndex` with `sharedIndexNodeLayer({ ...options, projectView })` shares package extraction
+and one deduplicated string ID space across explicit source and localization views. Each view keeps
+independent joined pointers; omitting `projectView` retains the separate-store behavior.
+Localization imports use independent content keys, immutable string segments and atomic
 generation publication; compaction remaps active layers while existing readers retain their handles.
 Strings use immutable A64 segments: byte-sorted ranks, front coding in 64-string blocks, a sparse
 index and binary GUIDs with exact case recovery. Refresh reuses the previous file's string IDs and
@@ -68,9 +70,30 @@ filter selections while preserving concurrent group pages;
 independent callers should leave it false. Cancellation does not evict completed query results.
 The synchronous `query.search(request)` API remains available.
 
+For host-owned composition, use `GameTextIndexSteps` from `gameTextIndexStepsLayer(cacheRoot)`:
+
+```ts
+const steps = yield * GameTextIndexSteps;
+const project = yield * steps.refreshProject({ projectRoot });
+const imported = yield * steps.importTarget(project, { targetName });
+const target = yield * steps.buildTarget(project, imported);
+const model = yield * steps.openTarget(target);
+```
+
+Reuse `project` for additional targets; target preparation does not enumerate or extract packages.
+`openProject({ projectRoot })` creates a project handle without discovery, so localization can be
+imported and validated before `refreshProject`. Pass the resulting verified revision to
+`buildTarget`. The steps layer requires `GameTextIndexSource`, `LocalizationEvidence`, and
+`GameTextIndexBuilder`; the Node source and TypeScript builder layers provide the default backends.
+Project/import/build handles are trusted, process-local values, not transport or durable job schemas.
+Each write step owns and releases its lease. Stale package revisions or superseded localization
+publications fail with recovery guidance; opening a model pins its reader in the caller's scope.
+The compatibility `GameTextIndexRefresh.refresh()` composes these same steps.
+
 Retained desktop models separate preparation from publication. `makeRetainedGameTextIndex()`
 returns `refresh` and `release`; prepare inside an operation scope, publish the result and run
 its `retain` effect together, then borrow it in each operation that reads lazy projections.
+`makeRetainedGameTextIndexWith(prepare)` accepts the host's composition with the same ownership rules.
 Active borrowers keep the previous reader and worker alive through replacement. Rejected
 preparations leave the published model usable. See `ADOPTING.md` for the ownership contract.
 The raw indexed corpus includes empty-source units; searchable exports keep their visibility rules.

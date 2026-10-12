@@ -28,7 +28,10 @@ import {
 	decodeGameTextRuleDocumentJson,
 	evaluateGameTextSourceQuality,
 	textQualityQuery,
-	makeRetainedGameTextIndex,
+	makeRetainedGameTextIndexWith,
+	GameTextIndexSteps,
+	GameTextIndexProgressReporter,
+	type GameTextIndexProgress,
 	type TextCorpus,
 	type WorkspaceQualityRequest,
 	type WorkspaceQualityResult,
@@ -174,7 +177,18 @@ export const WorkbenchGameTextLive = Layer.effect(
 	WorkbenchGameText,
 	Effect.gen(function* () {
 		const project = yield* WorkbenchProject;
-		const refreshIndex = yield* makeRetainedGameTextIndex();
+		let indexProgress: GameTextIndexProgress | undefined;
+		const reportProgress = (value: GameTextIndexProgress) => {
+			indexProgress = value;
+		};
+		const steps = yield* GameTextIndexSteps;
+		const refreshIndex = yield* makeRetainedGameTextIndexWith(
+			Effect.fn("Workbench.GameText.prepareSource")(function* (request) {
+				const project = yield* steps.refreshProject(request);
+				const imported = yield* steps.importTarget(project);
+				return yield* steps.openTarget(yield* steps.buildTarget(project, imported));
+			})
+		).pipe(Effect.provideService(GameTextIndexProgressReporter, reportProgress));
 		const dialog = yield* ElectronDialog;
 		const files = yield* LocalFiles;
 		const activity = yield* Ref.make({ scans: 0, operation: false });
@@ -216,6 +230,23 @@ export const WorkbenchGameTextLive = Layer.effect(
 			const projectProgress = yield* project.progress();
 			if (projectProgress.phase === "enumerating" || projectProgress.phase === "scanning") {
 				return projectProgress;
+			}
+			const current = indexProgress;
+			if (current && current.phase !== "ready" && current.phase !== "failed") {
+				const labels = {
+					inventory: "Reading project asset inventory",
+					localization: "Reading localization files",
+					packages: "Checking saved packages for text",
+					joining: "Building text index",
+					opening: "Opening text index"
+				};
+				return {
+					completed: current.completed,
+					total: current.total,
+					phase: "scanning" as const,
+					stage: "game_text" as const,
+					detail: labels[current.phase]
+				};
 			}
 			const active = yield* Ref.get(activity);
 			return {
@@ -293,18 +324,9 @@ export const WorkbenchGameTextLive = Layer.effect(
 		};
 		const localization = yield* makeGameTextLocalization(
 			() => currentModel(retainedCorpus),
-			() =>
-				currentModel(queryModel).pipe(
-					Effect.flatMap((model) =>
-						model
-							? Ref.get(modelSelection).pipe(
-									Effect.map((owner) => owner?.projectRoot)
-								)
-							: Effect.succeed(undefined)
-					)
-				),
+			() => currentModel((index) => index.project),
 			() => currentValue(qualityDocument)
-		);
+		).pipe(Effect.provideService(GameTextIndexProgressReporter, reportProgress));
 		const runRefresh = (projectRoot: string, index: WorkbenchProjectCandidates) =>
 			Effect.gen(function* () {
 				const revision = yield* Ref.updateAndGet(scanRevision, (value) => value + 1);

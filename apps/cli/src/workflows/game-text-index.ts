@@ -4,6 +4,7 @@ import { Config, Effect, Layer, Option } from "effect";
 import { LocalizationEvidenceNodeLive } from "@ue-shed/localization";
 import {
 	GameTextIndexRefresh,
+	GameTextIndexSteps,
 	GameTextIndexError,
 	gameTextIndexRefreshLayer,
 	gameTextIndexSourceNodeLayer,
@@ -30,11 +31,21 @@ export function cliGameTextIndexLayer(reader?: string) {
 
 export const refreshCliGameTextIndex = Effect.fn("Cli.game_text.refresh")(
 	function* (request: GameTextIndexRefreshRequest, reader: string | undefined) {
+		const compose = Effect.fn("Cli.game_text.prepare")(function* (
+			steps: typeof GameTextIndexSteps.Service
+		) {
+			const selected = yield* steps.openProject(request);
+			const imported = yield* steps.importTarget(selected, request);
+			const project = yield* steps.refreshProject(request);
+			return yield* steps.openTarget(yield* steps.buildTarget(project, imported, request));
+		});
+		const steps = yield* Effect.serviceOption(GameTextIndexSteps);
+		if (Option.isSome(steps)) return yield* compose(steps.value);
 		const provided = yield* Effect.serviceOption(GameTextIndexRefresh);
 		if (Option.isSome(provided)) return yield* provided.value.refresh(request);
-		return yield* Effect.flatMap(GameTextIndexRefresh, (service) =>
-			service.refresh(request)
-		).pipe(Effect.provide(cliGameTextIndexLayer(reader)));
+		return yield* Effect.flatMap(GameTextIndexSteps, compose).pipe(
+			Effect.provide(cliGameTextIndexLayer(reader))
+		);
 	},
 	(effect) =>
 		effect.pipe(

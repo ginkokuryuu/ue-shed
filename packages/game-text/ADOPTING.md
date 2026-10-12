@@ -36,7 +36,18 @@ Workbench unless a named verification failure leaves the public package contract
 ## Required and optional capabilities
 
 For a desktop host using the compact index, compose
-`gameTextIndexRefreshLayer(cacheRoot, { searchWorker: true, latestSearchOnly: true })` and call
+`gameTextIndexStepsLayer(cacheRoot, { searchWorker: true, latestSearchOnly: true })` with
+`gameTextIndexSourceNodeLayer`, `typeScriptIndexBuilderLayer`, one reader, and
+`LocalizationEvidenceNodeLive`. Use `refreshProject` once for the chosen package revision, then
+`importTarget`, `buildTarget`, and `openTarget` for each requested localization view. Source queries
+use `importTarget(project)` without a target name. Target steps reuse the verified project handle;
+they never start package inventory or extraction. For localization-first validation, use
+`openProject` and `importTarget` before refreshing packages, then pass the verified revision and
+the import to `buildTarget`. These handles stay in the trusted process. The adopting host chooses
+ordering, requested views, progress presentation, and cancellation; the package owns per-step
+leases, cache validity, immutable publication, and query reader resources.
+`gameTextIndexRefreshLayer` remains a compatible convenience workflow and also exposes the steps.
+Call
 the retained refresh result's Effect-shaped `search(request)`. The host scope owns the worker
 and its pinned reader. `latestSearchOnly` fits a single search view and preserves concurrent group
 pages while cancelling replaced pages and older filter selections; leave it false for independent
@@ -45,7 +56,8 @@ concurrent callers. Worker startup and searches have 30-second bounds. Bundled h
 `import.meta.url`. Verify the packaged worker through the host transport. The synchronous
 `query.search` remains available for headless batch use and bounded direct queries.
 
-Use `makeRetainedGameTextIndex()` when a host publishes persistent models. Its `refresh(request)`
+Use `makeRetainedGameTextIndexWith(prepare)` when a host publishes models from its own step
+composition. `makeRetainedGameTextIndex()` retains the convenience workflow. Their `refresh(request)`
 prepares a candidate in the calling operation's scope. Validate the candidate, publish one model
 reference and run `candidate.retain` together in an uninterruptible publication step. Serialize
 competing publications and validate the revision and project after asynchronous cleanup, before

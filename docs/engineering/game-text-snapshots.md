@@ -58,6 +58,18 @@ holds its physical file open until scope release, preserving that generation thr
 and retirement. Windows tests retire the old filename before reading its previously unloaded
 strings through the retained handle.
 
+`GameTextIndexRefresh` uses one `shared-project-text-v1` store per project. Package layers and
+string IDs are shared between saved-source queries and every localization target. Each target
+has its own hashed joined/base/invalidation pointers, presented through the same `SharedIndex`
+interface, so revisiting a target reuses its join and pinned readers retain their original view.
+`SharedIndexOptions.projectView` selects an explicit source or named localization view for
+lower-level tooling and workers. A localization target named `SavedText` remains distinct from
+the source view. View hashes preserve lone UTF-16 surrogates through JSON escaping.
+Standalone stores with ordinary target keys keep their existing layout. Earlier target-scoped
+refresh caches are disposable and rebuild in the new project store; authored files are unchanged.
+Committed signature inventories are cached by project identity and generation, with capacity two
+and no caching of failed lookups. A new catalog generation fetches a new inventory.
+
 A writer consumes a `SnapshotSource`: ordered section descriptors with a bounded load operation.
 `snapshotColumnsSource` adapts existing columns; streaming importers can supply descriptors that
 produce one column or block at a time. The writer never allocates an entire raw or compressed
@@ -255,11 +267,14 @@ a future native layer must not reacquire a lock already held by a TypeScript cal
 `typeScriptIndexBuilderLayer` remains the oracle and fallback. Native default selection and
 production host adoption are pending.
 
-The library `GameTextIndexRefresh` service composes those operations with an injected
-`GameTextIndexSource` inventory/event adapter. It imports selected localization files,
-refreshes package signatures/text, reads review state and publishes the joined target under
-one lease, then returns a pinned reader and the existing `TextCorpusQuery` contract. The
-production Project Index inventory adapter remains unfinished. The persisted service test
+The library `GameTextIndexSteps` service exposes project opening, package refresh, localization
+import, target construction, and query opening separately, using an injected `GameTextIndexSource`
+inventory/event adapter. Project refresh returns a verified package revision which multiple target
+builds can consume without repeating inventory. Localization imports can also precede package
+refresh. Every write step owns a scoped lease; builds reject stale project revisions or superseded
+file publications. Query opening validates the target revision and returns a pinned reader with the
+existing `TextCorpusQuery` contract. Workbench and CLI choose their composition.
+`GameTextIndexRefresh` remains a convenience wrapper over those steps. The persisted service test
 checks unchanged reuse, selected file/package changes, review invalidation and readers
 retaining their earlier generation.
 
@@ -355,8 +370,9 @@ Refresh spans record reused-column count, source reuse and query-preparation dur
 
 Every host obtains builds through `GameTextIndexBuilder`: import, package refresh, dictionary,
 compaction and joined refresh. `typeScriptIndexBuilderLayer` implements the existing signatures;
-hosts import the service rather than build functions. `GameTextIndexRefresh` owns the writer lease,
-refresh spans/metrics, typed failures and cache invalidation. A persisted `joined.invalidated`
+hosts select that capability through the public steps service. `GameTextIndexSteps` owns per-step
+writer leases, structured spans, typed failures and cache invalidation. The convenience refresh
+wrapper retains its overall refresh metrics. A persisted `joined.invalidated`
 marker forces the next join refresh while retaining prior metadata for selected-file refreshes;
 it is removed after successful publication. PO layers are invalidated by their content key and
 review changes by the next review read/hash. Query boundaries record spans and duration metrics.

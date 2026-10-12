@@ -22,6 +22,7 @@ import { textCorpusFromExtractionEvents } from "./corpus.js";
 import { comparePackageTextPathBytes } from "./package-text-order.js";
 import { encodeWtf8 } from "./wtf8.js";
 import { LocalizationImportSession } from "./localization-import-session.js";
+import { GameTextIndexProgressReporter } from "./index-progress.js";
 import { writeSnapshotFile, openSnapshotFile, type SnapshotFileReader } from "./snapshot-file.js";
 
 /** The caller supplies the Project Index's opaque package-and-sidecar signature, never a layer hash.
@@ -101,6 +102,7 @@ export const refreshPackageTextLayer = Effect.fn("PackageText.refresh")(function
 ) {
 	const store = yield* SharedIndex,
 		writer = yield* store.writer();
+	const reportProgress = yield* GameTextIndexProgressReporter;
 	const manifest = writer.manifest();
 	let inventory = input.inventory;
 	const retainedEligibility = new Map<string, boolean>();
@@ -180,6 +182,10 @@ export const refreshPackageTextLayer = Effect.fn("PackageText.refresh")(function
 	const removed = selection
 		.filter((shard) => !shard.entries.length && manifest.active[shard.name])
 		.map((shard) => shard.name);
+	let completed =
+		inventory.length - changed.reduce((count, shard) => count + shard.entries.length, 0);
+	const report = () => reportProgress({ phase: "packages", completed, total: inventory.length });
+	report();
 	if (!inventory.length && !Object.keys(manifest.layers).length) {
 		yield* writer.publishCold([
 			{ name: selection[0]!.name, key: selection[0]!.key, source: packageTextColumns([]) }
@@ -265,6 +271,8 @@ export const refreshPackageTextLayer = Effect.fn("PackageText.refresh")(function
 			}
 		}
 		const received = new Set<string>();
+		completed += shard.entries.length - requests.length;
+		report();
 		if (requests.length)
 			yield* input.read(requests).pipe(
 				Stream.runForEach((event) =>
@@ -281,6 +289,8 @@ export const refreshPackageTextLayer = Effect.fn("PackageText.refresh")(function
 						received.add(event.path);
 						next.push({ path: event.path, signature, evidence: event });
 						readPackages++;
+						completed++;
+						report();
 					})
 				)
 			);
@@ -311,6 +321,7 @@ export const refreshPackageTextLayer = Effect.fn("PackageText.refresh")(function
 			});
 		} else sources.push({ name: shard.name, key: shard.key, source: packageTextColumns(next) });
 	}
+	reportProgress({ phase: "joining", completed: 0, total: 0 });
 	if (!Object.keys(manifest.layers).length || sources.length > 8)
 		yield* writer.publishCold(sources, removed);
 	else yield* writer.publishBatch(sources, removed);

@@ -3,7 +3,7 @@ import { join, basename } from "node:path";
 import { createHash } from "node:crypto";
 import { Context, Effect, Exit, Layer, Schema, Scope, Stream } from "effect";
 import {
-	GameTextIndexRefresh,
+	GameTextIndexSteps,
 	GameTextIndexBuilder,
 	GameTextIndexSource,
 	gameTextIndexRefreshLayer,
@@ -79,12 +79,18 @@ export async function measureGameTextHosts(
 			if (!file?.path) throw new Error("Choose an existing target file position.");
 			return yield* builder.withSession(
 				{
-					configuration: { cacheRoot: cache, projectKey: project, targetKey: target.name }
+					configuration: {
+						cacheRoot: cache,
+						projectKey: project,
+						targetKey: target.name,
+						projectView: { kind: "localization", target: target.name }
+					}
 				},
 				builder.importLocalizationFile({
 					projectRoot: project,
 					cacheRoot: cache,
 					sharedTargetKey: target.name,
+					projectScoped: true,
 					relativePath: file.path,
 					format: file.format,
 					poFormat: target.poFormat,
@@ -192,7 +198,8 @@ export async function measureGameTextHosts(
 					configuration: {
 						cacheRoot: cache,
 						projectKey: project,
-						targetKey: task === "prepare-saved-packages" ? "SavedText" : "Generated"
+						targetKey: "SavedText",
+						projectView: { kind: "source" }
 					}
 				},
 				builder.refreshPackageTextLayer({
@@ -318,7 +325,7 @@ export async function measureGameTextHosts(
 			Layer.provide(LocalFilesLive),
 			Layer.provide(LocalizationEvidenceNodeLive),
 			Layer.provide(
-				Layer.succeed(GameTextIndexRefresh, Context.get(context, GameTextIndexRefresh))
+				Layer.succeed(GameTextIndexSteps, Context.get(context, GameTextIndexSteps))
 			)
 		);
 		const built = await run(Layer.buildWithScope(layer, rootScope));
@@ -552,7 +559,11 @@ export async function measureGameTextHosts(
 										sharedIndexNodeLayer({
 											cacheRoot: cache,
 											projectKey: project,
-											targetKey: "Generated"
+											targetKey: "Generated",
+											projectView: {
+												kind: "localization",
+												target: "Generated"
+											}
 										})
 									)
 								)
