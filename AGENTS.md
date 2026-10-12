@@ -8,6 +8,10 @@ layer.
 
 - Start at [`docs/README.md`](docs/README.md) for the doc map and read order.
 - Keep the core usable from libraries and the CLI without the Workbench.
+- In Showcase/Workbench, only the shell owns project selection. Feature routes and extensions must
+  use the host's selected project, never add their own project picker or maintain a separate active
+  project. Scan, rescan, and preset actions must not change the selected project. If none is selected,
+  direct the user to the shell picker. See [project ownership](docs/showcase.md#project-ownership).
 - Do not introduce studio-project names, paths, assets, schemas, credentials, or assumptions.
 - Treat existing internal tooling as behavioral reference, not source code or architecture to copy.
 - Keep Unreal integrations capability-driven and separately enabled.

@@ -23,6 +23,21 @@ outside the captured image; **Fit capture** returns to the full image. Hover ove
 read world XY, then right-click or use **Copy coordinates**. XY follows Unreal's +X north and +Y
 east orientation and is expressed in Unreal units.
 
+## Project ownership
+
+The Workbench shell exclusively owns choosing, switching, and restoring the active project through
+its shared project picker. Feature routes and extensions consume the host's selected-project context;
+they must never add a route-specific project picker, open a project or directory dialog as a fallback,
+or keep a separate active project. If no project is selected, explain the requirement and direct the
+user to the existing shell picker.
+
+Scan, rescan, export, and preset actions operate on the selected project and must never change project
+selection. Refreshing that project's data is allowed. Localization targets, cultures, assets, and maps
+are selections within the project; label them clearly so they cannot be mistaken for project pickers.
+
+This ownership rule applies to the Showcase host, not the headless APIs: libraries and the CLI continue
+to accept explicit project configuration, and other hosts own their own project-selection workflow.
+
 ## Take an investigation away
 
 In Game Text, use **Export → CSV / JSON** and **Presets → Save preset… / Open preset…**.
