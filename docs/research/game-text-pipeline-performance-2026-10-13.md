@@ -105,6 +105,10 @@ Precommit and the Effect architecture checker pass. Saved-package extraction on 
 and UE 5.8** fixtures matches baseline output: four packages and 22 occurrences for each version.
 These are saved-byte checks, not fresh live editor or codegen runs; those sources are unchanged.
 
+The final `VITEST_MAX_WORKERS=4 pnpm run check:repository` also passes: **2,414 tests passed**,
+94 expected skips, 322 passing test files. This includes the always-on repository lane; it is
+not a full `pnpm check` or a fresh live Unreal/WASM engine-matrix run.
+
 The maintained harness uses public libraries and fresh processes, validates replies and compares
 page hashes. Build both revisions, then supply their explicit artifacts:
 
