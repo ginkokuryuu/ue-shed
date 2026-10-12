@@ -60,7 +60,7 @@ strings through the retained handle.
 
 `GameTextIndexRefresh` uses one `shared-project-text-v1` store per project. Package layers and
 string IDs are shared between saved-source queries and every localization target. Each target
-has its own hashed joined/base/invalidation pointers, presented through the same `SharedIndex`
+has its own hashed joined/base/invalidation/import pointers, presented through the same `SharedIndex`
 interface, so revisiting a target reuses its join and pinned readers retain their original view.
 `SharedIndexOptions.projectView` selects an explicit source or named localization view for
 lower-level tooling and workers. A localization target named `SavedText` remains distinct from
@@ -69,6 +69,13 @@ Standalone stores with ordinary target keys keep their existing layout. Earlier 
 refresh caches are disposable and rebuild in the new project store; authored files are unchanged.
 Committed signature inventories are cached by project identity and generation, with capacity two
 and no caching of failed lookups. A new catalog generation fetches a new inventory.
+
+Completed localization imports publish content-derived observation keys for successful and failed
+files, shared across targets, plus a target-specific import key. Build and open steps check these
+dependencies before using a handle. Repairing a missing or malformed file invalidates an older
+failed import even when the restored content reuses its historical file-layer key. Unchanged
+observations reuse their keys, so concurrent targets with identical inputs remain compatible.
+Existing pinned models retain their original evidence when later observations change.
 
 A writer consumes a `SnapshotSource`: ordered section descriptors with a bounded load operation.
 `snapshotColumnsSource` adapts existing columns; streaming importers can supply descriptors that

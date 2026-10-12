@@ -238,6 +238,17 @@ const approvedResourceAdapters = new Set([
 const operationlessServices = new Set(["apps/workbench/src/main/workbench-config.ts"]);
 const externalServiceEvidence = new Map([
 	[
+		// The public index ports and schemas are separate from the injected steps and Node adapter.
+		"packages/game-text/src/index-contract.ts",
+		[
+			"packages/game-text/src/index-refresh.ts",
+			"packages/game-text/src/index-steps.ts",
+			"packages/game-text/src/index-source-node.ts",
+			"packages/game-text/src/index-steps.test.ts",
+			"packages/game-text/src/index-source-node.test.ts"
+		]
+	],
+	[
 		"packages/authoring-sdk/src/index.ts",
 		[
 			"apps/workbench/src/renderer/index.tsx",

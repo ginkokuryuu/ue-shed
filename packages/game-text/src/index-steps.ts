@@ -55,6 +55,7 @@ import type { refreshJoinedTarget, JoinedTargetInput } from "./joined-target.js"
 import type { LocalizationReviewSnapshot } from "@ue-shed/localization";
 import type { GameTextProjectView } from "./project-index-view.js";
 import { encodeWtf8 } from "./wtf8.js";
+import { observeGameTextImport } from "./index-import-observation.js";
 
 export const GameTextProjectRefreshRequest = Schema.Struct(
 	Struct.pick(GameTextIndexRefreshRequest.fields, [
@@ -110,8 +111,8 @@ export interface GameTextTargetImport {
 	readonly project: GameTextProject;
 	readonly view: GameTextProjectView;
 	readonly imported: Imported;
-	/** Complete current file dependencies, including reused files in incremental imports. */
-	readonly fileKeys: Readonly<Record<string, string>>;
+	/** Current layer and observation dependencies, including failed and incrementally reused files. */
+	readonly fileKeys: Readonly<Record<string, string | undefined>>;
 	readonly fileErrors: NonNullable<JoinedTargetInput["fileErrors"]>;
 	readonly fileProvenances: NonNullable<JoinedTargetInput["fileProvenances"]>;
 	readonly fileDiagnostics: NonNullable<JoinedTargetInput["fileDiagnostics"]>;
@@ -123,6 +124,7 @@ export interface GameTextTargetIndex {
 	readonly join: Join;
 	readonly review: LocalizationReviewSnapshot;
 	readonly generation: string;
+	readonly fileKeys: GameTextTargetImport["fileKeys"];
 }
 export interface GameTextIndexModel extends GameTextIndexRefreshResult {
 	readonly project: GameTextProjectIndex;
@@ -386,10 +388,12 @@ export const makeGameTextIndexSteps = (
 							fileDiagnostics[diagnostic.relativePath] = diagnostic.error;
 							delete fileProvenances[diagnostic.relativePath];
 						}
-					const manifest = yield* index.inspect();
-					const fileKeys = Object.fromEntries(
-						Object.keys(fileProvenances).map((path) => [path, manifest.active[path]!])
-					);
+					const fileKeys = yield* observeGameTextImport({
+						imported,
+						fileErrors,
+						fileProvenances,
+						fileDiagnostics
+					});
 					return {
 						project,
 						view:
@@ -479,6 +483,7 @@ export const makeGameTextIndexSteps = (
 						project,
 						view: target.view,
 						imported,
+						fileKeys: target.fileKeys,
 						join,
 						review,
 						generation: (yield* index.inspect()).generation
@@ -509,6 +514,12 @@ export const makeGameTextIndexSteps = (
 				normalizeFailure
 			);
 			yield* checkProject(target.project, joined.reader.manifest);
+			if (
+				Object.entries(target.fileKeys).some(
+					([name, key]) => joined.reader.manifest.active[name] !== key
+				)
+			)
+				return yield* Effect.fail(stale("localization"));
 			if (
 				joined.reader.manifest.generation !== target.generation ||
 				joined.reader.manifest.active.joined !== target.join.key ||

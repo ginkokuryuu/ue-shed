@@ -7,7 +7,7 @@ import {
 	type SharedIndexWriter
 } from "./shared-index.js";
 
-const joinedNames = new Set(["joined", "joined-base", "joined.invalidated"]);
+const joinedNames = new Set(["joined", "joined-base", "joined.invalidated", "imported"]);
 
 /** Source and localization views have distinct identities, even for a target named SavedText. */
 export type GameTextProjectView =

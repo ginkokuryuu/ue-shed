@@ -263,6 +263,7 @@ const oracleIndexStepsLayer = Layer.effect(
 						view: imported.view,
 						imported: imported.imported,
 						generation: "oracle",
+						fileKeys: {},
 						get join(): GameTextTargetIndex["join"] {
 							throw new Error("Unused compact join in object oracle");
 						},

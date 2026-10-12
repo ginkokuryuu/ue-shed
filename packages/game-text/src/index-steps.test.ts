@@ -1,7 +1,7 @@
 import { it } from "@effect/vitest";
 import { Deferred, Effect, Fiber, Layer } from "effect";
 import { expect } from "vitest";
-import { writeFile } from "node:fs/promises";
+import { unlink, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { GameTextIndexSteps, gameTextIndexStepsLayer } from "./index-steps.js";
 import { GameTextIndexRefresh, GameTextIndexSource } from "./index-refresh.js";
@@ -9,6 +9,74 @@ import { typeScriptIndexBuilderLayer } from "./index-builder.js";
 import { SharedIndex, sharedIndexNodeLayer } from "./shared-index.js";
 import { makeRetainedGameTextIndex } from "./index-retained.js";
 import { makeIndexRegressionFixture } from "./index-refresh-regressions.test-support.js";
+
+it.live.each([
+	{ broken: "missing", other: false },
+	{ broken: "malformed", other: false },
+	{ broken: "missing", other: true },
+	{ broken: "malformed", other: true }
+] as const)(
+	"rejects a superseded $broken import after repair by another target: $other",
+	({ broken, other }) =>
+		Effect.gen(function* () {
+			const fixture = yield* makeIndexRegressionFixture();
+			const repairTarget = other ? fixture.addTarget("Other") : fixture.target;
+			yield* Effect.gen(function* () {
+				const steps = yield* GameTextIndexSteps;
+				const project = yield* steps.refreshProject({ projectRoot: fixture.projectRoot });
+				const initialImport = yield* steps.importTarget(project, fixture.request);
+				const initialTarget = yield* steps.buildTarget(project, initialImport);
+				const initial = yield* steps.openTarget(initialTarget);
+				const path = join(fixture.projectRoot, "de.po");
+				yield* Effect.promise(() =>
+					broken === "missing" ? unlink(path) : writeFile(path, "not a PO file")
+				);
+				const old = yield* steps.importTarget(project, fixture.request);
+				const failedTarget = yield* steps.buildTarget(project, old);
+				const failed = yield* steps.openTarget(failedTarget);
+				expect(
+					yield* steps.buildTarget(project, initialImport).pipe(Effect.flip)
+				).toMatchObject({
+					_tag: "GameTextIndexError",
+					operation: "localization"
+				});
+				expect(yield* steps.openTarget(initialTarget).pipe(Effect.flip)).toMatchObject({
+					_tag: "GameTextIndexError",
+					operation: "localization"
+				});
+				expect(
+					failed.evidence.cultures.find((item) => item.culture === "de")?.po.status
+				).toBe("failed");
+				// Restore the exact original content: its historical active file key can be unchanged.
+				yield* Effect.promise(() => writeFile(path, fixture.contents.po));
+				const repairedImport = yield* steps.importTarget(project, {
+					targetName: repairTarget.name
+				});
+				const repairedTarget = yield* steps.buildTarget(project, repairedImport);
+				const repaired = yield* steps.openTarget(repairedTarget);
+				expect(
+					repaired.evidence.cultures.find((item) => item.culture === "de")?.po.status
+				).toBe("read");
+				expect(yield* steps.buildTarget(project, old).pipe(Effect.flip)).toMatchObject({
+					_tag: "GameTextIndexError",
+					operation: "localization"
+				});
+				const current = yield* steps.openTarget(repairedTarget);
+				expect(yield* steps.openTarget(failedTarget).pipe(Effect.flip)).toMatchObject({
+					_tag: "GameTextIndexError",
+					operation: "localization"
+				});
+				expect(current.evidence).toEqual(repaired.evidence);
+				expect(
+					initial.evidence.cultures.find((item) => item.culture === "de")?.po.status
+				).toBe("read");
+				expect(
+					failed.evidence.cultures.find((item) => item.culture === "de")?.po.status
+				).toBe("failed");
+			}).pipe(Effect.provide(fixture.layer()));
+		}).pipe(Effect.scoped),
+	15000
+);
 
 it.live(
 	"composes source and concurrent target views over one verified project revision",
@@ -60,6 +128,30 @@ it.live(
 			}).pipe(Effect.provide(fixture.layer(true)));
 		}).pipe(Effect.scoped),
 	15000
+);
+
+it.live("unchanged partial imports reuse failed observations from the published target", () =>
+	Effect.gen(function* () {
+		const fixture = yield* makeIndexRegressionFixture();
+		yield* Effect.gen(function* () {
+			const steps = yield* GameTextIndexSteps;
+			const project = yield* steps.refreshProject({ projectRoot: fixture.projectRoot });
+			yield* steps.buildTarget(project, yield* steps.importTarget(project, fixture.request));
+			yield* Effect.promise(() =>
+				writeFile(join(fixture.projectRoot, "de.po"), "not a PO file")
+			);
+			const failed = yield* steps.importTarget(project, fixture.request);
+			const target = yield* steps.buildTarget(project, failed);
+			const partial = yield* steps.importTarget(project, {
+				...fixture.request,
+				changedFiles: []
+			});
+			expect(partial.fileKeys).toEqual(failed.fileKeys);
+			const unchanged = yield* steps.buildTarget(project, failed);
+			expect(unchanged.join.key).toBe(target.join.key);
+			expect(unchanged.join.rebuilt).toBe(false);
+		}).pipe(Effect.provide(fixture.layer()));
+	}).pipe(Effect.scoped)
 );
 
 it.live("imports and validates localization without starting package discovery", () =>

@@ -13,3 +13,6 @@ Expose project opening and refresh, localization import, target construction, an
 as independently composable `GameTextIndexSteps`. Keep the existing refresh service as a
 compatibility wrapper, provide a retainer for host-owned compositions, and replace encoded
 target storage keys with explicit project views.
+
+Reject superseded localization observations, including failed inputs repaired by another target,
+without replacing the repaired joined view or retiring already pinned readers.
