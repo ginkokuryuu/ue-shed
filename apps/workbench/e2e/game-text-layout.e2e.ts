@@ -95,6 +95,18 @@ test("Game Text browses indexed translations with the list beside the selected l
 	});
 	expect((await back.boundingBox())?.y).toBe(beforeScroll?.y);
 	await page.screenshot({ path: testInfo.outputPath("game-text-layout-1024.png") });
+	await page.getByRole("button", { name: "Filter", exact: true }).click();
+	await page.getByRole("menuitem", { name: /^Folder/u }).click();
+	const submenu = page.getByRole("menu", { name: "Folder", exact: true });
+	const submenuBounds = await submenu.boundingBox();
+	if (!submenuBounds) throw new Error("The filter submenu has no bounds.");
+	expect(submenuBounds.x).toBeGreaterThanOrEqual(0);
+	expect(submenuBounds.y).toBeGreaterThanOrEqual(0);
+	expect(submenuBounds.x + submenuBounds.width).toBeLessThanOrEqual(1024);
+	expect(submenuBounds.y + submenuBounds.height).toBeLessThanOrEqual(768);
+	await page.keyboard.press("Escape");
+	await page.keyboard.press("Escape");
+
 	await page.getByRole("button", { name: "Hide side pane", exact: true }).click();
 	await expect(translatedHeading).toHaveCount(0);
 	await expect(detail).toBeHidden();

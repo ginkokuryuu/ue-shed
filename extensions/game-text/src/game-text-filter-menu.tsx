@@ -82,6 +82,7 @@ export function FilterMenu(props: {
 	const [active, setActive] = createSignal<string>();
 	const [subTyped, setSubTyped] = createSignal("");
 	const [subTop, setSubTop] = createSignal(0);
+	const [subRight, setSubRight] = createSignal(false);
 	const toggle = (field: TextFilterField, value: string) => {
 		const clause = makeClause(field, value);
 		if (clause !== undefined) props.onChange(toggleValue(props.filter, clause));
@@ -195,7 +196,26 @@ export function FilterMenu(props: {
 		if (active() !== key) setSubTyped("");
 		setActive(key);
 		setSubTop(row.offsetTop);
-		if (focus) queueMicrotask(() => submenu?.querySelector<HTMLInputElement>("input")?.focus());
+		queueMicrotask(() => {
+			if (active() !== key || !submenu) return;
+			const panel = row.closest('[role="dialog"]')?.getBoundingClientRect();
+			if (panel) {
+				setSubRight(panel.left < 280);
+				setSubTop(
+					Math.max(
+						8 - panel.top,
+						Math.min(
+							row.offsetTop,
+							window.innerHeight -
+								panel.top -
+								submenu.getBoundingClientRect().height -
+								8
+						)
+					)
+				);
+			}
+			if (focus) submenu.querySelector<HTMLInputElement>("input")?.focus();
+		});
 	};
 	return (
 		<AnchoredPopover
@@ -327,7 +347,7 @@ export function FilterMenu(props: {
 								queueMicrotask(() => activeRow?.focus());
 							}
 						}}
-						{...stylex.attrs(styles.submenu)}
+						{...stylex.attrs(styles.submenu, subRight() && styles.submenuRight)}
 						style={{ top: `${subTop()}px` }}
 					>
 						<input
@@ -511,6 +531,7 @@ const styles = stylex.create({
 		padding: 4,
 		zIndex: 20
 	},
+	submenuRight: { left: "calc(100% + 6px)", right: "auto" },
 	submenu: {
 		borderWidth: 1,
 		borderStyle: "solid",
