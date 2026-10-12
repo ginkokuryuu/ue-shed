@@ -71,6 +71,18 @@ test("Game Text browses indexed translations with the list beside the selected l
 		await page.getByRole("button", { name: "Rescan", exact: true }).click();
 		const progress = page.getByRole("progressbar");
 		await expect(progress).toBeVisible();
+		const fill = progress.locator("span");
+		await expect
+			.poll(() =>
+				fill.evaluate((element) => {
+					const bounds = element.getBoundingClientRect();
+					const track = element.parentElement?.getBoundingClientRect();
+					return track
+						? Math.min(bounds.right, track.right) - Math.max(bounds.left, track.left)
+						: 0;
+				})
+			)
+			.toBeGreaterThan(100);
 		await expect(status).toContainText("elapsed");
 		expect(await header.boundingBox()).toEqual(before.header);
 		expect(await status.boundingBox()).toEqual(before.status);
@@ -82,6 +94,9 @@ test("Game Text browses indexed translations with the list beside the selected l
 			before.header.y + before.header.height
 		);
 		await page.screenshot({ path: testInfo.outputPath(`game-text-rescan-${width}.png`) });
+		await header.screenshot({
+			path: testInfo.outputPath(`game-text-rescan-header-${width}.png`)
+		});
 		await expect(progress).toBeHidden();
 		await expect(page.getByRole("button", { name: "Rescan", exact: true })).toBeEnabled();
 		expect(await header.boundingBox()).toEqual(before.header);

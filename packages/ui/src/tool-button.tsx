@@ -3,6 +3,8 @@ import { Portal, type ComponentProps, type JSX } from "@solidjs/web";
 import { tokens } from "@ue-shed/ui-theme/tokens.stylex.js";
 import { Show, createEffect, createSignal, createUniqueId, omit, onSettled } from "solid-js";
 
+const tooltipOpened = "ue-shed:tool-tooltip-open";
+
 export type ToolButtonProps = Omit<
 	ComponentProps<"button">,
 	"class" | "style" | "title" | "aria-label" | "children"
@@ -35,9 +37,13 @@ export function ToolButton(props: ToolButtonProps) {
 	};
 	const show = (delay = 0) => {
 		cancelTimer();
-		if (expanded()) return;
-		if (delay) timer = setTimeout(() => setOpen(true), delay);
-		else setOpen(true);
+		if (expanded() || open()) return;
+		const reveal = () => {
+			anchor?.dispatchEvent(new Event(tooltipOpened, { bubbles: true }));
+			setOpen(true);
+		};
+		if (delay) timer = setTimeout(reveal, delay);
+		else reveal();
 	};
 	const leave = () => {
 		cancelTimer();
@@ -73,6 +79,9 @@ export function ToolButton(props: ToolButtonProps) {
 		};
 	});
 	onSettled(() => {
+		const dismissOther = (event: Event) => {
+			if (event.target !== anchor) close();
+		};
 		const escape = (event: KeyboardEvent) => {
 			if (event.key === "Escape" && open()) {
 				event.preventDefault();
@@ -80,9 +89,11 @@ export function ToolButton(props: ToolButtonProps) {
 			}
 		};
 		document.addEventListener("keydown", escape);
+		document.addEventListener(tooltipOpened, dismissOther);
 		return () => {
 			cancelTimer();
 			document.removeEventListener("keydown", escape);
+			document.removeEventListener(tooltipOpened, dismissOther);
 		};
 	});
 	return (

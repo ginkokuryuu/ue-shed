@@ -1,4 +1,4 @@
-import { AnchoredPopover, Button } from "@ue-shed/ui";
+import { AnchoredPopover, Button, ToolButton, ToolIcon, type ToolIconName } from "@ue-shed/ui";
 import { For, Show, createEffect, createSignal, createUniqueId } from "solid-js";
 import { styles } from "./game-text-styles.js";
 
@@ -9,6 +9,8 @@ export function LocalizationPicker(props: {
 	readonly values: readonly string[];
 	readonly disabled?: boolean;
 	readonly reason?: string | undefined;
+	readonly icon?: ToolIconName;
+	readonly tooltip?: string;
 	readonly onSelect: (value: string) => void;
 }) {
 	const id = createUniqueId();
@@ -28,36 +30,62 @@ export function LocalizationPicker(props: {
 			onOpenChange={setOpen}
 			placement="bottom-start"
 			style={styles.pickerMenu}
-			trigger={(trigger) => (
-				<Button
-					{...trigger}
-					type="button"
-					size="compact"
-					tone="quiet"
-					aria-label={props.label + ": " + props.value}
-					disabled={props.disabled}
-					title={props.reason}
-					ref={(element) => {
-						anchor = element;
-						trigger.ref(element);
-					}}
-					onClick={() => {
-						const wasOpen = open();
-						trigger.onClick();
-						if (!wasOpen)
-							queueMicrotask(() => {
-								const panel = anchor?.ownerDocument.getElementById(id);
-								(
-									panel?.querySelector<HTMLButtonElement>(
-										'button[aria-pressed="true"]'
-									) ?? panel?.querySelector<HTMLButtonElement>("button")
-								)?.focus();
-							});
-					}}
-				>
-					{props.value} <span aria-hidden="true">▾</span>
-				</Button>
-			)}
+			trigger={(trigger) => {
+				const ref = (element: HTMLButtonElement) => {
+					anchor = element;
+					trigger.ref(element);
+				};
+				const click = () => {
+					const wasOpen = open();
+					trigger.onClick();
+					if (!wasOpen)
+						queueMicrotask(() => {
+							const panel = anchor?.ownerDocument.getElementById(id);
+							(
+								panel?.querySelector<HTMLButtonElement>(
+									'button[aria-pressed="true"]'
+								) ?? panel?.querySelector<HTMLButtonElement>("button")
+							)?.focus();
+						});
+				};
+				return (
+					<Show
+						when={props.icon}
+						fallback={
+							<Button
+								{...trigger}
+								type="button"
+								size="compact"
+								tone="quiet"
+								aria-label={props.label + ": " + props.value}
+								disabled={props.disabled}
+								title={props.reason}
+								ref={ref}
+								onClick={click}
+							>
+								{props.value} <span aria-hidden="true">▾</span>
+							</Button>
+						}
+					>
+						{(icon) => (
+							<ToolButton
+								{...trigger}
+								label={props.label + ": " + props.value}
+								tooltip={
+									props.reason ??
+									props.tooltip ??
+									"Choose " + props.label.toLowerCase() + "."
+								}
+								disabled={props.disabled}
+								ref={ref}
+								onClick={click}
+							>
+								<ToolIcon name={icon()} />
+							</ToolButton>
+						)}
+					</Show>
+				);
+			}}
 		>
 			<For each={props.values}>
 				{(value) => (

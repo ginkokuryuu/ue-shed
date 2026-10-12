@@ -137,6 +137,11 @@ the culture count. Matching lines and inspected assets remain in the header; the
 only in Text. Search retains at least 150 px of input space. At 1024 px, columns fit the available
 list width and the side pane can be hidden. Scan progress replaces the header's coverage text and
 draws its bar inside the header's bottom edge, so rescans neither reserve empty space nor shift rows.
+The bar uses a visible blue fill for known package counts and an animated blue segment while totals
+are unknown, with a static indicator under reduced motion. Project selection belongs to the host's
+workspace project picker; **Scan project** and **Rescan** only use that selected project. A separate
+**Localization target** icon chooses translation resources within that project and identifies its
+current target in the accessible label and tooltip.
 View switches, list tools, exports and per-culture review flags use compact stroke icons with
 descriptive tooltips on hover and keyboard focus. Selected tools remain highlighted; applied filters,
 quality finding counts and unsaved rules retain visible badges. Accessible names and toggle states

@@ -144,8 +144,6 @@ function makeClient(
 	const query = textCorpusQuery(input, "2026-10-07T16:53:00.000Z");
 	let quality = textQualityQuery(evaluateGameTextSourceQuality(input, rulesDocument));
 	return {
-		chooseProjectAndScan: () =>
-			Effect.succeed({ status: "completed", summary: query.summary() }),
 		loadConfiguredProject: () =>
 			Effect.succeed({ status: "completed", summary: query.summary() }),
 		progress: () =>
@@ -646,6 +644,33 @@ describe("Game Text writing workspace", () => {
 		expect(calls).toEqual([false, true]);
 	});
 
+	it("uses the host's selected project even before a project preference key has loaded", async () => {
+		const query = textCorpusQuery(corpus);
+		const load = vi.fn((refresh = false) =>
+			Effect.succeed(
+				refresh
+					? { status: "completed" as const, summary: query.summary() }
+					: { status: "not_scanned" as const }
+			)
+		);
+		mount(makeClient(corpus, { loadConfiguredProject: load }));
+		await userEvent.setup().click(await screen.findByRole("button", { name: "Scan project" }));
+		await screen.findByText("2 matches");
+		expect(load.mock.calls.map(([refresh]) => refresh)).toEqual([false, true]);
+	});
+
+	it("sends users to the workspace project picker when no project is selected", async () => {
+		mount(
+			makeClient(corpus, {
+				loadConfiguredProject: () => Effect.succeed({ status: "not_configured" })
+			})
+		);
+		await screen.findByText(
+			"Choose a project using the workspace project picker, then return here."
+		);
+		expect(screen.queryByRole("button", { name: "Scan project" })).toBeNull();
+	});
+
 	it("restores per-project search, toggles and selection across fresh mounts without rescanning", async () => {
 		const calls: boolean[] = [];
 		const client = makeClient(corpus, {
@@ -857,16 +882,16 @@ describe("Game Text writing workspace", () => {
 		expect(screen.getByRole("button", { name: "Read problems" })).toBeDefined();
 	});
 
-	it("reports cancelled project selection and leaves Scan project available", async () => {
+	it("cancels a scan without offering route-owned project selection", async () => {
 		const user = userEvent.setup();
 		mount(
 			makeClient(corpus, {
-				loadConfiguredProject: () => Effect.succeed({ status: "not_scanned" }),
-				chooseProjectAndScan: () => Effect.succeed({ status: "cancelled" })
+				loadConfiguredProject: (refresh) =>
+					Effect.succeed({ status: refresh ? "cancelled" : "not_scanned" })
 			})
 		);
 		await user.click(await screen.findByRole("button", { name: "Scan project" }));
-		await screen.findByText("Project selection was cancelled. Choose a project to scan.");
+		await screen.findByText("Scan cancelled. Your workspace project selection is unchanged.");
 		expect(screen.getByRole("button", { name: "Scan project" })).toHaveProperty(
 			"disabled",
 			false
@@ -902,6 +927,7 @@ describe("Game Text writing workspace", () => {
 		});
 		expect(progress.getAttribute("aria-valuenow")).toBe("1");
 		expect(progress.getAttribute("aria-valuemax")).toBe("2");
+		expect(progress.querySelector("span")?.style.width).toBe("50%");
 		expect(screen.queryByText(/No text matches/u)).toBeNull();
 		await Effect.runPromise(
 			Deferred.succeed(response, { status: "completed", summary: query.summary() })
@@ -942,6 +968,7 @@ describe("Game Text writing workspace", () => {
 		await Effect.runPromise(Deferred.succeed(translations, { status: "ready", targets: [] }));
 		await screen.findByRole("progressbar", { name: "Loading first results" });
 		expect(progress.hasAttribute("value")).toBe(false);
+		expect(progress.querySelector("span")?.style.width).toBe("");
 		expect(screen.queryByText(/ready in/u)).toBeNull();
 		now = 181000;
 		await Effect.runPromise(

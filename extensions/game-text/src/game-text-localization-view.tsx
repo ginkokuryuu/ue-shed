@@ -107,6 +107,8 @@ export function LocalizationControls(props: {
 			<Show when={props.model.targets().length > 1}>
 				<LocalizationPicker
 					label="Localization target"
+					icon="target"
+					tooltip="Choose a localization target within the selected project. This controls which translations, PO files, and Unreal sync steps are used."
 					value={props.model.target() ?? "Choose target"}
 					values={props.model.targets().map((target) => target.name)}
 					disabled={props.disabled || (!props.model.ready() && !props.model.error())}

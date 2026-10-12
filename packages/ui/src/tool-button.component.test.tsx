@@ -52,6 +52,30 @@ it("keeps a hovered tooltip available while the pointer enters it", async () => 
 	await waitFor(() => expect(screen.queryByRole("tooltip")).toBeNull());
 });
 
+it("shows only the most recently hovered or focused tool's tooltip", async () => {
+	render(() => (
+		<>
+			<ToolButton label="Display" tooltip="Change list grouping.">
+				<ToolIcon name="display" />
+			</ToolButton>
+			<ToolButton label="Filter" tooltip="Narrow lines by state.">
+				<ToolIcon name="filter" />
+			</ToolButton>
+		</>
+	));
+	const user = userEvent.setup();
+	await user.hover(screen.getByRole("button", { name: "Display" }));
+	await screen.findByRole("tooltip");
+	await user.tab();
+	await user.tab();
+	await waitFor(() => expect(screen.getByRole("tooltip").textContent).toContain("Filter"));
+	expect(screen.getAllByRole("tooltip")).toHaveLength(1);
+	await user.unhover(screen.getByRole("button", { name: "Display" }));
+	await user.hover(screen.getByRole("button", { name: "Display" }));
+	await waitFor(() => expect(screen.getByRole("tooltip").textContent).toContain("Display"));
+	expect(screen.getAllByRole("tooltip")).toHaveLength(1);
+});
+
 it("exposes toggle state and changes its tooltip after the tool is used", async () => {
 	render(() => {
 		const [reviewed, setReviewed] = createSignal(false);
@@ -136,15 +160,20 @@ it("releases open-tooltip listeners and positioning frames when the tool unmount
 	await userEvent.setup().tab();
 	await screen.findByRole("tooltip");
 	const escape = addDocument.mock.calls.find(([name]) => name === "keydown")?.[1];
+	const claim = addDocument.mock.calls.find(
+		([name]) => name === "ue-shed:tool-tooltip-open"
+	)?.[1];
 	const resize = addWindow.mock.calls.find(([name]) => name === "resize")?.[1];
 	const scroll = addWindow.mock.calls.find(([name]) => name === "scroll")?.[1];
 	const frame = frames.mock.results.find((result) => result.type === "return")?.value;
 	expect(escape).toBeDefined();
+	expect(claim).toBeDefined();
 	expect(resize).toBeDefined();
 	expect(scroll).toBeDefined();
 	expect(frame).toBeDefined();
 	view.unmount();
 	expect(removeDocument).toHaveBeenCalledWith("keydown", escape);
+	expect(removeDocument).toHaveBeenCalledWith("ue-shed:tool-tooltip-open", claim);
 	expect(removeWindow).toHaveBeenCalledWith("resize", resize);
 	expect(removeWindow).toHaveBeenCalledWith("scroll", scroll, true);
 	expect(cancelFrame).toHaveBeenCalledWith(frame);

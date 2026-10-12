@@ -49,16 +49,6 @@ export const styles = stylex.create({
 	},
 	heading: { margin: 0, fontSize: 14, color: tokens.colorTextStrong, fontWeight: 600 },
 	indexProgress: { color: tokens.colorAccent },
-	progress: {
-		position: "absolute",
-		bottom: 0,
-		left: 0,
-		width: "100%",
-		height: 3,
-		margin: 0,
-		pointerEvents: "none",
-		accentColor: tokens.colorAccent
-	},
 	headerActions: {
 		display: "flex",
 		flexWrap: "wrap",

@@ -155,8 +155,6 @@ function client(
 		},
 		loadConfiguredProject: () =>
 			Effect.succeed({ status: "completed", summary: plain.summary() }),
-		chooseProjectAndScan: () =>
-			Effect.succeed({ status: "completed", summary: plain.summary() }),
 		search: (request) =>
 			Effect.succeed({
 				status: "ready",

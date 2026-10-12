@@ -36,6 +36,7 @@ import { Effect, Schedule, Stream } from "effect";
 import { For, Show, createEffect, createMemo, createSignal, onSettled, untrack } from "solid-js";
 import type { JSX } from "@solidjs/web";
 import type { GameTextClientApi } from "./game-text-client.js";
+import { GameTextScanProgress } from "./game-text-scan-progress.js";
 import { CopyButton } from "./game-text-copy-button.js";
 import { ShowInUnrealButton } from "./game-text-locate-button.js";
 import { ReadProblems, CoverageNotes } from "./game-text-read-problems.js";
@@ -161,6 +162,7 @@ export function GameTextRoute(props: {
 	const [searching, setSearching] = createSignal(true);
 	const [queryMs, setQueryMs] = createSignal<number>();
 	const [loading, setLoading] = createSignal(true);
+	const [projectAvailable, setProjectAvailable] = createSignal(true);
 	const [preparing, setPreparing] = createSignal(true);
 	const [elapsedSeconds, setElapsedSeconds] = createSignal(0);
 	const [preparationSeconds, setPreparationSeconds] = createSignal<number>();
@@ -833,46 +835,42 @@ export function GameTextRoute(props: {
 		} else if (result.status === "failed") setQualityFailure(result.error);
 	};
 
-	const load = (refresh: boolean, choose = false) => {
+	const load = (refresh: boolean) => {
 		setPreparing(true);
 		setLoading(true);
 		setError(undefined);
 		setSearchFailed(false);
 		setScanNotice(undefined);
 		setProgress({ completed: 0, total: 0, phase: "idle", stage: "game_text" });
-		refreshAction.run(
-			choose
-				? props.client.chooseProjectAndScan()
-				: props.client.loadConfiguredProject(refresh),
-			{
-				onFailure: (cause) => {
+		refreshAction.run(props.client.loadConfiguredProject(refresh), {
+			onFailure: (cause) => {
+				setPreparing(false);
+				setLoading(false);
+				showError(String(cause), () => load(refresh));
+			},
+			onSuccess: (result: TextCorpusQueryRunResult) => {
+				setLoading(false);
+				setProjectAvailable(result.status !== "not_configured");
+				if (result.status === "completed") {
+					localization.load();
+					setSummary(result.summary);
+					setScanRevision((revision) => revision + 1);
+					if (!untrack(projectKey) && props.client.projectKey) {
+						memoryAction.run(props.client.projectKey(), {
+							onSuccess: setProjectKey
+						});
+					}
+				} else if (result.status === "failed") {
 					setPreparing(false);
-					setLoading(false);
-					showError(String(cause), () => load(refresh, choose));
-				},
-				onSuccess: (result: TextCorpusQueryRunResult) => {
-					setLoading(false);
-					if (result.status === "completed") {
-						localization.load();
-						setSummary(result.summary);
-						setScanRevision((revision) => revision + 1);
-						if (!untrack(projectKey) && props.client.projectKey) {
-							memoryAction.run(props.client.projectKey(), {
-								onSuccess: setProjectKey
-							});
-						}
-					} else if (result.status === "failed") {
-						setPreparing(false);
-						showError(result.error.message + " " + result.error.recovery, () =>
-							load(refresh, choose)
-						);
-					} else if (result.status === "cancelled") {
-						setPreparing(false);
-						setScanNotice("Project selection was cancelled. Choose a project to scan.");
-					} else setPreparing(false);
-				}
+					showError(result.error.message + " " + result.error.recovery, () =>
+						load(refresh)
+					);
+				} else if (result.status === "cancelled") {
+					setPreparing(false);
+					setScanNotice("Scan cancelled. Your workspace project selection is unchanged.");
+				} else setPreparing(false);
 			}
-		);
+		});
 	};
 
 	const restore = (saved: GameTextPreferences) => {
@@ -1377,7 +1375,14 @@ export function GameTextRoute(props: {
 					<Show
 						when={indexBusy()}
 						fallback={
-							<Show when={summary()} fallback="Ready to scan project">
+							<Show
+								when={summary()}
+								fallback={
+									projectAvailable()
+										? "Ready to scan project"
+										: "No project selected"
+								}
+							>
 								{(current) => (
 									<>
 										<Show
@@ -1447,13 +1452,10 @@ export function GameTextRoute(props: {
 					</Show>
 				</span>
 				<Show when={indexBusy()}>
-					<progress
-						aria-label={progressLabel()}
-						aria-valuenow={progressTotal() > 0 ? progress().completed : undefined}
-						aria-valuemax={progressTotal() > 0 ? progressTotal() : undefined}
-						max={progressTotal() || 1}
-						value={progressTotal() > 0 ? progress().completed : undefined}
-						{...stylex.attrs(styles.progress)}
+					<GameTextScanProgress
+						label={progressLabel()}
+						completed={progress().completed}
+						total={progressTotal()}
 					/>
 				</Show>
 			</div>
@@ -1528,9 +1530,19 @@ export function GameTextRoute(props: {
 									Game Text reads the project's saved assets, so Unreal does not
 									need to be running.
 								</p>
-								<Button tone="primary" onClick={() => load(true, !projectKey())}>
-									Scan project
-								</Button>
+								<Show
+									when={projectAvailable()}
+									fallback={
+										<p>
+											Choose a project using the workspace project picker,
+											then return here.
+										</p>
+									}
+								>
+									<Button tone="primary" onClick={() => load(true)}>
+										Scan project
+									</Button>
+								</Show>
 							</Show>
 						</div>
 					}

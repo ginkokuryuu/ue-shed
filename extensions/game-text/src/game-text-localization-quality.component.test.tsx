@@ -44,8 +44,6 @@ function client(): GameTextClientApi {
 		projectKey: () => Effect.succeed("quality-project"),
 		loadConfiguredProject: () =>
 			Effect.succeed({ status: "completed", summary: text.summary() }),
-		chooseProjectAndScan: () =>
-			Effect.succeed({ status: "completed", summary: text.summary() }),
 		search: (request) => Effect.succeed({ status: "ready", page: text.search(request) }),
 		focus: (request) => {
 			const focus = text.focus(request);

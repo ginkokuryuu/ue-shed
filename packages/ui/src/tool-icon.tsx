@@ -15,7 +15,8 @@ export type ToolIconName =
 	| "export"
 	| "presets"
 	| "files"
-	| "translations";
+	| "translations"
+	| "target";
 
 /** Small stroke icons matching the Workbench navigation, usable by any host. */
 export function ToolIcon(props: { readonly name: ToolIconName }): JSX.Element {
@@ -35,7 +36,8 @@ export function ToolIcon(props: { readonly name: ToolIconName }): JSX.Element {
 		export: "M8 2v8M5 7l3 3 3-3M3 10v3h10v-3",
 		presets: "M4 2.5h8v11L8 11l-4 2.5Z",
 		files: "M6 1.5h5l3 3v7H6ZM11 1.5v3h3M3 4.5H2v10h8v-1",
-		translations: "M1.5 3h7M5 1.5V3M3 3c0 3 2 5 5 6M7 3c0 3-2 5-5 6M8 13l3-7 3 7M9 11h4"
+		translations: "M1.5 3h7M5 1.5V3M3 3c0 3 2 5 5 6M7 3c0 3-2 5-5 6M8 13l3-7 3 7M9 11h4",
+		target: "M8 1v3M8 12v3M1 8h3M12 8h3M13 8a5 5 0 1 1-10 0 5 5 0 1 1 10 0ZM10 8a2 2 0 1 1-4 0 2 2 0 1 1 4 0Z"
 	} satisfies Record<ToolIconName, string>;
 	return (
 		<svg
