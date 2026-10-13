@@ -3,8 +3,7 @@ import type { SharedIndexWriter } from "./shared-index.js";
 import type { JoinPackages, JoinFile } from "./joined-target-input.js";
 import { normalizeTextPath, textFileKey, textFolderLabel } from "./text-origin.js";
 import { StringArena } from "./shared-string-codec.js";
-import { encodeWtf8 } from "./wtf8.js";
-import { HostSliceClock, sortRowsInSlices } from "./host-slices.js";
+import { HostSliceClock, runHostSteps, sortRowsInSlices, uniqueIdsSteps } from "./host-slices.js";
 
 /** Shared strings are decoded in batches small enough for one host slice each. A scattered ID
  * can cost a 64-value block decode, so a batch stays near a 16 ms slice at about 512 IDs.
@@ -47,26 +46,14 @@ export const joinedQueryPlaces = Effect.fn("JoinedTarget.queryPlaces")(function*
 	const unique = (columns: readonly Uint32Array[]) =>
 		Effect.gen(function* () {
 			// Filesystem writers may have interned IDs in an unpublished append segment.
-			let maximum = -1;
-			for (const values of columns) for (const id of values) if (id > maximum) maximum = id;
-			const seen = new Uint8Array(maximum + 1);
-			let count = 0;
-			for (const values of columns)
-				for (const id of values)
-					if (!seen[id]) {
-						seen[id] = 1;
-						count++;
-					}
-			const ids = new Uint32Array(count);
-			let row = 0;
-			for (let id = 0; id < seen.length; id++) if (seen[id]) ids[row++] = id;
+			const ids = yield* runHostSteps(uniqueIdsSteps(columns, clock));
 			const arena = new StringArena(),
-				positions = new Uint32Array(maximum + 1);
+				positions = new Uint32Array((ids.at(-1) ?? -1) + 1);
 			for (let start = 0; start < ids.length; start += BATCH) {
 				const values = yield* batch(ids, start);
 				for (let offset = 0; offset < values.length; offset++) {
 					positions[ids[start + offset]!] = start + offset;
-					arena.add(Buffer.from(encodeWtf8(values[offset]!)));
+					arena.addString(values[offset]!);
 				}
 			}
 			const packed = arena.finish();
@@ -143,7 +130,7 @@ export const joinedQueryPlaces = Effect.fn("JoinedTarget.queryPlaces")(function*
 	};
 	const arena = new StringArena();
 	for (const value of labels) {
-		arena.add(Buffer.from(encodeWtf8(value)));
+		arena.addString(value);
 		if (clock.step()) yield* Effect.yieldNow;
 	}
 	pack("label", arena);
@@ -152,8 +139,7 @@ export const joinedQueryPlaces = Effect.fn("JoinedTarget.queryPlaces")(function*
 	const pathArena = new StringArena();
 	for (let start = 0; start < pathIds.length; start += BATCH) {
 		const values = yield* batch(pathIds, start);
-		for (const value of values)
-			pathArena.add(Buffer.from(encodeWtf8(normalizeTextPath(value))));
+		for (const value of values) pathArena.addString(normalizeTextPath(value));
 	}
 	result["query.place.path_ids"] = pathIds;
 	result["query.place.occurrence_object"] = packages.occurrence.object;
@@ -169,7 +155,7 @@ export const joinedQueryPlaces = Effect.fn("JoinedTarget.queryPlaces")(function*
 		for (let row = 0; row < values.length; row++) {
 			const prefix =
 				manifest.columns.options![start + row]! & 1024 ? manifest.pathPrefix : "";
-			manifestArena.add(Buffer.from(encodeWtf8(normalizeTextPath(prefix + values[row]!))));
+			manifestArena.addString(normalizeTextPath(prefix + values[row]!));
 		}
 	}
 	pack("manifest", manifestArena);

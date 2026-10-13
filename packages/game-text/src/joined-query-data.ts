@@ -470,10 +470,16 @@ export class JoinedQueryData {
 		return undefined;
 	}
 	unit(kind: "raw" | "slice", row: number): TextUnit {
+		return runHostStepsSync(this.unitSteps(kind, row, new HostSliceClock(Infinity)));
+	}
+	/** Host steps for `unit`; a widely shared unit may span slices between its occurrences. */
+	*unitSteps(kind: "raw" | "slice", row: number, clock: HostSliceClock): HostSteps<TextUnit> {
 		const prefix = `query.${kind}.`;
-		const occurrences = Array.from(this.members(kind, row), (member) =>
-			this.occurrence(member)
-		);
+		const occurrences: TextOccurrence[] = [];
+		for (const member of this.members(kind, row)) {
+			occurrences.push(this.occurrence(member));
+			if (clock.step()) yield;
+		}
 		const values = this.strings(
 			Array.from(
 				this.column(prefix + "sources").subarray(
@@ -952,9 +958,16 @@ export class JoinedQueryData {
 			for (const record of decoded) records.push(record);
 			if (clock.expired()) yield;
 		}
-		const keys: Uint8Array[] = [];
+		// One arena holds the path keys; a buffer per key is costly at inventory scale.
+		const arena = new StringArena();
 		for (const record of records) {
-			keys.push(encodeWtf8(record.path));
+			arena.addString(record.path);
+			if (clock.step()) yield;
+		}
+		const packed = arena.finish(),
+			keys: Uint8Array[] = [];
+		for (let row = 0; row < records.length; row++) {
+			keys.push(packed.bytes.subarray(packed.offsets[row], packed.offsets[row + 1]));
 			if (clock.step()) yield;
 		}
 		const order = yield* sortRowsSteps(

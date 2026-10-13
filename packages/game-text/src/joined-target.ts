@@ -1,4 +1,4 @@
-import { decodeWtf8, encodeWtf8 } from "./wtf8.js";
+import { decodeWtf8 } from "./wtf8.js";
 import { createHash } from "node:crypto";
 import { Effect, Schema, Option } from "effect";
 import {
@@ -941,7 +941,7 @@ export const refreshJoinedTarget = Effect.fn("JoinedTarget.refresh")(function* (
 				hasUnits && keys[row - start] === ""
 					? `unresolved:${decodeWtf8(rawIdBytes.subarray(rawIdStarts[raw], rawIdStarts[raw + 1]))}`
 					: JSON.stringify([namespaces[row - start], keys[row - start]]);
-			lineIds.add(Buffer.from(encodeWtf8(`${input.target.name}:${identity}`)));
+			lineIds.addString(`${input.target.name}:${identity}`);
 		}
 	}
 	const packedLineIds = lineIds.finish();

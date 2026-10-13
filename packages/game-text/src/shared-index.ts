@@ -1,4 +1,3 @@
-import { encodeWtf8 } from "./wtf8.js";
 import { projectIndexViewLayer, type GameTextProjectView } from "./project-index-view.js";
 import { randomUUID, createHash } from "node:crypto";
 import { join } from "node:path";
@@ -862,7 +861,7 @@ function makeSharedIndexNodeLayer(options: SharedIndexOptions) {
 										"Batch exceeds bound"
 									);
 									const arena = new StringArena();
-									for (const value of values) arena.add(encodeWtf8(value));
+									for (const value of values) arena.addString(value);
 									const ids = await files.internPacked(domain, arena.finish());
 									await files.flush();
 									return ids;

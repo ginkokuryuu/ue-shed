@@ -1,4 +1,3 @@
-import { encodeWtf8 } from "./wtf8.js";
 import { absent, unitId, type JoinPackages } from "./joined-target-input.js";
 import {
 	StringArena,
@@ -122,7 +121,7 @@ export function* joinedQueryColumns(input: {
 			strings.string(c.key[member]!)
 		);
 	for (const member of rawRepresentatives) {
-		ids.add(Buffer.from(encodeWtf8(unitName(member))));
+		ids.addString(unitName(member));
 		if (clock.step()) yield;
 	}
 	const packedIds = ids.finish();

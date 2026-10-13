@@ -302,7 +302,7 @@ export function attributeGaps(options: {
 			const repository = frames.filter((node) => repositoryFrame(node.callFrame.url));
 			const owner = repository[0] ? locate(repository[0].callFrame) : `[${leafKey}]`;
 			const chain = repository
-				.slice(1, 5)
+				.slice(1, 9)
 				.map((node) => locate(node.callFrame))
 				.join(" < ");
 			const entry = owners.get(owner) ?? { ms: 0, chains: new Map() };

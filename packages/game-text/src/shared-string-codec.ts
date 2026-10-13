@@ -281,14 +281,27 @@ export class StringArena {
 				: new Uint32Array(stringCapacity + 1);
 	}
 	add(value: Uint8Array) {
+		this.reserve(value.length);
+		this.bytes.set(value, this.size);
+		this.size += value.length;
+	}
+	/** Adds the WTF-8 bytes of `value` without allocating a buffer per well-formed string. */
+	addString(value: string) {
+		if (!value.isWellFormed()) return this.add(encodeWtf8(value));
+		// UTF-8 of a well-formed string is its WTF-8 encoding.
+		this.reserve(Buffer.byteLength(value, "utf8"));
+		this.size += this.bytes.write(value, this.size, "utf8");
+	}
+	/** Starts a value of `length` bytes at the current size, growing the arena when needed. */
+	private reserve(length: number) {
 		snapshotCheck(
-			value.length <= 1024 ** 2 && this.size + value.length <= 16 * 1024 ** 3,
+			length <= 1024 ** 2 && this.size + length <= 16 * 1024 ** 3,
 			"strings",
 			"String arena exceeds the 16 GiB byte cap"
 		);
-		if (this.size + value.length > this.bytes.length) {
+		if (this.size + length > this.bytes.length) {
 			const next = Buffer.allocUnsafe(
-				Math.min(16 * 1024 ** 3, Math.max(this.size + value.length, this.bytes.length * 2))
+				Math.min(16 * 1024 ** 3, Math.max(this.size + length, this.bytes.length * 2))
 			);
 			next.set(this.bytes.subarray(0, this.size));
 			this.bytes = next;
@@ -301,11 +314,9 @@ export class StringArena {
 			next.set(this.offsets);
 			this.offsets = next;
 		}
-		if (this.size + value.length >= 0xffffffff && this.offsets instanceof Uint32Array)
+		if (this.size + length >= 0xffffffff && this.offsets instanceof Uint32Array)
 			this.offsets = Float64Array.from(this.offsets);
 		this.offsets[this.count++] = this.size;
-		this.bytes.set(value, this.size);
-		this.size += value.length;
 	}
 	finish(): PackedStrings {
 		this.offsets[this.count] = this.size;

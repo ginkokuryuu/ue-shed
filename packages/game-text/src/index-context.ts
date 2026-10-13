@@ -67,10 +67,8 @@ export function indexedTextCorpus(joined: JoinedTargetReader, query: TextCorpusQ
 	function* decodeUnits(clock: HostSliceClock): HostSteps<TextCorpus["units"]> {
 		if (units) return units;
 		const values: TextCorpus["units"][number][] = [];
-		for (const row of data.column("query.raw.order")) {
-			values.push(data.unit("raw", row));
-			if (clock.step()) yield;
-		}
+		for (const row of data.column("query.raw.order"))
+			values.push(yield* data.unitSteps("raw", row, clock));
 		return (units ??= values);
 	}
 	const corpus: TextCorpus = {
@@ -88,7 +86,8 @@ export function indexedTextCorpus(joined: JoinedTargetReader, query: TextCorpusQ
 		}
 	};
 	indexedCorpora.set(corpus, {
-		// A unit's strings may each miss the shared block cache, so time is checked per unit.
+		// An occurrence's strings may each miss the shared block cache, so time is checked per
+		// occurrence.
 		units: () => decodeUnits(new HostSliceClock(16, 1)),
 		metadata: () => decodeMetadata(new HostSliceClock())
 	});

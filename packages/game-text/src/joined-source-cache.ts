@@ -1,13 +1,12 @@
 import { Effect, Schema } from "effect";
 import { promisify } from "node:util";
 import { constants, zstdCompress, zstdDecompressSync } from "node:zlib";
-import { encodeWtf8 } from "./wtf8.js";
 import { snapshotCheck } from "./snapshot-format.js";
 import { snapshotNodeChecksum, type SnapshotSourceColumn } from "./snapshot-file.js";
 import type { SharedIndexWriter } from "./shared-index.js";
 import type { JoinStrings } from "./joined-target-input.js";
-import { validatePackedStrings, type PackedStrings } from "./shared-string-codec.js";
-import { HostSliceClock } from "./host-slices.js";
+import { StringArena, validatePackedStrings, type PackedStrings } from "./shared-string-codec.js";
+import { HostSliceClock, runHostSteps, uniqueIdsSteps } from "./host-slices.js";
 
 const zstdCompressAsync = promisify(zstdCompress);
 
@@ -61,35 +60,34 @@ export const prepareJoinedSourceCache = Effect.fn("JoinedTarget.sourceCache")(fu
 	options: { readonly minimumEntries?: number; readonly maximumBytes?: number } = {}
 ) {
 	const clock = new HostSliceClock();
-	let maximum = -1;
-	for (const values of columns) for (const id of values) if (id > maximum) maximum = id;
-	const selected = new Uint8Array(maximum + 1);
-	let count = 0;
-	for (const values of columns)
-		for (const id of values)
-			if (!selected[id]) {
-				selected[id] = 1;
-				count++;
-			}
+	const ids = yield* runHostSteps(uniqueIdsSteps(columns, clock)),
+		count = ids.length;
 	if (!count || count < (options.minimumEntries ?? 8192)) return undefined;
-	const ids = new Uint32Array(count),
-		starts = new Uint32Array(count + 1);
-	let row = 0;
-	for (let id = 0; id < selected.length; id++) if (selected[id]) ids[row++] = id;
+	const starts = new Uint32Array(count + 1);
 	const last = strings.reader.manifest.segments.at(-1),
 		publishedCount = last ? last.start + last.count : 0;
-	const appended = new Map<number, Uint8Array>();
-	for (let start = 0; start < ids.length; start += 8192) {
-		const fresh = Array.from(ids.subarray(start, start + 8192)).filter(
+	// Unpublished appended values are packed in one arena; a batch is about one host slice.
+	const appended = new Map<number, number>(),
+		arena = new StringArena();
+	for (let start = 0; start < ids.length; start += 1024) {
+		const fresh = Array.from(ids.subarray(start, start + 1024)).filter(
 			(id) => id >= publishedCount
 		);
 		if (!fresh.length) continue;
 		if (clock.expired()) yield* Effect.yieldNow;
 		const values = yield* writer.strings(fresh);
-		for (let index = 0; index < fresh.length; index++)
-			appended.set(fresh[index]!, encodeWtf8(values[index]!));
+		for (let index = 0; index < fresh.length; index++) {
+			appended.set(fresh[index]!, appended.size);
+			arena.addString(values[index]!);
+		}
 	}
-	const bytesAt = (id: number) => appended.get(id) ?? strings.bytes(id);
+	const packed = arena.finish();
+	const bytesAt = (id: number) => {
+		const index = appended.get(id);
+		return index === undefined
+			? strings.bytes(id)
+			: packed.bytes.subarray(packed.offsets[index], packed.offsets[index + 1]);
+	};
 	const bound = Math.min(
 		options.maximumBytes ?? maximumSourceCacheBytes,
 		maximumSourceCacheBytes

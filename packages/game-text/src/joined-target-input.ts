@@ -47,12 +47,27 @@ export class JoinStrings {
 		return index;
 	}
 	need(columns: readonly Uint32Array[]) {
-		const selected = new Uint8Array(this.reader.manifest.segments.length);
-		for (const values of columns)
-			for (const id of values) if (id !== this.empty) selected[this.segment(id)] = 1;
-		const loaded = this.loaded,
+		const strings = this,
+			loaded = this.loaded,
 			reader = this.reader;
 		return Effect.gen(function* () {
+			const segments = reader.manifest.segments,
+				selected = new Uint8Array(segments.length),
+				clock = new HostSliceClock();
+			// Consecutive IDs usually share a segment, which skips its binary search.
+			let low = 0,
+				high = 0;
+			for (const values of columns)
+				for (let row = 0; row < values.length; row++) {
+					const id = values[row]!;
+					if (id !== strings.empty && (id < low || id >= high)) {
+						const segment = strings.segment(id);
+						selected[segment] = 1;
+						low = segments[segment]!.start;
+						high = low + segments[segment]!.count;
+					}
+					if (clock.step()) yield* Effect.yieldNow;
+				}
 			for (let segment = 0; segment < selected.length; segment++)
 				if (selected[segment] && !loaded.has(segment))
 					loaded.set(segment, yield* reader.packedSegment(segment));

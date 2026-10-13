@@ -66,6 +66,36 @@ export function runHostStepsSync<A>(steps: HostSteps<A>): A {
 /** Promise continuations are microtasks; only a macrotask lets timers and I/O callbacks run. */
 export const nextMacrotask = () => new Promise<void>((resolve) => setImmediate(resolve));
 
+/** Ascending distinct IDs of `columns`, marked in one byte per ID up to the largest ID. */
+export function* uniqueIdsSteps(
+	columns: readonly Uint32Array[],
+	clock: HostSliceClock
+): HostSteps<Uint32Array> {
+	let maximum = -1;
+	for (const values of columns)
+		for (let row = 0; row < values.length; row++) {
+			if (values[row]! > maximum) maximum = values[row]!;
+			if (clock.step()) yield;
+		}
+	const seen = new Uint8Array(maximum + 1);
+	let count = 0;
+	for (const values of columns)
+		for (let row = 0; row < values.length; row++) {
+			if (!seen[values[row]!]) {
+				seen[values[row]!] = 1;
+				count++;
+			}
+			if (clock.step()) yield;
+		}
+	const ids = new Uint32Array(count);
+	let next = 0;
+	for (let id = 0; id < seen.length; id++) {
+		if (seen[id]) ids[next++] = id;
+		if (clock.step()) yield;
+	}
+	return ids;
+}
+
 /** Stable sort of row indices that yields between bounded chunk sorts and merge slices.
  * The result equals a stable `values.sort(compare)` for any consistent comparator.
  */
