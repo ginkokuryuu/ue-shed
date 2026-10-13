@@ -35,18 +35,48 @@ export const styles = stylex.create({
 		color: tokens.colorText,
 		fontFamily: tokens.fontBody
 	},
-	toolbar: {
+	/** The title row: the workspace's views on the left, the project's scan state on the right. */
+	titleRow: {
 		display: "flex",
-		flexWrap: "wrap",
 		alignItems: "center",
-		gap: tokens.space2,
+		gap: 16,
 		flexShrink: 0,
-		padding: "10px 16px",
+		height: 40,
+		paddingInline: 16,
 		borderBottomWidth: 1,
 		borderBottomStyle: "solid",
 		borderBottomColor: tokens.colorBorder
 	},
-	heading: { margin: 0, fontSize: 14, color: tokens.colorTextStrong, fontWeight: 600 },
+	/** Which translations are shown, and what Unreal still has to take in. */
+	contextBar: {
+		display: "flex",
+		flexWrap: "wrap",
+		alignItems: "center",
+		gap: 8,
+		flexShrink: 0,
+		minHeight: 36,
+		paddingBlock: 2,
+		paddingInline: 12,
+		boxSizing: "border-box",
+		borderBottomWidth: 1,
+		borderBottomStyle: "solid",
+		borderBottomColor: tokens.colorBorder,
+		fontSize: 12
+	},
+	contextLabel: { paddingInline: 4, fontSize: 12, color: tokens.colorText, whiteSpace: "nowrap" },
+	contextActions: {
+		display: "flex",
+		alignItems: "center",
+		gap: 8,
+		marginLeft: "auto"
+	},
+	heading: {
+		margin: 0,
+		fontSize: 14,
+		color: tokens.colorTextStrong,
+		fontWeight: 600,
+		whiteSpace: "nowrap"
+	},
 	indexProgress: {
 		display: "inline-flex",
 		alignItems: "center",
@@ -61,14 +91,6 @@ export const styles = stylex.create({
 		overflow: "hidden",
 		textOverflow: "ellipsis",
 		whiteSpace: "nowrap"
-	},
-	headerActions: {
-		display: "flex",
-		flexWrap: "wrap",
-		alignItems: "center",
-		gap: 8,
-		flexShrink: 0,
-		order: 2
 	},
 	browseActions: {
 		display: "flex",
@@ -85,13 +107,11 @@ export const styles = stylex.create({
 		borderBottomStyle: "solid",
 		borderBottomColor: tokens.colorBorder
 	},
-	// Shares the title row while it has room and moves to its own row only on narrow windows; its
-	// fixed basis keeps changing scan text from moving anything else.
+	// Takes the title row's free space, so changing scan text never moves the tabs or Rescan.
 	coverage: {
 		flexGrow: 1,
 		flexShrink: 1,
-		flexBasis: 240,
-		order: 1,
+		flexBasis: 0,
 		minWidth: 0,
 		height: 18,
 		lineHeight: "18px",

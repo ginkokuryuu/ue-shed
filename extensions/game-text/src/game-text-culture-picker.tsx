@@ -106,6 +106,12 @@ export function CulturePicker(props: {
 							});
 					}}
 				>
+					{/* "All cultures" and "5 cultures" already say what they are. */}
+					<Show when={props.picked.length > 0 && props.picked.length <= 3}>
+						<span {...stylex.attrs(styles.prefix)}>
+							{props.picked.length === 1 ? "Culture " : "Cultures "}
+						</span>
+					</Show>
 					{culturesLabel(props.picked)} <span aria-hidden="true">▾</span>
 				</Button>
 			)}
@@ -159,6 +165,7 @@ export function CulturePicker(props: {
 }
 
 const styles = stylex.create({
+	prefix: { color: tokens.colorTextMuted },
 	panel: {
 		display: "grid",
 		gap: 2,

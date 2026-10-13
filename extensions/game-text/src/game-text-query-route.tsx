@@ -75,8 +75,10 @@ import {
 	StagedEditsButton,
 	StagedEditsPanel
 } from "./game-text-translation-edits.js";
+import { ViewTabs, type ViewTab } from "./game-text-view-tabs.js";
 import {
 	LocalizationControls,
+	LocalizationSync,
 	TranslationsDetail,
 	GatheredDetail,
 	localizationLabels
@@ -206,6 +208,39 @@ export function GameTextRoute(props: {
 		localization.target() && props.client.localizationQualitySearch
 			? workspaceFindingCount()
 			: qualitySummary()?.findingCount;
+	const qualityTab = (): ViewTab<"quality"> => {
+		if (qualityFailure()?.code === "invalid_rules")
+			return {
+				id: "quality",
+				label: "Quality checks",
+				badge: "!",
+				badgeLabel: "rules invalid",
+				badgeTone: "danger"
+			};
+		if (editor.dirty())
+			return {
+				id: "quality",
+				label: "Quality checks",
+				badge: "•",
+				badgeLabel: "unsaved rule changes",
+				badgeTone: "accent"
+			};
+		const count = qualityTabCount();
+		return count === undefined
+			? { id: "quality", label: "Quality checks" }
+			: {
+					id: "quality",
+					label: "Quality checks",
+					badge: count.toLocaleString(),
+					badgeLabel: textCountLabel(count, "finding")
+				};
+	};
+	// Reports read the target's translations, so they are offered only with a target.
+	const viewTabs = (): readonly ViewTab<"corpus" | "quality" | "reports">[] => [
+		{ id: "corpus", label: "Text" },
+		qualityTab(),
+		...(localization.active() ? [{ id: "reports" as const, label: "Reports" }] : [])
+	];
 	const [qualityDocument, setQualityDocument] = createSignal<GameTextRuleDocument | undefined>(
 		initial?.qualityDocument
 	);
@@ -1097,112 +1132,15 @@ export function GameTextRoute(props: {
 					</Button>
 				</section>
 			</Show>
-			<div {...stylex.attrs(styles.toolbar)}>
+			<header {...stylex.attrs(styles.titleRow)}>
 				<h1 {...stylex.attrs(styles.heading)}>Game Text</h1>
-				<div
-					role="tablist"
-					aria-label="Game Text view"
-					{...stylex.attrs(styles.bar)}
-					onKeyDown={(event) => {
-						if (!["ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key)) return;
-						const tabs = Array.from(
-							event.currentTarget.querySelectorAll<HTMLButtonElement>('[role="tab"]')
-						);
-						const index =
-							event.target instanceof HTMLButtonElement
-								? tabs.indexOf(event.target)
-								: -1;
-						const next =
-							event.key === "Home"
-								? 0
-								: event.key === "End"
-									? tabs.length - 1
-									: (index + (event.key === "ArrowLeft" ? -1 : 1) + tabs.length) %
-										tabs.length;
-						event.preventDefault();
-						tabs[next]?.click();
-						tabs[next]?.focus();
-					}}
-				>
-					<ToolButton
-						label="Text"
-						showLabel
-						role="tab"
-						id="game-text-tab-corpus"
-						aria-controls="game-text-panel-corpus"
-						tabindex={mode() === "corpus" ? 0 : -1}
-						aria-selected={mode() === "corpus" ? "true" : "false"}
-						onClick={() => setMode("corpus")}
-					></ToolButton>
-					<ToolButton
-						label="Quality checks"
-						showLabel
-						badge={
-							qualityFailure()?.code === "invalid_rules"
-								? "!"
-								: editor.dirty()
-									? "•"
-									: qualityTabCount()?.toLocaleString()
-						}
-						badgeLabel={
-							qualityFailure()?.code === "invalid_rules"
-								? "rules invalid"
-								: editor.dirty()
-									? "unsaved rule changes"
-									: qualityTabCount() === undefined
-										? undefined
-										: textCountLabel(qualityTabCount() ?? 0, "finding")
-						}
-						role="tab"
-						id="game-text-tab-quality"
-						aria-controls="game-text-panel-quality"
-						tabindex={mode() === "quality" ? 0 : -1}
-						aria-selected={mode() === "quality" ? "true" : "false"}
-						onClick={() => setMode("quality")}
-					></ToolButton>
-					<Show when={localization.active()}>
-						<ToolButton
-							label="Reports"
-							showLabel
-							role="tab"
-							id="game-text-tab-reports"
-							aria-controls="game-text-panel-reports"
-							tabindex={mode() === "reports" ? 0 : -1}
-							aria-selected={mode() === "reports" ? "true" : "false"}
-							onClick={() => setMode("reports")}
-						></ToolButton>
-					</Show>
-				</div>
-				<div {...stylex.attrs(styles.headerActions)}>
-					<LocalizationControls
-						model={localization}
-						disabled={operations.busy() || edits.working()}
-						cultureWork={page()?.facets?.cultures}
-						syncAction={
-							<SyncWithUnreal
-								model={operations}
-								pending={localization.active()?.notSynced ?? 0}
-								unwritten={edits.edits().length}
-							/>
-						}
-					/>
-					<StagedEditsButton model={edits} />
-					<UnrealSteps model={operations} />
-
-					<Show when={summary()}>
-						<ToolButton
-							label="Rescan"
-							tooltip={
-								operations.reason() ??
-								"Refresh saved text and translations from the project. Keeps your current list and drafts."
-							}
-							disabled={indexBusy() || operations.busy()}
-							onClick={() => load(true)}
-						>
-							<ToolIcon name="refresh" />
-						</ToolButton>
-					</Show>
-				</div>
+				<ViewTabs
+					label="Game Text view"
+					idPrefix="game-text"
+					tabs={viewTabs()}
+					selected={mode()}
+					onSelect={setMode}
+				/>
 				<span aria-label="Index status" {...stylex.attrs(styles.coverage)}>
 					<Show
 						when={indexBusy()}
@@ -1250,14 +1188,6 @@ export function GameTextRoute(props: {
 											· scanned {scanTime(current().scannedAt)}
 										</Show>
 										<ReadProblems summary={current()} />
-										<Show
-											when={
-												!indexBusy() && preparationSeconds() !== undefined
-											}
-										>
-											{" · ready in "}
-											{elapsedTime(preparationSeconds() ?? 0)}
-										</Show>
 									</>
 								)}
 							</Show>
@@ -1290,13 +1220,51 @@ export function GameTextRoute(props: {
 						</span>
 					</Show>
 				</span>
-			</div>
-			<Show when={mode() === "corpus"}>
-				<BrowseSummary
-					page={page()}
-					culture={localization.culture()}
-					cultures={localization.cultures()}
-				/>
+				<Show when={summary()}>
+					<ToolButton
+						label="Rescan"
+						tooltip={
+							operations.reason() ??
+							"Refresh saved text and translations from the project. Keeps your current list and drafts."
+						}
+						disabled={indexBusy() || operations.busy()}
+						onClick={() => load(true)}
+					>
+						<ToolIcon name="refresh" />
+					</ToolButton>
+				</Show>
+			</header>
+			<Show when={summary()}>
+				<div role="group" aria-label="Translations" {...stylex.attrs(styles.contextBar)}>
+					<Show
+						when={localization.targets().length > 0 || !localization.ready()}
+						fallback={
+							<span {...stylex.attrs(styles.contextLabel, styles.muted)}>
+								This project has no localization targets.
+							</span>
+						}
+					>
+						<LocalizationControls
+							model={localization}
+							disabled={operations.busy() || edits.working()}
+							cultureWork={page()?.facets?.cultures}
+						/>
+					</Show>
+					<div {...stylex.attrs(styles.contextActions)}>
+						<LocalizationSync
+							model={localization}
+							action={
+								<SyncWithUnreal
+									model={operations}
+									pending={localization.active()?.notSynced ?? 0}
+									unwritten={edits.edits().length}
+								/>
+							}
+						/>
+						<StagedEditsButton model={edits} />
+						<UnrealSteps model={operations} />
+					</div>
+				</div>
 			</Show>
 			<OperationPanel model={operations} />
 			<StagedEditsPanel model={edits} />
@@ -1965,12 +1933,18 @@ export function GameTextRoute(props: {
 			<Show when={mode() === "corpus" ? summary() : undefined}>
 				{(_current) => (
 					<footer {...stylex.attrs(browseStyles.footer)}>
+						<BrowseSummary page={page()} />
+						<span {...stylex.attrs(styles.grow)} />
+						<Show when={!indexBusy() && preparationSeconds() !== undefined}>
+							<span title="Time from opening the project to its first results">
+								Ready in {elapsedTime(preparationSeconds() ?? 0)}
+							</span>
+						</Show>
 						<Show when={queryMs() !== undefined}>
 							<span title="Last successful query round trip, excluding the typing debounce">
 								Last query {Math.round(queryMs() ?? 0)} ms
 							</span>
 						</Show>
-						<span {...stylex.attrs(styles.grow)} />
 						<Show when={localization.active()}>
 							{(active) => (
 								<span>

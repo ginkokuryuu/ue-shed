@@ -95,20 +95,36 @@ function visibleTranslations(detail: LocalizationFocus, culture: string | undefi
 		);
 }
 
+const TARGET_TOOLTIP =
+	"The localization target in this project: it decides which translations, PO files and Unreal steps are used.";
+
+/** Which translations the workspace shows: the target, and the cultures picked within it. */
 export function LocalizationControls(props: {
 	readonly model: GameTextLocalizationState;
 	readonly disabled?: boolean;
-	readonly syncAction?: JSX.Element;
 	/** Each culture's work over the current filters, for the culture picker. */
 	readonly cultureWork?: readonly TextCultureFacet[] | undefined;
 }) {
 	return (
 		<>
-			<Show when={props.model.targets().length > 1}>
+			<Show
+				when={props.model.targets().length > 1}
+				fallback={
+					// A project with one target has nothing to choose, but still says which it is.
+					<Show when={props.model.targets()[0]}>
+						{(target) => (
+							<span title={TARGET_TOOLTIP} {...stylex.attrs(styles.contextLabel)}>
+								<span {...stylex.attrs(styles.muted)}>Target </span>
+								{target().name}
+							</span>
+						)}
+					</Show>
+				}
+			>
 				<LocalizationPicker
 					label="Localization target"
 					prefix="Target"
-					tooltip="The localization target in this project: it decides which translations, PO files and Unreal steps are used."
+					tooltip={TARGET_TOOLTIP}
 					value={props.model.target() ?? "Choose target"}
 					values={props.model.targets().map((target) => target.name)}
 					disabled={props.disabled || (!props.model.ready() && !props.model.error())}
@@ -120,29 +136,42 @@ export function LocalizationControls(props: {
 			</Show>
 			<Show when={props.model.active()}>
 				{(active) => (
-					<>
-						<CulturePicker
-							disabled={props.disabled === true}
-							cultures={active().target.cultures}
-							picked={props.model.cultures()}
-							work={props.cultureWork}
-							onToggle={props.model.toggleCulture}
-							onAll={() => props.model.selectCulture("")}
-						/>
-						<Show when={active().notSynced > 0}>
-							<span
-								role="status"
-								title="Translations saved in PO files that Unreal has not imported yet"
-								{...stylex.attrs(styles.muted, styles.accent)}
-							>
-								{active().notSynced.toLocaleString()} not synced
-							</span>
-						</Show>
-						{props.syncAction}
-					</>
+					<CulturePicker
+						disabled={props.disabled === true}
+						cultures={active().target.cultures}
+						picked={props.model.cultures()}
+						work={props.cultureWork}
+						onToggle={props.model.toggleCulture}
+						onAll={() => props.model.selectCulture("")}
+					/>
 				)}
 			</Show>
 		</>
+	);
+}
+
+/** Translations in PO files that Unreal has not imported yet, beside the action that syncs them. */
+export function LocalizationSync(props: {
+	readonly model: GameTextLocalizationState;
+	readonly action?: JSX.Element;
+}) {
+	return (
+		<Show when={props.model.active()}>
+			{(active) => (
+				<>
+					<Show when={active().notSynced > 0}>
+						<span
+							role="status"
+							title="Translations saved in PO files that Unreal has not imported yet"
+							{...stylex.attrs(styles.muted, styles.accent)}
+						>
+							{active().notSynced.toLocaleString()} not synced
+						</span>
+					</Show>
+					{props.action}
+				</>
+			)}
+		</Show>
 	);
 }
 

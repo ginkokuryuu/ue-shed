@@ -52,7 +52,7 @@ Workbench keeps scan progress visible through localization preparation and the f
 query. It shows the current stage, completed package/file counts when known, and elapsed time from
 starting the operation until results are usable. Index construction and opening use indeterminate
 progress rather than an invented overall percentage or ETA. The completed duration remains visible
-as `ready in`. Library hosts can observe the same index stages through the optional,
+in the Text footer as `Ready in`. Library hosts can observe the same index stages through the optional,
 operation-scoped `GameTextIndexProgressReporter`.
 
 Staged translation review keeps its edit list in a bounded, keyboard-scrollable area. Close,
@@ -129,21 +129,31 @@ The compact list has **Key**, **Source** and **State** columns, and a **Translat
 while exactly one culture is picked; with none or several, the state column carries the culture
 strip instead. **Filter** is the single entry point for translation states and line facts.
 Translation values read **Not translated**, **Needs update** and **Not synced**; line facts include
-**Outside this target**. The translation summary counts matching lines in the picked cultures;
-counts can overlap across cultures and are not presented as percentages of one total. **Ctrl K**
-(or **Cmd K**) focuses search. Rescan shows inline progress and retains the current list for
-browsing and searching while the new index is prepared. The footer reports the last successful
-query round trip, excluding the typing debounce, and the picked and total culture counts.
-Matching lines and inspected assets share the title row while it has room and move to their own
-row only on narrow windows; the footer appears only in Text. Search retains at least 150 px of
-input space. At 1024 px, columns fit the available list width and the **Side pane** toggle can
-hide the side pane, keeping focus on the toggle. Scan progress replaces the header's coverage
-text, with a compact bar beside the stage readout only when package/file totals are known. Unknown
-totals use a small activity spinner instead of a looping bar. This keeps idle space and row
-positions stable; reduced motion stops the spinner. The bar measures the named stage, not an
-overall percentage. Project selection belongs to the host's workspace project picker; **Scan
-project** and **Rescan** only use that selected project. **Target** names the localization target in use within that project and chooses
-another; it decides which translations, PO files and Unreal steps are used.
+**Outside this target**. **Ctrl K** (or **Cmd K**) focuses search.
+
+The header has two rows. The title row holds the **Text**, **Quality checks** and **Reports**
+views as tabs, the project's scan state (lines, inspected assets and any read problems) and
+**Rescan**. Under it, the translations row says which translations are shown, **Target** and the
+picked cultures, and on its right what Unreal still has to take in: the not-synced count,
+**Sync with Unreal**, staged edits and **Unreal steps**. **Target** names the localization target
+in use within the project, and chooses another when the project has several; it decides which
+translations, PO files and Unreal steps are used. A project without localization targets says so
+in that row.
+
+The Text footer is its status bar: the matching lines in each translation state for the picked
+cultures, how long the project took to become ready, the last successful query round trip
+(excluding the typing debounce) and the picked and total culture counts. State counts can overlap
+across cultures and are not presented as percentages of one total.
+
+Rescan shows inline progress and retains the current list for browsing and searching while the
+new index is prepared. Scan progress replaces the title row's scan state, with a compact bar beside
+the stage readout only when package/file totals are known. Unknown totals use a small activity
+spinner instead of a looping bar. This keeps idle space and row positions stable; reduced motion
+stops the spinner. The bar measures the named stage, not an overall percentage. Project selection
+belongs to the host's workspace project picker; **Scan project** and **Rescan** only use that
+selected project. Search retains at least 150 px of input space. At 1024 px, both header rows keep
+one line, columns fit the available list width and the **Side pane** toggle can hide the side
+pane, keeping focus on the toggle.
 
 The primary controls are labelled: the **Text**, **Quality checks** and **Reports** views,
 **Changed files**, **Filter**, **Display**, **Target** and **Sync with Unreal**. Secondary toggles

@@ -979,7 +979,7 @@ describe("Game Text writing workspace", () => {
 		expect(
 			screen.getByLabelText("Index status").querySelector("[data-scan-activity]")
 		).not.toBeNull();
-		expect(screen.queryByText(/ready in/u)).toBeNull();
+		expect(screen.queryByText(/Ready in/u)).toBeNull();
 		now = 181000;
 		await Effect.runPromise(
 			Deferred.succeed(firstPage, {
@@ -989,7 +989,7 @@ describe("Game Text writing workspace", () => {
 		);
 		await screen.findByText("2 matches");
 		await waitFor(() => expect(screen.queryByRole("progressbar")).toBeNull());
-		expect(screen.getByText(/ready in 3:00/u)).toBeDefined();
+		expect(screen.getByText(/Ready in 3:00/u)).toBeDefined();
 		expect(screen.getByRole("button", { name: "Rescan" })).toHaveProperty("disabled", false);
 		clock.mockRestore();
 	});
