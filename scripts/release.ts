@@ -2,6 +2,7 @@ import { spawnSync } from "node:child_process";
 import { existsSync } from "node:fs";
 import { homedir } from "node:os";
 import { createInterface } from "node:readline/promises";
+import { parseArgs } from "node:util";
 import { delimiter, dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { PUBLIC_VERSION } from "./pack-public-packages.ts";
@@ -14,11 +15,20 @@ export interface ReleaseSteps {
 	readonly check: () => void;
 	readonly confirm: () => Promise<void>;
 	readonly publish: () => void;
+	/** Full commit the operator already gated with `pnpm check`; skips rerunning the gate. */
+	readonly checkedCommit?: string | undefined;
 }
 
-export async function runRelease({ validateSource, check, confirm, publish }: ReleaseSteps) {
+export async function runRelease({
+	validateSource,
+	check,
+	confirm,
+	publish,
+	checkedCommit
+}: ReleaseSteps) {
 	const validatedCommit = validateSource();
-	check();
+	if (checkedCommit === undefined) check();
+	else assertCheckedCommit(checkedCommit, validatedCommit);
 	await confirm();
 	const publicationCommit = validateSource();
 	if (publicationCommit !== validatedCommit) {
@@ -27,6 +37,28 @@ export async function runRelease({ validateSource, check, confirm, publish }: Re
 		);
 	}
 	publish();
+}
+
+export function assertCheckedCommit(checkedCommit: string, head: string) {
+	if (!/^[0-9a-f]{40}$/.test(checkedCommit)) {
+		throw new Error(
+			`--checked requires a full 40-character commit, received ${checkedCommit}.`
+		);
+	}
+	if (checkedCommit !== head) {
+		throw new Error(
+			`--checked ${checkedCommit} does not match release HEAD ${head}; rerun pnpm check.`
+		);
+	}
+}
+
+export function parseReleaseArguments(args: readonly string[]) {
+	const { values } = parseArgs({
+		args: [...args],
+		options: { checked: { type: "string" } },
+		strict: true
+	});
+	return { checkedCommit: values.checked };
 }
 
 export function publicationConfirmationPhrase(version: string) {
@@ -75,16 +107,20 @@ function runPnpm(args: readonly string[], env: NodeJS.ProcessEnv) {
 	}
 }
 
-async function confirmPublication() {
+async function confirmPublication(checkedCommit: string | undefined) {
 	if (process.stdin.isTTY !== true || process.stdout.isTTY !== true) {
 		throw new Error(
 			"Release publication requires an interactive terminal for confirmation and npm authentication."
 		);
 	}
+	const gate =
+		checkedCommit === undefined
+			? "All release checks passed."
+			: `Skipped pnpm check; operator reports it passed on ${checkedCommit}.`;
 	const terminal = createInterface({ input: process.stdin, output: process.stdout });
 	try {
 		const answer = await terminal.question(
-			`\nAll release checks passed. Type ${JSON.stringify(publicationConfirmationPhrase(PUBLIC_VERSION))} ` +
+			`\n${gate} Type ${JSON.stringify(publicationConfirmationPhrase(PUBLIC_VERSION))} ` +
 				"to begin npm publication and immediate authentication; any other input aborts. "
 		);
 		assertPublicationConfirmation(answer, PUBLIC_VERSION);
@@ -94,6 +130,7 @@ async function confirmPublication() {
 }
 
 async function main() {
+	const { checkedCommit } = parseReleaseArguments(process.argv.slice(2));
 	const env = releaseEnvironment();
 	const cargo = spawnSync("cargo", ["--version"], { env, encoding: "utf8", windowsHide: true });
 	if (cargo.error || cargo.status !== 0) {
@@ -104,8 +141,9 @@ async function main() {
 	await runRelease({
 		validateSource: () => assertCleanReleaseSource(),
 		check: () => runPnpm(["check"], env),
-		confirm: confirmPublication,
-		publish: () => runPnpm(["exec", "changeset", "publish"], env)
+		confirm: () => confirmPublication(checkedCommit),
+		publish: () => runPnpm(["exec", "changeset", "publish"], env),
+		checkedCommit
 	});
 }
 

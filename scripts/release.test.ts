@@ -5,7 +5,9 @@ import { tmpdir } from "node:os";
 import test from "node:test";
 import { delimiter, join, resolve } from "node:path";
 import {
+	assertCheckedCommit,
 	assertPublicationConfirmation,
+	parseReleaseArguments,
 	publicationConfirmationPhrase,
 	releaseEnvironment,
 	runRelease
@@ -171,4 +173,56 @@ test("does not publish when confirmation is blank or interrupted", async () => {
 		/expected the exact phrase "publish 0\.5\.2"/
 	);
 	assert.deepEqual(events, ["validate-source", "check", "confirm"]);
+});
+
+test("skips the gate only for the exact checked release commit", async () => {
+	const events: string[] = [];
+	await runRelease({
+		validateSource: () => {
+			events.push("validate-source");
+			return "a".repeat(40);
+		},
+		check: () => events.push("check"),
+		confirm: async () => {
+			events.push("confirm");
+		},
+		publish: () => events.push("publish"),
+		checkedCommit: "a".repeat(40)
+	});
+	assert.deepEqual(events, ["validate-source", "confirm", "validate-source", "publish"]);
+});
+
+test("does not confirm or publish when the checked commit is not the release HEAD", async () => {
+	const events: string[] = [];
+	await assert.rejects(
+		() =>
+			runRelease({
+				validateSource: () => {
+					events.push("validate-source");
+					return "a".repeat(40);
+				},
+				check: () => events.push("check"),
+				confirm: async () => {
+					events.push("confirm");
+				},
+				publish: () => events.push("publish"),
+				checkedCommit: "b".repeat(40)
+			}),
+		/--checked b{40} does not match release HEAD a{40}; rerun pnpm check\./
+	);
+	assert.deepEqual(events, ["validate-source"]);
+});
+
+test("requires a full lowercase commit for --checked", () => {
+	assert.throws(() => assertCheckedCommit("abc1234", "a".repeat(40)), /full 40-character/);
+	assert.throws(() => assertCheckedCommit("A".repeat(40), "a".repeat(40)), /full 40-character/);
+	assert.doesNotThrow(() => assertCheckedCommit("a".repeat(40), "a".repeat(40)));
+});
+
+test("parses --checked and rejects unknown release arguments", () => {
+	assert.deepEqual(parseReleaseArguments([]), { checkedCommit: undefined });
+	assert.deepEqual(parseReleaseArguments(["--checked", "a".repeat(40)]), {
+		checkedCommit: "a".repeat(40)
+	});
+	assert.throws(() => parseReleaseArguments(["--skip-check"]));
 });
