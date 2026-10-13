@@ -9,4 +9,6 @@ and decoded-memory limits, while retaining control of rendering, codecs, schedul
 
 Expose optional, capability-checked screenshot warmup frames on the editor-viewport renderer.
 Native screenshot warmup is separate from outer settling; the scoped override restores the original
-engine value and priority after each frame and on interruption. Existing capture defaults remain intact.
+engine value and priority after each frame and on interruption. Extended capability discovery is
+explicitly negotiated; the original capability response remains compatible with strict v1 clients.
+Existing capture defaults remain intact.

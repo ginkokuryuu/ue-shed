@@ -10,6 +10,9 @@ class UESHEDCAMERASEDITOR_API UUEShedCameraRenderingLibrary : public UBlueprintF
 public:
 	UFUNCTION(BlueprintCallable, Category = "UE Shed|Cameras|Rendering")
 	static void GetCameraRenderCapabilities(FString& ResultJson);
+	/** Extended discovery is separate so existing strict v1 clients retain their response shape. */
+	UFUNCTION(BlueprintCallable, Category = "UE Shed|Cameras|Rendering")
+	static void GetCameraRenderCapabilitiesV2(FString &ResultJson);
 	UFUNCTION(BlueprintCallable, Category = "UE Shed|Cameras|Rendering")
 	static void PreflightCameraRender(const FString& RequestJson, FString& ResultJson);
 	UFUNCTION(BlueprintCallable, Category = "UE Shed|Cameras|Rendering")

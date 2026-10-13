@@ -1520,6 +1520,12 @@ TSharedPtr<FJsonObject> FUEShedCameraRenderSession::Capabilities()
 }
 void UUEShedCameraRenderingLibrary::GetCameraRenderCapabilities(FString &ResultJson)
 {
+	auto Capabilities = FUEShedCameraRenderSession::Capabilities();
+	Capabilities->RemoveField(TEXT("highResolutionScreenshot"));
+	ResultJson = UEShedCameraJsonText(Capabilities);
+}
+void UUEShedCameraRenderingLibrary::GetCameraRenderCapabilitiesV2(FString &ResultJson)
+{
 	ResultJson = UEShedCameraJsonText(FUEShedCameraRenderSession::Capabilities());
 }
 void UUEShedCameraRenderingLibrary::PreflightCameraRender(const FString &RequestJson, FString &ResultJson)

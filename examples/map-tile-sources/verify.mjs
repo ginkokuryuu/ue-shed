@@ -11,6 +11,9 @@ import {
 import {
 	planMapTileSources as rootPlanner,
 	CameraRendererPolicy,
+	CameraRenderCapabilitiesV1,
+	CameraRenderCapabilities,
+	cameraRenderContract,
 	highResolutionReviewRenderer
 } from "@ue-shed/cameras";
 import { planMapTileSources as browserPlanner } from "@ue-shed/cameras/browser";
@@ -43,6 +46,40 @@ const rendering = Schema.decodeUnknownSync(CameraRendererPolicy)(
 	{ onExcessProperty: "error" }
 );
 assert.equal(rendering.screenshotWarmupFrames, 128);
+const legacyCapabilities = {
+	contract: cameraRenderContract,
+	engineVersion: "fixture-engine",
+	pluginVersion: "fixture-plugin",
+	projectName: "Fixture",
+	renderers: [],
+	preparation: [],
+	freeze: [],
+	maximumRetainedOperations: 64,
+	maximumRetainedSessions: 9,
+	retentionMs: 120000
+};
+assert.deepEqual(
+	Schema.decodeUnknownSync(CameraRenderCapabilitiesV1)(legacyCapabilities, {
+		onExcessProperty: "error"
+	}),
+	legacyCapabilities
+);
+const extendedCapabilities = {
+	...legacyCapabilities,
+	highResolutionScreenshot: { version: 1, maximumWarmupFrames: 256 }
+};
+assert.deepEqual(
+	Schema.decodeUnknownSync(CameraRenderCapabilities)(extendedCapabilities, {
+		onExcessProperty: "error"
+	}),
+	extendedCapabilities
+);
+assert.equal(
+	Schema.decodeUnknownResult(CameraRenderCapabilitiesV1)(extendedCapabilities, {
+		onExcessProperty: "error"
+	})._tag,
+	"Failure"
+);
 const blocks = value(planMapTileSources({ grid, options }));
 const singles = value(planMapTileSources({ grid, options: { ...options, tilesPerSourceSide: 1 } }));
 assert.equal(blocks.sourceCount, 64);

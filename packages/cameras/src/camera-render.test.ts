@@ -26,6 +26,7 @@ import {
 	AbsoluteCamera,
 	CameraFrameOperationId,
 	CameraRenderCapabilities,
+	CameraRenderCapabilitiesV1,
 	CameraRendererPolicy,
 	CameraRenderSessionId,
 	cameraRenderContract,
@@ -101,7 +102,8 @@ const failed = (code: "editor_busy" | "capture_failed" | "restoration_failed") =
 });
 function harness(
 	override: (name: string) => Effect.Effect<unknown, RemoteControlClientError> | undefined = () =>
-		undefined
+		undefined,
+	extendedCapabilities = false
 ) {
 	const calls: string[] = [];
 	const client: RemoteControlClientApi = {
@@ -115,9 +117,15 @@ function harness(
 						? {
 								schemaVersion: 1,
 								producerKind: "unreal_editor",
-								capabilities: ["cameras.render-session.v1"]
+								capabilities: extendedCapabilities
+									? [
+											"cameras.render-session.v1",
+											"cameras.render-session.capabilities.v2"
+										]
+									: ["cameras.render-session.v1"]
 							}
-						: call.functionName === "GetCameraRenderCapabilities"
+						: call.functionName === "GetCameraRenderCapabilities" ||
+							  call.functionName === "GetCameraRenderCapabilitiesV2"
 							? capabilities
 							: call.functionName === "BeginCameraRender"
 								? {
@@ -392,14 +400,16 @@ describe("native screenshot warmup", () => {
 	});
 	it("rejects missing or insufficient support before native preflight or acquisition", async () => {
 		for (const support of [undefined, { version: 1, maximumWarmupFrames: 32 }]) {
-			const h = harness((name) =>
-				name === "GetCameraRenderCapabilities"
-					? Effect.succeed(
-							support === undefined
-								? capabilities
-								: { ...capabilities, highResolutionScreenshot: support }
-						)
-					: undefined
+			const h = harness(
+				(name) =>
+					name === "GetCameraRenderCapabilitiesV2"
+						? Effect.succeed(
+								support === undefined
+									? capabilities
+									: { ...capabilities, highResolutionScreenshot: support }
+							)
+						: undefined,
+				support !== undefined
 			);
 			const opened = await Effect.runPromise(
 				Effect.scoped(h.renderer.open(session)).pipe(Effect.flip)
@@ -417,24 +427,26 @@ describe("native screenshot warmup", () => {
 		}
 	});
 	it("round-trips the requested warmup in frame evidence and capture reuse identity", async () => {
-		const h = harness((name) =>
-			name === "GetCameraRenderCapabilities"
-				? Effect.succeed({
-						...capabilities,
-						highResolutionScreenshot: { version: 1, maximumWarmupFrames: 256 }
-					})
-				: name === "BeginCameraRender"
+		const h = harness(
+			(name) =>
+				name === "GetCameraRenderCapabilitiesV2"
 					? Effect.succeed({
-							status: "opened",
-							sessionId: session.sessionId,
-							resolvedPolicy: session.policy
+							...capabilities,
+							highResolutionScreenshot: { version: 1, maximumWarmupFrames: 256 }
 						})
-					: name === "StartCameraFrame"
+					: name === "BeginCameraRender"
 						? Effect.succeed({
-								...captured,
-								evidence: { ...captured.evidence, policy: session.policy }
+								status: "opened",
+								sessionId: session.sessionId,
+								resolvedPolicy: session.policy
 							})
-						: undefined
+						: name === "StartCameraFrame"
+							? Effect.succeed({
+									...captured,
+									evidence: { ...captured.evidence, policy: session.policy }
+								})
+							: undefined,
+			true
 		);
 		const result = await Effect.runPromise(
 			renderCamera({ session, frame }).pipe(Effect.provideService(CameraRenderer, h.renderer))
@@ -455,6 +467,35 @@ describe("native screenshot warmup", () => {
 				policy: { ...session.policy, renderer: highResolutionReviewRenderer }
 			})
 		);
+	});
+	it("uses unchanged v1 discovery and rendering when extended discovery is absent", async () => {
+		const h = harness();
+		const response = await Effect.runPromise(h.renderer.capabilities());
+		expect(
+			Schema.decodeUnknownResult(CameraRenderCapabilitiesV1)(response, {
+				onExcessProperty: "error"
+			})._tag
+		).toBe("Success");
+		expect(response).not.toHaveProperty("highResolutionScreenshot");
+		expect(await Effect.runPromise(h.run())).toEqual(captured);
+		expect(h.calls).toContain("GetCameraRenderCapabilities");
+		expect(h.calls).not.toContain("GetCameraRenderCapabilitiesV2");
+	});
+	it("negotiates extended discovery before receiving new capability fields", async () => {
+		const h = harness(
+			(name) =>
+				name === "GetCameraRenderCapabilitiesV2"
+					? Effect.succeed({
+							...capabilities,
+							highResolutionScreenshot: { version: 1, maximumWarmupFrames: 256 }
+						})
+					: undefined,
+			true
+		);
+		const response = await Effect.runPromise(h.renderer.capabilities());
+		expect(response.highResolutionScreenshot?.maximumWarmupFrames).toBe(256);
+		expect(h.calls).toContain("GetCameraRenderCapabilitiesV2");
+		expect(h.calls).not.toContain("GetCameraRenderCapabilities");
 	});
 });
 

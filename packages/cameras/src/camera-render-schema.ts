@@ -212,13 +212,8 @@ export const CameraRenderPreflight = Schema.Struct({
 	issues: Schema.Array(CameraRenderIssue)
 });
 export type CameraRenderPreflight = typeof CameraRenderPreflight.Type;
-export const CameraRenderCapabilities = Schema.Struct({
-	highResolutionScreenshot: Schema.optionalKey(
-		Schema.Struct({
-			version: Schema.Literal(1),
-			maximumWarmupFrames: integer(1, 256)
-		})
-	),
+/** Original capability response, retained for previously shipped strict v1 clients. */
+export const CameraRenderCapabilitiesV1 = Schema.Struct({
 	authoredVisibility: Schema.optionalKey(
 		Schema.Struct({
 			version: Schema.Literal(1),
@@ -270,6 +265,16 @@ export const CameraRenderCapabilities = Schema.Struct({
 	maximumRetainedSessions: integer(1, 9),
 	retentionMs: integer(1000, 120000)
 });
+/** V2 capability discovery; render requests and frame evidence retain contract 1.0. */
+export const CameraRenderCapabilities = CameraRenderCapabilitiesV1.mapFields((fields) => ({
+	...fields,
+	highResolutionScreenshot: Schema.optionalKey(
+		Schema.Struct({
+			version: Schema.Literal(1),
+			maximumWarmupFrames: integer(1, 256)
+		})
+	)
+}));
 export type CameraRenderCapabilities = typeof CameraRenderCapabilities.Type;
 export const CameraRenderProgress = Schema.Struct({
 	status: Schema.Literal("running"),

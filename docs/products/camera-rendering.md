@@ -141,6 +141,9 @@ field preserves the engine/project's `r.HighResScreenshotDelay` setting. A large
 not guarantee full-resolution internal rendering; editor screen-percentage settings still apply.
 
 Discover `capabilities.highResolutionScreenshot.maximumWarmupFrames` before choosing the setting.
+The SDK selects `GetCameraRenderCapabilitiesV2` only when the Core manifest advertises
+`cameras.render-session.capabilities.v2`. The original `GetCameraRenderCapabilities` response
+retains its previous schema so existing strict v1 clients can discover and render unchanged policy.
 The SDK rejects missing or insufficient support before acquiring the editor, and SceneCapture
 policies reject the field. For example, an adopter may combine `screenshotWarmupFrames: 128` with
 its independently chosen outer settling count for a qualified 4K overview, or use 32 native frames

@@ -20,6 +20,7 @@ import { decodeCompanionCapabilityManifest } from "@ue-shed/protocol";
 import {
 	CameraRenderBeginResult,
 	CameraRenderCapabilities,
+	CameraRenderCapabilitiesV1,
 	CameraRenderEndResult,
 	CameraRenderFailure,
 	CameraFrameRequest,
@@ -263,8 +264,16 @@ export function makeCameraRenderer(
 				recovery:
 					"Install a matching UE Shed Cameras/Core plugin bundle. Renderer substitution is never automatic."
 			});
-		return yield* call("capabilities", "none", "GetCameraRenderCapabilities", {}).pipe(
-			Effect.flatMap((input) => decode(CameraRenderCapabilities, input)),
+		const extended = manifest.capabilities.includes("cameras.render-session.capabilities.v2");
+		return yield* call(
+			"capabilities",
+			"none",
+			extended ? "GetCameraRenderCapabilitiesV2" : "GetCameraRenderCapabilities",
+			{}
+		).pipe(
+			Effect.flatMap((input) =>
+				decode(extended ? CameraRenderCapabilities : CameraRenderCapabilitiesV1, input)
+			),
 			Effect.mapError((cause) => renderError("capabilities", "none", cause))
 		);
 	});

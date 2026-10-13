@@ -1,11 +1,12 @@
 import { randomUUID } from "node:crypto";
-import { Effect, Layer, Result } from "effect";
+import { Effect, Layer, Result, Schema } from "effect";
 import { describe, expect, it } from "vitest";
-import { RemoteControlClientLive } from "@ue-shed/unreal-connection";
+import { RemoteControlClient, RemoteControlClientLive } from "@ue-shed/unreal-connection";
 import {
 	CameraRenderer,
 	CameraFrameOperationId,
 	CameraRenderSessionId,
+	CameraRenderCapabilitiesV1,
 	cameraRenderContract,
 	cameraRendererLayer,
 	readCameraFrameArtifact,
@@ -50,11 +51,33 @@ describe.skipIf(!endpoint || !projectRoot)("composable map sources in a renderin
 				preparation: { geometry: { mode: "preserve_loading" }, dataLayers: [] }
 			}
 		};
-		const layer = cameraRendererLayer(endpoint!).pipe(Layer.provide(RemoteControlClientLive));
+		const layer = cameraRendererLayer(endpoint!).pipe(
+			Layer.provideMerge(RemoteControlClientLive)
+		);
 		await Effect.runPromise(
 			Effect.gen(function* () {
 				const renderer = yield* CameraRenderer;
-				const capability = (yield* renderer.capabilities()).renderers.find(
+				const capabilities = yield* renderer.capabilities();
+				expect(capabilities.highResolutionScreenshot?.maximumWarmupFrames).toBe(256);
+				const client = yield* RemoteControlClient;
+				const previousSdkCapabilities = yield* client
+					.request({
+						endpoint: endpoint!,
+						objectPath:
+							"/Script/UEShedCamerasEditor.Default__UEShedCameraRenderingLibrary",
+						functionName: "GetCameraRenderCapabilities",
+						parameters: {},
+						operation: "camera.render.legacy-capabilities"
+					})
+					.pipe(
+						Effect.flatMap((value) =>
+							Schema.decodeUnknownEffect(CameraRenderCapabilitiesV1)(value, {
+								onExcessProperty: "error"
+							})
+						)
+					);
+				expect(previousSdkCapabilities).not.toHaveProperty("highResolutionScreenshot");
+				const capability = capabilities.renderers.find(
 					(entry) => entry.kind === "editor_viewport"
 				);
 				if (!capability)

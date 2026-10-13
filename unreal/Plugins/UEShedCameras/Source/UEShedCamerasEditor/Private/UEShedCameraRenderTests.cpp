@@ -27,6 +27,7 @@
 #include "UEShedCameraEditorOwnership.h"
 #include "UEShedCameraLibrary.h"
 #include "UEShedCameraRenderSession.h"
+#include "UEShedCameraRenderingLibrary.h"
 #include "UEShedCameraReviewLibrary.h"
 #include "UEShedCameraSource.h"
 #include "UEShedCameraSubsystem.h"
@@ -311,6 +312,13 @@ bool FUEShedCameraScreenshotWarmupTest::RunTest(const FString &Parameters)
 	const bool BeforeDirty = World->GetOutermost()->IsDirty();
 	const auto Pose = UEShedCameraPose(FVector(1000, 1000, 900), FRotator(-30, -135, 0), 60, false);
 	const auto Capabilities = FUEShedCameraRenderSession::Capabilities();
+	FString LegacyJson, ExtendedJson;
+	UUEShedCameraRenderingLibrary::GetCameraRenderCapabilities(LegacyJson);
+	UUEShedCameraRenderingLibrary::GetCameraRenderCapabilitiesV2(ExtendedJson);
+	TestFalse(TEXT("Legacy discovery preserves the previous strict client shape"),
+	          UEShedCameraJson(LegacyJson)->HasField(TEXT("highResolutionScreenshot")));
+	TestTrue(TEXT("Extended discovery includes native warmup controls"),
+	         UEShedCameraJson(ExtendedJson)->HasField(TEXT("highResolutionScreenshot")));
 	TestEqual(TEXT("Advertised native warmup limit"),
 	          Capabilities->GetObjectField(TEXT("highResolutionScreenshot"))
 	              ->GetIntegerField(TEXT("maximumWarmupFrames")),
