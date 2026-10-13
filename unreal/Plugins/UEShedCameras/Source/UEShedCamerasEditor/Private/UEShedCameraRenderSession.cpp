@@ -220,7 +220,8 @@ bool ValidPolicy(const TSharedPtr<FJsonObject> &P)
 		    (String(R, TEXT("vignette")) != TEXT("project") &&
 		     String(R, TEXT("vignette")) != TEXT("disabled")) ||
 		    (R->HasField(TEXT("screenshotWarmupFrames")) &&
-		     !Number(R, TEXT("screenshotWarmupFrames"), 1, 256, true)))
+		     (R->TryGetField(TEXT("screenshotWarmupFrames"))->Type != EJson::Number ||
+		      !Number(R, TEXT("screenshotWarmupFrames"), 1, 256, true))))
 			return false;
 	}
 	else if (Kind == TEXT("scene_capture"))

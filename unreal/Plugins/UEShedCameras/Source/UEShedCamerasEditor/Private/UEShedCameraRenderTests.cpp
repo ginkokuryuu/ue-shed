@@ -329,6 +329,23 @@ bool FUEShedCameraScreenshotWarmupTest::RunTest(const FString &Parameters)
 		              ->GetStringField(TEXT("code")),
 		          FString(TEXT("invalid_policy")));
 	}
+	const TArray<TSharedPtr<FJsonValue>> InvalidTypes{MakeShared<FJsonValueString>(TEXT("128")),
+	                                                  MakeShared<FJsonValueBoolean>(true),
+	                                                  MakeShared<FJsonValueNull>()};
+	for (const auto &Invalid : InvalidTypes)
+	{
+		auto Request =
+		    UEShedLegacyRenderRequest(FGuid::NewGuid().ToString(EGuidFormats::Digits), World, true);
+		Request->GetObjectField(TEXT("policy"))
+		    ->GetObjectField(TEXT("renderer"))
+		    ->SetField(TEXT("screenshotWarmupFrames"), Invalid);
+		TestEqual(TEXT("Invalid native warmup type rejected before ownership"),
+		          FUEShedCameraRenderSession::Preflight(Request)
+		              ->GetArrayField(TEXT("issues"))[0]
+		              ->AsObject()
+		              ->GetStringField(TEXT("code")),
+		          FString(TEXT("invalid_policy")));
+	}
 	for (const FString Mode : {TEXT("32"), TEXT("128"), TEXT("cancel"), TEXT("lease"),
 	                           TEXT("takeover"), TEXT("same-value"), TEXT("omit")})
 	{
