@@ -86,6 +86,7 @@
 		"test:fast": "node scripts/test.ts --exclude packages/authoring/src/unreal-mutation.integration.test.ts",
 		"test:unreal-authoring": "node scripts/test-unreal-authoring.ts",
 		"test:unreal-plugins": "node scripts/test-unreal-plugins.ts",
+		"benchmark:camera-render": "node --import tsx scripts/benchmark-camera-render.ts",
 		"test:unreal-niagara": "pnpm --filter @ue-shed/engine build && pnpm --filter @ue-shed/niagara build && node --import tsx scripts/test-unreal-niagara.ts",
 		"test:unreal-review": "node scripts/test-unreal-review.ts",
 		"test:localization-processes": "pnpm run build:typescript-packages && node --import tsx scripts/test-localization-processes.ts",

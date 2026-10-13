@@ -15,6 +15,12 @@ orthographic cameras work through explicit editor-viewport or SceneCapture polic
 previews/final captures and all map modes share the extracted native lifecycle and global ownership.
 See the guide for CLI usage, compatibility, visual differences, and downstream adoption.
 
+[Composable map tile sources](../../docs/products/map-tile-sources.md) expose explicit per-zoom
+source planning, individual-tile or block footprints, lossless RGBA8 crops and optional linear-light
+parent derivation. Hosts retain render policies, codecs, concurrency, storage and publication.
+These pure helpers also ship in the browser-safe `map-tiles` and `browser` entry points; the complete
+Map Capture workflow keeps its existing defaults.
+
 ```sh
 npm install --save-exact @ue-shed/cameras @ue-shed/unreal-connection @ue-shed/protocol
 ```

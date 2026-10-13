@@ -35,3 +35,11 @@ disabled. The example deliberately delegates all domain behavior to the bridge a
 
 Record the exact package version, plugin digest, engine version, and your host's own transport
 journey before claiming downstream compatibility. Review previews are not final-capture evidence.
+
+For caller-managed map captures, use `planMapTileSources` or `createMapTileSource` with the public
+`CameraRenderer` session. Choose one tile or a larger block explicitly per zoom, declare dimension
+and decoded-source memory limits, and consume the returned crop rectangles. Optional
+`cropMapTileImage` and `deriveMapTileParent` work on decoded RGBA8 sRGB pixels; keep codecs, source
+receipts, derivation provenance, scheduling, output and publication owned by your host. See
+[map tile sources](../../docs/products/map-tile-sources.md) for the contract and
+`examples/map-tile-sources/verify.mjs` for the packed-consumer journey.

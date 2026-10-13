@@ -1,5 +1,7 @@
 /** Browser-safe tile grid, manifest, and selection surface. */
 export * from "./map-tile-pyramid.js";
+export * from "./map-tile-source.js";
+export * from "./map-tile-image.js";
 export * from "./map-tile-authoring.js";
 export {
 	MapCaptureContractVersion,

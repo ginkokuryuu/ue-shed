@@ -359,6 +359,17 @@ try {
 		run(process.execPath, [cameraConsumer], consumerDirectory, { env: consumerEnvironment }),
 		"camera-adoption-ok"
 	);
+	const mapSourcesConsumer = join(consumerDirectory, "verify-map-tile-sources.mjs");
+	await copyFile(
+		join(repositoryRoot, "examples/map-tile-sources/verify.mjs"),
+		mapSourcesConsumer
+	);
+	assert.equal(
+		run(process.execPath, [mapSourcesConsumer], consumerDirectory, {
+			env: consumerEnvironment
+		}),
+		"map-tile-sources-adoption-ok"
+	);
 	await writeFile(
 		consumerScript,
 		`${[

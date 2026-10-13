@@ -12,6 +12,8 @@ export * from "./review-capture.js";
 export * from "./camera-render-schema.js";
 export * from "./camera-render.js";
 export * from "./map-tile-pyramid.js";
+export * from "./map-tile-source.js";
+export * from "./map-tile-image.js";
 export * from "./map-tile-authoring.js";
 export * from "./map-tile-schema.js";
 export * from "./map-tile-repository.js";

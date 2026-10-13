@@ -21,6 +21,14 @@ rows and columns, and gives every parent exactly four children. Capture Z keeps 
 camera above geometry but does not determine detail. The neutral manifest versions grid orientation,
 gutter/crop policy, addressing, artifact hashes, provenance, and completion state.
 
+### Tile Source
+
+One orthographic render footprint covering a rectangular block of logical tiles at one explicit
+zoom. A source has dimension and decoded-memory limits, an outer gutter, and exact crop rectangles
+for the logical tiles. It is an intermediate image rather than a viewer delivery unit. A host may
+choose individual-tile sources or larger blocks, independently render each zoom or derive parents,
+and own codecs, scheduling and publication through the same public camera-render session.
+
 ### Tile Key
 
 The stable `(zoom, row, column)` address of one tile. In orientation v1, rows progress from world

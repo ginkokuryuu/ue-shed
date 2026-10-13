@@ -53,6 +53,9 @@ should follow [Website and illustrated guides](engineering/website.md).
 - [Shared camera rendering](products/camera-rendering.md) — public editor-world rendering lifecycle,
   backend policies, compatibility and downstream adoption.
 
+- [Composable map tile sources](products/map-tile-sources.md) — caller-selected source footprints,
+  dimension/memory limits, lossless crops and optional parent derivation.
+
 - [Camera arrangement authoring](products/camera-authoring.md) — actor-scoped drafts, optional native
   editing, Unreal RC synchronization, and recoverable approval.
 
@@ -86,6 +89,9 @@ should follow [Website and illustrated guides](engineering/website.md).
 | [0009](decisions/0009-localization-change-sets-and-review-state.md)          | Localization change sets and review state       |
 
 ## Research
+
+- [Map screenshot pipeline revisited (2026-10-13)](research/map-capture-screenshot-pipeline-2026-10-13.md) —
+  UE 5.7/5.8 internals, adopter timings, warmup and master/block benchmarks, and derived-pyramid costs.
 
 - [UAsset source-derived parser model](../crates/uasset-source-gen/README.md) — source-derived class
   metadata, composable native serialization layouts, and Unreal-backed parser conformance.

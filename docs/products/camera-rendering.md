@@ -9,6 +9,11 @@ For actor context or bounded map areas, use `renderPreparedCamera` with
 [`@ue-shed/world`](world-preparation.md). Native `camera_regions` and Data Layer preparation also use
 the shared `UEShedWorld` manager. Install matching Core, World and Cameras plugins.
 
+For a caller-managed tile workflow, compose the session with
+[map tile source helpers](map-tile-sources.md). Choose individual tiles or larger blocks separately
+for each zoom, consume exact crop rectangles and optionally derive parents. Rendering policy,
+encoding, scheduling and publication remain caller-owned.
+
 ## Public API
 
 Open the map separately, discover `cameras.render-session.v1`, and call `capabilities()` and

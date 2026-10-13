@@ -1,0 +1,329 @@
+import { Result, Schema } from "effect";
+import { AbsoluteCamera, CameraOutputSize } from "./camera-render-schema.js";
+import {
+	createMapTileGrid,
+	mapTileWorldBounds,
+	type MapTileGrid,
+	type MapWorldBounds
+} from "./map-tile-pyramid.js";
+import { MapCapturePlan, MapTileKeySchema, MapTilePyramidLevel } from "./map-tile-schema.js";
+
+const Count = Schema.Int.check(Schema.isBetween({ minimum: 1, maximum: 256 }));
+const Grid = Schema.Struct({
+	requestedBounds: MapCapturePlan.fields.requestedBounds,
+	snappedBounds: MapCapturePlan.fields.requestedBounds,
+	origin: Schema.Struct({ x: Schema.Finite, y: Schema.Finite }),
+	orientation: Schema.Literal("rows_max_x_to_min_x_columns_min_y_to_max_y"),
+	tilePixelSize: MapCapturePlan.fields.tilePixelSize,
+	levels: Schema.Array(MapTilePyramidLevel).check(Schema.isMinLength(1), Schema.isMaxLength(24))
+});
+
+export const MapTileSourceLimits = Schema.Struct({
+	maximumDimension: Schema.Int.check(Schema.isBetween({ minimum: 16, maximum: 16384 })),
+	/** One decoded RGBA8 source, excluding GPU resources, codecs and output crops. */
+	maximumDecodedBytes: Schema.Int.check(Schema.isBetween({ minimum: 1, maximum: 2 ** 30 }))
+});
+export type MapTileSourceLimits = typeof MapTileSourceLimits.Type;
+
+export const MapTileSourceBlock = Schema.Struct({
+	firstTile: MapTileKeySchema,
+	rows: Count,
+	columns: Count
+});
+export type MapTileSourceBlock = typeof MapTileSourceBlock.Type;
+
+export const MapTileSourceSettings = Schema.Struct({
+	captureZ: MapCapturePlan.fields.capture.fields.z,
+	gutterPixels: MapCapturePlan.fields.gutterPixels,
+	limits: MapTileSourceLimits
+});
+export type MapTileSourceSettings = typeof MapTileSourceSettings.Type;
+
+export const MapTileSourceLayoutOptions = MapTileSourceSettings.mapFields((fields) => ({
+	...fields,
+	zoom: MapTileKeySchema.fields.zoom,
+	tilesPerSourceSide: Count
+}));
+export type MapTileSourceLayoutOptions = typeof MapTileSourceLayoutOptions.Type;
+
+export const MapTilePixelRect = Schema.Struct({
+	left: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
+	top: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
+	width: Schema.Int.check(Schema.isBetween({ minimum: 1, maximum: 16384 })),
+	height: Schema.Int.check(Schema.isBetween({ minimum: 1, maximum: 16384 }))
+});
+export type MapTilePixelRect = typeof MapTilePixelRect.Type;
+
+export const MapTileSourceCrop = Schema.Struct({
+	key: MapTileKeySchema,
+	rect: MapTilePixelRect,
+	worldBounds: MapCapturePlan.fields.requestedBounds
+});
+export type MapTileSourceCrop = typeof MapTileSourceCrop.Type;
+
+export const MapTileSource = Schema.Struct({
+	block: MapTileSourceBlock,
+	camera: AbsoluteCamera,
+	size: CameraOutputSize,
+	decodedBytes: Schema.Int.check(Schema.isBetween({ minimum: 1, maximum: 2 ** 30 })),
+	/** Logical tile coverage. The camera footprint also includes the outer gutter. */
+	worldBounds: MapCapturePlan.fields.requestedBounds,
+	crops: Schema.Array(MapTileSourceCrop)
+});
+export type MapTileSource = typeof MapTileSource.Type;
+
+export interface MapTileSourceLayout {
+	readonly sourceCount: number;
+	readonly tileCount: number;
+	/** Lazy, row-major source descriptors for this explicitly selected zoom only. */
+	readonly sources: Iterable<MapTileSource>;
+}
+
+export class MapTileSourceError extends Schema.TaggedErrorClass<MapTileSourceError>()(
+	"MapTileSourceError",
+	{
+		code: Schema.Literals(["invalid_grid", "invalid_source", "source_limit_exceeded"]),
+		message: Schema.String,
+		recovery: Schema.String
+	}
+) {}
+
+const decodeGrid = Schema.decodeUnknownResult(Grid, { onExcessProperty: "error" });
+const decodeSettings = Schema.decodeUnknownResult(MapTileSourceSettings, {
+	onExcessProperty: "error"
+});
+const decodeLayout = Schema.decodeUnknownResult(MapTileSourceLayoutOptions, {
+	onExcessProperty: "error"
+});
+const decodeBlock = Schema.decodeUnknownResult(MapTileSourceBlock, { onExcessProperty: "error" });
+
+function failure(code: MapTileSourceError["code"], message: string) {
+	return Result.fail(
+		new MapTileSourceError({
+			code,
+			message,
+			recovery:
+				"Use a canonical map grid, an in-bounds source block and explicit dimension/memory limits; reduce the block size when necessary."
+		})
+	);
+}
+
+function sameBounds(first: MapWorldBounds, second: MapWorldBounds): boolean {
+	return (
+		first.minX === second.minX &&
+		first.minY === second.minY &&
+		first.maxX === second.maxX &&
+		first.maxY === second.maxY
+	);
+}
+
+function validateGrid(input: MapTileGrid): Result.Result<MapTileGrid, MapTileSourceError> {
+	const decoded = decodeGrid(input);
+	if (Result.isFailure(decoded)) return failure("invalid_grid", String(decoded.failure));
+	const grid = decoded.success;
+	const expected = createMapTileGrid({
+		requestedBounds: grid.requestedBounds,
+		tilePixelSize: grid.tilePixelSize,
+		coarsestUnitsPerPixel: grid.levels[0]!.unitsPerPixel,
+		levelCount: grid.levels.length
+	});
+	if (
+		!sameBounds(grid.snappedBounds, expected.snappedBounds) ||
+		grid.origin.x !== expected.origin.x ||
+		grid.origin.y !== expected.origin.y ||
+		grid.levels.some((level, index) => {
+			const canonical = expected.levels[index]!;
+			return (
+				level.zoom !== canonical.zoom ||
+				level.rows !== canonical.rows ||
+				level.columns !== canonical.columns ||
+				level.tileWorldSize !== canonical.tileWorldSize ||
+				level.unitsPerPixel !== canonical.unitsPerPixel ||
+				!Number.isSafeInteger(level.rows) ||
+				!Number.isSafeInteger(level.columns)
+			);
+		})
+	)
+		return failure(
+			"invalid_grid",
+			"The grid must match createMapTileGrid's bounds, origin and levels."
+		);
+	return Result.succeed(expected);
+}
+
+function sourceSize(grid: MapTileGrid, block: MapTileSourceBlock, settings: MapTileSourceSettings) {
+	const size = {
+		width: block.columns * grid.tilePixelSize + 2 * settings.gutterPixels,
+		height: block.rows * grid.tilePixelSize + 2 * settings.gutterPixels
+	};
+	return { ...size, decodedBytes: size.width * size.height * 4 };
+}
+
+function validateBlock(
+	grid: MapTileGrid,
+	block: MapTileSourceBlock,
+	settings: MapTileSourceSettings
+): Result.Result<void, MapTileSourceError> {
+	const level = grid.levels[block.firstTile.zoom];
+	if (
+		!level ||
+		block.firstTile.row + block.rows > level.rows ||
+		block.firstTile.column + block.columns > level.columns
+	) {
+		return failure(
+			"invalid_source",
+			"The source block extends beyond its selected grid level."
+		);
+	}
+	const size = sourceSize(grid, block, settings);
+	if (
+		size.width > settings.limits.maximumDimension ||
+		size.height > settings.limits.maximumDimension ||
+		size.decodedBytes > settings.limits.maximumDecodedBytes
+	) {
+		return failure(
+			"source_limit_exceeded",
+			`Source ${size.width}x${size.height} requires ${size.decodedBytes} decoded RGBA8 bytes and exceeds the declared limits.`
+		);
+	}
+	if (
+		!Number.isFinite(size.width * level.unitsPerPixel) ||
+		size.width * level.unitsPerPixel > 1e9
+	) {
+		return failure(
+			"invalid_source",
+			"The source's orthographic width exceeds the camera-render contract."
+		);
+	}
+	return Result.succeed(undefined);
+}
+
+function buildSource(
+	grid: MapTileGrid,
+	block: MapTileSourceBlock,
+	settings: MapTileSourceSettings
+): MapTileSource {
+	const first = mapTileWorldBounds(grid, block.firstTile);
+	const last = mapTileWorldBounds(grid, {
+		zoom: block.firstTile.zoom,
+		row: block.firstTile.row + block.rows - 1,
+		column: block.firstTile.column + block.columns - 1
+	});
+	const worldBounds = { minX: last.minX, minY: first.minY, maxX: first.maxX, maxY: last.maxY };
+	const { decodedBytes, ...size } = sourceSize(grid, block, settings);
+	const crops: MapTileSourceCrop[] = [];
+	for (let row = 0; row < block.rows; row++)
+		for (let column = 0; column < block.columns; column++) {
+			const key = {
+				zoom: block.firstTile.zoom,
+				row: block.firstTile.row + row,
+				column: block.firstTile.column + column
+			};
+			crops.push({
+				key,
+				rect: {
+					left: settings.gutterPixels + column * grid.tilePixelSize,
+					top: settings.gutterPixels + row * grid.tilePixelSize,
+					width: grid.tilePixelSize,
+					height: grid.tilePixelSize
+				},
+				worldBounds: mapTileWorldBounds(grid, key)
+			});
+		}
+	return {
+		block,
+		size,
+		decodedBytes,
+		worldBounds,
+		crops,
+		camera: {
+			location: {
+				x: (worldBounds.minX + worldBounds.maxX) / 2,
+				y: (worldBounds.minY + worldBounds.maxY) / 2,
+				z: settings.captureZ
+			},
+			rotation: { pitch: -90, yaw: 0, roll: 0 },
+			projection: {
+				kind: "orthographic",
+				width: size.width * grid.levels[block.firstTile.zoom]!.unitsPerPixel
+			}
+		}
+	};
+}
+
+/** Plan one explicit rectangular block, including ragged grid edges and only an outer gutter. */
+export function createMapTileSource(args: {
+	readonly grid: MapTileGrid;
+	readonly block: MapTileSourceBlock;
+	readonly settings: MapTileSourceSettings;
+}): Result.Result<MapTileSource, MapTileSourceError> {
+	const grid = validateGrid(args.grid);
+	if (Result.isFailure(grid)) return Result.fail(grid.failure);
+	const block = decodeBlock(args.block),
+		settings = decodeSettings(args.settings);
+	if (Result.isFailure(block)) return failure("invalid_source", String(block.failure));
+	if (Result.isFailure(settings)) return failure("invalid_source", String(settings.failure));
+	const ready = validateBlock(grid.success, block.success, settings.success);
+	if (Result.isFailure(ready)) return Result.fail(ready.failure);
+	return Result.succeed(buildSource(grid.success, block.success, settings.success));
+}
+
+/** Plan one caller-selected zoom. A side of one preserves individually rendered tiles. */
+export function planMapTileSources(args: {
+	readonly grid: MapTileGrid;
+	readonly options: MapTileSourceLayoutOptions;
+}): Result.Result<MapTileSourceLayout, MapTileSourceError> {
+	const grid = validateGrid(args.grid);
+	if (Result.isFailure(grid)) return Result.fail(grid.failure);
+	const decoded = decodeLayout(args.options);
+	if (Result.isFailure(decoded)) return failure("invalid_source", String(decoded.failure));
+	const options = { ...decoded.success, limits: { ...decoded.success.limits } };
+	const level = grid.success.levels[options.zoom];
+	if (!level) return failure("invalid_source", "The selected zoom does not exist in this grid.");
+	const tileCount = level.rows * level.columns;
+	const sourceCount =
+		Math.ceil(level.rows / options.tilesPerSourceSide) *
+		Math.ceil(level.columns / options.tilesPerSourceSide);
+	if (!Number.isSafeInteger(tileCount) || !Number.isSafeInteger(sourceCount)) {
+		return failure(
+			"invalid_grid",
+			"The selected level's source/tile count exceeds safe integer arithmetic."
+		);
+	}
+	const maximum = {
+		firstTile: { zoom: options.zoom, row: 0, column: 0 },
+		rows: Math.min(level.rows, options.tilesPerSourceSide),
+		columns: Math.min(level.columns, options.tilesPerSourceSide)
+	};
+	const ready = validateBlock(grid.success, maximum, options);
+	if (Result.isFailure(ready)) return Result.fail(ready.failure);
+	const canonical = grid.success;
+	return Result.succeed({
+		sourceCount,
+		tileCount,
+		sources: {
+			*[Symbol.iterator]() {
+				for (let row = 0; row < level.rows; row += options.tilesPerSourceSide) {
+					for (
+						let column = 0;
+						column < level.columns;
+						column += options.tilesPerSourceSide
+					) {
+						yield buildSource(
+							canonical,
+							{
+								firstTile: { zoom: options.zoom, row, column },
+								rows: Math.min(options.tilesPerSourceSide, level.rows - row),
+								columns: Math.min(
+									options.tilesPerSourceSide,
+									level.columns - column
+								)
+							},
+							options
+						);
+					}
+				}
+			}
+		}
+	});
+}
