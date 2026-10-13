@@ -462,7 +462,7 @@ transporting bounded schema-validated results to browser code.
 
 ## Saved investigations and exports
 
-The public browser entry point exposes version-1 `GameTextInvestigationPreset` and
+The public browser entry point exposes versioned `GameTextInvestigationPreset` and
 `GameTextInvestigationExport` schemas, `exportGameTextInvestigation`, and
 `gameTextInvestigationCsv`. Corpus and quality query models also provide `export` methods that
 retain all matching units or findings and their full evidence. Existing search page limits remain
@@ -488,7 +488,11 @@ additionally carry `workspaceFilter`, the target and optional culture, and built
 without a rules file. `workspaceFilter` is valid only in quality mode with a localization target;
 the preset schema rejects other combinations. Their `localization_quality` exports retain all
 matching finding summaries, selection, scan status and coverage through `WorkspaceQualityReport`,
-with the target's review file applied as in the Workbench list.
+with the target's review file applied as in the Workbench list. Localization quality presets and
+exports use schema version 2, which older readers reject instead of dropping the finding filter.
+Version-1 corpus and source quality investigations remain readable and retain their version when
+replayed; a version-1 preset cannot carry `workspaceFilter`. An export and its preset use the same
+schema version.
 `localizationQualityWorkspace.export` gives headless clients the same report, and
 `workspaceQualityCsv` writes Workbench's spreadsheet layout from it. The CLI's `--format csv`
 instead writes the `gameTextInvestigationCsv` metadata layout, with `finding_id`, `kind`, `culture`,

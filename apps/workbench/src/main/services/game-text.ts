@@ -911,7 +911,7 @@ export const WorkbenchGameTextLive = Layer.effect(
 						})
 					);
 				const preset: GameTextInvestigationPreset = {
-					schemaVersion: 1,
+					schemaVersion: query.workspaceFilter === undefined ? 1 : 2,
 					kind: "game_text",
 					sort: "domain_order",
 					query,

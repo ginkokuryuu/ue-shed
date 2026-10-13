@@ -1174,6 +1174,8 @@ it("exports the selected target's localization quality list as a replayable repo
 				const exported = JSON.parse(
 					yield* Effect.promise(() => readFile(outputPath, "utf8"))
 				);
+				expect(exported.schemaVersion).toBe(2);
+				expect(exported.preset.schemaVersion).toBe(2);
 				expect(exported.preset.query).toEqual(query);
 				expect(exported.result).toMatchObject({
 					mode: "localization_quality",
@@ -1185,6 +1187,12 @@ it("exports the selected target's localization quality list as a replayable repo
 					}
 				});
 				expect(exported.result.report.findings).toEqual(listed.page.findings);
+				outputPath = join(root, "preset.json");
+				expect((yield* service.investigationSave(query)).status).toBe("saved");
+				const savedPreset = JSON.parse(
+					yield* Effect.promise(() => readFile(outputPath, "utf8"))
+				);
+				expect(savedPreset).toMatchObject({ schemaVersion: 2, query });
 				outputPath = join(root, "export.csv");
 				expect((yield* service.investigationExport(query, "csv")).status).toBe("saved");
 				const csv = yield* Effect.promise(() => readFile(outputPath, "utf8"));

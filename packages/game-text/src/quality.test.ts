@@ -399,7 +399,7 @@ it.effect("replays embedded quality rules and exports filtered evidence with pro
 		expect(
 			yield* Schema.decodeUnknownEffect(GameTextInvestigationPreset)({
 				...preset,
-				schemaVersion: 2
+				schemaVersion: 3
 			}).pipe(Effect.result)
 		).toMatchObject({ _tag: "Failure" });
 		const invalidRules = {
