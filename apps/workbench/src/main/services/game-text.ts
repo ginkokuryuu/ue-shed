@@ -130,8 +130,6 @@ export interface WorkbenchGameTextApi {
 		query: GameTextInvestigationQuery
 	) => Effect.Effect<InvestigationFileResult>;
 	readonly investigationOpen: () => Effect.Effect<GameTextInvestigationPresetResult>;
-	readonly chooseAndRefresh: () => Effect.Effect<TextCorpusQueryRunResult>;
-	readonly chooseAndScan: () => Effect.Effect<TextCorpusRunResult>;
 	readonly configuredRefresh: (refresh?: boolean) => Effect.Effect<TextCorpusQueryRunResult>;
 	readonly configuredScan: () => Effect.Effect<TextCorpusRunResult>;
 	readonly progress: () => Effect.Effect<WorkbenchTaskProgress>;
@@ -443,21 +441,6 @@ export const WorkbenchGameTextLive = Layer.effect(
 			}
 		);
 
-		const chooseAndScan = Effect.fn("Workbench.WorkbenchGameText.chooseAndScan")(function* () {
-			const choice = yield* project.choose();
-			if (choice.status === "cancelled") return { status: "cancelled" as const };
-			if (choice.status === "not_configured") return { status: "not_configured" as const };
-			if (choice.status === "failed") {
-				return unavailableProject(choice.error.message, choice.error.recovery);
-			}
-			return yield* project.candidates("game_text").pipe(
-				Effect.flatMap((index) => runScan(choice.project.projectRoot, index)),
-				Effect.catch((error) =>
-					Effect.succeed(unavailableProject(error.message, error.recovery))
-				)
-			);
-		});
-
 		class QueryKey extends Data.Class<{
 			readonly projectRoot: string;
 			readonly generation: number;
@@ -504,24 +487,6 @@ export const WorkbenchGameTextLive = Layer.effect(
 						: { status: "not_scanned" as const };
 				}
 				return yield* Cache.get(refreshes, key);
-			}
-		);
-
-		const chooseAndRefresh = Effect.fn("Workbench.WorkbenchGameText.chooseAndRefresh")(
-			function* () {
-				const choice = yield* project.choose();
-				if (choice.status === "cancelled") return { status: "cancelled" as const };
-				if (choice.status === "not_configured")
-					return { status: "not_configured" as const };
-				if (choice.status === "failed") {
-					return unavailableQueryProject(choice.error.message, choice.error.recovery);
-				}
-				return yield* project.candidates("game_text").pipe(
-					Effect.flatMap((index) => runRefresh(choice.project.projectRoot, index)),
-					Effect.catch((error) =>
-						Effect.succeed(unavailableQueryProject(error.message, error.recovery))
-					)
-				);
 			}
 		);
 
@@ -617,10 +582,17 @@ export const WorkbenchGameTextLive = Layer.effect(
 					Ref.set(qualityDocument, prepared.document),
 					Ref.set(qualityModel, prepared.model)
 				]);
+				// The renderer learns whether Save has a file destination, never the path itself.
+				const destination = yield* Ref.get(qualityRulePath);
+				const owner = yield* Ref.get(modelSelection);
 				return {
 					document: prepared.document,
 					status: "completed" as const,
-					summary: prepared.model.summary()
+					summary: prepared.model.summary(),
+					ruleFile:
+						destination !== undefined && destination.projectRoot === owner?.projectRoot
+							? ("attached" as const)
+							: ("none" as const)
 				};
 			}
 		);
@@ -1067,22 +1039,6 @@ export const WorkbenchGameTextLive = Layer.effect(
 			investigationExport: scoped(investigationExport),
 			investigationSave: scoped(investigationSave),
 			investigationOpen: scoped(investigationOpen),
-			chooseAndRefresh: () =>
-				Effect.scoped(
-					guardScan(chooseAndRefresh(), () =>
-						unavailableQueryProject(
-							"An Unreal localization step is running.",
-							"Cancel it or wait before scanning."
-						)
-					)
-				),
-			chooseAndScan: () =>
-				guardScan(chooseAndScan(), () =>
-					unavailableProject(
-						"An Unreal localization step is running.",
-						"Cancel it or wait before scanning."
-					)
-				),
 			configuredRefresh: (refresh = true) =>
 				Effect.scoped(
 					refresh
@@ -1116,8 +1072,8 @@ export const WorkbenchGameTextLive = Layer.effect(
 );
 
 export function makeWorkbenchGameTextTestLayer(
-	service: Pick<WorkbenchGameTextApi, "chooseAndScan" | "configuredScan"> &
-		Partial<Omit<WorkbenchGameTextApi, "chooseAndScan" | "configuredScan">>
+	service: Pick<WorkbenchGameTextApi, "configuredScan"> &
+		Partial<Omit<WorkbenchGameTextApi, "configuredScan">>
 ): Layer.Layer<WorkbenchGameText> {
 	return Layer.succeed(
 		WorkbenchGameText,
@@ -1142,7 +1098,6 @@ export function makeWorkbenchGameTextTestLayer(
 			investigationExport: () => Effect.succeed({ status: "cancelled" }),
 			investigationSave: () => Effect.succeed({ status: "cancelled" }),
 			investigationOpen: () => Effect.succeed({ status: "cancelled" }),
-			chooseAndRefresh: () => Effect.succeed({ status: "not_configured" }),
 			configuredRefresh: () => Effect.succeed({ status: "not_configured" }),
 			focus: () => Effect.succeed({ status: "not_ready" }),
 			chooseQualityRules: () => Effect.succeed({ status: "not_ready" }),
