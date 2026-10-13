@@ -1,3 +1,4 @@
+import { Cause } from "effect";
 import { GameTextClientError } from "./game-text-client.js";
 
 /**
@@ -5,9 +6,12 @@ import { GameTextClientError } from "./game-text-client.js";
  * carry their own recovery; anything else is unexpected, so it only offers a retry.
  */
 export function failureText(what: string, cause: unknown): string {
-	const recovery =
-		cause instanceof GameTextClientError
-			? cause.recovery
-			: "Try again. If it keeps failing, restart Workbench.";
-	return `${what} ${recovery}`;
+	if (cause instanceof GameTextClientError) return `${what} ${cause.recovery}`;
+	if (Cause.isCause(cause)) {
+		for (const reason of cause.reasons) {
+			if (Cause.isFailReason(reason) && reason.error instanceof GameTextClientError)
+				return `${what} ${reason.error.recovery}`;
+		}
+	}
+	return `${what} Try again. If it keeps failing, restart Workbench.`;
 }
