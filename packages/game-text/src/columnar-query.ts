@@ -257,10 +257,12 @@ export function columnarTextCorpusQuery(
 				? wanted.map((term) => Buffer.from(term))
 				: undefined;
 			const last = joined.reader.manifest.segments.at(-1);
-			sourceCache = asciiTerms?.length
-				? (data.searchSourceBytes(asciiTerms, checkInterrupted) ??
-					new Uint8Array(last ? last.start + last.count : 0))
-				: new Uint8Array(last ? last.start + last.count : 0);
+			sourceCache =
+				(asciiTerms?.length
+					? data.searchSourceBytes(asciiTerms, checkInterrupted)
+					: wanted.length
+						? data.rejectAsciiSources(checkInterrupted)
+						: undefined) ?? new Uint8Array(last ? last.start + last.count : 0);
 			sourceQuery = key;
 		}
 	};
@@ -1453,66 +1455,40 @@ export function columnarTextCorpusQuery(
 		);
 	};
 	data.prepareSources();
-	for (const field of new Set([
-		...joined.baseLayer.directory.entries.keys(),
-		...Object.keys(joined.meta.aliases),
-		...Object.keys(joined.meta.chunks ?? {})
-	]))
-		if (field !== "join.meta" && field !== "shared.meta" && !/\.chunk\d+$/u.test(field))
-			data.column(field);
-	for (let shard = 0; shard < joined.meta.packageNames.length; shard++) {
-		for (const field of [
-			"package.path",
-			"package.occurrence_start",
-			"occurrence.source",
-			"occurrence.notes",
-			"occurrence.namespace",
-			"occurrence.key",
-			"occurrence.object",
-			"occurrence.property",
-			"occurrence.class",
-			"occurrence.row",
-			"occurrence.identity",
-			"occurrence.location",
-			"occurrence.editable"
-		])
-			data.packageColumn(shard, field);
-	}
-	for (const name of Object.keys(joined.meta.dependencies).filter(
-		(name) => !name.startsWith("package-text.")
-	)) {
-		for (const field of [
-			"namespace",
-			"key",
-			"source",
-			"source-extra",
-			"translation",
-			"translation-extra",
-			"path",
-			"notes",
-			"metadata",
-			"po-extra",
-			"options",
-			"ordinal"
-		])
-			data.fileColumn(name, field);
-	}
+	// Warm bounded presentation pages instead of inflating every physical column. Other
+	// cultures, rule fields and package details stay lazy under this generation's pinned handles.
 	if (target.cultures.length) {
 		cachedSearch({
 			query: "",
 			capability: "all",
-			pageSize: 0,
+			pageSize: 50,
 			localization: { target: target.name }
 		});
 		cachedSearch({
 			query: "",
 			capability: "all",
-			pageSize: 0,
+			pageSize: 50,
 			localization: { target: target.name, culture: target.cultures[0]! }
 		});
+	} else {
+		cachedSearch({ query: "", capability: "all", pageSize: 50 });
 	}
 	const findRaw = (id: string) => data.findId("raw", id);
 	const findLine = (id: string) => data.findId("line", id);
+	const rawLineRows = () => {
+		let rows = data.projection.columns.get("focus:raw-line");
+		if (!rows) {
+			rows = new Uint32Array(rawOrder.length).fill(0xffffffff);
+			const raws = c("query.slice.raw");
+			for (const candidate of lineOrder) {
+				checkpoint();
+				for (let sr = lineStarts[candidate]!; sr < lineStarts[candidate + 1]!; sr++)
+					rows[raws[sr]!] = candidate;
+			}
+			data.projection.columns.set("focus:raw-line", rows);
+		}
+		return rows;
+	};
 	return {
 		summary: () => summary,
 		search: cachedSearch,
@@ -1566,12 +1542,8 @@ export function columnarTextCorpusQuery(
 					}
 			} else if (row !== undefined) {
 				if (!raw.visible![row]) return undefined;
-				for (const candidate of lineOrder) {
-					let found = false;
-					for (let sr = lineStarts[candidate]!; sr < lineStarts[candidate + 1]!; sr++)
-						if (c("query.slice.raw")[sr] === row) found = true;
-					if (found) lineRow = candidate;
-				}
+				const candidate = rawLineRows()[row]!;
+				if (candidate !== 0xffffffff) lineRow = candidate;
 			}
 			if (row === undefined) return undefined;
 			const members = data.members(kind, row);

@@ -1,4 +1,4 @@
-import { mkdir, mkdtemp, rm } from "node:fs/promises";
+import { appendFile, mkdir, mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createHash } from "node:crypto";
@@ -24,6 +24,7 @@ import { encodeWtf8 } from "./wtf8.js";
 import { LocalizationImportSession } from "./localization-import-session.js";
 import { GameTextIndexProgressReporter } from "./index-progress.js";
 import { writeSnapshotFile, openSnapshotFile, type SnapshotFileReader } from "./snapshot-file.js";
+import { importColdPackageTextLayer } from "./package-text-cold.js";
 
 /** The caller supplies the Project Index's opaque package-and-sidecar signature, never a layer hash.
  * Header evidence and signatures must come from the same complete inventory generation.
@@ -211,10 +212,118 @@ export const refreshPackageTextLayer = Effect.fn("PackageText.refresh")(function
 	const reader = Object.keys(manifest.active).some((name) => name.startsWith("package-text."))
 		? yield* store.open()
 		: undefined;
+	const session = yield* Effect.serviceOption(LocalizationImportSession);
+	if (!reader && changed.length > 8 && inventory.length >= 256) {
+		const directory = yield* Effect.acquireRelease(
+			Effect.tryPromise({
+				try: async () => {
+					const root = Option.isSome(session)
+						? join(session.value.configuration.cacheRoot, "staging")
+						: tmpdir();
+					await mkdir(root, { recursive: true });
+					return mkdtemp(join(root, "package-cold-"));
+				},
+				catch: (cause) => snapshotFailure("package-text.stage", String(cause))
+			}),
+			(value) => Effect.promise(() => rm(value, { recursive: true, force: true }))
+		);
+		const buffers = new Map<string, { lines: string[]; bytes: number }>();
+		const flush = async (name: string) => {
+			const buffer = buffers.get(name)!;
+			if (!buffer.lines.length) return;
+			await appendFile(join(directory, `${name}.ndjson`), buffer.lines.join(""));
+			buffer.lines.length = 0;
+			buffer.bytes = 0;
+		};
+		const append = (record: PackageTextStored) =>
+			Effect.tryPromise({
+				try: async () => {
+					const name = shardName(packageTextShard(record.path)),
+						buffer = buffers.get(name) ?? { lines: [], bytes: 0 },
+						line = `${JSON.stringify(record)}\n`;
+					buffers.set(name, buffer);
+					buffer.lines.push(line);
+					buffer.bytes += Buffer.byteLength(line);
+					if (buffer.bytes >= 64 * 1024) await flush(name);
+				},
+				catch: (cause) => snapshotFailure("package-text.stage", String(cause))
+			});
+		const requested = new Map<string, PackageTextInventoryEntry>();
+		for (const shard of changed)
+			for (const { entry, selected } of shard.entries) {
+				if (selected) requested.set(entry.path, entry);
+				else {
+					yield* append({
+						path: entry.path,
+						signature: entry.signature,
+						evidence: { event: "not_gatherable", path: entry.path }
+					});
+					completed++;
+				}
+			}
+		report();
+		const received = new Set<string>();
+		if (requested.size)
+			yield* input.read([...requested.keys()]).pipe(
+				Stream.runForEach((event) =>
+					Effect.gen(function* () {
+						if (event.event === "text_summary") return;
+						const entry = requested.get(event.path);
+						if (!entry || received.has(event.path))
+							return yield* Effect.fail(
+								snapshotFailure(
+									"package-text.read",
+									"Unexpected or duplicate package"
+								)
+							);
+						received.add(event.path);
+						yield* append({
+							path: event.path,
+							signature: entry.signature,
+							evidence: event
+						});
+						completed++;
+						report();
+					})
+				)
+			);
+		if (received.size !== requested.size)
+			return yield* Effect.fail(
+				snapshotFailure("package-text.read", "Reader omitted requested packages")
+			);
+		yield* Effect.tryPromise({
+			try: async () => {
+				for (const name of buffers.keys()) await flush(name);
+			},
+			catch: (cause) => snapshotFailure("package-text.stage", String(cause))
+		});
+		reportProgress({ phase: "joining", completed: 0, total: 0 });
+		const result = yield* importColdPackageTextLayer({
+			inventory,
+			recordDirectory: directory,
+			stagingRoot: directory
+		}).pipe(
+			Effect.provideService(
+				SharedIndex,
+				SharedIndex.of({
+					...store,
+					writer: () => Effect.succeed(writer),
+					inspect: () => Effect.succeed(writer.manifest())
+				})
+			)
+		);
+		return {
+			readPackages: requested.size,
+			reusedPackages: inventory.length - requested.size,
+			changedShards: changed.length,
+			removedShards: removed.length,
+			published: true,
+			profile: result.profile
+		};
+	}
 	const sources: ColdLayerSource[] = [];
 	// A cold build must release each shard's authored objects before reading the next shard.
 	// Disk-backed sources retain the atomic dictionary/root publication without retaining the corpus.
-	const session = yield* Effect.serviceOption(LocalizationImportSession);
 	const staged =
 		changed.length > 8
 			? yield* Effect.acquireRelease(

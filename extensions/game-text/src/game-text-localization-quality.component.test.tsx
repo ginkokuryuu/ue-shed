@@ -44,8 +44,6 @@ function client(): GameTextClientApi {
 		projectKey: () => Effect.succeed("quality-project"),
 		loadConfiguredProject: () =>
 			Effect.succeed({ status: "completed", summary: text.summary() }),
-		chooseProjectAndScan: () =>
-			Effect.succeed({ status: "completed", summary: text.summary() }),
 		search: (request) => Effect.succeed({ status: "ready", page: text.search(request) }),
 		focus: (request) => {
 			const focus = text.focus(request);
@@ -365,7 +363,10 @@ describe("localization quality and reports", () => {
 			save = vi.fn(api.saveQualityRules);
 		mount({ ...api, previewQualityRules: preview, saveQualityRules: save });
 		await user.click(await screen.findByRole("button", { name: "Edit rules" }));
-		await user.click(screen.getByRole("button", { name: /Budget.*translation.limit/u }));
+		await user.click(screen.getByRole("button", { name: "Choose another rules file…" }));
+		await user.click(
+			screen.getByRole("button", { name: /Character limit.*translation.limit/u })
+		);
 		await user.clear(screen.getByRole("spinbutton", { name: "Maximum characters for de" }));
 		await user.type(
 			screen.getByRole("spinbutton", { name: "Maximum characters for de" }),
@@ -383,7 +384,7 @@ describe("localization quality and reports", () => {
 			screen.getByRole("spinbutton", { name: "Maximum characters for en" }),
 			"10"
 		);
-		await user.click(screen.getByRole("button", { name: /Terms.*translation.terms/u }));
+		await user.click(screen.getByRole("button", { name: /Terminology.*translation.terms/u }));
 		await user.clear(screen.getByRole("textbox", { name: "de term 1" }));
 		await user.type(screen.getByRole("textbox", { name: "de term 1" }), "Guten Tag");
 		await user.clear(screen.getByRole("textbox", { name: "de alternatives 1" }));
@@ -441,10 +442,16 @@ describe("localization quality and reports", () => {
 			schemaVersion: 1
 		});
 		mount(
-			{ ...api, previewQualityRules: preview, saveQualityRules: save },
+			{
+				...api,
+				chooseQualityRules: () => preview(v1),
+				previewQualityRules: preview,
+				saveQualityRules: save
+			},
 			{ qualityDocument: v1 }
 		);
 		await user.click(await screen.findByRole("button", { name: "Edit rules" }));
+		await user.click(screen.getByRole("button", { name: "Choose another rules file…" }));
 		await user.click(screen.getByRole("button", { name: "Upgrade to version 2" }));
 		await screen.findByText("Preview updated. Changes are not saved yet.");
 		expect(preview.mock.calls.at(-1)?.[0]).toMatchObject({ schemaVersion: 2, rules: v1.rules });

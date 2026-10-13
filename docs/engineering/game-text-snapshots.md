@@ -7,6 +7,35 @@ Workbench. Domain storage stays outside the native Catalog. Package, localizatio
 layers are published through `GameTextIndexBuilder`; every host uses the shared refresh service.
 The native Catalog supplies bounded committed signature inventory, as described below.
 
+## Canonical performance policy
+
+[ADR 0010](../decisions/0010-game-text-performance-policy.md) adopts the measured, bounded pipeline.
+These are shared library defaults, not Workbench-only optimizations. Cold parsing starts immediately
+with size-weighted reservations and up to eight workers; one oversized task can run alone. Parser
+workers prepare sorted string runs and hashes. Larger layer conversions use workers while the
+coordinator retains dictionary IDs, leases and publication. Reservations estimate memory use.
+
+Queries warm bounded default pages and load other fields on demand. Review and raw focus use numeric
+identity lookup. Locale sorting decodes stable runs bounded by 8,192 entries and 4 MiB of encoded
+bytes, allowing one oversized identifier alone, then merges one decoded head per run. Optional
+source caching follows the format and overlay bounds below. Numeric sections remain zstd level 1;
+string/import domains retain their measured compression policy.
+
+Bundled Node hosts must emit `localization-import-worker.js`, `package-text-worker.js`,
+`cold-layer-worker.js` and, when enabled, `search-worker.js`, with their dependencies beside the
+bundle that resolves them through `import.meta.url`.
+Leaving the installed package unbundled also preserves these paths. Verify a cold refresh that
+uses multiple layers in the packaged host; a small warm fixture can miss an absent cold worker.
+
+The accepted target-only generated 1× cache is 81.8 MiB. Workbench prepares that same target-first
+model for raw source and localization browsing; its fresh cache also measures 81.8 MiB. Older
+source-plus-target caches measure 140.8 MiB and retain their previous layers until explicitly
+rebuilt. This fixture result does not impose a global cache quota
+across projects, targets, staging or pinned generations. Full measurements and rejected alternatives
+are in the [consolidated experiment record](../research/game-text-pipeline-performance-2026-10-13.md).
+Backend adoption remains governed by the shared builder contract below. Gather coverage is unchanged;
+see [the comparison with Unreal gather](game-text-gather-coverage.md).
+
 The Node adapter uses built-in zstd and CRC32, verified on Node 24 and 26. Store activation on a
 runtime without zstd fails with typed upgrade guidance. Other package exports remain loadable.
 
@@ -16,6 +45,19 @@ Layout version 4 uses magic `UESHT004` inside the existing `game-text-v1` cache 
 Old derived generations are rejected and rebuilt. Integers are little endian; payloads are
 four-byte aligned. The 48-byte header contains version, section count, file length, directory end,
 directory CRC32 and header CRC32. Reserved bytes must be zero.
+
+Full joins with at least 8,192 distinct sources may include an optional source-query cache. Its
+global IDs, byte offsets, canonical WTF-8 bytes, ASCII flags and a 256 KiB ASCII-trigram membership
+table are ordinary checksummed sections. The producer limits the combined raw projection to
+96 MiB and conservatively bounds its stored sections to 16 MiB; larger projections retain the
+dictionary-backed path. Readers verify ranges, IDs, UTF-8/WTF-8 boundaries and flag codes before
+using the projection. Older joins remain readable without these optional columns.
+
+The cache belongs to its immutable full-join generation. An overlay can reuse its base and append
+bounded newly selected sources, copying the trigram table before adding their memberships. Missing
+trigrams reject only lowercase ASCII sources; other sources retain exact locale folding and
+matching. Obsolete memberships cause additional checks rather than lost matches. Existing readers
+keep their original buffers. ID compaction remaps the cache's ID column with other source columns.
 
 Each 96-byte directory entry holds a zero-padded ASCII name (31 characters), kind, codec,
 64-bit positioned offset, stored length, raw length, element count, raw CRC32, string domain
@@ -76,6 +118,26 @@ dependencies before using a handle. Repairing a missing or malformed file invali
 failed import even when the restored content reuses its historical file-layer key. Unchanged
 observations reuse their keys, so concurrent targets with identical inputs remain compatible.
 Existing pinned models retain their original evidence when later observations change.
+
+Worker-enabled index steps retain a bounded map of eight query workers, keyed by configuration,
+physical generation and joined-layer identity. Overlapping unchanged models share a worker while
+keeping their own reader scopes. A model opens its worker before publication; lazily reopening
+the current manifest after publication would lose its historical generation after compaction.
+Closing one model leaves other pins usable. The last pin awaits worker retirement, and changed
+joins use a different worker. Metrics count starts, stops and retirement duration.
+An unchanged refresh replaces an instance that has failed after readiness. Instance keys differ
+from immutable query identities: old reader pins remain valid, and retiring a failed instance
+cannot remove its healthy replacement from the pool. Concurrent callers share the replacement.
+
+A target model contains the complete raw source projection. Hosts needing both views can import
+the target before refreshing packages and build one join. Workbench uses the selected target for
+the same project, or the first discovered target, with source-only recovery when target discovery
+or import is unavailable. Target selection still validates imports, review records and carried key
+changes before comparing the target handle's optional opaque `queryRevision` with the existing
+model's identity and borrowing it. Hosts must not parse or construct this identity or store it as
+a durable ID; compare only within the same project, cache and backend. An
+unchanged package refresh clears the old selection while retaining its resource pin until a
+replacement takes ownership; discovery failures and empty target lists release that pin.
 
 A writer consumes a `SnapshotSource`: ordered section descriptors with a bounded load operation.
 `snapshotColumnsSource` adapts existing columns; streaming importers can supply descriptors that
@@ -231,6 +293,23 @@ Compaction preallocates from its census rather than doubling a multi-gigabyte ar
 stay within the supervised heap/RSS limits on the retained workloads; larger workloads can fail
 the explicit 16 GiB arena cap rather than silently wrap offsets.
 
+Cold localization starts a bounded parser pool immediately. It reserves half of the memory reported
+by `process.availableMemory()` for parsing, estimates each task at 128 MiB plus 32 times its input
+size, and admits smaller files alongside a larger one when their reservations fit. A file that
+exceeds the estimate budget runs alone. These reservations are conservative scheduling estimates,
+not a hard RSS limit; there is no largest-file calibration pass or fixed 16 GB worker allowance.
+
+Parser workers prepare 16 MiB local string runs and reuse hashes before their columns are released.
+The coordinator merges those runs, assigns shared IDs, and preserves deterministic cross-domain
+ownership. Temporary run readers target 16 MiB in aggregate with a 16 KiB minimum per reader.
+At 256 or more packages, a first package refresh spools one validated read batch into bounded shard
+buffers and uses the package worker pool. Existing and smaller package sets retain their current
+path. With at least 512 KiB of local-to-global mapping vectors, staged layer conversion runs in up
+to eight workers under an available-memory budget; smaller mappings convert in the coordinator.
+Workers receive only their own copied ID maps and cannot publish a root or acquire another lease.
+The coordinator verifies results and publishes the root atomically. Final join policy still runs in
+TypeScript; its ID comparators retain two decoded strings rather than repeatedly decoding both sides.
+
 **File refresh.** The previous key comes from the active path publication or the file's validated
 stat hint. Sorted identity mappings match old/new rows, including duplicates and reordering.
 The prior file's byte-to-ID mapping reuses unchanged content; only unresolved new/changed strings
@@ -372,7 +451,12 @@ derived columns stay private to the new query; full-base changes and dictionary 
 reuse. Source search arenas copy retained WTF-8 bytes and decode only newly selected source IDs.
 Reuse permits at most 8,192 newly selected IDs, 8,192 obsolete IDs and 32 MiB of obsolete source
 bytes; beyond those bounds, the arena rebuilds from current sources. Old readers keep their
-original buffers. Query preparation remains eager, including source search and common counts.
+original buffers. Query preparation eagerly prepares source search, common counts and bounded
+default presentation pages. Other package, culture and rule columns load on demand through the
+pinned reader; preparation no longer inflates every physical column. The source arena trims
+backing capacity when spare bytes exceed 25%. Non-ASCII searches skip sources known to contain
+only lowercase ASCII, while other sources retain locale-sensitive folding. Raw focus lazily
+builds a numeric reverse index instead of repeatedly visiting every localization line.
 Refresh spans record reused-column count, source reuse and query-preparation duration.
 
 Every host obtains builds through `GameTextIndexBuilder`: import, package refresh, dictionary,

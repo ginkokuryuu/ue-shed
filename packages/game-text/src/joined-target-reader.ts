@@ -24,6 +24,7 @@ import {
 	type LocalizationJoin
 } from "./localization-schema.js";
 import { TextUnitId } from "./identifiers.js";
+import { JoinedSourceCacheMeta } from "./joined-source-cache.js";
 import { u32, type ColumnReader } from "./joined-target-input.js";
 import type { SharedIndexReader } from "./shared-index.js";
 import {
@@ -42,6 +43,7 @@ export const JoinedTargetMeta = Schema.Struct({
 	patches: Schema.optionalKey(Schema.Record(Schema.String, Schema.String)),
 	patchRows: Schema.optionalKey(Schema.Record(Schema.String, Schema.String)),
 	sourcePatches: Schema.optionalKey(JoinedSourcePatches),
+	sourceCache: Schema.optionalKey(JoinedSourceCacheMeta),
 	input: Schema.Struct({
 		projectRoot: Schema.String,
 		target: LocalizationTarget,

@@ -3,7 +3,17 @@ export * from "./package-text-record.js";
 export * from "./package-text-candidates.js";
 export * from "./snapshot-format.js";
 export * from "./localization-import.js";
-export * from "./shared-index.js";
+export {
+	SharedIndex,
+	sharedIndexDirectory,
+	sharedIndexNodeLayer,
+	retireSharedIndexFiles,
+	type SharedLayerRecord,
+	type SharedIndexManifest,
+	type SharedIndexOptions,
+	type SharedIndexReader,
+	type SharedIndexWriter
+} from "./shared-index.js";
 export type { SnapshotLoadedDomain } from "./snapshot-file.js";
 export {
 	snapshotColumnsSource,

@@ -15,7 +15,7 @@ import {
 } from "@ue-shed/game-text/browser";
 import { Button } from "@ue-shed/ui";
 import { tokens } from "@ue-shed/ui-theme/tokens.stylex.js";
-import { For, Show } from "solid-js";
+import { For, Show, createMemo } from "solid-js";
 import { cultureSummary } from "./game-text-culture-state.js";
 
 const SEVERE = new Set<TextProblem>(["key_changed", "conflicting_source"]);
@@ -63,8 +63,18 @@ function problemSentence(
  * The open line's page header: back to the list, where the line sits in it, and the lines before
  * and after it.
  */
+export interface LinePosition {
+	/** The line's place among the lines counted by `total`, from zero. */
+	readonly index: number;
+	readonly total: number;
+	/** The group counted, when grouping can list one line in several groups. */
+	readonly group?: string | undefined;
+	readonly first: boolean;
+	readonly last: boolean;
+}
+
 export function LinePageHeader(props: {
-	readonly position: { readonly index: number; readonly total: number } | undefined;
+	readonly position: LinePosition | undefined;
 	readonly onBack: () => void;
 	readonly onMove: (step: -1 | 1) => void;
 }) {
@@ -74,11 +84,22 @@ export function LinePageHeader(props: {
 				‹ Lines
 			</Button>
 			<span {...stylex.attrs(styles.grow)} />
-			<Show when={props.position}>
+			<Show
+				when={props.position}
+				fallback={
+					<span
+						title="Filters or a rescan removed this line from the list. Go back to the lines to pick another."
+						{...stylex.attrs(styles.position)}
+					>
+						Not in the current list
+					</span>
+				}
+			>
 				{(position) => (
-					<span {...stylex.attrs(styles.position)}>
+					<span title={position().group} {...stylex.attrs(styles.position)}>
 						{(position().index + 1).toLocaleString()} of{" "}
 						{position().total.toLocaleString()}
+						{position().group === undefined ? "" : " in " + position().group}
 					</span>
 				)}
 			</Show>
@@ -87,7 +108,9 @@ export function LinePageHeader(props: {
 				size="compact"
 				tone="quiet"
 				aria-label="Previous line"
-				disabled={!props.position || props.position.index === 0}
+				title="Previous line (Alt ↑)"
+				aria-keyshortcuts="Alt+ArrowUp"
+				disabled={!props.position || props.position.first}
 				onClick={() => props.onMove(-1)}
 			>
 				↑
@@ -97,7 +120,9 @@ export function LinePageHeader(props: {
 				size="compact"
 				tone="quiet"
 				aria-label="Next line"
-				disabled={!props.position || props.position.index + 1 >= props.position.total}
+				title="Next line (Alt ↓)"
+				aria-keyshortcuts="Alt+ArrowDown"
+				disabled={!props.position || props.position.last}
 				onClick={() => props.onMove(1)}
 			>
 				↓
@@ -111,7 +136,21 @@ export function LineProblem(props: {
 	readonly focus: TextCorpusFocus | undefined;
 	readonly detail: LocalizationFocus | undefined;
 }) {
+	const onlyUnsynced = createMemo(
+		() =>
+			props.detail?.translations.some((mark) => mark.facts.includes("not_synced")) &&
+			!props.detail?.translations.some(
+				(mark) => mark.state === "not_translated" || mark.facts.includes("needs_update")
+			)
+	);
 	const worst = () => lineProblems(props.focus, props.detail)[0] ?? "up_to_date";
+	const tone = createMemo(() =>
+		SEVERE.has(worst())
+			? "severe"
+			: onlyUnsynced() && worst() === "translation"
+				? "sync"
+				: "waiting"
+	);
 	return (
 		<Show when={problemSentence(worst(), props.detail)}>
 			{(sentence) => (
@@ -120,10 +159,18 @@ export function LineProblem(props: {
 					aria-label="What this line needs"
 					{...stylex.attrs(
 						styles.callout,
-						SEVERE.has(worst()) ? styles.calloutSevere : styles.calloutWaiting
+						tone() === "severe" && styles.calloutSevere,
+						tone() === "sync" && styles.calloutSync,
+						tone() === "waiting" && styles.calloutWaiting
 					)}
 				>
-					<strong {...stylex.attrs(SEVERE.has(worst()) ? styles.severe : styles.waiting)}>
+					<strong
+						{...stylex.attrs(
+							tone() === "severe" && styles.severe,
+							tone() === "sync" && styles.sync,
+							tone() === "waiting" && styles.waiting
+						)}
+					>
 						{TEXT_PROBLEM_LABELS[worst()]}
 					</strong>{" "}
 					{sentence()}
@@ -138,7 +185,7 @@ export function LineProperties(props: {
 	readonly focus: TextCorpusFocus | undefined;
 	readonly detail: LocalizationFocus | undefined;
 }) {
-	const problems = () => lineProblems(props.focus, props.detail);
+	const problems = () => lineProblems(props.focus, props.detail).slice(1);
 	const key = () => {
 		const identity = props.detail?.identity ?? undefined;
 		if (identity) return { namespace: identity.namespace, key: identity.key };
@@ -197,28 +244,30 @@ export function LineProperties(props: {
 		<section aria-label="Properties" {...stylex.attrs(styles.properties)}>
 			<h3 {...stylex.attrs(styles.heading)}>Properties</h3>
 			<dl {...stylex.attrs(styles.list)}>
-				<dt {...stylex.attrs(styles.term)}>Problem</dt>
-				<dd {...stylex.attrs(styles.value)}>
-					<For each={problems()}>
-						{(problem) => (
-							<span
-								{...stylex.attrs(
-									styles.problem,
-									SEVERE.has(problem) && styles.severe,
-									WAITING.has(problem) && styles.waiting
-								)}
-							>
-								{TEXT_PROBLEM_LABELS[problem]}
-							</span>
-						)}
-					</For>
-				</dd>
+				<Show when={problems().length > 0}>
+					<dt {...stylex.attrs(styles.term)}>Other problems</dt>
+					<dd {...stylex.attrs(styles.value)}>
+						<For each={problems()}>
+							{(problem) => (
+								<span
+									{...stylex.attrs(
+										styles.problem,
+										SEVERE.has(problem) && styles.severe,
+										WAITING.has(problem) && styles.waiting
+									)}
+								>
+									{TEXT_PROBLEM_LABELS[problem]}
+								</span>
+							)}
+						</For>
+					</dd>
+				</Show>
 				<Show when={key()}>
 					{(identity) => (
 						<>
 							<dt {...stylex.attrs(styles.term)}>Namespace</dt>
 							<dd {...stylex.attrs(styles.value, styles.mono)}>
-								{identity().namespace === "" ? "(none)" : identity().namespace}
+								{identity().namespace || "global"}
 							</dd>
 							<dt {...stylex.attrs(styles.term)}>Key</dt>
 							<dd {...stylex.attrs(styles.value, styles.mono)}>{identity().key}</dd>
@@ -277,6 +326,10 @@ export function LineProperties(props: {
 
 const styles = stylex.create({
 	header: {
+		position: "sticky",
+		top: 0,
+		zIndex: 3,
+		backgroundColor: tokens.colorSurface,
 		display: "flex",
 		alignItems: "center",
 		gap: 4,
@@ -303,6 +356,8 @@ const styles = stylex.create({
 		borderColor: "rgba(235, 87, 87, 0.35)",
 		backgroundColor: "rgba(235, 87, 87, 0.06)"
 	},
+	calloutSync: { borderColor: tokens.colorAccent, backgroundColor: tokens.colorAccentWash },
+	sync: { color: tokens.colorAccent },
 	calloutWaiting: {
 		borderColor: "rgba(242, 153, 74, 0.35)",
 		backgroundColor: "rgba(242, 153, 74, 0.06)"

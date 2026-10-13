@@ -3,12 +3,17 @@ import { mkdir, mkdtemp, rm } from "node:fs/promises";
 import { join } from "node:path";
 import { Worker } from "node:worker_threads";
 import { availableParallelism } from "node:os";
-import { Effect } from "effect";
+import { Effect, Schema } from "effect";
 import { SharedIndex } from "./shared-index.js";
 import { openSnapshotFile, type SnapshotFileReader } from "./snapshot-file.js";
 import { SnapshotStoreError } from "./snapshot-store.js";
 import { packageTextSelection, type PackageTextInventoryEntry } from "./package-text-layer.js";
-import type { ColdLayerSource } from "./shared-string-sort.js";
+import { PreparedColdStrings, type ColdLayerSource } from "./shared-string-sort.js";
+
+const Reply = Schema.Union([
+	Schema.Struct({ ok: Schema.Literal(true), preparedStrings: PreparedColdStrings }),
+	Schema.Struct({ ok: Schema.Literal(false), error: Schema.String })
+]);
 
 function worker() {
 	const compiled = new URL("./package-text-worker.js", import.meta.url);
@@ -39,6 +44,7 @@ export const importColdPackageTextLayer = Effect.fn("PackageText.importCold")(fu
 				const directory = await mkdtemp(join(input.stagingRoot, "package-"));
 				const workers: Worker[] = [],
 					readers: SnapshotFileReader[] = [];
+				const preparedStrings = new Map<string, PreparedColdStrings>();
 				const workerCount = Math.min(
 					8,
 					availableParallelism(),
@@ -63,10 +69,20 @@ export const importColdPackageTextLayer = Effect.fn("PackageText.importCold")(fu
 										instance.off("error", error);
 										instance.off("exit", exit);
 									};
-									const message = (reply: string) => {
+									const message = (input: typeof Reply.Encoded) => {
 										clean();
-										if (reply === "ok") resolve();
-										else reject(new Error(reply));
+										try {
+											const reply = Schema.decodeUnknownSync(Reply)(input);
+											if (reply.ok) {
+												preparedStrings.set(
+													current.name,
+													reply.preparedStrings
+												);
+												resolve();
+											} else reject(new Error(reply.error));
+										} catch (cause) {
+											reject(cause);
+										}
 									};
 									const error = (cause: Error) => {
 										clean();
@@ -101,7 +117,7 @@ export const importColdPackageTextLayer = Effect.fn("PackageText.importCold")(fu
 						readers.push(
 							await openSnapshotFile(join(directory, `${shard.name}.snapshot`))
 						);
-					return { directory, readers, workerCount };
+					return { directory, readers, workerCount, preparedStrings };
 				} catch (cause) {
 					await Promise.all(workers.map((instance) => instance.terminate()));
 					await Promise.all(readers.map((reader) => reader.close()));
@@ -131,6 +147,8 @@ export const importColdPackageTextLayer = Effect.fn("PackageText.importCold")(fu
 		...selection.map((shard, row) => ({
 			name: shard.name,
 			key: shard.key,
+			stagedFile: join(prepared.directory, `${shard.name}.snapshot`),
+			preparedStrings: prepared.preparedStrings.get(shard.name)!,
 			source: {
 				columns: [...prepared.readers[row]!.directory.entries.values()].map((entry) => ({
 					...entry,

@@ -86,6 +86,7 @@ export const makeRetainedGameTextIndexWith = Effect.fn("GameTextIndex.retain")(f
 					);
 					return {
 						project: result.project,
+						queryRevision: result.queryRevision,
 						get joined() {
 							return result.joined;
 						},

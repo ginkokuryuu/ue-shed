@@ -475,7 +475,7 @@ const styles = stylex.create({
 	fieldGrid: {
 		display: "grid",
 		gridTemplateColumns:
-			"minmax(90px, .48fr) minmax(190px, 1.35fr) minmax(130px, .8fr) minmax(105px, .62fr) minmax(105px, .62fr) minmax(130px, .72fr)",
+			"minmax(80px, .48fr) minmax(120px, 1.35fr) minmax(100px, .8fr) minmax(100px, .62fr) minmax(100px, .62fr) minmax(150px, .72fr)",
 		gap: 8,
 		alignItems: "end",
 		marginTop: 14

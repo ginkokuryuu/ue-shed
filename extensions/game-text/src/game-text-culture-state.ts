@@ -5,8 +5,8 @@ export type CultureCell = "shipped" | "missing" | "to_update" | "not_synced" | "
 
 export const CELL_WORDS = {
 	shipped: "shipped",
-	missing: "missing",
-	to_update: "to update",
+	missing: "not translated",
+	to_update: "need update",
 	not_synced: "not synced",
 	other: "not settled"
 } satisfies Record<CultureCell, string>;

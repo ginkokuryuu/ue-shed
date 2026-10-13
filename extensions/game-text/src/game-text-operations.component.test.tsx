@@ -63,7 +63,6 @@ function client(operations: NonNullable<GameTextClientApi["operations"]>): GameT
 				return { status: "completed" as const, summary: text.summary() };
 			})
 		),
-		chooseProjectAndScan: () => Effect.die("unused"),
 		search: (request) => Effect.succeed({ status: "ready", page: text.search(request) }),
 		focus: (request) => {
 			const focus = text.focus(request);

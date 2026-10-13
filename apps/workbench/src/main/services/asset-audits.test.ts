@@ -345,29 +345,6 @@ it.effect("translates a typed scan failure into the failed result variant", () =
 	)
 );
 
-it.effect("cancels choose-and-scan when global project selection is cancelled", () =>
-	Effect.gen(function* () {
-		const service = yield* WorkbenchAssetAudits;
-		const result = yield* service.chooseAndScan();
-		expect(result).toEqual({ status: "cancelled" });
-	}).pipe(
-		Effect.provide(
-			WorkbenchAssetAuditsLive.pipe(
-				Layer.provide(
-					Layer.mergeAll(
-						configuration,
-						makeTextureAuditTestLayer({ scan: () => Effect.die("not used") }),
-						dialogLayer({}),
-						offlinePreviewLayer,
-						unselectedProject,
-						makeRemoteControlClientTestLayer(() => Effect.die("not used"))
-					)
-				)
-			)
-		)
-	)
-);
-
 it.effect("reports live preview unavailable when Remote Control fails", () =>
 	Effect.gen(function* () {
 		const service = yield* WorkbenchAssetAudits;

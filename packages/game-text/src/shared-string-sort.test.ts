@@ -5,9 +5,92 @@ import { describe, expect, it } from "vitest";
 import { snapshotColumnsSource } from "./snapshot-file.js";
 import { encodeStringBlock } from "./snapshot-format.js";
 import { SharedStringFiles } from "./shared-string-file.js";
-import { sortColdStrings } from "./shared-string-sort.js";
+import { prepareColdStringRuns, sortColdStrings } from "./shared-string-sort.js";
+import { mkdir } from "node:fs/promises";
 
 describe("cold external string sort", () => {
+	it("worker runs preserve mappings and reuse hashes across domains, Unicode and existing IDs", async () => {
+		const root = await mkdtemp(join(tmpdir(), "ue-shed-prepared-sort-"));
+		const values = [
+			["", "repeat", "é", "\ud800", "😀"],
+			["repeat", "\udc00", "é", "new"]
+		];
+		const entries = values.map((strings, row) => ({
+			name: `Content/Localization/Invented/fr/file-${row}.po`,
+			key: `key-${row}`,
+			source: snapshotColumnsSource([
+				{ name: "file.meta", kind: "bytes", values: new Uint8Array() },
+				{
+					name: "source.b0",
+					kind: "strings",
+					domain: "source",
+					stringCount: strings.length,
+					values: encodeStringBlock(strings)
+				},
+				{
+					name: "translation.b0",
+					kind: "strings",
+					domain: "translation",
+					stringCount: strings.length,
+					values: encodeStringBlock([...strings].reverse())
+				}
+			])
+		}));
+		try {
+			for (const existing of [false, true]) {
+				const beforeRoot = join(root, `before-${existing}`),
+					afterRoot = join(root, `after-${existing}`);
+				await mkdir(beforeRoot);
+				await mkdir(afterRoot);
+				const before = await new SharedStringFiles(beforeRoot, []).open(),
+					after = await new SharedStringFiles(afterRoot, []).open();
+				try {
+					if (existing) {
+						await before.intern("identity", ["repeat", "existing"]);
+						await after.intern("identity", ["repeat", "existing"]);
+					}
+					const expected = await sortColdStrings(entries, before, beforeRoot, 64);
+					const prepared = await Promise.all(
+						entries.map(async (entry, row) => {
+							const staging = join(afterRoot, `worker-${row}`);
+							await mkdir(staging);
+							const preparedStrings = await prepareColdStringRuns(
+								entry.source,
+								staging,
+								64
+							);
+							return {
+								...entry,
+								preparedStrings,
+								source: {
+									columns: entry.source.columns.map((column) => ({
+										...column,
+										load: async () => {
+											throw new Error(
+												"Coordinator must not reread worker string blocks"
+											);
+										}
+									}))
+								}
+							};
+						})
+					);
+					const actual = await sortColdStrings(prepared, after, afterRoot, 64);
+					expect(actual).toEqual(expected);
+					expect(after.count).toBe(before.count);
+					for (let row = 0; row < entries.length; row++)
+						expect(
+							await after.strings(Array.from(actual[row]!.maps.get("source")!))
+						).toEqual(values[row]);
+				} finally {
+					await before.close();
+					await after.close();
+				}
+			}
+		} finally {
+			await rm(root, { recursive: true, force: true });
+		}
+	});
 	it("synchronous query strings read cold blocks and share the bounded asynchronous cache", async () => {
 		const root = await mkdtemp(join(tmpdir(), "ue-shed-query-strings-"));
 		const writer = await new SharedStringFiles(root, []).open();

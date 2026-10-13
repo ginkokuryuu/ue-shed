@@ -4,6 +4,7 @@ use std::io;
 use std::path::{Path, PathBuf};
 use std::sync::Mutex;
 use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::mpsc;
 
 use serde::{Deserialize, Serialize};
 use uasset_inspection::projection::{
@@ -525,8 +526,34 @@ pub(crate) fn extract_text_with_cancellation(
             ProjectionKind::Text
         },
         cancellation,
+        None,
     )
 }
+
+pub(crate) fn extract_text_streaming(
+    request: &Request,
+    cancellation: &CancellationToken,
+    emit: &mut ProjectionSink<'_>,
+) -> Result<ProjectionOutput, Failure> {
+    projection(
+        request,
+        if matches!(request.operation, Operation::ExtractTextPackages { .. }) {
+            ProjectionKind::TextPackages
+        } else {
+            ProjectionKind::Text
+        },
+        cancellation,
+        Some(emit),
+    )
+}
+
+pub(crate) enum ProjectionStreamEvent<'a> {
+    Progress { completed: u64, total: u64 },
+    Result(&'a ResultFrame),
+}
+
+type ProjectionSink<'a> =
+    dyn for<'event> FnMut(ProjectionStreamEvent<'event>) -> Result<(), Failure> + 'a;
 
 pub(crate) fn extract_texture(request: &Request) -> Result<ProjectionOutput, Failure> {
     extract_texture_with_cancellation(request, &CancellationToken::new())
@@ -536,7 +563,7 @@ pub(crate) fn extract_texture_with_cancellation(
     request: &Request,
     cancellation: &CancellationToken,
 ) -> Result<ProjectionOutput, Failure> {
-    projection(request, ProjectionKind::Texture, cancellation)
+    projection(request, ProjectionKind::Texture, cancellation, None)
 }
 
 #[derive(Clone, Copy)]
@@ -550,6 +577,7 @@ fn projection(
     request: &Request,
     kind: ProjectionKind,
     cancellation: &CancellationToken,
+    mut emit: Option<&mut ProjectionSink<'_>>,
 ) -> Result<ProjectionOutput, Failure> {
     let selection = match (&request.operation, kind) {
         (Operation::ExtractText { selection }, ProjectionKind::Text)
@@ -565,56 +593,31 @@ fn projection(
         }
     };
     checkpoint(cancellation, "discovery")?;
-    let roots = resolve_roots(selection, cancellation)?;
+    let worker_count = request.limits.concurrency.unwrap_or(4).max(1) as usize;
+    let roots = if emit.is_some() {
+        resolve_roots_with_concurrency(selection, cancellation, worker_count)?
+    } else {
+        resolve_roots(selection, cancellation)?
+    };
     let (paths, _) = scanner::discover_paths(&roots, false, cancellation)?;
     checkpoint(cancellation, "discovery")?;
     enforce_maximum_assets(request, paths.len())?;
     let filters = projection_filters(kind, selection.paths.is_none());
-    let next_path = AtomicUsize::new(0);
-    let worker_count = request.limits.concurrency.unwrap_or(4).max(1) as usize;
-    let slots = Mutex::new(
-        (0..paths.len())
-            .map(|_| None::<Result<ProjectionWorkResult, Failure>>)
-            .collect::<Vec<_>>(),
-    );
-    let path_refs = &paths;
-    std::thread::scope(|scope| {
-        for _ in 0..worker_count.min(paths.len().max(1)) {
-            let next_path = &next_path;
-            let slots = &slots;
-            let filters = &filters;
-            let cancellation = cancellation.clone();
-            scope.spawn(move || {
-                loop {
-                    if checkpoint(&cancellation, "discovery").is_err() {
-                        break;
-                    }
-                    let index = next_path.fetch_add(1, Ordering::Relaxed);
-                    let Some(path) = path_refs.get(index) else {
-                        break;
-                    };
-                    let result = project_one_path(path, kind, filters, &cancellation);
-                    slots
-                        .lock()
-                        .expect("direct projection slots must not be poisoned")[index] =
-                        Some(result);
-                }
-            });
-        }
-    });
-
+    if let Some(emit) = &mut emit {
+        emit(ProjectionStreamEvent::Progress {
+            completed: 0,
+            total: paths.len() as u64,
+        })?;
+    }
     let mut results = Vec::new();
     let mut diagnostics = Vec::new();
     let mut emitted_assets = 0_u64;
     let mut failed_assets = 0_u64;
     let mut partial_assets = 0_u64;
     let mut skipped_assets = 0_u64;
-    for result in slots
-        .into_inner()
-        .expect("direct projection slots must not be poisoned")
-        .into_iter()
-        .flatten()
-    {
+    let mut completed_assets = 0_u64;
+    let streaming = emit.is_some();
+    let mut consume = |result: Result<ProjectionWorkResult, Failure>| {
         let result = result?;
         checkpoint(cancellation, "inspection")?;
         if result.diagnostic.is_some() {
@@ -631,7 +634,67 @@ fn projection(
         } else if !result.results.is_empty() {
             emitted_assets += 1;
         }
-        results.extend(result.results);
+        if let Some(emit) = &mut emit {
+            for result in &result.results {
+                emit(ProjectionStreamEvent::Result(result))?;
+            }
+            completed_assets += 1;
+            if completed_assets.is_multiple_of(128) || completed_assets == paths.len() as u64 {
+                emit(ProjectionStreamEvent::Progress {
+                    completed: completed_assets,
+                    total: paths.len() as u64,
+                })?;
+            }
+        } else {
+            results.extend(result.results);
+        }
+        Ok(())
+    };
+    if streaming {
+        project_paths_bounded(
+            &paths,
+            worker_count,
+            kind,
+            &filters,
+            cancellation,
+            &mut consume,
+        )?;
+    } else {
+        let next_path = AtomicUsize::new(0);
+        let slots = Mutex::new(
+            (0..paths.len())
+                .map(|_| None::<Result<ProjectionWorkResult, Failure>>)
+                .collect::<Vec<_>>(),
+        );
+        std::thread::scope(|scope| {
+            for _ in 0..worker_count.min(paths.len().max(1)) {
+                let next_path = &next_path;
+                let slots = &slots;
+                let filters = &filters;
+                let paths = &paths;
+                scope.spawn(move || {
+                    loop {
+                        if checkpoint(cancellation, "discovery").is_err() {
+                            break;
+                        }
+                        let index = next_path.fetch_add(1, Ordering::Relaxed);
+                        let Some(path) = paths.get(index) else {
+                            break;
+                        };
+                        let result = project_one_path(path, kind, filters, cancellation);
+                        slots.lock().expect("projection slots poisoned")[index] = Some(result);
+                    }
+                });
+            }
+        });
+        for result in slots
+            .into_inner()
+            .expect("projection slots poisoned")
+            .into_iter()
+            .flatten()
+        {
+            consume(result)?;
+        }
     }
     let depth = match kind {
         ProjectionKind::Text | ProjectionKind::TextPackages => ScanSummaryDepth::Text,
@@ -680,6 +743,72 @@ fn projection(
         summary,
         diagnostics,
         partial,
+    })
+}
+
+/// Keep ordered delivery and at most two jobs per worker in flight. Scheduling advances only
+/// after the next ordered result is consumed, so one slow package cannot grow the reorder buffer.
+fn project_paths_bounded(
+    paths: &[PathBuf],
+    worker_count: usize,
+    kind: ProjectionKind,
+    filters: &ScanFilters,
+    cancellation: &CancellationToken,
+    consume: &mut dyn FnMut(Result<ProjectionWorkResult, Failure>) -> Result<(), Failure>,
+) -> Result<(), Failure> {
+    let worker_count = worker_count.min(paths.len().max(1));
+    let window = worker_count * 2;
+    let (jobs, receive_job) = mpsc::sync_channel::<usize>(window);
+    let receive_job = Mutex::new(receive_job);
+    let (finished, receive_result) = mpsc::sync_channel(window);
+    std::thread::scope(|scope| {
+        for _ in 0..worker_count {
+            let receive_job = &receive_job;
+            let finished = finished.clone();
+            scope.spawn(move || {
+                loop {
+                    let Ok(index) = receive_job.lock().expect("projection jobs poisoned").recv()
+                    else {
+                        break;
+                    };
+                    let result = checkpoint(cancellation, "inspection").and_then(|()| {
+                        project_one_path(&paths[index], kind, filters, cancellation)
+                    });
+                    if finished.send((index, result)).is_err() {
+                        break;
+                    }
+                }
+            });
+        }
+        drop(finished);
+        let result = (|| {
+            let mut scheduled = 0;
+            for index in 0..window.min(paths.len()) {
+                jobs.send(index).expect("projection workers available");
+                scheduled += 1;
+            }
+            let mut pending = BTreeMap::new();
+            let mut next = 0;
+            while next < paths.len() {
+                checkpoint(cancellation, "inspection")?;
+                let (index, result) = receive_result.recv().expect("projection result available");
+                pending.insert(index, result);
+                while let Some(result) = pending.remove(&next) {
+                    consume(result)?;
+                    next += 1;
+                    if scheduled < paths.len() {
+                        jobs.send(scheduled).expect("projection workers available");
+                        scheduled += 1;
+                    }
+                }
+            }
+            Ok(())
+        })();
+        // Dropping both channels releases waiting workers before the scoped joins, including
+        // cancellation, consumer failures and a broken stdout pipe.
+        drop(jobs);
+        drop(receive_result);
+        result
     })
 }
 
@@ -1254,6 +1383,14 @@ fn resolve_roots(
     selection: &ProjectSelection,
     cancellation: &CancellationToken,
 ) -> Result<Vec<PathBuf>, Failure> {
+    resolve_roots_with_concurrency(selection, cancellation, 1)
+}
+
+fn resolve_roots_with_concurrency(
+    selection: &ProjectSelection,
+    cancellation: &CancellationToken,
+    concurrency: usize,
+) -> Result<Vec<PathBuf>, Failure> {
     checkpoint(cancellation, "discovery")?;
     let project_root = PathBuf::from(&selection.project_root);
     let Some(requested) = &selection.paths else {
@@ -1268,41 +1405,87 @@ fn resolve_roots(
         retry_safe: true,
         ..Default::default()
     })?;
-    let mut roots = Vec::with_capacity(requested.len());
-    for requested in requested {
-        checkpoint(cancellation, "discovery")?;
-        let path = PathBuf::from(requested);
-        let joined = if path.is_absolute() {
-            path
-        } else {
-            project_root.join(path)
-        };
-        let canonical = fs::canonicalize(&joined).map_err(|error| Failure {
-            code: "discovery".to_owned(),
-            message: format!("--path {} is not readable: {error}", joined.display()),
-            retry_safe: true,
+    let resolve = |requested: &str| {
+        resolve_requested_root(
+            requested,
+            &project_root,
+            &canonical_project_root,
+            cancellation,
+        )
+    };
+    if requested.len() < 64 || concurrency <= 1 {
+        return requested.iter().map(|path| resolve(path)).collect();
+    }
+    let next = AtomicUsize::new(0);
+    let resolved = Mutex::new(
+        requested
+            .iter()
+            .map(|_| None::<Result<PathBuf, Failure>>)
+            .collect::<Vec<_>>(),
+    );
+    std::thread::scope(|scope| {
+        for _ in 0..concurrency.min(requested.len()) {
+            let next = &next;
+            let resolved = &resolved;
+            let resolve = &resolve;
+            scope.spawn(move || {
+                loop {
+                    let index = next.fetch_add(1, Ordering::Relaxed);
+                    let Some(path) = requested.get(index) else {
+                        break;
+                    };
+                    let result = resolve(path);
+                    resolved.lock().expect("resolved project paths poisoned")[index] = Some(result);
+                }
+            });
+        }
+    });
+    checkpoint(cancellation, "discovery")?;
+    resolved
+        .into_inner()
+        .expect("resolved project paths poisoned")
+        .into_iter()
+        .map(|value| value.expect("requested path resolved"))
+        .collect()
+}
+
+fn resolve_requested_root(
+    requested: &str,
+    project_root: &Path,
+    canonical_project_root: &Path,
+    cancellation: &CancellationToken,
+) -> Result<PathBuf, Failure> {
+    checkpoint(cancellation, "discovery")?;
+    let path = PathBuf::from(requested);
+    let joined = if path.is_absolute() {
+        path
+    } else {
+        project_root.join(path)
+    };
+    let canonical = fs::canonicalize(&joined).map_err(|error| Failure {
+        code: "discovery".to_owned(),
+        message: format!("--path {} is not readable: {error}", joined.display()),
+        retry_safe: true,
+        ..Default::default()
+    })?;
+    if !canonical.starts_with(canonical_project_root) {
+        return Err(Failure {
+            code: "invalid_request".to_owned(),
+            message: format!("--path {} is outside the project root", joined.display()),
+            retry_safe: false,
             ..Default::default()
-        })?;
-        if !canonical.starts_with(&canonical_project_root) {
-            return Err(Failure {
-                code: "invalid_request".to_owned(),
-                message: format!("--path {} is outside the project root", joined.display()),
-                retry_safe: false,
-                ..Default::default()
-            });
-        }
-        if canonical.is_file() && !scanner::is_package_path(&canonical) {
-            return Err(Failure {
-                code: "invalid_request".to_owned(),
-                message: format!("--path {} is not a .uasset or .umap file", joined.display()),
-                retry_safe: false,
-                ..Default::default()
-            });
-        }
-        roots.push(joined);
+        });
+    }
+    if !scanner::is_package_path(&canonical) && canonical.is_file() {
+        return Err(Failure {
+            code: "invalid_request".to_owned(),
+            message: format!("--path {} is not a .uasset or .umap file", joined.display()),
+            retry_safe: false,
+            ..Default::default()
+        });
     }
     checkpoint(cancellation, "discovery")?;
-    Ok(roots)
+    Ok(joined)
 }
 
 fn enforce_maximum_assets(request: &Request, count: usize) -> Result<(), Failure> {
@@ -2002,6 +2185,116 @@ mod tests {
     use crate::protocol::Request;
     use crate::protocol_result::SavedWorldActorDecode;
     use uasset_parser::package::ObjectPath;
+
+    fn text_projection_request(compact: bool) -> Request {
+        let project_root = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .join("../../fixtures/unreal-project");
+        serde_json::from_value(serde_json::json!({
+            "contract": { "name": "uasset-io", "version": { "major": 1, "minor": 9 } },
+            "limits": { "concurrency": 2 },
+            "operation": {
+                "kind": if compact { "extract_text_packages" } else { "extract_text" },
+                "projectRoot": project_root.to_string_lossy(),
+                "paths": [
+                    "Content/Fixture/Localization/ST_Localization.uasset",
+                    "Content/Fixture/Authoring/DT_Text.uasset",
+                    "Content/Fixture/Text/ST_Game.uasset"
+                ]
+            },
+            "requestId": "streamed-text"
+        }))
+        .expect("fixture text request")
+    }
+
+    #[test]
+    fn streamed_text_preserves_ordered_results_and_measures_completed_packages() {
+        for compact in [false, true] {
+            let request = text_projection_request(compact);
+            let cancellation = CancellationToken::new();
+            let buffered = super::extract_text_with_cancellation(&request, &cancellation).unwrap();
+            let mut results = Vec::new();
+            let mut progress = Vec::new();
+            let streamed = super::extract_text_streaming(&request, &cancellation, &mut |event| {
+                match event {
+                    super::ProjectionStreamEvent::Result(result) => results.push(result.clone()),
+                    super::ProjectionStreamEvent::Progress { completed, total } => {
+                        progress.push((completed, total));
+                    }
+                }
+                Ok(())
+            })
+            .unwrap();
+            results.extend(streamed.results);
+            assert_eq!(
+                serde_json::to_value(results).unwrap(),
+                serde_json::to_value(buffered.results).unwrap()
+            );
+            assert_eq!(
+                serde_json::to_value(streamed.summary).unwrap(),
+                serde_json::to_value(buffered.summary).unwrap()
+            );
+            assert_eq!(progress, [(0, 3), (3, 3)]);
+        }
+    }
+
+    #[test]
+    fn streamed_text_releases_waiting_workers_when_the_consumer_fails() {
+        let request = text_projection_request(true);
+        let cancellation = CancellationToken::new();
+        let mut received = 0;
+        let failure = super::extract_text_streaming(&request, &cancellation, &mut |event| {
+            if matches!(event, super::ProjectionStreamEvent::Result(_)) {
+                received += 1;
+                return Err(super::Failure::new("test_sink", "consumer failed", false));
+            }
+            Ok(())
+        })
+        .expect_err("consumer failure");
+        assert_eq!(failure.code, "test_sink");
+        assert_eq!(received, 1);
+    }
+
+    #[test]
+    fn streamed_text_stops_between_results_after_cancellation() {
+        let request = text_projection_request(true);
+        let cancellation = CancellationToken::new();
+        let mut received = 0;
+        let failure = super::extract_text_streaming(&request, &cancellation, &mut |event| {
+            if matches!(event, super::ProjectionStreamEvent::Result(_)) {
+                received += 1;
+                cancellation.cancel();
+            }
+            Ok(())
+        })
+        .expect_err("cancelled consumer");
+        assert_eq!(failure.code, "cancelled");
+        assert_eq!(received, 1);
+    }
+
+    #[test]
+    fn parallel_text_path_validation_retains_input_order_and_rejects_outside_roots() {
+        let mut request = text_projection_request(true);
+        let crate::protocol::Operation::ExtractTextPackages { selection } = &mut request.operation
+        else {
+            unreachable!();
+        };
+        selection.paths = Some(vec!["Content/Fixture/Text/ST_Game.uasset".into(); 65]);
+        let cancellation = CancellationToken::new();
+        let serial = super::resolve_roots(selection, &cancellation).unwrap();
+        let parallel = super::resolve_roots_with_concurrency(selection, &cancellation, 4).unwrap();
+        assert_eq!(parallel, serial);
+        let outside = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+        selection.paths.as_mut().unwrap()[63] =
+            outside.join("Cargo.toml").to_string_lossy().into_owned();
+        selection.paths.as_mut().unwrap()[64] =
+            outside.join("src/lib.rs").to_string_lossy().into_owned();
+        let serial = super::resolve_roots(selection, &cancellation).unwrap_err();
+        let parallel =
+            super::resolve_roots_with_concurrency(selection, &cancellation, 4).unwrap_err();
+        assert_eq!(parallel.code, serial.code);
+        assert_eq!(parallel.message, serial.message);
+        assert_eq!(parallel.code, "invalid_request");
+    }
 
     #[test]
     fn legacy_text_protocol_frames_preserve_occurrences_and_each_gap_reason() {

@@ -7,7 +7,7 @@ import {
 	type LocalizationReviewChange,
 	type LocalizationTranslation
 } from "@ue-shed/game-text/browser";
-import { Chip, createEffectAction } from "@ue-shed/ui";
+import { Chip, ToolButton, ToolIcon, createEffectAction, type ToolIconName } from "@ue-shed/ui";
 import { For, Show, createSignal } from "solid-js";
 import type { GameTextClientApi } from "./game-text-client.js";
 import type { GameTextLocalizationState } from "./game-text-localization-state.js";
@@ -28,6 +28,18 @@ const flagLabels = {
 	machine_translated: "Machine translated"
 } satisfies Record<LocalizationReviewFlag, string>;
 const flags = LocalizationReviewFlag.literals;
+const flagTools = {
+	reviewed: { icon: "reviewed", description: "Checked against the source text." },
+	proofread: { icon: "proofread", description: "Checked spelling, grammar, and phrasing." },
+	approved: { icon: "approved", description: "Approved for use in the game." },
+	machine_translated: {
+		icon: "machine",
+		description: "Identifies a machine-generated translation."
+	}
+} satisfies Record<
+	LocalizationReviewFlag,
+	{ readonly icon: ToolIconName; readonly description: string }
+>;
 
 export function reviewLensLabel(lens: LocalizationReviewLens): string {
 	return lensLabels[lens];
@@ -128,13 +140,15 @@ export function ReviewControls(props: {
 			>
 				<For each={flags}>
 					{(flag) => (
-						<Chip
+						<ToolButton
 							label={flagLabels[flag]}
-							selected={current().includes(flag)}
-							toggle
+							tooltip={`${current().includes(flag) ? "On. Click to remove this flag." : "Off. Click to set this flag."} ${flagTools[flag].description} Applies to the exact source and translation shown.`}
+							aria-pressed={current().includes(flag) ? "true" : "false"}
 							disabled={props.busy || working()}
 							onClick={() => toggle(flag)}
-						/>
+						>
+							<ToolIcon name={flagTools[flag].icon} />
+						</ToolButton>
 					)}
 				</For>
 				<Show when={review()}>

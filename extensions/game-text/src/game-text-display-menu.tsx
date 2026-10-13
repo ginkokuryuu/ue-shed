@@ -1,8 +1,8 @@
 import * as stylex from "@stylexjs/stylex";
 import { TextGroupBy } from "@ue-shed/game-text/browser";
-import { AnchoredPopover, Button } from "@ue-shed/ui";
+import { AnchoredPopover, ToolButton, ToolIcon } from "@ue-shed/ui";
 import { tokens } from "@ue-shed/ui-theme/tokens.stylex.js";
-import { For, createSignal, createUniqueId } from "solid-js";
+import { For, createEffect, createSignal, createUniqueId } from "solid-js";
 
 const GROUP_LABELS = {
 	problem: "Problem",
@@ -21,6 +21,32 @@ export function DisplayMenu(props: {
 	const id = createUniqueId();
 	const [open, setOpen] = createSignal(false);
 	const choices = [undefined, ...TextGroupBy.literals];
+	let radios: HTMLDivElement | undefined;
+	const checked = () => radios?.querySelector<HTMLButtonElement>('[aria-checked="true"]');
+	// A radio group is one stop: it opens on the current choice, and arrows change the choice.
+	createEffect(open, (isOpen) => {
+		if (isOpen) queueMicrotask(() => checked()?.focus());
+	});
+	const move = (event: KeyboardEvent) => {
+		const step =
+			event.key === "ArrowDown" || event.key === "ArrowRight"
+				? 1
+				: event.key === "ArrowUp" || event.key === "ArrowLeft"
+					? -1
+					: 0;
+		if (step === 0 && event.key !== "Home" && event.key !== "End") return;
+		event.preventDefault();
+		event.stopPropagation();
+		const current = choices.indexOf(props.group);
+		const next =
+			event.key === "Home"
+				? 0
+				: event.key === "End"
+					? choices.length - 1
+					: (current + step + choices.length) % choices.length;
+		props.onGroupChange(choices[next]);
+		queueMicrotask(() => checked()?.focus());
+	};
 	return (
 		<AnchoredPopover
 			id={id}
@@ -30,12 +56,26 @@ export function DisplayMenu(props: {
 			placement="bottom-end"
 			style={styles.panel}
 			trigger={(trigger) => (
-				<Button {...trigger} type="button" size="compact" disabled={props.disabled}>
-					Display
-				</Button>
+				<ToolButton
+					{...trigger}
+					label="Display"
+					showLabel
+					tooltip={`Grouped by ${props.group ? GROUP_LABELS[props.group].toLowerCase() : "nothing"}.`}
+					disabled={props.disabled}
+				>
+					<ToolIcon name="display" />
+				</ToolButton>
 			)}
 		>
-			<div role="radiogroup" aria-label="Group by" {...stylex.attrs(styles.group)}>
+			<div
+				ref={(element) => {
+					radios = element;
+				}}
+				role="radiogroup"
+				aria-label="Group by"
+				onKeyDown={move}
+				{...stylex.attrs(styles.group)}
+			>
 				<span {...stylex.attrs(styles.head)}>Group by</span>
 				<For each={choices}>
 					{(choice) => (
@@ -43,6 +83,7 @@ export function DisplayMenu(props: {
 							type="button"
 							role="radio"
 							aria-checked={props.group === choice ? "true" : "false"}
+							tabindex={props.group === choice ? 0 : -1}
 							onClick={() => props.onGroupChange(choice)}
 							{...stylex.attrs(
 								styles.choice,

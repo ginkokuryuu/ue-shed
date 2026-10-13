@@ -17,43 +17,64 @@ export function CopyButton(props: { readonly label: string; readonly value: stri
 		}
 	);
 	return (
-		<button
-			type="button"
-			aria-label={props.label}
-			title={feedback() ?? props.label}
-			{...stylex.attrs(styles.copyButton)}
-			onClick={() => {
-				confirmation.cancel();
-				action.run(
-					Effect.tryPromise({
-						try: () => navigator.clipboard.writeText(props.value),
-						catch: String
-					}),
-					{
-						onSuccess: () => {
-							setFeedback("Copied");
-							confirmation.run(Effect.sleep("1500 millis"), {
-								onSuccess: () => setFeedback(undefined)
-							});
-						},
-						onFailure: () => setFeedback("Could not copy")
-					}
-				);
-			}}
-		>
-			<svg aria-hidden="true" viewBox="0 0 16 16" {...stylex.attrs(styles.copyIcon)}>
-				<Show
-					when={feedback() === "Copied"}
-					fallback={
-						<>
-							<rect x="5" y="5" width="9" height="9" rx="1" />
-							<path d="M11 3V2H2v9h1" />
-						</>
-					}
-				>
-					<path d="m3 8 3 3 7-7" />
-				</Show>
-			</svg>
-		</button>
+		<>
+			<Show when={feedback()}>
+				{(text) => (
+					<span role="status" {...stylex.attrs(local.hidden)}>
+						{text()}
+					</span>
+				)}
+			</Show>
+			<button
+				type="button"
+				aria-label={props.label}
+				title={feedback() ?? props.label}
+				{...stylex.attrs(styles.copyButton)}
+				onClick={() => {
+					confirmation.cancel();
+					action.run(
+						Effect.tryPromise({
+							try: () => navigator.clipboard.writeText(props.value),
+							catch: String
+						}),
+						{
+							onSuccess: () => {
+								setFeedback("Copied");
+								confirmation.run(Effect.sleep("1500 millis"), {
+									onSuccess: () => setFeedback(undefined)
+								});
+							},
+							onFailure: () => setFeedback("Could not copy")
+						}
+					);
+				}}
+			>
+				<svg aria-hidden="true" viewBox="0 0 16 16" {...stylex.attrs(styles.copyIcon)}>
+					<Show
+						when={feedback() === "Copied"}
+						fallback={
+							<>
+								<rect x="5" y="5" width="9" height="9" rx="1" />
+								<path d="M11 3V2H2v9h1" />
+							</>
+						}
+					>
+						<path d="m3 8 3 3 7-7" />
+					</Show>
+				</svg>
+			</button>
+		</>
 	);
 }
+
+const local = stylex.create({
+	// Announced to screen readers without taking space beside the icon.
+	hidden: {
+		position: "absolute",
+		width: 1,
+		height: 1,
+		overflow: "hidden",
+		clipPath: "inset(50%)",
+		whiteSpace: "nowrap"
+	}
+});

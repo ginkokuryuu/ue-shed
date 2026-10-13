@@ -271,13 +271,6 @@ export const gameTextClient: GameTextClientApi = GameTextClient.of({
 			decodeTextCorpusQueryRunResult
 		)
 	),
-	chooseProjectAndScan: Effect.fn("GameTextClient.chooseProjectAndScan")(() =>
-		invokeRequest(
-			"gameText.chooseProjectAndScan",
-			() => window.ueShed.gameText.chooseProjectAndRefresh(),
-			decodeTextCorpusQueryRunResult
-		)
-	),
 	progress: Effect.fn("GameTextClient.progress")(() =>
 		invokeRequest(
 			"gameText.progress",

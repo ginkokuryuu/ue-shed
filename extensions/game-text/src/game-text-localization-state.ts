@@ -76,16 +76,20 @@ export function createGameTextLocalizationState(props: {
 		const version = ++generation;
 		props.onPending();
 		setReady(false);
-		setActive(undefined);
-		setDetail(undefined);
 		setError(undefined);
-		if (name !== untrack(() => latest(target))) setSelectedId(undefined);
+		if (name !== untrack(() => latest(target))) {
+			setActive(undefined);
+			setDetail(undefined);
+			setSelectedId(undefined);
+		}
 		restoredTarget = undefined;
 		setTarget(name);
 		targetAction.run(operation, {
 			onFailure: () => {
 				if (version !== generation) return;
-				setError("Translations could not be loaded. Rescan to try again.");
+				setActive(undefined);
+				setReady(true);
+				setError("Translations could not be loaded. Retry translations to try again.");
 			},
 			onSuccess: (result) => {
 				if (version !== generation) return;
@@ -95,9 +99,15 @@ export function createGameTextLocalizationState(props: {
 						remembered.filter((item) => result.target.cultures.includes(item))
 					);
 					setReady(true);
-				} else if (result.status === "failed")
-					setError(result.message + " " + result.recovery);
-				else setError("Saved assets changed. Rescan to load translations.");
+				} else {
+					setActive(undefined);
+					setReady(true);
+					setError(
+						result.status === "failed"
+							? result.message + " " + result.recovery
+							: "Saved assets changed. Rescan to load translations."
+					);
+				}
 			}
 		});
 	};
@@ -108,18 +118,22 @@ export function createGameTextLocalizationState(props: {
 		const version = ++generation;
 		props.onPending();
 		setReady(false);
-		setActive(undefined);
-		setDetail(undefined);
 		setError(undefined);
 		targetAction.cancel();
 		listAction.run(operation, {
 			onFailure: () => {
-				if (version === generation)
-					setError("Localization targets could not be loaded. Rescan to try again.");
+				if (version !== generation) return;
+				setActive(undefined);
+				setReady(true);
+				setError(
+					"Localization targets could not be loaded. Retry translations to try again."
+				);
 			},
 			onSuccess: (result) => {
 				if (version !== generation) return;
 				if (result.status !== "ready") {
+					setActive(undefined);
+					setReady(true);
 					setError(
 						result.status === "failed"
 							? result.message + " " + result.recovery
@@ -136,6 +150,8 @@ export function createGameTextLocalizationState(props: {
 					result.targets[0];
 				if (chosen) selectTarget(chosen.name);
 				else {
+					setActive(undefined);
+					setDetail(undefined);
 					setTarget(undefined);
 					setPicked([]);
 					setState(undefined);
@@ -152,7 +168,7 @@ export function createGameTextLocalizationState(props: {
 		const chosen = cultures();
 		const selectedState = state();
 		const selectedReview = review();
-		if (!ready() || !current) return undefined;
+		if (!current) return undefined;
 		return {
 			target: current.target.name,
 			...(chosen.length === 1 ? { culture: chosen[0] } : undefined),
@@ -173,7 +189,9 @@ export function createGameTextLocalizationState(props: {
 			onFailure: () => {
 				if (version !== focusGeneration) return;
 				setDetailLoading(false);
-				setError("Translations for this line could not be loaded. Rescan to try again.");
+				setError(
+					"Translations for this line could not be loaded. Retry translations to try again."
+				);
 			},
 			onSuccess: (result) => {
 				if (version !== focusGeneration) return;
@@ -260,6 +278,7 @@ export function createGameTextLocalizationState(props: {
 			}
 		});
 	};
+	let focusedIdentity = "";
 	createEffect(
 		() => ({
 			ready: ready(),
@@ -271,7 +290,11 @@ export function createGameTextLocalizationState(props: {
 		({ ready: loaded, summary, target: name, id, unit }) => {
 			focusGeneration++;
 			focusAction.cancel();
-			setDetail(undefined);
+			const identity = JSON.stringify([name, id, unit]);
+			if (identity !== focusedIdentity) {
+				setDetail(undefined);
+				focusedIdentity = identity;
+			}
 			setDetailLoading(false);
 			if (!loaded || !summary || !name || (!id && !unit)) return;
 			const selection: LocalizationFocusRequest["selection"] | undefined = id

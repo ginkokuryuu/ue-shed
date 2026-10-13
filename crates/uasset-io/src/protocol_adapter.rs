@@ -467,15 +467,21 @@ fn execute_direct(
             if !empty_paths {
                 emit_progress(emitter, 0, "discovering", None)?;
             }
-            let output = direct_executor::extract_text_with_cancellation(request, cancellation)?;
-            if !empty_paths {
-                emit_progress(
-                    emitter,
-                    0,
-                    "inspecting",
-                    Some(output.summary.scanned_assets),
-                )?;
-            }
+            let output =
+                direct_executor::extract_text_streaming(request, cancellation, &mut |event| {
+                    match event {
+                        direct_executor::ProjectionStreamEvent::Result(result) => {
+                            emit_typed_result(emitter, result)
+                        }
+                        direct_executor::ProjectionStreamEvent::Progress { completed, total } => {
+                            if empty_paths {
+                                Ok(())
+                            } else {
+                                emit_progress(emitter, completed, "inspecting", Some(total))
+                            }
+                        }
+                    }
+                })?;
             for diagnostic in &output.diagnostics {
                 emit_diagnostic(emitter, diagnostic)?;
             }

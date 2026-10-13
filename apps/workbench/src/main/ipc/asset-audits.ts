@@ -10,14 +10,8 @@ export const register = Effect.gen(function* () {
 	yield* ipc.register(invokeContracts["asset-audits:textures:configured-scan"], () =>
 		audits.configuredScan()
 	);
-	yield* ipc.register(invokeContracts["asset-audits:textures:choose-and-scan"], () =>
-		audits.chooseAndScan().pipe(Effect.orDie)
-	);
 	yield* ipc.register(invokeContracts["asset-audits:textures:configured-refresh"], (refresh) =>
 		audits.configuredRefresh(refresh)
-	);
-	yield* ipc.register(invokeContracts["asset-audits:textures:choose-and-refresh"], () =>
-		audits.chooseAndRefresh().pipe(Effect.orDie)
 	);
 	yield* ipc.register(invokeContracts["asset-audits:textures:progress"], () => audits.progress());
 	yield* ipc.register(invokeContracts["asset-audits:textures:investigation-export"], (...args) =>

@@ -129,10 +129,6 @@ export interface GameTextClientApi {
 		) => Effect.Effect<InvestigationFileResult, GameTextClientError>;
 		readonly open: () => Effect.Effect<GameTextInvestigationPresetResult, GameTextClientError>;
 	};
-	readonly chooseProjectAndScan: () => Effect.Effect<
-		TextCorpusQueryRunResult,
-		GameTextClientError
-	>;
 	readonly focus: (
 		request: TextCorpusFocusRequest
 	) => Effect.Effect<TextCorpusFocusResult, GameTextClientError>;

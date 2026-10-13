@@ -98,6 +98,20 @@ export const WorkspaceQualityPage = Schema.Struct({
 	rules: Schema.Array(TextQualityRuleSummary).check(Schema.isMaxLength(1032))
 });
 export type WorkspaceQualityPage = typeof WorkspaceQualityPage.Type;
+/** File reports keep every matching finding; renderer pages remain bounded. */
+export const WorkspaceQualityReport = WorkspaceQualityPage.mapFields(
+	({ nextOffset: _offset, ...fields }) => ({
+		...fields,
+		findings: Schema.Array(WorkspaceFinding),
+		corpusCoverage: TextCorpus.fields.coverage,
+		status: TextCorpus.fields.status,
+		target: WorkspaceQualityRequest.fields.target,
+		culture: WorkspaceQualityRequest.fields.culture,
+		filter: WorkspaceQualityRequest.fields.filter
+	})
+);
+export type WorkspaceQualityReport = typeof WorkspaceQualityReport.Type;
+
 const Failure = Schema.Struct({
 	status: Schema.Literal("failed"),
 	message: Schema.String,
@@ -333,45 +347,58 @@ export function localizationQualityWorkspace(
 		Schema.is(BoundedChange)(finding.suggestedChange)
 			? finding.suggestedChange
 			: undefined;
+	const search = (request: WorkspaceQualityRequest): WorkspaceQualityPage => {
+		const culture = indexed.filter(
+			({ summary }) =>
+				!request.culture || !summary.culture || summary.culture === request.culture
+		);
+		const typeCounts = new Map<WorkspaceQualityFilter, number>();
+		const ruleCounts = new Map<Finding["ruleId"], number>();
+		for (const { summary, finding } of culture) {
+			typeCounts.set(summary.filter, (typeCounts.get(summary.filter) ?? 0) + 1);
+			ruleCounts.set(finding.ruleId, (ruleCounts.get(finding.ruleId) ?? 0) + 1);
+		}
+		const counts = Schema.decodeUnknownSync(WorkspaceQualityPage.fields.counts)(
+			Object.fromEntries(
+				WorkspaceQualityFilter.literals.map((filter) => [
+					filter,
+					filter === "all" ? culture.length : (typeCounts.get(filter) ?? 0)
+				])
+			)
+		);
+		const limits = new Map<LocalizationCheckDiagnostic["code"], number>();
+		for (const diagnostic of report.checkDiagnostics) {
+			if (!request.culture || diagnostic.culture === request.culture)
+				limits.set(diagnostic.code, (limits.get(diagnostic.code) ?? 0) + 1);
+		}
+		const findings = matched(request),
+			offset = request.offset ?? 0;
+		return {
+			counts,
+			limits: [...limits].map(([code, count]) => ({ code, count })),
+			unsupportedRuleCultures: report.ruleDiagnostics?.length ?? 0,
+			total: findings.length,
+			findings: findings.slice(offset, offset + 50).map((item) => item.summary),
+			suggestedFixCount: findings.filter(({ finding }) => eligible(finding)).length,
+			rules: [...(source?.rules ?? []), ...report.rules].map((rule) => ({
+				ruleId: rule.ruleId,
+				findingCount: ruleCounts.get(rule.ruleId) ?? 0
+			})),
+			...(offset + 50 < findings.length ? { nextOffset: offset + 50 } : undefined)
+		};
+	};
 	return {
-		search(request: WorkspaceQualityRequest): WorkspaceQualityPage {
-			const culture = indexed.filter(
-				({ summary }) =>
-					!request.culture || !summary.culture || summary.culture === request.culture
-			);
-			const typeCounts = new Map<WorkspaceQualityFilter, number>();
-			const ruleCounts = new Map<Finding["ruleId"], number>();
-			for (const { summary, finding } of culture) {
-				typeCounts.set(summary.filter, (typeCounts.get(summary.filter) ?? 0) + 1);
-				ruleCounts.set(finding.ruleId, (ruleCounts.get(finding.ruleId) ?? 0) + 1);
-			}
-			const counts = Schema.decodeUnknownSync(WorkspaceQualityPage.fields.counts)(
-				Object.fromEntries(
-					WorkspaceQualityFilter.literals.map((filter) => [
-						filter,
-						filter === "all" ? culture.length : (typeCounts.get(filter) ?? 0)
-					])
-				)
-			);
-			const limits = new Map<LocalizationCheckDiagnostic["code"], number>();
-			for (const diagnostic of report.checkDiagnostics) {
-				if (!request.culture || diagnostic.culture === request.culture)
-					limits.set(diagnostic.code, (limits.get(diagnostic.code) ?? 0) + 1);
-			}
-			const findings = matched(request),
-				offset = request.offset ?? 0;
+		search,
+		export(request: WorkspaceQualityRequest): WorkspaceQualityReport {
+			const { nextOffset: _offset, ...metadata } = search(request);
 			return {
-				counts,
-				limits: [...limits].map(([code, count]) => ({ code, count })),
-				unsupportedRuleCultures: report.ruleDiagnostics?.length ?? 0,
-				total: findings.length,
-				findings: findings.slice(offset, offset + 50).map((item) => item.summary),
-				suggestedFixCount: findings.filter(({ finding }) => eligible(finding)).length,
-				rules: [...(source?.rules ?? []), ...report.rules].map((rule) => ({
-					ruleId: rule.ruleId,
-					findingCount: ruleCounts.get(rule.ruleId) ?? 0
-				})),
-				...(offset + 50 < findings.length ? { nextOffset: offset + 50 } : undefined)
+				...metadata,
+				findings: matched(request).map((item) => item.summary),
+				corpusCoverage: report.coverage,
+				status: report.status,
+				target: request.target,
+				filter: request.filter,
+				...(request.culture ? { culture: request.culture } : undefined)
 			};
 		},
 		focus(request: WorkspaceQualityFocusRequest): WorkspaceQualityFocusResult {
@@ -650,5 +677,22 @@ export function localizationReportCsv(
 			if (baseline) cells.push(row.newWords ?? "Unknown", row.changedWords ?? "Unknown");
 			return cells;
 		})
+	]);
+}
+
+/** A spreadsheet of the same finding summaries the quality list displays. */
+export function workspaceQualityCsv(report: WorkspaceQualityReport): string {
+	return spreadsheetCsv([
+		["Target", "Culture", "Check", "Source", "Problem", "Context", "Finding ID", "Scan status"],
+		...report.findings.map((finding) => [
+			report.target,
+			finding.culture ?? "Source",
+			workspaceQualityLabels[finding.filter],
+			finding.source,
+			finding.problem,
+			finding.context,
+			finding.id,
+			report.status
+		])
 	]);
 }

@@ -74,12 +74,7 @@ import {
 	type WorldTransform
 } from "@ue-shed/observatory";
 import { AssetReader, type AssetReaderError } from "@ue-shed/unreal-assets";
-import type {
-	SavedWorld,
-	SavedWorldChoice,
-	SavedWorldMap,
-	SavedWorldProgress
-} from "@ue-shed/protocol";
+import type { SavedWorld, SavedWorldMap, SavedWorldProgress } from "@ue-shed/protocol";
 import { RemoteControlClient } from "@ue-shed/unreal-connection";
 import {
 	Context,
@@ -98,7 +93,7 @@ import {
 } from "effect";
 import { basename, dirname, resolve } from "node:path";
 import { LocalFiles } from "../adapters/local-files.js";
-import { WorkbenchWindow, type WorkbenchWindowError } from "../adapters/electron-window.js";
+import { WorkbenchWindow } from "../adapters/electron-window.js";
 import type { RendererWorldObservationEvent } from "../ipc-contracts.js";
 import { WorkbenchConfiguration } from "../workbench-config.js";
 import { WorkbenchProject } from "./project-workspace.js";
@@ -242,8 +237,6 @@ export interface WorkbenchMapReviewApi {
 		request: CameraWorkspaceRequest
 	) => Effect.Effect<CameraWorkspaceResult>;
 	readonly resetLiveTarget?: () => Effect.Effect<void>;
-	/** Chooses the global Workbench project, then returns its cached saved-map inventory. */
-	readonly chooseProjectAndMaps: () => Effect.Effect<SavedWorldChoice, WorkbenchWindowError>;
 	/** Lists configured saved maps; this deliberately never connects to Unreal. */
 	readonly savedWorldMaps: () => Effect.Effect<readonly SavedWorldMap[], SavedWorldUnavailable>;
 	/** Reads one configured saved map; this deliberately never connects to Unreal. */
@@ -1001,46 +994,6 @@ export const WorkbenchMapReviewLive = Layer.effect(
 
 		const savedWorldProgress = Effect.fn("Workbench.WorkbenchMapReview.savedWorldProgress")(
 			() => assetReader.savedWorldProgress()
-		);
-
-		const chooseProjectAndMaps = Effect.fn("Workbench.WorkbenchMapReview.chooseProjectAndMaps")(
-			function* () {
-				const choice = yield* project.choose();
-				if (choice.status === "cancelled") return choice;
-				if (choice.status === "not_configured") {
-					return {
-						status: "failed" as const,
-						message: "No Workbench project is selected.",
-						recovery: "Choose a project from the Workbench header, then retry."
-					};
-				}
-				if (choice.status === "failed") {
-					return {
-						status: "failed" as const,
-						message: choice.error.message,
-						recovery: choice.error.recovery
-					};
-				}
-				const selected = yield* project.savedProject().pipe(
-					Effect.match({
-						onFailure: (error) => ({ error, status: "failed" as const }),
-						onSuccess: (value) => ({ status: "ready" as const, value })
-					})
-				);
-				if (selected.status === "failed") {
-					return {
-						status: "failed" as const,
-						message: selected.error.message,
-						recovery: selected.error.recovery
-					};
-				}
-				return {
-					maps: selected.value.maps,
-					projectName: choice.project.projectName,
-					projectRoot: selected.value.projectRoot,
-					status: "configured" as const
-				};
-			}
 		);
 
 		const focusActor = Effect.fn("Workbench.WorkbenchMapReview.focusActor")(function* (
@@ -2303,7 +2256,6 @@ export const WorkbenchMapReviewLive = Layer.effect(
 			authoringResume,
 			authorFromSelection,
 			capture: captureAndReload,
-			chooseProjectAndMaps,
 			createReviewSet,
 			discardAuthoring,
 			focusActor,
@@ -2439,7 +2391,6 @@ export function makeWorkbenchMapReviewTestLayer(
 		| "savedWorld"
 		| "savedWorldMaps"
 		| "savedWorldProgress"
-		| "chooseProjectAndMaps"
 		| "applyVisibilityPolicy"
 		| "replaceVisibilityPolicy"
 		| "reviewSetLibrary"
@@ -2452,7 +2403,6 @@ export function makeWorkbenchMapReviewTestLayer(
 				| "savedWorld"
 				| "savedWorldMaps"
 				| "savedWorldProgress"
-				| "chooseProjectAndMaps"
 				| "applyVisibilityPolicy"
 				| "replaceVisibilityPolicy"
 				| "reviewSetLibrary"
@@ -2473,8 +2423,6 @@ export function makeWorkbenchMapReviewTestLayer(
 			savedWorldProgress:
 				service.savedWorldProgress ??
 				(() => Effect.die("saved world progress reader not stubbed")),
-			chooseProjectAndMaps:
-				service.chooseProjectAndMaps ?? (() => Effect.die("project chooser not stubbed")),
 			createReviewSet:
 				service.createReviewSet ?? (() => Effect.die("Review Set creation not stubbed")),
 			replaceVisibilityPolicy:

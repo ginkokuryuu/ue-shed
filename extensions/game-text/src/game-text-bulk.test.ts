@@ -57,6 +57,15 @@ const change = (sourceChanged: boolean) =>
 	}) satisfies Encoded["keyChange"];
 
 describe("bulk actions", () => {
+	it("excludes stale state and stale facts even when a pending PO translation exists", () => {
+		const lines = [
+			line("Old", [
+				mark("de", "needs_update", "Alt"),
+				{ ...mark("fr", "not_synced", "Ancien"), facts: ["needs_update", "not_synced"] }
+			])
+		];
+		expect(reviewChanges(lines, [], "en")).toEqual([]);
+	});
 	it("marks only reviewable, unreviewed translations in the picked cultures", () => {
 		const reviewed = {
 			status: "current",

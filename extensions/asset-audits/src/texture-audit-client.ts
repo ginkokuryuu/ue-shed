@@ -57,10 +57,6 @@ export interface TextureAuditClientApi {
 		refresh?: boolean
 	) => Effect.Effect<TextureAuditQueryRunResult, TextureAuditClientError>;
 	readonly progress: () => Effect.Effect<TaskProgress, TextureAuditClientError>;
-	readonly chooseProjectAndScan: () => Effect.Effect<
-		TextureAuditQueryRunResult,
-		TextureAuditClientError
-	>;
 	readonly search: (
 		request: TextureAuditSearchRequest
 	) => Effect.Effect<TextureAuditSearchResult, TextureAuditClientError>;

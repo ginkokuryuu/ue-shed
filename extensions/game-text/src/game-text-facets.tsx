@@ -9,7 +9,7 @@ import {
 	type TextGroupBy
 } from "@ue-shed/game-text/browser";
 import { tokens } from "@ue-shed/ui-theme/tokens.stylex.js";
-import { For, Show, createSignal } from "solid-js";
+import { For, Show, createSignal, createUniqueId } from "solid-js";
 import { hasValue, toggleValue } from "./game-text-filter-model.js";
 import { FolderBrowser } from "./game-text-folder-browser.js";
 
@@ -30,6 +30,7 @@ export function FacetsPane(props: {
 	readonly onFolderChange: (folder: string) => void;
 	readonly onFilterChange: (filter: TextFilter) => void;
 }) {
+	const panelId = createUniqueId();
 	const [tab, setTab] = createSignal<Tab>("folders");
 	const problems = () =>
 		TextProblem.literals.flatMap((problem) => {
@@ -119,12 +120,40 @@ export function FacetsPane(props: {
 				</section>
 			</Show>
 			<section aria-label="Where the lines are" {...stylex.attrs(styles.card)}>
-				<div role="tablist" aria-label="Where the lines are" {...stylex.attrs(styles.tabs)}>
+				<div
+					role="tablist"
+					aria-label="Where the lines are"
+					onKeyDown={(event) => {
+						const tabs: readonly Tab[] = ["folders", "assets", "origins"];
+						if (!["ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key)) return;
+						const index = tabs.indexOf(tab());
+						const next =
+							tabs[
+								event.key === "Home"
+									? 0
+									: event.key === "End"
+										? 2
+										: (index + (event.key === "ArrowLeft" ? -1 : 1) + 3) % 3
+							];
+						event.preventDefault();
+						if (next) {
+							setTab(next);
+							event.currentTarget
+								.querySelector<HTMLButtonElement>(`[data-tab="${next}"]`)
+								?.focus();
+						}
+					}}
+					{...stylex.attrs(styles.tabs)}
+				>
 					<For each={["folders", "assets", "origins"] satisfies Tab[]}>
 						{(item) => (
 							<button
 								type="button"
 								role="tab"
+								data-tab={item}
+								id={panelId + "-" + item}
+								aria-controls={panelId}
+								tabindex={tab() === item ? 0 : -1}
 								aria-selected={tab() === item ? "true" : "false"}
 								onClick={() => setTab(item)}
 								{...stylex.attrs(styles.tab, tab() === item && styles.tabOn)}
@@ -138,64 +167,69 @@ export function FacetsPane(props: {
 						)}
 					</For>
 				</div>
-				<Show when={tab() === "folders"}>
-					<FolderBrowser
-						list={props.page?.facets?.folders}
-						folder={props.folder}
-						filter={props.filter}
-						onFolderChange={props.onFolderChange}
-						onFilterChange={props.onFilterChange}
-					/>
-				</Show>
-				<For each={tab() === "folders" ? [] : entries()}>
-					{(entry) => (
-						<div {...stylex.attrs(styles.row)}>
-							<button
-								type="button"
-								aria-pressed={
-									hasValue(props.filter, field(), value(entry)) ? "true" : "false"
-								}
-								onClick={() => toggle(entry)}
-								{...stylex.attrs(
-									styles.facet,
-									hasValue(props.filter, field(), value(entry)) && styles.chosen
-								)}
-							>
-								<span
+				<div role="tabpanel" id={panelId} aria-labelledby={panelId + "-" + tab()}>
+					<Show when={tab() === "folders"}>
+						<FolderBrowser
+							list={props.page?.facets?.folders}
+							folder={props.folder}
+							filter={props.filter}
+							onFolderChange={props.onFolderChange}
+							onFilterChange={props.onFilterChange}
+						/>
+					</Show>
+					<For each={tab() === "folders" ? [] : entries()}>
+						{(entry) => (
+							<div {...stylex.attrs(styles.row)}>
+								<button
+									type="button"
+									aria-pressed={
+										hasValue(props.filter, field(), value(entry))
+											? "true"
+											: "false"
+									}
+									onClick={() => toggle(entry)}
 									{...stylex.attrs(
-										styles.name,
-										tab() === "assets" ? styles.mono : undefined
+										styles.facet,
+										hasValue(props.filter, field(), value(entry)) &&
+											styles.chosen
 									)}
 								>
-									{entry.label}
-								</span>
-								<span {...stylex.attrs(styles.count)}>
-									<Show when={entry.needWork > 0}>
-										<span
-											{...stylex.attrs(
-												SEVERE.has(entry.worst)
-													? styles.severe
-													: styles.waiting
-											)}
-										>
-											{entry.needWork.toLocaleString()}
-										</span>
-										{" · "}
-									</Show>
-									{entry.count.toLocaleString()}
-								</span>
-							</button>
-						</div>
-					)}
-				</For>
-				<Show when={tab() !== "folders" && entries().length === 0}>
-					<p {...stylex.attrs(styles.empty)}>Nothing here.</p>
-				</Show>
-				<Show when={tab() !== "folders" && more() > 0}>
-					<p {...stylex.attrs(styles.empty)}>
-						{more().toLocaleString()} more, by problems.
-					</p>
-				</Show>
+									<span
+										{...stylex.attrs(
+											styles.name,
+											tab() === "assets" ? styles.mono : undefined
+										)}
+									>
+										{entry.label}
+									</span>
+									<span {...stylex.attrs(styles.count)}>
+										<Show when={entry.needWork > 0}>
+											<span
+												{...stylex.attrs(
+													SEVERE.has(entry.worst)
+														? styles.severe
+														: styles.waiting
+												)}
+											>
+												{entry.needWork.toLocaleString()} need work
+											</span>
+											{" · "}
+										</Show>
+										{entry.count.toLocaleString()} lines
+									</span>
+								</button>
+							</div>
+						)}
+					</For>
+					<Show when={tab() !== "folders" && entries().length === 0}>
+						<p {...stylex.attrs(styles.empty)}>Nothing here.</p>
+					</Show>
+					<Show when={tab() !== "folders" && more() > 0}>
+						<p {...stylex.attrs(styles.empty)}>
+							{more().toLocaleString()} more, by problems.
+						</p>
+					</Show>
+				</div>
 			</section>
 		</div>
 	);

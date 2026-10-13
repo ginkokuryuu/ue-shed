@@ -30,8 +30,9 @@ import { incrementJoinedTarget } from "./joined-target-incremental.js";
 import { comparePackageTextPathBytes } from "./package-text-order.js";
 import { joinedQueryColumns } from "./joined-query-columns.js";
 import { joinedQueryPlaces } from "./joined-query-places.js";
+import { prepareJoinedSourceCache } from "./joined-source-cache.js";
 import { joinedPhysicalChunkName } from "./joined-column-chunks.js";
-import { StringArena } from "./shared-string-codec.js";
+import { StringArena, sortPackedStringsByLocale } from "./shared-string-codec.js";
 
 const noteMetadata = Schema.decodeUnknownOption(
 	Schema.fromJsonString(
@@ -925,13 +926,7 @@ export const refreshJoinedTarget = Effect.fn("JoinedTarget.refresh")(function* (
 	new Uint8Array(lineIdValues.buffer).set(packedLineIds.bytes);
 	queryColumns["query.line.id_utf8"] = lineIdValues;
 	queryColumns["query.line.id_starts"] = Uint32Array.from(packedLineIds.offsets);
-	const lineId = (row: number) =>
-		decodeWtf8(
-			packedLineIds.bytes.subarray(packedLineIds.offsets[row], packedLineIds.offsets[row + 1])
-		);
-	queryColumns["query.line.order"] = Uint32Array.from({ length: count }, (_, row) => row).sort(
-		(left, right) => lineId(left).localeCompare(lineId(right))
-	);
+	queryColumns["query.line.order"] = sortPackedStringsByLocale(packedLineIds);
 	queryColumns["query.package.order"] = Uint32Array.from(
 		{ length: packages.paths.length },
 		(_, row) => row
@@ -1032,6 +1027,11 @@ export const refreshJoinedTarget = Effect.fn("JoinedTarget.refresh")(function* (
 		),
 		"paths"
 	);
+	const sourceCache = yield* prepareJoinedSourceCache(writer, strings, [
+		line.source!,
+		queryColumns["query.raw.sources"]!
+	]);
+	if (sourceCache) sourceColumns.push(...sourceCache.columns);
 	const meta = new TextEncoder().encode(
 		JSON.stringify({
 			version: 3,
@@ -1039,6 +1039,7 @@ export const refreshJoinedTarget = Effect.fn("JoinedTarget.refresh")(function* (
 			input,
 			aliases,
 			chunks,
+			...(sourceCache ? { sourceCache: sourceCache.meta } : undefined),
 			generation: root.generation,
 			dependencies,
 			packageNames: packages.names,

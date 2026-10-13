@@ -536,6 +536,10 @@ export async function compareJoinFuzzInput(
 		input.seed % 6
 	]!;
 	const requests: TextCorpusSearchRequest[] = [
+		...(["é", "i\u0307", "ı", "\ud800", "\udfff", "😀"] as const).flatMap((query) => [
+			{ ...withoutFacets, query },
+			{ ...unlocalized, query }
+		]),
 		withoutFacets,
 		base,
 		unlocalized,
@@ -672,6 +676,9 @@ export async function compareJoinFuzzInput(
 					exports: [candidate.export(base), candidate.export(unlocalized)],
 					lines: candidate.localizationLines(base),
 					searches: requests.map((request) => candidate.search(request)),
+					rawFocus: rawPresentations.map((unit) =>
+						candidate.focus({ id: unit.id, pageSize: 2 })
+					),
 					focus: expected.lines.map((line) => ({
 						line: candidate.localizationFocus(line.id),
 						units:
@@ -743,6 +750,12 @@ export async function compareJoinFuzzInput(
 	compare("column-query.export.localized", oracle.export(base), actual.query.exports[0]);
 	compare("column-query.export.raw", oracle.export(unlocalized), actual.query.exports[1]);
 	compare("column-query.localizationLines", oracle.localizationLines(base), actual.query.lines);
+	for (const [row, unit] of actual.rawPresentations.entries())
+		compare(
+			"column-query.rawFocus",
+			oracle.focus({ id: unit.id, pageSize: 2 }),
+			actual.query.rawFocus[row]
+		);
 	compare(
 		"query.columns.raw",
 		oracle.search({ query: "", capability: "all", pageSize: 1000 }).units,

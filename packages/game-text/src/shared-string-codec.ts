@@ -1,5 +1,5 @@
 import { isUtf8 } from "node:buffer";
-import { encodeWtf8, hasWtf8Surrogate, isWtf8 } from "./wtf8.js";
+import { decodeWtf8, encodeWtf8, hasWtf8Surrogate, isWtf8 } from "./wtf8.js";
 import { snapshotCheck } from "./snapshot-format.js";
 export interface PackedStrings {
 	readonly bytes: Buffer;
@@ -30,6 +30,122 @@ export function packedStrings(values: readonly string[]): PackedStrings {
 }
 export function stringBytes(strings: PackedStrings, id: number): Buffer {
 	return strings.bytes.subarray(strings.offsets[id]!, strings.offsets[id + 1]!);
+}
+
+/** Native validation handles ordinary UTF-8 arenas; verify every individual string boundary. */
+export function validatePackedStrings(strings: PackedStrings, section: string) {
+	const { bytes, offsets } = strings;
+	snapshotCheck(
+		offsets[0] === 0 && offsets.at(-1) === bytes.length,
+		section,
+		"Invalid packed lengths"
+	);
+	const utf8 = isUtf8(bytes);
+	for (let row = 1; row < offsets.length; row++) {
+		const start = offsets[row - 1]!,
+			end = offsets[row]!;
+		snapshotCheck(
+			Number.isSafeInteger(end) &&
+				start <= end &&
+				end <= bytes.length &&
+				end - start <= 1024 ** 2,
+			section,
+			"Invalid packed string range"
+		);
+		if (utf8)
+			snapshotCheck(
+				end === bytes.length || (bytes[end]! & 0xc0) !== 0x80,
+				section,
+				"Invalid packed string boundary"
+			);
+		else snapshotCheck(isWtf8(bytes.subarray(start, end)), section, "Invalid packed WTF-8");
+	}
+}
+/** Comparators usually revisit one side of the previous pair. Retain two decoded IDs only. */
+export function packedStringReader(strings: PackedStrings) {
+	let first = -1,
+		second = -1,
+		firstValue = "",
+		secondValue = "";
+	return (row: number) => {
+		if (row === first) return firstValue;
+		if (row === second) {
+			[first, second] = [second, first];
+			[firstValue, secondValue] = [secondValue, firstValue];
+			return firstValue;
+		}
+		second = first;
+		secondValue = firstValue;
+		first = row;
+		firstValue = decodeWtf8(stringBytes(strings, row));
+		return firstValue;
+	};
+}
+
+/** Decode bounded sort runs once, then retain only their heads during a stable locale merge. */
+export function sortPackedStringsByLocale(
+	strings: PackedStrings,
+	order = Uint32Array.from({ length: strings.offsets.length - 1 }, (_, row) => row),
+	runSize = 8192
+): Uint32Array {
+	snapshotCheck(Number.isInteger(runSize) && runSize > 0, "sort.locale", "Invalid sort run size");
+	const rows = order.slice(),
+		boundaries = [0];
+	for (let start = 0; start < rows.length; ) {
+		let end = start,
+			bytes = 0;
+		while (end < rows.length && end - start < Math.min(runSize, 8192)) {
+			const row = rows[end]!,
+				length = strings.offsets[row + 1]! - strings.offsets[row]!;
+			if (end > start && bytes + length > 4 * 1024 ** 2) break;
+			bytes += length;
+			end++;
+		}
+		const values = Array.from(rows.subarray(start, end), (row) =>
+			decodeWtf8(stringBytes(strings, row))
+		);
+		const local = Uint32Array.from({ length: end - start }, (_, row) => row);
+		local.sort((a, b) => values[a]!.localeCompare(values[b]!));
+		const sorted = Uint32Array.from(local, (row) => rows[start + row]!);
+		rows.set(sorted, start);
+		boundaries.push(end);
+		start = end;
+	}
+	const runCount = boundaries.length - 1,
+		cursors = Uint32Array.from(boundaries.slice(0, -1)),
+		ends = Uint32Array.from(boundaries.slice(1)),
+		keys = Array.from(cursors, (cursor) => decodeWtf8(stringBytes(strings, rows[cursor]!))),
+		heap = Uint32Array.from({ length: runCount }, (_, run) => run);
+	let size = runCount;
+	const before = (a: number, b: number) => {
+		const compared = keys[a]!.localeCompare(keys[b]!);
+		return compared < 0 || (compared === 0 && a < b);
+	};
+	const down = (position: number) => {
+		const value = heap[position]!;
+		for (;;) {
+			let child = position * 2 + 1;
+			if (child >= size) break;
+			if (child + 1 < size && before(heap[child + 1]!, heap[child]!)) child++;
+			if (!before(heap[child]!, value)) break;
+			heap[position] = heap[child]!;
+			position = child;
+		}
+		heap[position] = value;
+	};
+	for (let position = (size >>> 1) - 1; position >= 0; position--) down(position);
+	const result = new Uint32Array(rows.length);
+	for (let position = 0; position < result.length; position++) {
+		const run = heap[0]!,
+			cursor = cursors[run]!;
+		result[position] = rows[cursor]!;
+		cursors[run] = cursor + 1;
+		if (cursor + 1 < ends[run]!)
+			keys[run] = decodeWtf8(stringBytes(strings, rows[cursor + 1]!));
+		else heap[0] = heap[--size]!;
+		if (size) down(0);
+	}
+	return result;
 }
 export function compareBytes(a: Uint8Array, b: Uint8Array) {
 	return Buffer.compare(a, b);

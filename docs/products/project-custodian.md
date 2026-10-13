@@ -63,9 +63,9 @@ versioned contracts.
 - `ue-shed custodian plan <root>` prints the same evidence with its pressure-aware dry-run plan.
 - `ue-shed custodian prepare <root> --target <id> --output <directory>` persists a reviewable
   proposal, and `ue-shed custodian apply <proposal> --approve <phrase>` revalidates and executes it.
-- Workbench `#/project-custodian` lets the user choose a root, then presents reclaimed-space scale,
-  protected/refused state, target composition, exact queue selection, approval, cancellation, and
-  receipt evidence.
+- Workbench `#/project-custodian` scans the shell's selected project, or the explicit
+  `UE_SHED_CUSTODIAN_ROOT` when configured, then presents reclaimed-space scale, protected/refused
+  state, target composition, exact queue selection, approval, cancellation, and receipt evidence.
 
 The behavior was informed by the MIT-licensed
 [`unreal-custodian`](https://github.com/ibrews/unreal-custodian) project as product research. UE Shed

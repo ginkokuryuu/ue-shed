@@ -35,7 +35,7 @@ export function exportRequest(
 /** The most review changes one request writes. */
 export const REVIEW_BATCH = 500;
 
-const REVIEWABLE = new Set(["translated", "not_synced", "needs_update"]);
+const REVIEWABLE = new Set(["translated", "not_synced"]);
 
 /** Only the picked cultures' marks; every culture's when none is picked. */
 const pickedMarks = (line: LocalizationLinePreview, cultures: readonly string[]) =>
@@ -56,7 +56,13 @@ export function reviewChanges(
 	for (const line of lines) {
 		if (line.identity === null) continue;
 		for (const mark of pickedMarks(line, cultures)) {
-			if (mark.culture === nativeCulture || !REVIEWABLE.has(mark.state)) continue;
+			if (
+				mark.culture === nativeCulture ||
+				!REVIEWABLE.has(mark.state) ||
+				!mark.translation?.trim() ||
+				mark.facts.includes("needs_update")
+			)
+				continue;
 			if (mark.review?.status === "current" && mark.review.flags.includes("reviewed"))
 				continue;
 			changes.push({
