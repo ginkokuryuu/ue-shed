@@ -7,10 +7,12 @@ import { Effect } from "effect";
 export class HostSliceClock {
 	private started = performance.now();
 	private steps = 0;
-	constructor(
-		private readonly budgetMs = 16,
-		private readonly stride = 1024
-	) {}
+	private readonly budgetMs: number;
+	private readonly stride: number;
+	constructor(budgetMs = 16, stride = 1024) {
+		this.budgetMs = budgetMs;
+		this.stride = stride;
+	}
 	/** Counts one cheap unit of work and reports whether the current slice is spent. */
 	step(): boolean {
 		if (++this.steps < this.stride) return false;

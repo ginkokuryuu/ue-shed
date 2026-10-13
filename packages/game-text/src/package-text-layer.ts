@@ -75,10 +75,12 @@ class PackageTextSelectionBuilder {
 		createHash("sha256").update("package-text-v1")
 	);
 	private previous: Uint8Array | undefined;
-	constructor(
-		private readonly external: ReadonlySet<string>,
-		private readonly retainedEligibility?: ReadonlyMap<string, boolean>
-	) {}
+	private readonly external: ReadonlySet<string>;
+	private readonly retainedEligibility: ReadonlyMap<string, boolean> | undefined;
+	constructor(external: ReadonlySet<string>, retainedEligibility?: ReadonlyMap<string, boolean>) {
+		this.external = external;
+		this.retainedEligibility = retainedEligibility;
+	}
 	add(entry: PackageTextInventoryEntry) {
 		// Each path is encoded once and kept as the next entry's predecessor.
 		const bytes = encodeWtf8(entry.path);
