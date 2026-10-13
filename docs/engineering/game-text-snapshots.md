@@ -130,7 +130,9 @@ A target model contains the complete raw source projection. Hosts needing both v
 the target before refreshing packages and build one join. Workbench uses the selected target for
 the same project, or the first discovered target, with source-only recovery when target discovery
 or import is unavailable. Target selection still validates imports, review records and carried key
-changes before comparing the optional `queryRevision` and borrowing the existing model. An
+changes before comparing the target handle's optional opaque `queryRevision` with the existing
+model's identity and borrowing it. Hosts must not parse or construct this identity or store it as
+a durable ID; compare only within the same project, cache and backend. An
 unchanged package refresh clears the old selection while retaining its resource pin until a
 replacement takes ownership; discovery failures and empty target lists release that pin.
 

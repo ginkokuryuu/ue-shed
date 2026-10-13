@@ -11,6 +11,9 @@ source string and localization identity.
 
 ## Install
 
+The Node entry point requires Node 22.15.x or later in the 22.x line, or Node 23.8.0 and newer,
+including Node 24 and 26. Earlier runtimes lack the built-in Zstd APIs used by the compact index.
+
 Pin the package and the host's Effect runtime exactly:
 
 ```sh
@@ -42,8 +45,9 @@ The `@ue-shed/game-text/browser` entry point contains only schemas and pure quer
 not expose filesystem, process, Electron, Perforce, or Unreal authority.
 
 The package also exports a pure compact snapshot codec from both entry points and the Effect
-`SnapshotStore` with `snapshotStoreNodeLayer` from the Node entry point. These support the
-upcoming persistent corpus layers; current query hosts still use the in-memory model. See the
+`SnapshotStore` with `snapshotStoreNodeLayer` from the Node entry point. Compact-index hosts use
+persistent package, localization and joined layers, bounded queries and lazy object projections;
+the in-memory corpus API remains available for batch consumers. See the
 [snapshot engineering guide](../../docs/engineering/game-text-snapshots.md) for the format, caps,
 immutable publication and recovery behavior. `reader.domain()` bulk-loads one source, identity,
 translation or path domain; `reader.strings()` keeps page reads limited to touched blocks.
@@ -98,6 +102,11 @@ Active borrowers keep the previous reader and worker alive through replacement. 
 preparations leave the published model usable. See `ADOPTING.md` for the ownership contract.
 The raw indexed corpus includes empty-source units; searchable exports keep their visibility rules.
 
+Validated target handles and opened models may supply `queryRevision`. Treat it as opaque and
+compare it only within the same project, cache and backend after validating current target inputs.
+Never construct or parse it, persist it as a durable ID, or assume its encoding survives a release.
+Adapters without the identity retain the normal preparation path.
+
 `summary().counts` uses that same query path with no active filters. `summary().searchable` counts
 only lines with searchable source and their saved locations. `TextCorpus.coverage` retains raw scan
 provenance, including empty FText values; it is not a count of writer-visible lines. Character counts
@@ -110,6 +119,12 @@ same review signals shown in search.
 browser-safe, quote every cell, protect spreadsheet formulas, and include a UTF-8 BOM and final CRLF.
 `gameTextInvestigationCsv` keeps its provenance-oriented layout, and `exportGameTextInvestigation`
 remains the JSON provenance document.
+
+Localization quality investigation presets and exports use schema version 2 and retain
+`workspaceFilter`, target and culture. Older readers reject these documents instead of dropping
+the finding selection. Version-1 corpus and source quality investigations remain readable and
+keep their version when replayed. A version-1 preset cannot carry `workspaceFilter`, and an export
+uses the same version as its preset.
 
 `STARTER_GAME_TEXT_RULES` contains neutral v1 examples to customize. A trusted Node host can use
 `createStarterTextRules(projectRoot, output?)` to create it exclusively, or use the CLI:

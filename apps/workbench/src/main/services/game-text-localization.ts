@@ -101,7 +101,7 @@ export const makeGameTextLocalization = Effect.fn("Workbench.GameText.localizati
 			);
 			if (
 				prepared?.queryRevision !== undefined &&
-				prepared.queryRevision === `${target.generation}:${target.join.key}`
+				prepared.queryRevision === target.queryRevision
 			) {
 				// Borrowing the host model pins its reader and worker in this target's scope.
 				// Validation above still observes changed files, reviews and carried key changes.

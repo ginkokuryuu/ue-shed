@@ -7,7 +7,8 @@ Workbench unless a named verification failure leaves the public package contract
 ## Fast path
 
 1. Inspect the target's package manifest, Node version, Effect version, selected-project model, and
-   saved-asset reader configuration.
+   saved-asset reader configuration. The Node entry supports Node 22.15+ in the 22.x line, or
+   Node 23.8+ (including 24 and 26); Node 22.14 lacks the required built-in Zstd APIs.
 2. Install the exact `@ue-shed/game-text` version. Reuse a compatible existing
    `@ue-shed/unreal-assets` and `@ue-shed/uasset` installation when present.
 3. In the target's trusted Node process, compose one scoped `AssetReader` layer and
@@ -52,8 +53,10 @@ A localization index also supplies the complete raw source query and corpus. Pre
 target first when both views are needed, and use that model for requests without `localization` as
 well. Keep source-only preparation as recovery when target discovery or import is unavailable.
 After validating a target with `importTarget` and `buildTarget`, a compact model's optional
-`queryRevision` identifies its immutable generation and joined key. A matching prepared model can
-be borrowed instead of opened again; adapters without this identity use normal preparation.
+`queryRevision` is an opaque identity shared by the validated target handle and its opened model.
+Compare it only within the same project, cache and backend. Borrow a matching prepared model
+instead of opening it again. Never construct or parse the identity, persist it as a durable ID,
+or depend on its encoding across releases; adapters without it use normal preparation.
 
 Call
 the retained refresh result's Effect-shaped `search(request)`. The host scope owns the worker

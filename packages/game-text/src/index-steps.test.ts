@@ -36,6 +36,9 @@ it.live(
 				const second = yield* steps
 					.openTarget(target)
 					.pipe(Effect.provideService(Scope.Scope, secondScope));
+				expect(target.queryRevision).toBeDefined();
+				expect(first.queryRevision).toBe(target.queryRevision);
+				expect(second.queryRevision).toBe(target.queryRevision);
 				expect((yield* Metric.value(started)).count - beforeStarted).toBe(1);
 				const request = { query: "Source", capability: "all" as const, pageSize: 10 };
 				const expected = first.query.search(request);

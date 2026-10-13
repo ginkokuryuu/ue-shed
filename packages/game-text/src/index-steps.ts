@@ -128,11 +128,16 @@ export interface GameTextTargetIndex {
 	readonly join: Join;
 	readonly review: LocalizationReviewSnapshot;
 	readonly generation: string;
+	/** Opaque identity for comparing this validated target with an already opened model. */
+	readonly queryRevision?: string | undefined;
 	readonly fileKeys: GameTextTargetImport["fileKeys"];
 }
 export interface GameTextIndexModel extends GameTextIndexRefreshResult {
 	readonly project: GameTextProjectIndex;
 }
+
+const queryRevisionFor = (project: GameTextProject, generation: string, joinedKey: string) =>
+	JSON.stringify([project.cacheRoot, project.projectRoot, generation, joinedKey]);
 
 const failure = (operation: string, message: string, recovery: string) =>
 	new GameTextIndexError({ operation, message, recovery, retrySafe: true });
@@ -434,7 +439,7 @@ export const makeGameTextIndexSteps = (
 			project: GameTextProjectIndex,
 			target: GameTextTargetImport,
 			input: GameTextTargetBuildRequest = {}
-		) {
+		): Effect.fn.Return<GameTextTargetIndex, IndexFailure> {
 			const request = yield* Schema.decodeUnknownEffect(GameTextTargetBuildRequest)(
 				input
 			).pipe(
@@ -498,6 +503,7 @@ export const makeGameTextIndexSteps = (
 					const join = yield* Effect.scoped(builder.refreshJoinedTarget(joinInput));
 					if ((yield* index.inspect()).active["joined.invalidated"])
 						yield* (yield* index.writer()).publishBatch([], ["joined.invalidated"]);
+					const generation = (yield* index.inspect()).generation;
 					return {
 						project,
 						view: target.view,
@@ -505,7 +511,8 @@ export const makeGameTextIndexSteps = (
 						fileKeys: target.fileKeys,
 						join,
 						review,
-						generation: (yield* index.inspect()).generation
+						generation,
+						queryRevision: queryRevisionFor(project, generation, join.key)
 					} satisfies GameTextTargetIndex;
 				})
 			);
@@ -617,7 +624,11 @@ export const makeGameTextIndexSteps = (
 			return {
 				...result,
 				project: target.project,
-				queryRevision: `${joined.reader.manifest.generation}:${target.join.key}`,
+				queryRevision: queryRevisionFor(
+					target.project,
+					joined.reader.manifest.generation,
+					target.join.key
+				),
 				joined,
 				query,
 				search,

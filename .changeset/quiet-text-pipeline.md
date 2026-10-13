@@ -6,6 +6,9 @@
 Share scoped query workers across overlapping immutable index readers. Workbench prepares one
 target-first model for source and localization browsing, validates inputs before reusing it, and
 retains unchanged workers across rescans. Keep result rows and loaded pages stable with Solid 2 keys.
+Expose an optional opaque query identity on validated target handles and their opened models so
+hosts can reuse a model without constructing storage identifiers. Correct Game Text's Node range
+to `^22.15.0 || >=23.8.0`, matching the built-in Zstd APIs required by its Node entry point.
 
 Reduce saved-text extraction working memory with bounded ordered native delivery and concurrent
 path validation. Keep package signature checks before and after reads while running them with
