@@ -5,7 +5,7 @@ import { tmpdir } from "node:os";
 import test from "node:test";
 import { delimiter, join, resolve } from "node:path";
 import {
-	assertCheckedCommit,
+	assertReusableCheck,
 	assertPublicationConfirmation,
 	parseReleaseArguments,
 	publicationConfirmationPhrase,
@@ -175,7 +175,13 @@ test("does not publish when confirmation is blank or interrupted", async () => {
 	assert.deepEqual(events, ["validate-source", "check", "confirm"]);
 });
 
-test("skips the gate only for the exact checked release commit", async () => {
+const releaseNotes = "docs/releases/0.5.2.md";
+
+function reuse(commit: string, changes: readonly string[] = []) {
+	return { commit, releaseNotes, changesSince: () => changes };
+}
+
+test("skips the gate for the exact checked release commit", async () => {
 	const events: string[] = [];
 	await runRelease({
 		validateSource: () => {
@@ -187,12 +193,18 @@ test("skips the gate only for the exact checked release commit", async () => {
 			events.push("confirm");
 		},
 		publish: () => events.push("publish"),
-		checkedCommit: "a".repeat(40)
+		reuseCheck: reuse("a".repeat(40))
 	});
 	assert.deepEqual(events, ["validate-source", "confirm", "validate-source", "publish"]);
 });
 
-test("does not confirm or publish when the checked commit is not the release HEAD", async () => {
+test("reuses a check when only the release notes changed since it", () => {
+	assert.doesNotThrow(() =>
+		assertReusableCheck(reuse("b".repeat(40), [releaseNotes]), "a".repeat(40))
+	);
+});
+
+test("does not confirm or publish when the release changed beyond its notes", async () => {
 	const events: string[] = [];
 	await assert.rejects(
 		() =>
@@ -206,17 +218,36 @@ test("does not confirm or publish when the checked commit is not the release HEA
 					events.push("confirm");
 				},
 				publish: () => events.push("publish"),
-				checkedCommit: "b".repeat(40)
+				reuseCheck: reuse("b".repeat(40), [releaseNotes, "scripts/release.ts"])
 			}),
-		/--checked b{40} does not match release HEAD a{40}; rerun pnpm check\./
+		/--checked b{40} differs from release HEAD a{40} beyond docs\/releases\/0\.5\.2\.md \(scripts\/release\.ts\); rerun pnpm check\./
 	);
 	assert.deepEqual(events, ["validate-source"]);
 });
 
+test("does not reuse a check from a commit outside the release history", () => {
+	assert.throws(
+		() =>
+			assertReusableCheck(
+				{
+					commit: "b".repeat(40),
+					releaseNotes,
+					changesSince: () => {
+						throw new Error("not an ancestor");
+					}
+				},
+				"a".repeat(40)
+			),
+		/not an ancestor/
+	);
+});
+
 test("requires a full lowercase commit for --checked", () => {
-	assert.throws(() => assertCheckedCommit("abc1234", "a".repeat(40)), /full 40-character/);
-	assert.throws(() => assertCheckedCommit("A".repeat(40), "a".repeat(40)), /full 40-character/);
-	assert.doesNotThrow(() => assertCheckedCommit("a".repeat(40), "a".repeat(40)));
+	assert.throws(() => assertReusableCheck(reuse("abc1234"), "a".repeat(40)), /full 40-character/);
+	assert.throws(
+		() => assertReusableCheck(reuse("A".repeat(40)), "a".repeat(40)),
+		/full 40-character/
+	);
 });
 
 test("parses --checked and rejects unknown release arguments", () => {

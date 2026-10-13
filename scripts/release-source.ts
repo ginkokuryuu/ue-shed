@@ -38,6 +38,20 @@ function git(args: readonly string[]) {
 	return result.stdout.trim();
 }
 
+/** Repository-relative files changed from an ancestor commit to HEAD. */
+export function changedFilesSince(commit: string) {
+	const ancestry = spawnSync("git", ["merge-base", "--is-ancestor", commit, "HEAD"], {
+		cwd: repositoryRoot,
+		shell: false
+	});
+	if (ancestry.error) throw ancestry.error;
+	if (ancestry.status !== 0) {
+		throw new Error(`Commit ${commit} is not an ancestor of the release HEAD.`);
+	}
+	const changes = git(["diff", "--name-only", "--no-renames", commit, "HEAD"]);
+	return changes === "" ? [] : changes.split("\n");
+}
+
 export function assertCleanReleaseSource(expectedCommit?: string) {
 	return validateCleanReleaseSource(
 		{

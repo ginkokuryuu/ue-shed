@@ -6,7 +6,7 @@ import { parseArgs } from "node:util";
 import { delimiter, dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { PUBLIC_VERSION } from "./pack-public-packages.ts";
-import { assertCleanReleaseSource } from "./release-source.ts";
+import { assertCleanReleaseSource, changedFilesSince } from "./release-source.ts";
 
 const repositoryRoot = resolve(import.meta.dirname, "..");
 
@@ -15,8 +15,17 @@ export interface ReleaseSteps {
 	readonly check: () => void;
 	readonly confirm: () => Promise<void>;
 	readonly publish: () => void;
-	/** Full commit the operator already gated with `pnpm check`; skips rerunning the gate. */
-	readonly checkedCommit?: string | undefined;
+	/** Reuse a `pnpm check` the operator already ran instead of rerunning the gate. */
+	readonly reuseCheck?: ReusedCheck | undefined;
+}
+
+export interface ReusedCheck {
+	/** Full commit the operator gated with `pnpm check`. */
+	readonly commit: string;
+	/** The only file allowed to change between the checked commit and the release HEAD. */
+	readonly releaseNotes: string;
+	/** Files changed from the checked commit to HEAD; throws if it is not an ancestor. */
+	readonly changesSince: (commit: string) => readonly string[];
 }
 
 export async function runRelease({
@@ -24,11 +33,11 @@ export async function runRelease({
 	check,
 	confirm,
 	publish,
-	checkedCommit
+	reuseCheck
 }: ReleaseSteps) {
 	const validatedCommit = validateSource();
-	if (checkedCommit === undefined) check();
-	else assertCheckedCommit(checkedCommit, validatedCommit);
+	if (reuseCheck === undefined) check();
+	else assertReusableCheck(reuseCheck, validatedCommit);
 	await confirm();
 	const publicationCommit = validateSource();
 	if (publicationCommit !== validatedCommit) {
@@ -39,15 +48,19 @@ export async function runRelease({
 	publish();
 }
 
-export function assertCheckedCommit(checkedCommit: string, head: string) {
-	if (!/^[0-9a-f]{40}$/.test(checkedCommit)) {
-		throw new Error(
-			`--checked requires a full 40-character commit, received ${checkedCommit}.`
-		);
+export function assertReusableCheck(
+	{ commit, releaseNotes, changesSince }: ReusedCheck,
+	head: string
+) {
+	if (!/^[0-9a-f]{40}$/.test(commit)) {
+		throw new Error(`--checked requires a full 40-character commit, received ${commit}.`);
 	}
-	if (checkedCommit !== head) {
+	if (commit === head) return;
+	const unchecked = changesSince(commit).filter((file) => file !== releaseNotes);
+	if (unchecked.length > 0) {
 		throw new Error(
-			`--checked ${checkedCommit} does not match release HEAD ${head}; rerun pnpm check.`
+			`--checked ${commit} differs from release HEAD ${head} beyond ${releaseNotes} ` +
+				`(${unchecked.join(", ")}); rerun pnpm check.`
 		);
 	}
 }
@@ -116,7 +129,8 @@ async function confirmPublication(checkedCommit: string | undefined) {
 	const gate =
 		checkedCommit === undefined
 			? "All release checks passed."
-			: `Skipped pnpm check; operator reports it passed on ${checkedCommit}.`;
+			: `Skipped pnpm check; operator reports it passed on ${checkedCommit} ` +
+				"(release notes may differ).";
 	const terminal = createInterface({ input: process.stdin, output: process.stdout });
 	try {
 		const answer = await terminal.question(
@@ -143,7 +157,14 @@ async function main() {
 		check: () => runPnpm(["check"], env),
 		confirm: () => confirmPublication(checkedCommit),
 		publish: () => runPnpm(["exec", "changeset", "publish"], env),
-		checkedCommit
+		reuseCheck:
+			checkedCommit === undefined
+				? undefined
+				: {
+						commit: checkedCommit,
+						releaseNotes: `docs/releases/${PUBLIC_VERSION}.md`,
+						changesSince: changedFilesSince
+					}
 	});
 }
 

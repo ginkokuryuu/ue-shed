@@ -100,9 +100,11 @@ override and is resolved consistently for builds and package assembly.
 
 `pnpm release` reruns the complete gate, then pauses indefinitely at an interactive confirmation.
 When `pnpm check` already passed on the committed release in this checkout, pass that full commit
-to skip the rerun: `pnpm release --checked <full commit>`. The release refuses unless the clean
-HEAD is exactly that commit, and the confirmation prompt states that the gate was skipped on the
-operator's word. Packages still rebuild through their `prepack` scripts during publication.
+to skip the rerun: `pnpm release --checked <full commit>`. The clean release HEAD must be that commit
+or a descendant whose only change is `docs/releases/<version>.md`, so validation results can be
+recorded in the release notes after the gate. Anything else is refused. The confirmation prompt
+states that the gate was skipped on the operator's word. Packages still rebuild through their
+`prepack` scripts during publication.
 No npm request or 2FA challenge begins until the operator types the exact versioned phrase shown by
 the prompt, for example `publish 0.5.2`. Blank input, buffered Enter, a different version, and any
 other response abort publication. After confirmation it delegates dependency-ordered publication
