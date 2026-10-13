@@ -1,4 +1,25 @@
-export * from "./corpus.js";
+export {
+	TextCorpusScanError,
+	TextCorpusScanOptions,
+	STRING_TABLE_CLASS,
+	TEXT_PROPERTY_NAME,
+	textOccurrenceFromExtraction,
+	textOccurrencesFromInspection,
+	textPackagePathsFromProjectIndex,
+	buildTextCorpus,
+	textCorpusFromExtractionEvents,
+	TextCorpusService,
+	TextCorpusServiceLive,
+	makeTextCorpusServiceTestLayer,
+	scanTextCorpus,
+	type ScanTextCorpusOptions,
+	type TextPackageOutcome,
+	type TextPackageCounts,
+	type TextCorpusServiceApi,
+	type TextCorpusServiceTestApi
+} from "./corpus.js";
+// oxlint-disable-next-line anti-slop/no-shape-in-symbol-names -- Deprecated aliases stay public.
+export type { TextCorpusServiceShape, TextCorpusServiceTestShape } from "./corpus.js";
 export * from "./package-text-record.js";
 export {
 	REQUIRES_LOCALIZATION_GATHER,

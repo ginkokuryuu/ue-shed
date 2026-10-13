@@ -1,5 +1,6 @@
 import type { ProjectIndexHeader } from "@ue-shed/unreal-assets";
-import type { TextCorpus } from "./schema.js";
+import type { TextCorpus, TextCorpusDiagnostic, TextPackageCoverage } from "./schema.js";
+import { HostSliceClock, runHostStepsSync, type HostSteps } from "./host-slices.js";
 
 export const REQUIRES_LOCALIZATION_GATHER = 0x00040000;
 
@@ -59,30 +60,44 @@ export function textCorpusWithExcludedPackages(
 	corpus: TextCorpus,
 	packageFiles: readonly string[]
 ): TextCorpus {
-	const excluded = new Set(packageFiles);
-	for (const unit of corpus.units)
+	return runHostStepsSync(
+		textCorpusWithExcludedPackagesSteps(corpus, packageFiles, new HostSliceClock(Infinity))
+	);
+}
+
+/** Host steps for `textCorpusWithExcludedPackages`, for inventories of many excluded packages. */
+export function* textCorpusWithExcludedPackagesSteps(
+	corpus: TextCorpus,
+	packageFiles: readonly string[],
+	clock: HostSliceClock
+): HostSteps<TextCorpus> {
+	const excluded = new Set<string>();
+	for (const packageFile of packageFiles) {
+		excluded.add(packageFile);
+		if (clock.step()) yield;
+	}
+	for (const unit of corpus.units) {
 		if (unit.occurrences.some((occurrence) => excluded.has(occurrence.packageFile)))
 			throw new Error("STOP: excluded package contains decoded text.");
+		if (clock.step()) yield;
+	}
 	const coverage = corpus.packageCoverage ?? [];
 	if (coverage.some((item) => excluded.has(item.packageFile)))
 		throw new Error("An excluded package must not also be inspected.");
-	return {
-		...corpus,
-		packageCoverage: [
-			...coverage,
-			...[...excluded].map((packageFile) => ({
-				packageFile,
-				status: "not_gatherable" as const
-			}))
-		],
-		diagnostics: [
-			...corpus.diagnostics,
-			...[...excluded].map((packageFile) => ({
-				code: "package_not_gatherable" as const,
-				packageFile,
-				message:
-					"Excluded because Unreal does not gather this package. Its text payload was not inspected."
-			}))
-		]
-	};
+	const packageCoverage: TextPackageCoverage[] = [...coverage];
+	const diagnostics: TextCorpusDiagnostic[] = [...corpus.diagnostics];
+	for (const packageFile of excluded) {
+		packageCoverage.push({ packageFile, status: "not_gatherable" });
+		if (clock.step()) yield;
+	}
+	for (const packageFile of excluded) {
+		diagnostics.push({
+			code: "package_not_gatherable",
+			packageFile,
+			message:
+				"Excluded because Unreal does not gather this package. Its text payload was not inspected."
+		});
+		if (clock.step()) yield;
+	}
+	return { ...corpus, packageCoverage, diagnostics };
 }

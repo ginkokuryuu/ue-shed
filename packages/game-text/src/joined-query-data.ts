@@ -3,10 +3,15 @@ import { decodeWtf8, encodeWtf8 } from "./wtf8.js";
 import { resolve } from "node:path";
 import { projectRelativePath } from "./project-relative-path.js";
 import { Cache, Effect, Schema } from "effect";
-import { textOccurrenceFromExtraction, textCorpusFromExtractionEvents } from "./corpus.js";
+import {
+	textOccurrenceFromExtraction,
+	textCorpusFromExtractionEvents,
+	textCorpusFromExtractionEventsSteps
+} from "./corpus.js";
 import { emptyPackageTextRecord } from "./package-text-record.js";
 import { packageTextGapReasons, decodePackageTextColumns } from "./package-text-columns.js";
-import { textCorpusWithExcludedPackages } from "./package-text-candidates.js";
+import { textCorpusWithExcludedPackagesSteps } from "./package-text-candidates.js";
+import { HostSliceClock, runHostStepsSync, sortRowsSteps, type HostSteps } from "./host-slices.js";
 import { comparePackageTextPathBytes } from "./package-text-order.js";
 import { TextUnitId } from "./identifiers.js";
 import { hydrateJoinedTarget, type JoinedTargetReader } from "./joined-target-reader.js";
@@ -20,7 +25,13 @@ import {
 	type TextCorpusDiagnosticSummary,
 	type TextPackageCoverageSummary
 } from "./corpus-summary.js";
-import type { TextUnit, TextOccurrence, TextUnitSearchResult, TextReviewSignal } from "./schema.js";
+import type {
+	TextCorpus,
+	TextUnit,
+	TextOccurrence,
+	TextUnitSearchResult,
+	TextReviewSignal
+} from "./schema.js";
 import {
 	LocalizationLineId,
 	LocalizationEvidenceLineId,
@@ -876,47 +887,63 @@ export class JoinedQueryData {
 	}
 	/** Explicit bulk export includes lossless package metadata, without decoding occurrence text. */
 	exportMetadata() {
+		return runHostStepsSync(this.exportMetadataSteps(new HostSliceClock(Infinity)));
+	}
+	/** Host steps for `exportMetadata`: one package layer decodes per step, then the records sort,
+	 * fold and gain excluded packages in bounded slices.
+	 */
+	*exportMetadataSteps(clock: HostSliceClock): HostSteps<TextCorpus> {
 		const joined = this.joined;
-		const records = runJoinedQuery(
-			Effect.gen(function* () {
-				const result: Effect.Success<ReturnType<typeof decodePackageTextColumns>> = [];
-				for (const name of joined.meta.packageNames) {
+		const records: Effect.Success<ReturnType<typeof decodePackageTextColumns>>[number][] = [];
+		for (const name of joined.meta.packageNames) {
+			const decoded = runJoinedQuery(
+				Effect.gen(function* () {
 					const layer = yield* joined.reader.layer(name);
 					const packageCount = (yield* u32(layer, "package.path")).length;
-					result.push(
-						...(yield* decodePackageTextColumns({
-							...layer,
-							section: (field) =>
-								field.startsWith("occurrence.")
-									? Effect.succeed(new Uint32Array())
-									: field === "package.occurrence_start"
-										? Effect.succeed(new Uint32Array(packageCount + 1))
-										: layer.section(field)
-						}))
-					);
-				}
-				return result;
-			}).pipe(Effect.scoped)
-		);
-		records.sort((left, right) =>
-			comparePackageTextPathBytes(encodeWtf8(left.path), encodeWtf8(right.path))
+					return yield* decodePackageTextColumns({
+						...layer,
+						section: (field) =>
+							field.startsWith("occurrence.")
+								? Effect.succeed(new Uint32Array())
+								: field === "package.occurrence_start"
+									? Effect.succeed(new Uint32Array(packageCount + 1))
+									: layer.section(field)
+					});
+				}).pipe(Effect.scoped)
+			);
+			for (const record of decoded) records.push(record);
+			if (clock.expired()) yield;
+		}
+		const keys: Uint8Array[] = [];
+		for (const record of records) {
+			keys.push(encodeWtf8(record.path));
+			if (clock.step()) yield;
+		}
+		const order = yield* sortRowsSteps(
+			Uint32Array.from(keys, (_, row) => row),
+			(left, right) => comparePackageTextPathBytes(keys[left]!, keys[right]!),
+			clock
 		);
 		const projectRoot = this.joined.meta.input.projectRoot;
-		const metadata = textCorpusFromExtractionEvents({
-			projectRoot,
-			discoveredPackages: records.length,
-			events: records.flatMap((record) =>
-				record.evidence.event === "not_gatherable"
-					? []
-					: [{ ...record.evidence, path: resolve(projectRoot, record.path) }]
-			)
-		});
-		return textCorpusWithExcludedPackages(
-			metadata,
-			records
-				.filter((record) => record.evidence.event === "not_gatherable")
-				.map((record) => projectRelativePath(projectRoot, record.path))
+		function* events() {
+			for (const row of order) {
+				const record = records[row]!;
+				if (record.evidence.event !== "not_gatherable")
+					yield { ...record.evidence, path: resolve(projectRoot, record.path) };
+			}
+		}
+		const metadata = yield* textCorpusFromExtractionEventsSteps(
+			{ projectRoot, discoveredPackages: records.length, events: events() },
+			clock
 		);
+		const excluded: string[] = [];
+		for (const row of order) {
+			const record = records[row]!;
+			if (record.evidence.event === "not_gatherable")
+				excluded.push(projectRelativePath(projectRoot, record.path));
+			if (clock.step()) yield;
+		}
+		return yield* textCorpusWithExcludedPackagesSteps(metadata, excluded, clock);
 	}
 	/** Diagnostics hydrate only the packages represented by a focused unit. */
 	diagnostics(members: Uint32Array) {

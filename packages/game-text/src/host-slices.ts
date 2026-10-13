@@ -60,34 +60,40 @@ export const sortRowsInSlices = (
 	compare: (left: number, right: number) => number,
 	clock = new HostSliceClock(),
 	chunk = 4096
-) =>
-	Effect.gen(function* () {
-		const count = values.length;
-		for (let start = 0; start < count; start += chunk) {
-			values.subarray(start, Math.min(count, start + chunk)).sort(compare);
-			if (clock.expired()) yield* Effect.yieldNow;
-		}
-		if (count <= chunk) return values;
-		let source: Uint32Array = values,
-			target: Uint32Array = new Uint32Array(count);
-		for (let width = chunk; width < count; width *= 2) {
-			for (let left = 0; left < count; left += width * 2) {
-				const middle = Math.min(count, left + width),
-					right = Math.min(count, left + width * 2);
-				let a = left,
-					b = middle,
-					out = left;
-				while (a < middle && b < right) {
-					// Ties take the left run, which keeps the merge stable.
-					target[out++] =
-						compare(source[b]!, source[a]!) < 0 ? source[b++]! : source[a++]!;
-					if (clock.step()) yield* Effect.yieldNow;
-				}
-				target.set(source.subarray(a, middle), out);
-				target.set(source.subarray(b, right), out + middle - a);
+) => runHostSteps(sortRowsSteps(values, compare, clock, chunk));
+
+/** Host steps for `sortRowsInSlices`, for callers that are themselves host steps. */
+export function* sortRowsSteps(
+	values: Uint32Array,
+	compare: (left: number, right: number) => number,
+	clock = new HostSliceClock(),
+	chunk = 4096
+): HostSteps<Uint32Array> {
+	const count = values.length;
+	for (let start = 0; start < count; start += chunk) {
+		values.subarray(start, Math.min(count, start + chunk)).sort(compare);
+		if (clock.expired()) yield;
+	}
+	if (count <= chunk) return values;
+	let source: Uint32Array = values,
+		target: Uint32Array = new Uint32Array(count);
+	for (let width = chunk; width < count; width *= 2) {
+		for (let left = 0; left < count; left += width * 2) {
+			const middle = Math.min(count, left + width),
+				right = Math.min(count, left + width * 2);
+			let a = left,
+				b = middle,
+				out = left;
+			while (a < middle && b < right) {
+				// Ties take the left run, which keeps the merge stable.
+				target[out++] = compare(source[b]!, source[a]!) < 0 ? source[b++]! : source[a++]!;
+				if (clock.step()) yield;
 			}
-			[source, target] = [target, source];
+			target.set(source.subarray(a, middle), out);
+			target.set(source.subarray(b, right), out + middle - a);
 		}
-		if (source !== values) values.set(source);
-		return values;
-	});
+		[source, target] = [target, source];
+	}
+	if (source !== values) values.set(source);
+	return values;
+}

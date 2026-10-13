@@ -43,8 +43,14 @@ export function indexedLocalizationStatusReport(
 	};
 }
 
-/** Units of indexed corpora, decoded as host steps for `materializeTextCorpus`. */
-const indexedUnits = new WeakMap<TextCorpus, () => HostSteps<TextCorpus["units"]>>();
+/** Bulk fields of indexed corpora, decoded as host steps for `materializeTextCorpus`. */
+const indexedCorpora = new WeakMap<
+	TextCorpus,
+	{
+		readonly units: () => HostSteps<TextCorpus["units"]>;
+		readonly metadata: () => HostSteps<TextCorpus>;
+	}
+>();
 
 /** Legacy report inputs are projections of a pinned index; bulk fields decode on explicit access. */
 export function indexedTextCorpus(joined: JoinedTargetReader, query: TextCorpusQuery): TextCorpus {
@@ -52,7 +58,12 @@ export function indexedTextCorpus(joined: JoinedTargetReader, query: TextCorpusQ
 		summary = query.summary();
 	let metadata: ReturnType<JoinedQueryData["exportMetadata"]> | undefined;
 	let units: TextCorpus["units"] | undefined;
-	const readMetadata = () => (metadata ??= data.exportMetadata());
+	function* decodeMetadata(clock: HostSliceClock): HostSteps<TextCorpus> {
+		if (metadata) return metadata;
+		const value = yield* data.exportMetadataSteps(clock);
+		return (metadata ??= value);
+	}
+	const readMetadata = () => runHostStepsSync(decodeMetadata(new HostSliceClock(Infinity)));
 	function* decodeUnits(clock: HostSliceClock): HostSteps<TextCorpus["units"]> {
 		if (units) return units;
 		const values: TextCorpus["units"][number][] = [];
@@ -76,8 +87,11 @@ export function indexedTextCorpus(joined: JoinedTargetReader, query: TextCorpusQ
 			return readMetadata().packageCoverage ?? [];
 		}
 	};
-	// Units cost tens of microseconds each, so a slice checks time every 64 units.
-	indexedUnits.set(corpus, () => decodeUnits(new HostSliceClock(16, 64)));
+	indexedCorpora.set(corpus, {
+		// Units cost tens of microseconds each, so a slice checks time every 64 units.
+		units: () => decodeUnits(new HostSliceClock(16, 64)),
+		metadata: () => decodeMetadata(new HostSliceClock())
+	});
 	return corpus;
 }
 
@@ -87,8 +101,10 @@ export function indexedTextCorpus(joined: JoinedTargetReader, query: TextCorpusQ
 export const materializeTextCorpus = Effect.fn("GameTextIndex.materializeCorpus")(function* (
 	corpus: TextCorpus
 ) {
-	const steps = indexedUnits.get(corpus);
-	const units = steps ? yield* runHostSteps(steps()) : corpus.units;
+	const steps = indexedCorpora.get(corpus);
+	const units = steps ? yield* runHostSteps(steps.units()) : corpus.units;
+	// Metadata is cached by the corpus, so its getters below read the decoded value.
+	if (steps) yield* runHostSteps(steps.metadata());
 	return {
 		schemaVersion: corpus.schemaVersion,
 		status: corpus.status,

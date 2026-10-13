@@ -14,6 +14,7 @@ import {
 	type SavedPropertyValue
 } from "@ue-shed/unreal-assets";
 import { Context, Effect, Layer, Ref, Schema, Stream } from "effect";
+import { HostSliceClock, runHostStepsSync, type HostSteps } from "./host-slices.js";
 import {
 	TextOccurrenceId,
 	TextUnitId,
@@ -832,9 +833,21 @@ export function textCorpusFromExtractionEvents(options: {
 	readonly discoveredPackages?: number;
 	readonly events: Iterable<SavedAssetTextExtractionEvent | SavedAssetPackageTextEvent>;
 }): TextCorpus {
+	return runHostStepsSync(
+		textCorpusFromExtractionEventsSteps(options, new HostSliceClock(Infinity))
+	);
+}
+
+/** Host steps for `textCorpusFromExtractionEvents`; the event fold yields between slices. */
+export function* textCorpusFromExtractionEventsSteps(
+	options: Parameters<typeof textCorpusFromExtractionEvents>[0],
+	clock: HostSliceClock
+): HostSteps<TextCorpus> {
 	const accumulator = emptyTextExtractionAccumulator();
-	for (const event of options.events)
+	for (const event of options.events) {
 		foldTextExtractionEvent(options.projectRoot, accumulator, event);
+		if (clock.step()) yield;
+	}
 	return buildTextCorpusFromExtraction({
 		accumulator,
 		discoveredPackages: options.discoveredPackages ?? 0
