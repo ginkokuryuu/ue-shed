@@ -10,6 +10,7 @@ import {
 	type LocalizationJoin
 } from "./localization-schema.js";
 import { localizationManifestNotes } from "./localization.js";
+import { LocalizationFileProblem } from "./localization-status.js";
 import { TextUnitId } from "./identifiers.js";
 
 const Count = Schema.Int.check(Schema.isGreaterThanOrEqualTo(0));
@@ -43,7 +44,15 @@ export const LocalizationTargetResult = Schema.Union([
 		status: Schema.Literal("ready"),
 		target: LocalizationTargetPreview,
 		lines: Count,
-		notSynced: Count
+		notSynced: Count,
+		/** The target's evidence files that are missing from the working copy or unreadable. */
+		fileProblems: Schema.optionalKey(
+			Schema.Array(LocalizationFileProblem).check(
+				Schema.isMaxLength(2 * MAX_LOCALIZATION_CULTURES + 3)
+			)
+		),
+		/** The folder Game Text looked in for the target's evidence files. */
+		localizationFolder: Schema.optionalKey(Schema.String)
 	})
 ]);
 export type LocalizationTargetResult = typeof LocalizationTargetResult.Type;

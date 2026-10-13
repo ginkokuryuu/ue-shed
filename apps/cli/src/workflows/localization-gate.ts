@@ -127,7 +127,9 @@ const loadGate = Effect.fn("Cli.localization.gate")(function* (command: Localiza
 	const checked = evidence.filter((item) => !ungathered.includes(item));
 	for (const item of checked) {
 		if (item.manifest.status === "failed")
-			return yield* Effect.fail(localizationManifestFailure(item.manifest.error));
+			return yield* Effect.fail(
+				localizationManifestFailure(item.manifest.error, item.manifest.relativePath)
+			);
 	}
 	// Files that exist but cannot be read make translations unknown, never absent.
 	const unread = checked.flatMap(localizationGateUnreadEvidence);

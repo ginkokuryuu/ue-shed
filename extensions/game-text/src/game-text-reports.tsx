@@ -1,5 +1,6 @@
 import * as stylex from "@stylexjs/stylex";
 import {
+	explainLocalizationFile,
 	LocalizationUnknownReason,
 	textCountLabel,
 	type TextCorpusQuerySummary,
@@ -230,8 +231,35 @@ export function GameTextReports(props: {
 									)}
 									·{" "}
 									{textCountLabel(report().gatherFilesRead, "localization file")}{" "}
-									read · {report().gatherFilesFailed} unread.
+									read
+									<Show when={report().gatherFilesMissing}>
+										{(missing) => ` · ${missing().toLocaleString()} missing`}
+									</Show>{" "}
+									·{" "}
+									{report().gatherFilesFailed -
+										(report().gatherFilesMissing ?? 0)}{" "}
+									unread.
 								</p>
+								<Show when={report().gatherFileProblems?.length}>
+									<Show when={report().localizationFolder}>
+										{(folder) => (
+											<p {...stylex.attrs(styles.muted)}>
+												Looked in {folder()}
+											</p>
+										)}
+									</Show>
+									<For each={report().gatherFileProblems}>
+										{(problem) => {
+											const text = explainLocalizationFile(problem);
+											return (
+												<p {...stylex.attrs(styles.muted)}>
+													{text.message}
+													{text.recovery ? ` ${text.recovery}` : ""}
+												</p>
+											);
+										}}
+									</For>
+								</Show>
 								<Show when={report().wordCountUnknown > 0}>
 									<p {...stylex.attrs(styles.muted)}>
 										Word counts are unavailable for some source languages.

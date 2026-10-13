@@ -29,6 +29,11 @@ import {
 	type LocalizationProgressReport,
 	type LocalizationBaseline
 } from "./localization-reports.js";
+import {
+	LocalizationFileProblem,
+	localizationEvidenceFolder,
+	localizationFileProblems
+} from "./localization-status.js";
 import { textCountLabel } from "./csv.js";
 import { textAssetName, spreadsheetCsv } from "./csv.js";
 
@@ -537,7 +542,16 @@ export const WorkspaceReportPage = Schema.Struct({
 	nextOffset: Offset,
 	coverage: TextCorpus.fields.coverage,
 	gatherFilesRead: Count,
+	/** Every evidence file that failed, including files the working copy does not have. */
 	gatherFilesFailed: Count,
+	/** The failed files that are absent from the working copy rather than unreadable. */
+	gatherFilesMissing: Schema.optionalKey(Count),
+	/** The folder Game Text looked in for the target's evidence files. */
+	localizationFolder: Schema.optionalKey(Schema.String),
+	/** Failed evidence files, missing or unreadable, with their paths and error codes. */
+	gatherFileProblems: Schema.optionalKey(
+		Schema.Array(LocalizationFileProblem).check(Schema.isMaxLength(50))
+	),
 	wordCountUnknown: Count,
 	unknownReasons: LocalizationProgressCulture.fields.unknownReasons,
 	baseline: Schema.optionalKey(
@@ -581,6 +595,8 @@ export function localizationReportPage(
 		(a, b) => Number(b.culture === native) - Number(a.culture === native)
 	);
 	const offset = request.offset ?? 0;
+	const problems = localizationFileProblems(report.gatherEvidence);
+	const folder = localizationEvidenceFolder(report.gatherEvidence);
 	const reasons = Schema.decodeUnknownSync(WorkspaceReportPage.fields.unknownReasons)(
 		Object.fromEntries(
 			LocalizationUnknownReason.literals.map((reason) => [
@@ -618,7 +634,10 @@ export function localizationReportPage(
 		totalCultures: cultures.length,
 		coverage: report.coverage,
 		gatherFilesRead: report.gatherEvidence.filter((file) => file.status === "read").length,
-		gatherFilesFailed: report.gatherEvidence.filter((file) => file.status === "failed").length,
+		gatherFilesFailed: problems.length,
+		gatherFilesMissing: problems.filter((problem) => problem.state === "missing").length,
+		...(folder === undefined ? undefined : { localizationFolder: folder }),
+		...(problems.length > 0 ? { gatherFileProblems: problems.slice(0, 50) } : undefined),
 		wordCountUnknown: report.wordCountDiagnostics.length,
 		unknownReasons: reasons,
 		...(offset + 50 < cultures.length ? { nextOffset: offset + 50 } : undefined),

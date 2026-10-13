@@ -622,6 +622,11 @@ Missing manifest/archive/PO evidence, duplicate identities, unresolved corpus id
 Table namespaces, conflicting current sources, unavailable gather settings, non-project paths and
 unavailable asset classes or excluded-class ancestry are explicit unknown reasons. DataTable cell
 locations do not distinguish DataTable subclasses, so class exclusions can require unknown coverage.
+A file the working copy does not
+have is reported as "Not in this working copy" with its project-relative path and a Gather or Export
+recovery; a file that exists but fails to read or parse keeps "could not be read" with its error
+code. Ready target results and workspace report pages carry these failed files as bounded
+`LocalizationFileProblem` values and the folder Game Text looked in, without file provenance.
 Namespace-collapsed PO identities
 without keys cannot support an exact join. Crowdin identity PO marks reduced source checking because
 it has no source; archive-to-manifest comparisons still determine staleness.
