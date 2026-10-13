@@ -200,34 +200,60 @@ function toDepotFile(file: ListDepotFilesAtChangeResult["items"][number]): Perfo
 	};
 }
 
+interface P4FailureFields {
+	readonly category?: string;
+	readonly reason?: string;
+	readonly tag?: string;
+}
+
+function mapHistoryErrorKind(failure: P4FailureFields): MapHistoryError["kind"] {
+	if (failure.tag === "P4MaterializationError") {
+		return failure.reason === "limit_exceeded" ? "resource_limit" : "materialization";
+	}
+	if (failure.tag !== "P4CommandError") return "perforce_command";
+	switch (failure.category) {
+		case "authentication":
+		case "permission":
+			return "perforce_authentication";
+		case "not_in_view":
+			return "ambiguous_depot_mapping";
+		case "server_config":
+		case "client":
+		case "user":
+		case "charset":
+			return "perforce_configuration";
+		default:
+			return "perforce_command";
+	}
+}
+
 function toMapHistoryError(operation: string, cause: unknown): MapHistoryError {
+	const isString = Schema.is(Schema.String);
 	const tag = cause instanceof Object && "_tag" in cause ? cause._tag : undefined;
 	const category = cause instanceof Object && "category" in cause ? cause.category : undefined;
 	const message = cause instanceof Object && "message" in cause ? cause.message : undefined;
 	const reason = cause instanceof Object && "reason" in cause ? cause.reason : undefined;
-	const kind =
-		tag === "P4MaterializationError"
-			? reason === "limit_exceeded"
-				? "resource_limit"
-				: "materialization"
-			: tag === "P4CommandError" && category === "authentication"
-				? "perforce_authentication"
-				: tag === "P4CommandError" &&
-					  (category === "server_config" || category === "client")
-					? "perforce_configuration"
-					: "perforce_command";
+	const kind = mapHistoryErrorKind({
+		...(isString(tag) ? { tag } : undefined),
+		...(isString(category) ? { category } : undefined),
+		...(isString(reason) ? { reason } : undefined)
+	});
 	return new MapHistoryError({
 		cause,
 		kind,
-		message: Schema.is(Schema.String)(message) ? message : `${operation} failed.`,
+		message: isString(message) ? message : `${operation} failed.`,
 		recovery:
-			kind === "perforce_authentication"
-				? "Authenticate with Perforce and retry."
-				: kind === "perforce_configuration"
-					? "Check the active Perforce server and client configuration."
-					: kind === "resource_limit"
-						? "Narrow the history range or raise the explicit operation limit."
-						: "Inspect the Perforce diagnostic and retry when it is safe.",
+			category === "permission"
+				? "Request Perforce access to the depot paths and retry."
+				: kind === "perforce_authentication"
+					? "Authenticate with Perforce and retry."
+					: kind === "ambiguous_depot_mapping"
+						? "Use a project path covered by one unambiguous Perforce client mapping."
+						: kind === "perforce_configuration"
+							? "Check the active Perforce server and client configuration."
+							: kind === "resource_limit"
+								? "Narrow the history range or raise the explicit operation limit."
+								: "Inspect the Perforce diagnostic and retry when it is safe.",
 		retrySafe:
 			tag === "P4TimeoutError" || (tag === "P4CommandError" && category === "connection")
 	});

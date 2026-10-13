@@ -190,4 +190,29 @@ describe("PerforceHistorySource", () => {
 		expect(error.kind).toBe("perforce_authentication");
 		expect(error.retrySafe).toBe(false);
 	});
+
+	it.each([
+		["permission", "perforce_authentication"],
+		["not_in_view", "ambiguous_depot_mapping"],
+		["user", "perforce_configuration"],
+		["charset", "perforce_configuration"],
+		["changelist", "perforce_command"]
+	] as const)("maps %s command failures to %s", async (category, kind) => {
+		const source = makePerforceHistorySource({
+			...backend(),
+			describeChangelist: () =>
+				Effect.fail(
+					new P4CommandError(
+						"Perforce rejected the command.",
+						{ args: ["describe"], command: "p4", exitCode: 0, stderr: "", stdout: "" },
+						category
+					)
+				)
+		});
+
+		const error = await Effect.runPromise(Effect.flip(source.describeChangelist(42)));
+
+		expect(error.kind).toBe(kind);
+		expect(error.retrySafe).toBe(false);
+	});
 });
