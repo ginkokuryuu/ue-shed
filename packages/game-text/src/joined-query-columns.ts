@@ -1,6 +1,10 @@
 import { encodeWtf8 } from "./wtf8.js";
 import { absent, unitId, type JoinPackages } from "./joined-target-input.js";
-import { StringArena, packedStringReader } from "./shared-string-codec.js";
+import {
+	StringArena,
+	packedStringReader,
+	sortPackedStringsByLocale
+} from "./shared-string-codec.js";
 import { snapshotCheck } from "./snapshot-format.js";
 
 /** Numeric query entries retain raw-unit predicates and each gathered occurrence slice. */
@@ -193,7 +197,7 @@ export function joinedQueryColumns(input: {
 			ordered = false;
 			break;
 		}
-	if (!ordered) rawOrderColumn.sort((a, b) => id(a).localeCompare(id(b)));
+	if (!ordered) rawOrderColumn.set(sortPackedStringsByLocale(packedIds, rawOrderColumn));
 	let sliceRow = 0;
 	for (let row = 0; row < line.source!.length; row++) {
 		const units = new Set<number>();

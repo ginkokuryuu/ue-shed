@@ -87,6 +87,9 @@ should follow [Website and illustrated guides](engineering/website.md).
 
 ## Research
 
+- [Game Text cache allowance experiment (2026-10-13)](research/game-text-cache-budget-performance-2026-10-13.md) —
+  a 150 MiB disk allowance, source projections, cold/reopen measurements and rejected storage policies.
+
 - [Game Text cold index continuation (2026-10-13)](research/game-text-cold-index-performance-2026-10-13.md) —
   parallel cold preparation, conversion, repeated timings and rejected join-cache experiments.
 

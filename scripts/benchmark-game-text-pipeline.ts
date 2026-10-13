@@ -42,8 +42,6 @@ if (
 	!values.output
 )
 	throw new Error("Provide --project, --reader, --before-reader, --before-module and --output.");
-if (values.records && !values.cache)
-	throw new Error("Retained records require an existing --cache.");
 const runs = Number(values.runs);
 if (!Number.isSafeInteger(runs) || runs < 1 || runs > 20) throw new Error("--runs must be 1–20.");
 const Stage = Schema.Struct({

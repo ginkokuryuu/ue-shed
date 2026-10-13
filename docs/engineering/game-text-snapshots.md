@@ -17,6 +17,19 @@ Old derived generations are rejected and rebuilt. Integers are little endian; pa
 four-byte aligned. The 48-byte header contains version, section count, file length, directory end,
 directory CRC32 and header CRC32. Reserved bytes must be zero.
 
+Full joins with at least 8,192 distinct sources may include an optional source-query cache. Its
+global IDs, byte offsets, canonical WTF-8 bytes, ASCII flags and a 256 KiB ASCII-trigram membership
+table are ordinary checksummed sections. The producer limits the combined raw projection to
+96 MiB and conservatively bounds its stored sections to 16 MiB; larger projections retain the
+dictionary-backed path. Readers verify ranges, IDs, UTF-8/WTF-8 boundaries and flag codes before
+using the projection. Older joins remain readable without these optional columns.
+
+The cache belongs to its immutable full-join generation. An overlay can reuse its base and append
+bounded newly selected sources, copying the trigram table before adding their memberships. Missing
+trigrams reject only lowercase ASCII sources; other sources retain exact locale folding and
+matching. Obsolete memberships cause additional checks rather than lost matches. Existing readers
+keep their original buffers. ID compaction remaps the cache's ID column with other source columns.
+
 Each 96-byte directory entry holds a zero-padded ASCII name (31 characters), kind, codec,
 64-bit positioned offset, stored length, raw length, element count, raw CRC32, string domain
 (23 characters), domain string count and reserved flags. Codec zero stores raw bytes; codec one

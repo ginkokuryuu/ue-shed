@@ -28,7 +28,13 @@ import {
 	type LocalizationLinePreview
 } from "./localization-schema.js";
 import { LocalizationIdentity } from "@ue-shed/localization/browser";
-import { StringArena, type PackedStrings } from "./shared-string-codec.js";
+import { StringArena } from "./shared-string-codec.js";
+import {
+	readJoinedSourceCache,
+	addSourceTrigrams,
+	rejectSourceTrigrams,
+	type JoinedSourceCache
+} from "./joined-source-cache.js";
 
 type MutableDiagnosticCounts = {
 	-readonly [K in keyof TextCorpusDiagnosticSummary["diagnosticCounts"]]: TextCorpusDiagnosticSummary["diagnosticCounts"][K];
@@ -64,12 +70,7 @@ export interface JoinedQueryProjection {
 	readonly base?: string;
 	readonly key?: string;
 	sourceSeed?: JoinedQueryProjection["sources"];
-	sources?: {
-		readonly packed: PackedStrings;
-		readonly index: Uint32Array;
-		readonly ids: Uint32Array;
-		readonly simple: Uint8Array;
-	};
+	sources?: JoinedSourceCache;
 }
 
 /** Copy only immutable physical columns still referenced by this generation. Patched and
@@ -137,6 +138,49 @@ export class JoinedQueryData {
 		const selected = new Uint8Array(last ? last.start + last.count : 0);
 		for (const id of this.column("line.source")) selected[id] = 1;
 		for (const id of this.column("query.raw.sources")) selected[id] = 1;
+		if (!this.projection.sourceSeed && this.joined.meta.sourceCache) {
+			const bytes = runJoinedQuery(this.joined.layer.section("query.source.bytes"));
+			snapshotCheck(bytes instanceof Uint8Array, "query.source.bytes", "Expected byte cache");
+			const trigrams = this.joined.meta.sourceCache.trigramVersion
+				? runJoinedQuery(this.joined.layer.section("query.source.trigrams"))
+				: undefined;
+			snapshotCheck(
+				trigrams === undefined || trigrams instanceof Uint8Array,
+				"query.source.trigrams",
+				"Expected byte index"
+			);
+			const flags = this.joined.meta.sourceCache.flagsVersion
+				? runJoinedQuery(this.joined.layer.section("query.source.simple"))
+				: undefined;
+			snapshotCheck(
+				flags === undefined || flags instanceof Uint8Array,
+				"query.source.simple",
+				"Expected byte flags"
+			);
+			const cached = readJoinedSourceCache(
+				this.joined.meta.sourceCache,
+				this.column("query.source.ids"),
+				this.column("query.source.starts"),
+				bytes,
+				selected.length,
+				trigrams,
+				flags
+			);
+			if (!this.joined.meta.base) {
+				let count = 0;
+				for (const present of selected) count += present;
+				snapshotCheck(
+					count === cached.ids.length,
+					"query.source",
+					"Source cache selection differs"
+				);
+				for (const id of cached.ids)
+					snapshotCheck(selected[id] === 1, "query.source", "Source cache ID is unused");
+				this.projection.sources = cached;
+				return;
+			}
+			this.projection.sourceSeed = cached;
+		}
 		const seed = this.projection.sourceSeed;
 		this.projection.sourceSeed = undefined;
 		if (seed) {
@@ -167,7 +211,8 @@ export class JoinedQueryData {
 				for (let row = 0; row <= added.length; row++)
 					offsets[seed.ids.length + row] = seed.packed.bytes.length + extra.offsets[row]!;
 				const ids = new Uint32Array(seed.ids.length + added.length),
-					simple = new Uint8Array(ids.length);
+					simple = new Uint8Array(ids.length),
+					trigrams = seed.trigrams?.slice();
 				ids.set(seed.ids);
 				simple.set(seed.simple);
 				for (let row = 0; row < added.length; row++) {
@@ -179,8 +224,15 @@ export class JoinedQueryData {
 					simple[position] = Number(
 						!value.some((byte) => byte >= 128 || (byte >= 65 && byte <= 90))
 					);
+					if (trigrams && simple[position]) addSourceTrigrams(trigrams, value);
 				}
-				this.projection.sources = { packed: { bytes, offsets }, index, ids, simple };
+				this.projection.sources = {
+					packed: { bytes, offsets },
+					index,
+					ids,
+					simple,
+					...(trigrams ? { trigrams } : undefined)
+				};
 				return;
 			}
 		}
@@ -231,6 +283,8 @@ export class JoinedQueryData {
 	): Uint8Array | undefined {
 		const source = this.projection.sources;
 		if (!source) return undefined;
+		if (source.trigrams && rejectSourceTrigrams(source.trigrams, terms))
+			return this.rejectAsciiSources(checkInterrupted);
 		const counts = new Uint32Array(source.ids.length),
 			offsets = source.packed.offsets,
 			bytes = source.packed.bytes;

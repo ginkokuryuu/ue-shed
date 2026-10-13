@@ -12,3 +12,8 @@ Start cold localization parsing with input-size memory reservations rather than 
 largest-file probe. Prepare bounded string-sort runs in workers, batch large cold package reads,
 convert larger staged layers in workers, and retain only two decoded identifiers while sorting
 joined query IDs. Small package sets and small layer mappings keep their existing preparation path.
+
+Persist a bounded optional source-query projection so reopened readers can reuse verified source
+bytes, ASCII flags and trigram membership. Preserve pinned readers and update the projection across
+source overlays. Match review records by numeric identity and sort joined identifiers in bounded
+locale runs with a stable merge.

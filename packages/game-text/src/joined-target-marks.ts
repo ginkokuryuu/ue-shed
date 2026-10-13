@@ -15,6 +15,11 @@ import {
 	type LocalizationKeyChangePair
 } from "./localization-key-changes.js";
 import { textFileKey } from "./text-origin.js";
+import { localizationStates } from "./localization-schema.js";
+
+const notFound = localizationStates.indexOf("not_found");
+const notGathered = localizationStates.indexOf("not_gathered");
+const changedSinceGather = localizationStates.indexOf("changed_since_gather");
 
 const placeKey = (path: string) =>
 	path
@@ -59,26 +64,11 @@ export const finishJoinedTarget = Effect.fn("JoinedTarget.marks")(function* (
 	};
 	const manifestPath = (row: number) =>
 		(m.options![row]! & 1024 ? manifest.pathPrefix : "") + strings.string(m.path![row]!);
-	const matches = (row: number, state: string) =>
-		culture.some(
-			(marks) =>
-				marks.state![row] ===
-				[
-					"translated",
-					"not_translated",
-					"needs_update",
-					"not_synced",
-					"not_gathered",
-					"changed_since_gather",
-					"not_found",
-					"gathered_only",
-					"outside_target",
-					"unknown"
-				].indexOf(state)
-		);
+	const matches = (row: number, state: number) =>
+		culture.some((marks) => marks.state![row] === state);
 	const oldRows: number[] = [];
 	for (let row = 0; row < count; row++)
-		if (!isSaved(row) && isResolved(row) && matches(row, "not_found")) oldRows.push(row);
+		if (!isSaved(row) && isResolved(row) && matches(row, notFound)) oldRows.push(row);
 	const pairs: LocalizationKeyChangePair[] = [];
 	let ambiguous = 0;
 	const paired = new Uint8Array(count);
@@ -159,12 +149,7 @@ export const finishJoinedTarget = Effect.fn("JoinedTarget.marks")(function* (
 				forward = new Uint32Array(count),
 				reverse = new Uint32Array(count);
 			for (let row = 0; row < count; row++)
-				if (
-					!paired[row] &&
-					isSaved(row) &&
-					isResolved(row) &&
-					matches(row, "not_gathered")
-				) {
+				if (!paired[row] && isSaved(row) && isResolved(row) && matches(row, notGathered)) {
 					const older = reachable(row, tier, index);
 					for (const old of older) reverse[old]!++;
 					if (older.size === 1) forward[row] = [...older][0]! + 1;
@@ -216,7 +201,7 @@ export const finishJoinedTarget = Effect.fn("JoinedTarget.marks")(function* (
 				!paired[row] &&
 				isSaved(row) &&
 				isResolved(row) &&
-				matches(row, "not_gathered") &&
+				matches(row, notGathered) &&
 				indexes.some((index, tier) => reachable(row, tier, index, true).size > 0)
 			)
 				ambiguous++;
@@ -243,26 +228,29 @@ export const finishJoinedTarget = Effect.fn("JoinedTarget.marks")(function* (
 	}
 	const review = input.review?.target === input.target.name ? input.review : undefined;
 	if (review) {
-		const records = new Map<string, number>();
+		const records = new Map<number, Map<number, Map<string, number>>>();
 		for (let start = 0; start < review.records.length; start += 4096) {
 			const batch = review.records.slice(start, start + 4096);
 			const ids = yield* writer.intern(
 				"identity",
 				batch.flatMap((record) => [record.namespace, record.key])
 			);
-			for (let row = 0; row < batch.length; row++)
-				records.set(
-					`${batch[row]!.culture}:${ids[row * 2]}:${ids[row * 2 + 1]}`,
-					start + row
-				);
+			for (let row = 0; row < batch.length; row++) {
+				const namespace = ids[row * 2]!,
+					key = ids[row * 2 + 1]!;
+				let keys = records.get(namespace);
+				if (!keys) records.set(namespace, (keys = new Map()));
+				let cultures = keys.get(key);
+				if (!cultures) keys.set(key, (cultures = new Map()));
+				cultures.set(batch[row]!.culture, start + row);
+			}
 		}
 		for (let row = 0; row < count; row++)
-			if (isResolved(row))
+			if (isResolved(row)) {
+				const selected = records.get(line.namespace![row]!)?.get(line.key![row]!);
 				for (let ci = 0; ci < culture.length; ci++) {
 					const marks = culture[ci]!,
-						recordIndex = records.get(
-							`${input.target.cultures[ci]}:${line.namespace![row]}:${line.key![row]}`
-						);
+						recordIndex = selected?.get(input.target.cultures[ci]!);
 					marks.review![row] = 1;
 					if (recordIndex === undefined) continue;
 					const id = translationId(columns, row, ci),
@@ -275,13 +263,14 @@ export const finishJoinedTarget = Effect.fn("JoinedTarget.marks")(function* (
 							: 3;
 					marks.review_record![row] = recordIndex + 1;
 				}
+			}
 	}
 	for (let row = 0; row < count; row++) {
 		let problems = line.problems![row]!;
 		if (line.key_change![row] && !(line.key_change![row]! & 1)) problems |= 1;
 		if (line.reasons![row]! & (1 << 11)) problems |= 2;
-		if (matches(row, "not_gathered")) problems |= 4;
-		if (matches(row, "changed_since_gather")) problems |= 8;
+		if (matches(row, notGathered)) problems |= 4;
+		if (matches(row, changedSinceGather)) problems |= 8;
 		if (
 			culture.some(
 				(marks) =>
