@@ -88,8 +88,8 @@ export function indexedTextCorpus(joined: JoinedTargetReader, query: TextCorpusQ
 		}
 	};
 	indexedCorpora.set(corpus, {
-		// Units cost tens of microseconds each, so a slice checks time every 64 units.
-		units: () => decodeUnits(new HostSliceClock(16, 64)),
+		// A unit's strings may each miss the shared block cache, so time is checked per unit.
+		units: () => decodeUnits(new HostSliceClock(16, 1)),
 		metadata: () => decodeMetadata(new HostSliceClock())
 	});
 	return corpus;

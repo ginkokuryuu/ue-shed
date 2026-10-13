@@ -113,6 +113,19 @@ export function reuseJoinedQueryProjection(
 	};
 }
 
+/** String columns read by the metadata export; occurrence strings are not decoded there. */
+const METADATA_STRING_FIELDS = [
+	"package.path",
+	"package.signature",
+	"package.error",
+	"gap.object",
+	"gap.property"
+];
+/** A scattered string ID can cost a 64-value block decode and, when its frame was evicted, a
+ * frame decompression; small batches keep a slice near its budget.
+ */
+const METADATA_STRING_BATCH = 32;
+
 /** Column and bounded row access for the synchronous public API. No corpus is materialized. */
 export class JoinedQueryData {
 	readonly joined: JoinedTargetReader;
@@ -668,6 +681,10 @@ export class JoinedQueryData {
 		};
 	}
 	metadata() {
+		return runHostStepsSync(this.metadataSteps(new HostSliceClock(Infinity)));
+	}
+	/** Host steps for `metadata`; a slice ends between package shards. */
+	*metadataSteps(clock: HostSliceClock) {
 		let discoveredPackages = 0,
 			inspectedPackages = 0,
 			partialPackages = 0,
@@ -708,6 +725,7 @@ export class JoinedQueryData {
 				keys = this.packageColumn(shard, "occurrence.key");
 			for (let row = 0; row < identities.length; row++)
 				if (identities[row]! < 2 && keys[row] !== 0) resolvedOccurrences++;
+			if (clock.expired()) yield;
 		}
 		const textOccurrences = this.column("query.raw.members").length;
 		return {
@@ -896,18 +914,38 @@ export class JoinedQueryData {
 		const joined = this.joined;
 		const records: Effect.Success<ReturnType<typeof decodePackageTextColumns>>[number][] = [];
 		for (const name of joined.meta.packageNames) {
+			// A layer's package and gap strings are scattered across shared blocks; they decode
+			// in ID order across slices before the columns decode from the resolved values.
+			const ids = runJoinedQuery(
+				Effect.gen(function* () {
+					const layer = yield* joined.reader.layer(name);
+					const unique = new Set<number>();
+					for (const field of METADATA_STRING_FIELDS)
+						for (const id of yield* u32(layer, field)) unique.add(id);
+					return Uint32Array.from(unique).sort();
+				}).pipe(Effect.scoped)
+			);
+			const values = new Map<number, string>();
+			for (let start = 0; start < ids.length; start += METADATA_STRING_BATCH) {
+				const batch = ids.subarray(start, start + METADATA_STRING_BATCH);
+				const decoded = this.strings([...batch]);
+				for (let index = 0; index < batch.length; index++)
+					values.set(batch[index]!, decoded[index]!);
+				if (clock.expired()) yield;
+			}
 			const decoded = runJoinedQuery(
 				Effect.gen(function* () {
 					const layer = yield* joined.reader.layer(name);
 					const packageCount = (yield* u32(layer, "package.path")).length;
 					return yield* decodePackageTextColumns({
-						...layer,
 						section: (field) =>
 							field.startsWith("occurrence.")
 								? Effect.succeed(new Uint32Array())
 								: field === "package.occurrence_start"
 									? Effect.succeed(new Uint32Array(packageCount + 1))
-									: layer.section(field)
+									: layer.section(field),
+						strings: (_domain, wanted) =>
+							Effect.succeed(wanted.map((id) => values.get(id)!))
 					});
 				}).pipe(Effect.scoped)
 			);

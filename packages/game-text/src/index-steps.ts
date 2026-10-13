@@ -42,7 +42,10 @@ import { SnapshotStoreError } from "./snapshot-store.js";
 import { SnapshotFormatError } from "./snapshot-format.js";
 import { reuseJoinedQueryProjection, type JoinedQueryProjection } from "./joined-query-data.js";
 import { instrumentIndexQuery } from "./index-query.js";
-import { columnarTextCorpusQuery, workerBackedColumnarTextCorpusQuery } from "./columnar-query.js";
+import {
+	columnarTextCorpusQuery,
+	workerBackedColumnarTextCorpusQuerySteps
+} from "./columnar-query.js";
 import { makeGameTextSearchWorkerResource } from "./search-worker-node.js";
 import { SearchWorkerInput } from "./search-worker-protocol.js";
 import {
@@ -58,7 +61,7 @@ import type { refreshJoinedTarget, JoinedTargetInput } from "./joined-target.js"
 import type { LocalizationReviewSnapshot } from "@ue-shed/localization";
 import type { GameTextProjectView } from "./project-index-view.js";
 import { encodeWtf8 } from "./wtf8.js";
-import { HostSliceClock } from "./host-slices.js";
+import { HostSliceClock, tryHostSteps } from "./host-slices.js";
 import {
 	observeGameTextImport,
 	checkRetainedImportObservations
@@ -611,20 +614,24 @@ export const makeGameTextIndexSteps = (
 			const reusedColumns = projection.columns.size;
 			const reusedSources = Boolean(projection.sourceSeed);
 			const queryStarted = performance.now();
-			const query = yield* Effect.try({
-				try: () =>
-					instrumentIndexQuery(
-						options.searchWorker
-							? workerBackedColumnarTextCorpusQuery(joined, projection)
-							: columnarTextCorpusQuery(joined, undefined, projection)
-					),
-				catch: (cause) =>
-					failure(
-						"query",
-						String(cause),
-						"Clear the disposable Game Text index and refresh."
-					)
-			});
+			const queryFailure = (cause: unknown) =>
+				failure(
+					"query",
+					String(cause),
+					"Clear the disposable Game Text index and refresh."
+				);
+			// The worker-backed host model is built in bounded host slices.
+			const query = instrumentIndexQuery(
+				options.searchWorker
+					? yield* tryHostSteps(
+							() => workerBackedColumnarTextCorpusQuerySteps(joined, projection),
+							queryFailure
+						)
+					: yield* Effect.try({
+							try: () => columnarTextCorpusQuery(joined, undefined, projection),
+							catch: queryFailure
+						})
+			);
 			const queryPreparationMs = performance.now() - queryStarted;
 			yield* Cache.set(projections, projectionKey, projection);
 			yield* Effect.annotateCurrentSpan({

@@ -41,6 +41,20 @@ export const runHostSteps = <A>(steps: HostSteps<A>) =>
 		}
 	});
 
+/** Runs host steps like `runHostSteps`, mapping a throw from any step to a typed failure. */
+export const tryHostSteps = <A, E>(
+	steps: () => HostSteps<A>,
+	onThrow: (cause: unknown) => E
+): Effect.Effect<A, E> =>
+	Effect.gen(function* () {
+		const running = yield* Effect.try({ try: steps, catch: onThrow });
+		for (;;) {
+			const next = yield* Effect.try({ try: () => running.next(), catch: onThrow });
+			if (next.done) return next.value;
+			yield* Effect.yieldNow;
+		}
+	});
+
 /** Runs host steps to completion on the current call stack, for synchronous callers. */
 export function runHostStepsSync<A>(steps: HostSteps<A>): A {
 	for (;;) {

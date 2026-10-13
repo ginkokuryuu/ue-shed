@@ -1,5 +1,6 @@
 import { Cache, Duration, Effect, Exit, Schema } from "effect";
 import { runJoinedQuery } from "./joined-query-node.js";
+import { HostSliceClock, runHostStepsSync, type HostSteps } from "./host-slices.js";
 import { QueryPlaces } from "./query-places.js";
 import { encodeWtf8, decodeWtf8 } from "./wtf8.js";
 import type { TextCorpusQuery } from "./query.js";
@@ -63,26 +64,44 @@ export function columnarTextCorpusQuery(
 	projection?: JoinedQueryProjection,
 	checkInterrupted?: () => void
 ): TextCorpusQuery {
-	return buildColumnarTextCorpusQuery(joined, scannedAt, projection, checkInterrupted, true);
+	return runHostStepsSync(
+		columnarTextCorpusQuerySteps(
+			joined,
+			scannedAt,
+			projection,
+			checkInterrupted,
+			true,
+			new HostSliceClock(Infinity)
+		)
+	);
 }
 
-/** Host model when a search worker serves searches. It warms no presentation pages; the first
- * host search prepares source search state instead. Results equal `columnarTextCorpusQuery`.
+/** Host model when a search worker serves searches, built in bounded host slices. It warms no
+ * presentation pages; the first host search prepares source search state instead. Results equal
+ * `columnarTextCorpusQuery`.
  */
-export function workerBackedColumnarTextCorpusQuery(
+export function workerBackedColumnarTextCorpusQuerySteps(
 	joined: JoinedTargetReader,
 	projection?: JoinedQueryProjection
-): TextCorpusQuery {
-	return buildColumnarTextCorpusQuery(joined, undefined, projection, undefined, false);
+): HostSteps<TextCorpusQuery> {
+	return columnarTextCorpusQuerySteps(
+		joined,
+		undefined,
+		projection,
+		undefined,
+		false,
+		new HostSliceClock()
+	);
 }
 
-function buildColumnarTextCorpusQuery(
+function* columnarTextCorpusQuerySteps(
 	joined: JoinedTargetReader,
 	scannedAt: string | undefined,
 	projection: JoinedQueryProjection | undefined,
 	checkInterrupted: (() => void) | undefined,
-	warm: boolean
-): TextCorpusQuery {
+	warm: boolean,
+	clock: HostSliceClock
+): HostSteps<TextCorpusQuery> {
 	let visited = 0;
 	const checkpoint = () => {
 		if (checkInterrupted && (++visited & 255) === 0) checkInterrupted();
@@ -90,18 +109,29 @@ function buildColumnarTextCorpusQuery(
 	const data = new JoinedQueryData(joined, projection),
 		target = joined.meta.input.target;
 	const c = (name: string) => data.column(name);
+	// Each column load inflates and verifies one section; a slice ends between loads.
+	function* columns(names: readonly string[]): HostSteps<Record<string, Uint32Array>> {
+		const result: Record<string, Uint32Array> = {};
+		for (const name of names) {
+			result[name] = c(name);
+			if (clock.expired()) yield;
+		}
+		return result;
+	}
 	const rawOrder = c("query.raw.order"),
 		lineOrder = c("query.line.order");
 	const lineStarts = c("query.line.starts");
+	if (clock.expired()) yield;
 	const places = new QueryPlaces(data);
-	const cultureColumns = target.cultures.map((_, index) =>
-		Object.fromEntries(
-			["state", "facts", "reasons", "review", "review_record"].map((field) => [
-				field,
-				c(`c${index}.${field}`)
-			])
-		)
-	);
+	if (clock.expired()) yield;
+	const cultureFields = ["state", "facts", "reasons", "review", "review_record"];
+	const cultureColumns: Record<string, Uint32Array>[] = [];
+	for (let index = 0; index < target.cultures.length; index++) {
+		const loaded = yield* columns(cultureFields.map((field) => `c${index}.${field}`));
+		cultureColumns.push(
+			Object.fromEntries(cultureFields.map((field) => [field, loaded[`c${index}.${field}`]!]))
+		);
+	}
 	const joinHeader = {
 		schemaVersion: 1 as const,
 		target: target.name,
@@ -109,41 +139,30 @@ function buildColumnarTextCorpusQuery(
 		cultures: target.cultures,
 		lines: []
 	};
-	const raw = Object.fromEntries(
-		[
-			"visible",
-			"signals",
-			"origins",
-			"editing",
-			"notes",
-			"member_start",
-			"member_end",
-			"source_start",
-			"source_end",
-			"sources",
-			"file_start",
-			"file_end",
-			"files"
-		].map((field) => [field, c(`query.raw.${field}`)])
-	);
-	const slice = Object.fromEntries(
-		[
-			"visible",
-			"signals",
-			"origins",
-			"editing",
-			"notes",
-			"member_start",
-			"member_end",
-			"source_start",
-			"source_end",
-			"sources",
-			"file_start",
-			"file_end",
-			"files"
-		].map((field) => [field, c(`query.slice.${field}`)])
-	);
-	const lineFileProjection = () => {
+	const rowFields = [
+		"visible",
+		"signals",
+		"origins",
+		"editing",
+		"notes",
+		"member_start",
+		"member_end",
+		"source_start",
+		"source_end",
+		"sources",
+		"file_start",
+		"file_end",
+		"files"
+	];
+	const rowColumns = function* (kind: "raw" | "slice") {
+		const loaded = yield* columns(rowFields.map((field) => `query.${kind}.${field}`));
+		return Object.fromEntries(
+			rowFields.map((field) => [field, loaded[`query.${kind}.${field}`]!])
+		);
+	};
+	const raw = yield* rowColumns("raw");
+	const slice = yield* rowColumns("slice");
+	const lineFileProjection = function* () {
 		let starts = data.projection.columns.get("place:line_file_starts"),
 			files = data.projection.columns.get("place:line_files");
 		if (!starts || !files) {
@@ -151,8 +170,10 @@ function buildColumnarTextCorpusQuery(
 			const facetFiles = c("facet.files"),
 				fileStarts = c("line.file_start"),
 				fileEnds = c("line.file_end");
+			if (clock.expired()) yield;
 			let count = 0;
 			for (let row = 0; row < joined.meta.count; row++) {
+				if (clock.step()) yield;
 				starts[row] = count;
 				if (lineStarts[row] === lineStarts[row + 1])
 					count += fileEnds[row]! - fileStarts[row]!;
@@ -165,6 +186,7 @@ function buildColumnarTextCorpusQuery(
 			files = new Uint32Array(count);
 			let offset = 0;
 			for (let row = 0; row < joined.meta.count; row++) {
+				if (clock.step()) yield;
 				if (lineStarts[row] === lineStarts[row + 1]) {
 					const values = facetFiles.subarray(fileStarts[row], fileEnds[row]);
 					files.set(values, offset);
@@ -185,15 +207,17 @@ function buildColumnarTextCorpusQuery(
 		}
 		return { starts, files };
 	};
-	const lineFiles = lineFileProjection();
+	const lineFiles = yield* lineFileProjection();
 	const lineFlagColumns = new Uint8Array(joined.meta.count);
 	const lineSavedVisible = new Uint8Array(joined.meta.count);
-	for (let row = 0; row < lineFlagColumns.length; row++)
+	for (let row = 0; row < lineFlagColumns.length; row++) {
+		if (clock.step()) yield;
 		for (let sr = lineStarts[row]!; sr < lineStarts[row + 1]!; sr++)
 			if (slice.visible![sr]) {
 				lineFlagColumns[row] = lineFlagColumns[row]! | slice.signals![sr]!;
 				lineSavedVisible[row] = 1;
 			}
+	}
 	const lineFlags = (row: number) => lineFlagColumns[row]!;
 	const cultureScopes = runJoinedQuery(
 		Cache.make({
@@ -617,7 +641,7 @@ function buildColumnarTextCorpusQuery(
 	);
 	const matching = (request: Request): Uint32Array =>
 		runJoinedQuery(Cache.get(matchedRows, matchingKey(request)));
-	const rawCounts = (request: Request) => {
+	const rawCountsSteps = function* (request: Request, slices: HostSliceClock) {
 		const counts = emptyCounts();
 		const {
 			capability: _capability,
@@ -632,6 +656,7 @@ function buildColumnarTextCorpusQuery(
 		prepareTextSearch(wanted);
 		for (const row of rawOrder) {
 			checkpoint();
+			if (slices.step()) yield;
 			if (!eligible("raw", row, baseRequest, true, wanted)) continue;
 			const flags = raw.signals![row]!,
 				editing = raw.editing![row]!,
@@ -660,8 +685,10 @@ function buildColumnarTextCorpusQuery(
 		}
 		return counts;
 	};
-	const metadata = data.metadata(),
-		baseline = rawCounts({ query: "", capability: "all" });
+	const rawCounts = (request: Request) =>
+		runHostStepsSync(rawCountsSteps(request, new HostSliceClock(Infinity)));
+	const metadata = yield* data.metadataSteps(clock),
+		baseline = yield* rawCountsSteps({ query: "", capability: "all" }, clock);
 	const summary = {
 		schemaVersion: 1,
 		...metadata,

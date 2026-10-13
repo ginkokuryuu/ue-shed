@@ -321,12 +321,22 @@ if (failure) {
 
 // ---- Report -----------------------------------------------------------------------------------
 const longest = [...measured.gaps].sort((left, right) => right.ms - left.ms);
+// Up to five gaps per stage, so one long stage cannot hide the culprits of the others.
+const perStage = new Map<string, number>();
+const attributedGaps = longest
+	.filter((gap) => {
+		if (gap.ms < 100) return false;
+		const count = perStage.get(gap.stage) ?? 0;
+		perStage.set(gap.stage, count + 1);
+		return count < 5;
+	})
+	.slice(0, 40);
 const attributed =
 	profile && profiler
 		? attributeGaps({
 				profile,
 				markerMs: profiler.markerMs,
-				gaps: longest.filter((gap) => gap.ms >= 100).slice(0, 40),
+				gaps: attributedGaps,
 				repositoryRoot
 			})
 		: undefined;

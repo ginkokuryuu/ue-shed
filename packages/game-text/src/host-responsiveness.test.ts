@@ -41,6 +41,9 @@ it.live.skipIf(!enabled)(
 			expect(cold.value.join.rebuilt).toBe(true);
 			expect(cold.maxGapMs).toBeLessThan(MAXIMUM_GAP_MS);
 			const warm = yield* withEventLoopGaps(refresh);
+			yield* Effect.logInfo("Host event-loop gaps").pipe(
+				Effect.annotateLogs({ coldMaxGapMs: cold.maxGapMs, warmMaxGapMs: warm.maxGapMs })
+			);
 			expect(warm.value.packages.readPackages).toBe(0);
 			expect(warm.value.join.rebuilt).toBe(false);
 			expect(warm.maxGapMs).toBeLessThan(MAXIMUM_GAP_MS);

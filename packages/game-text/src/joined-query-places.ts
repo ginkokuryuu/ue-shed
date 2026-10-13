@@ -6,8 +6,10 @@ import { StringArena } from "./shared-string-codec.js";
 import { encodeWtf8 } from "./wtf8.js";
 import { HostSliceClock, sortRowsInSlices } from "./host-slices.js";
 
-/** Shared strings are decoded in batches small enough for one host slice each. */
-const BATCH = 2048;
+/** Shared strings are decoded in batches small enough for one host slice each. A scattered ID
+ * can cost a 64-value block decode, so a batch stays near a 16 ms slice at about 512 IDs.
+ */
+const BATCH = 512;
 
 /** Persist predicates and UTF-16 label ranks; queries decode only the returned group labels. */
 export const joinedQueryPlaces = Effect.fn("JoinedTarget.queryPlaces")(function* (
