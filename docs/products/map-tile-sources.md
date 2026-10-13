@@ -121,8 +121,12 @@ tile path when that rendering behavior is required. The
 six-level timing result alongside shadow-pool overflow and overlap differences. Its subsequent
 matched three-level comparison failed visual quality acceptance: a 4K source did not reproduce
 sixteen 1K camera views. Neither source dimensions nor fewer capture calls establish equivalent
-quality. Automatic grouping requires separate content-specific qualification; these helpers do not
-select it. No arbitrary CVar overrides or quality fallback are applied by these helpers.
+quality. Follow-up native run-up/resolution experiments recovered detail, and review preferred a
+128-native-frame source for the tested overview, with 32 also acceptable. Those settings are private
+experimental controls, not new camera-render policy fields. Automatic grouping requires separate
+content-specific qualification; these helpers do not select it. No arbitrary CVar overrides or
+quality fallback are applied by these helpers. Derive zooms from lossless pixels first; delivery
+codecs and any per-zoom quality choices remain host-owned.
 
 The packed-consumer journey is `examples/map-tile-sources/verify.mjs`, run by
 `pnpm test:release:packages`. It proves both source strategies, crops, parent derivation and public

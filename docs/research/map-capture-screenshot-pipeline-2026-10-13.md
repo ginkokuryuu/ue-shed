@@ -8,13 +8,14 @@ camera moves, a fixed 128-frame warmup per tile, separately rendered zoom levels
 and post-process choices, and repeated PNG processing. Replacing SceneCapture with a custom renderer
 is not required to investigate a faster default.
 
-Larger source captures reduce repeated rendering, but the subsequent matched three-level comparison
-on a complex map **failed visual quality acceptance**. One 4K source did not reproduce sixteen 1K
-camera views, despite matching logical pixel density and using the same native screenshot path.
-Lossless slicing cannot recover detail or lighting that the larger view did not render. Keep source
-grouping an explicit, unqualified caller choice; do not select it automatically from dimensions,
-memory or timings. Preserve individual captures as the fidelity baseline while profiling their cost.
-Do not lower the default warmup merely because a simple scene tolerates fewer frames.
+Larger source captures reduce repeated rendering, but the first matched three-level comparison on a
+complex map **failed visual quality acceptance**. Follow-up experiments recovered substantial detail
+by increasing the native screenshot's final-resolution run-up or controlling viewport resolution.
+Review then preferred the 128-frame native result for the overview use case, with 32 native frames
+also acceptable. This qualifies those specific images for that use case, not pixel equivalence or
+an automatic strategy for arbitrary worlds. Lossless slicing cannot recover detail that was never
+rendered. Keep source grouping explicit, and qualify resolution and settling together before adopting
+it. Do not lower the default warmup merely because a simple scene tolerates fewer frames.
 
 This investigation adds a repeatable headless benchmark and local source-block comparisons. It does
 not change existing capture defaults or claim that the adopter's reported hour-long run was reproduced.
@@ -312,9 +313,93 @@ than the final 4K dummy viewport. No renderer setting was changed to claim a fix
 equivalence was established. Further experiments must pass image review before timing is used to
 recommend adoption.
 
+## Controlled follow-up: resolution, settling and delivery
+
+The next investigation varied settings separately in an owned hidden editor on the same complex
+map, inspecting original PNGs rather than treating crop checks or pixel-error scores as visual
+acceptance. Four selected 1K regions provided mountain, buildings, foliage and road references;
+repeated references measured rendering-history variation. The investigation captured 87 timed
+sources plus nine shared seed captures across the batches. No five-level run was performed.
+
+A private viewport probe measured the ordinary editor viewport at **492×157**. Native screenshot
+size does not resize that viewport during the preceding settling phase. When the probe set the
+viewport to 4128×4128, the editor's automatic screen-percentage heuristic selected a primary
+resolution fraction of **0.393642**. This corresponds to roughly 1625 input pixels per axis before
+upscaling, although the exact aligned render rectangle was not instrumented. Requesting a 4K PNG
+therefore does not establish that either the outer warmup or its image formation used 4K input
+pixels. The editor deliberately ignores `r.ScreenPercentage`; its viewport-specific settings apply.
+
+The source-defined mechanism is in `Editor/UnrealEd/Private/EditorViewportClient.cpp` and
+`Runtime/Engine/Private/LegacyScreenPercentageDriver.cpp`. A private probe compiled and exercised
+viewport sizing/restoration on installed **UE 5.7.4** and **UE 5.8.3**, with normal editor exit on
+both. Both selected the same 0.393642 fraction at 4128 square with the inspected settings. The
+complex-map experiments use **UE 5.8.2**. Its probe was linked against the existing engine libraries
+after the normal build guard rejected recompiling engine dependencies; no engine binary or map
+asset was changed. The probe is local diagnostic code, not a shipped integration.
+
+In the first controlled run, changing only `r.HighResScreenshotDelay` from four to 32 and 128
+recovered roads, rocks and building structure. Returning to four frames reproduced the blurred
+result. Native source/artifact capture took 6.543 s at 32 and 8.190 s at 128, compared with
+6.321 s for the first four-frame source. These figures exclude common setup and subsequent leaf
+crop processing. Later cases reached 14–16 s after larger render resources had been exercised;
+the change in timing was not isolated, so the initial figures are not stable production guarantees.
+
+Forcing 100% editor rendering also recovered detail. Warming the ordinary viewport at 4128 square
+before the screenshot produced readable detail at the native four-frame default; its measured
+source capture was 6.982 s, rising to 13.161 s with 100% rendering. Increasing the shadow pool to
+8192 pages or changing orthographic shadow-level selection alone did not recover the original blur.
+Those shadow settings may still affect lighting; these tests do not establish that they are irrelevant.
+Manually replacing camera clip-plane behavior produced an unusable image and was rejected.
+
+The reviewer's preferred overview was the **128 native-frame** result; the **32 native-frame** result
+was also acceptable for this cartographic use case. Lighting and fine noise still differ from the
+individual-camera reference. This revises the recommendation for that particular overview without
+withdrawing the failure of the original default four-frame shortcut. A final trial retained 128
+native frames while reducing outer settling to 16: two complete source/artifact captures took
+5.467 s and 6.202 s. Inspection retained readable roads and buildings; this shorter outer policy
+needs broader content and startup qualification before becoming a default.
+
+An independent 1K settling sweep retained the native four-frame screenshot default and measured
+eight selected-region captures per setting:
+
+| Outer settling frames | Mean source/artifact capture |
+| --------------------- | ---------------------------: |
+| 128                   |                      3.985 s |
+| 64                    |                      2.078 s |
+| 32                    |                      1.096 s |
+| 16                    |                      0.629 s |
+
+Road/building structure was retained at 32, while 16 showed more noise. This is a useful alternate
+performance lead that preserves individual camera footprints. It is not a pixel-equivalence claim:
+reference repeats and cross-session comparisons have visible lighting-history variation.
+
+Delivery tests used the preferred 128-frame source, lossless 1K crops, and five parents derived in
+linear light through the public pixel helpers. Every zoom was derived before any lossy encoding.
+The source's 4096 logical pixels become a 2048-square middle level and 1024-square root, delivered
+as individual 1024-square tile files. WebP quality 90 throughout is the initial delivery baseline;
+lower per-zoom quality is an optional additional bandwidth tradeoff rather than a substitute for
+downsampling.
+
+| Zoom | Tiles | Q90 mean tile | Q90 complete zoom | Optional lower quality | Mean tile at lower quality |
+| ---- | ----: | ------------: | ----------------: | ---------------------: | -------------------------: |
+| Root |     1 |       273 KiB |           273 KiB |                     50 |                     98 KiB |
+| Mid  |     4 |       234 KiB |           938 KiB |                     70 |                     97 KiB |
+| Leaf |    16 |       242 KiB |          3864 KiB |                     85 |                    178 KiB |
+
+These are content-specific measured sizes, not codec size guarantees. All zooms at Q90 total about
+4.96 MiB; the viewer only requests visible 1K tiles. Original PNG comparison, selectable zoom/quality,
+mobile layout and an offline single-HTML artifact passed browser checks. The complex-map capture
+sessions restored native ownership and console values, source map and plan hashes stayed unchanged,
+and owned editors were stopped. Evidence remains under ignored `out/map-capture-diagnosis-2026-10-13/`.
+
+The native screenshot run-up and viewport resolution were controlled by the private diagnostic
+harness, not new public `CameraRenderPolicy` fields. Caller-selected source geometry and CPU image
+operations are the implemented API surface. A production adopter must separately qualify and own
+the rendering controls; the planner's dimension/memory checks do not select them or certify quality.
+
 ## Implementation recommendation
 
-The caller-managed primitives now ship in `@ue-shed/cameras`; see the
+The caller-managed primitives are exposed in `@ue-shed/cameras`; see the
 [map tile source contract](../products/map-tile-sources.md). Source planning accepts individual
 tiles or explicit blocks at a caller-selected zoom, validates dimension/decoded-memory budgets,
 and returns exact cameras and crop rectangles. Lossless crop and linear-light parent reduction
