@@ -293,9 +293,11 @@ try {
 	const cold = await timed("cold", () => refresh(coldScope));
 	log(`cold: ${cold.packages.readPackages} packages read, join rebuilt=${cold.join.rebuilt}`);
 	await searches("cold", cold);
-	// Some hosts spread the retained corpus, which materialises every unit on this thread.
+	// Hosts that keep a plain corpus copy materialise every unit; this is the Workbench path.
 	if (values["corpus-units"])
-		await timed("host:corpus-units", async () => cold.corpus.units.length);
+		await timed("host:corpus-units", () =>
+			run(gameText.materializeTextCorpus(cold.corpus).pipe(Effect.map((c) => c.units.length)))
+		);
 	await timed("cold:release", () => run(Scope.close(coldScope, Exit.void)));
 	if (values.warm) {
 		const warmScope = await run(Scope.make());
