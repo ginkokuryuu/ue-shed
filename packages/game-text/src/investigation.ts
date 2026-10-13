@@ -46,18 +46,21 @@ export const GameTextInvestigationQuery = Schema.Struct({
 );
 export type GameTextInvestigationQuery = Schema.Schema.Type<typeof GameTextInvestigationQuery>;
 export const GameTextInvestigationPreset = Schema.Struct({
-	schemaVersion: Schema.Literal(1),
+	schemaVersion: Schema.Literals([1, 2]),
 	kind: Schema.Literal("game_text"),
 	sort: Schema.Literal("domain_order"),
 	query: GameTextInvestigationQuery,
 	rules: Schema.optionalKey(GameTextRuleDocument)
 }).check(
-	Schema.makeFilter(
-		(preset) =>
-			preset.query.mode !== "quality" ||
+	Schema.makeFilter((preset) => {
+		if (preset.schemaVersion === 1 && preset.query.workspaceFilter !== undefined)
+			return "Localization quality presets require schemaVersion 2.";
+		return preset.query.mode !== "quality" ||
 			preset.rules !== undefined ||
 			preset.query.workspaceFilter !== undefined
-	)
+			? undefined
+			: "Source quality presets require a rule document.";
+	})
 );
 export type GameTextInvestigationPreset = Schema.Schema.Type<typeof GameTextInvestigationPreset>;
 export const GameTextInvestigationPresetResult = Schema.Union([
@@ -73,7 +76,7 @@ export type GameTextInvestigationPresetResult = Schema.Schema.Type<
 	typeof GameTextInvestigationPresetResult
 >;
 export const GameTextInvestigationExport = Schema.Struct({
-	schemaVersion: Schema.Literal(1),
+	schemaVersion: GameTextInvestigationPreset.fields.schemaVersion,
 	kind: Schema.Literal("game_text_export"),
 	source: InvestigationSource,
 	preset: GameTextInvestigationPreset,
@@ -86,7 +89,15 @@ export const GameTextInvestigationExport = Schema.Struct({
 			report: WorkspaceQualityReport
 		})
 	])
-});
+}).check(
+	Schema.makeFilter((document) => {
+		if (document.schemaVersion !== document.preset.schemaVersion)
+			return "An investigation export and its preset must use the same schemaVersion.";
+		return document.schemaVersion === 1 && document.result.mode === "localization_quality"
+			? "Localization quality exports require schemaVersion 2."
+			: undefined;
+	})
+);
 export type GameTextInvestigationExport = Schema.Schema.Type<typeof GameTextInvestigationExport>;
 
 /**
@@ -121,6 +132,13 @@ export function exportGameTextInvestigation(
 		});
 	});
 	return Effect.gen(function* () {
+		if (preset.schemaVersion === 1 && preset.query.workspaceFilter !== undefined)
+			return yield* Effect.fail(
+				new InvestigationError({
+					message: "Localization quality presets require schemaVersion 2.",
+					recovery: "Save this localization quality selection as a version-2 preset."
+				})
+			);
 		if (
 			preset.query.mode === "quality" &&
 			preset.rules === undefined &&
@@ -166,13 +184,15 @@ export function exportGameTextInvestigation(
 						)
 					);
 		return {
-			schemaVersion: 1,
+			schemaVersion: preset.schemaVersion,
 			kind: "game_text_export",
 			source,
 			preset,
 			coverageScope: "whole_scan",
 			result:
-				preset.query.mode === "quality" && workspace
+				preset.query.mode === "quality" &&
+				preset.query.workspaceFilter !== undefined &&
+				workspace
 					? { mode: "localization_quality", report: workspace }
 					: preset.query.mode === "quality" && rules !== undefined
 						? {

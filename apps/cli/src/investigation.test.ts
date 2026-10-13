@@ -113,7 +113,7 @@ describe.skipIf(!process.env.UE_SHED_UASSET_EXECUTABLE)("localization quality pr
 			return output;
 		};
 		const preset = {
-			schemaVersion: 1,
+			schemaVersion: 2,
 			kind: "game_text",
 			sort: "domain_order",
 			query: {
@@ -131,6 +131,8 @@ describe.skipIf(!process.env.UE_SHED_UASSET_EXECUTABLE)("localization quality pr
 		await writeFile(presetPath, JSON.stringify(preset));
 		const args = ["investigations", "run", fixture.root, "--preset", presetPath];
 		const before = JSON.parse(await run(args));
+		expect(before.schemaVersion).toBe(2);
+		expect(before.preset.schemaVersion).toBe(2);
 		expect(before.result).toMatchObject({
 			mode: "localization_quality",
 			report: { target: "FixtureGame", culture: "de", filter: "format_arguments" }

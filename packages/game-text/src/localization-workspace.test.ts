@@ -206,7 +206,7 @@ it("exports and replays the exact localization quality filter and culture with c
 	expect(csv.split("\r\n")[0]).toContain('"Finding ID","Scan status"');
 	expect(csv.endsWith("\r\n")).toBe(true);
 	const input = {
-		schemaVersion: 1,
+		schemaVersion: 2,
 		kind: "game_text",
 		sort: "domain_order",
 		query: {
@@ -227,6 +227,7 @@ it("exports and replays the exact localization quality filter and culture with c
 	const exported = await Effect.runPromise(
 		exportGameTextInvestigation(fixture.text, preset, source, undefined, report)
 	);
+	expect(exported.schemaVersion).toBe(2);
 	expect(exported.result).toEqual({ mode: "localization_quality", report });
 	expect(Schema.decodeUnknownSync(GameTextInvestigationExport)(exported)).toEqual(exported);
 	expect(gameTextInvestigationCsv(exported)).toContain("finding_id");
