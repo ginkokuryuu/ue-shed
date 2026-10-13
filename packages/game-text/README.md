@@ -101,6 +101,9 @@ its `retain` effect together, then borrow it in each operation that reads lazy p
 Active borrowers keep the previous reader and worker alive through replacement. Rejected
 preparations leave the published model usable. See `ADOPTING.md` for the ownership contract.
 The raw indexed corpus includes empty-source units; searchable exports keep their visibility rules.
+Its `units` decode on first access, synchronously. A host that keeps a plain copy after releasing
+the model should read `materializeTextCorpus(model.corpus)` while the model is borrowed; it
+decodes units in bounded slices instead of blocking the event loop like a spread would.
 
 Validated target handles and opened models may supply `queryRevision`. Treat it as opaque and
 compare it only within the same project, cache and backend after validating current target inputs.

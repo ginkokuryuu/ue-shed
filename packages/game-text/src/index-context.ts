@@ -18,6 +18,7 @@ import type { JoinedTargetReader } from "./joined-target-reader.js";
 import { JoinedQueryData } from "./joined-query-data.js";
 import { decodeLocalizationSnapshot } from "./localization-columns.js";
 import { runJoinedQuery } from "./joined-query-node.js";
+import { HostSliceClock, runHostSteps, runHostStepsSync, type HostSteps } from "./host-slices.js";
 import {
 	localizationEvidenceFileStatuses,
 	type LocalizationStatusReport
@@ -42,6 +43,9 @@ export function indexedLocalizationStatusReport(
 	};
 }
 
+/** Units of indexed corpora, decoded as host steps for `materializeTextCorpus`. */
+const indexedUnits = new WeakMap<TextCorpus, () => HostSteps<TextCorpus["units"]>>();
+
 /** Legacy report inputs are projections of a pinned index; bulk fields decode on explicit access. */
 export function indexedTextCorpus(joined: JoinedTargetReader, query: TextCorpusQuery): TextCorpus {
 	const data = new JoinedQueryData(joined),
@@ -49,14 +53,21 @@ export function indexedTextCorpus(joined: JoinedTargetReader, query: TextCorpusQ
 	let metadata: ReturnType<JoinedQueryData["exportMetadata"]> | undefined;
 	let units: TextCorpus["units"] | undefined;
 	const readMetadata = () => (metadata ??= data.exportMetadata());
-	return {
+	function* decodeUnits(clock: HostSliceClock): HostSteps<TextCorpus["units"]> {
+		if (units) return units;
+		const values: TextCorpus["units"][number][] = [];
+		for (const row of data.column("query.raw.order")) {
+			values.push(data.unit("raw", row));
+			if (clock.step()) yield;
+		}
+		return (units ??= values);
+	}
+	const corpus: TextCorpus = {
 		schemaVersion: 1,
 		status: summary.status,
 		coverage: summary.coverage,
 		get units() {
-			return (units ??= Array.from(data.column("query.raw.order"), (row) =>
-				data.unit("raw", row)
-			));
+			return runHostStepsSync(decodeUnits(new HostSliceClock(Infinity)));
 		},
 		get diagnostics() {
 			return readMetadata().diagnostics;
@@ -65,7 +76,30 @@ export function indexedTextCorpus(joined: JoinedTargetReader, query: TextCorpusQ
 			return readMetadata().packageCoverage ?? [];
 		}
 	};
+	// Units cost tens of microseconds each, so a slice checks time every 64 units.
+	indexedUnits.set(corpus, () => decodeUnits(new HostSliceClock(16, 64)));
+	return corpus;
 }
+
+/** A plain copy of a corpus for hosts that keep it after its index is released. Units of an
+ * indexed corpus decode in bounded host slices; read it while the index is still pinned.
+ */
+export const materializeTextCorpus = Effect.fn("GameTextIndex.materializeCorpus")(function* (
+	corpus: TextCorpus
+) {
+	const steps = indexedUnits.get(corpus);
+	const units = steps ? yield* runHostSteps(steps()) : corpus.units;
+	return {
+		schemaVersion: corpus.schemaVersion,
+		status: corpus.status,
+		coverage: corpus.coverage,
+		units,
+		diagnostics: corpus.diagnostics,
+		...(corpus.packageCoverage === undefined
+			? undefined
+			: { packageCoverage: corpus.packageCoverage })
+	} satisfies TextCorpus;
+});
 
 export function indexedLocalizationJoin(
 	joined: JoinedTargetReader,

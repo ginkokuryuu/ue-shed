@@ -5,6 +5,7 @@ import { Effect } from "effect";
 import { expect } from "vitest";
 import { LocalizationEvidence } from "@ue-shed/localization";
 import { GameTextIndexRefresh } from "./index-refresh.js";
+import { materializeTextCorpus } from "./index-context.js";
 import { makeIndexRegressionFixture } from "./index-refresh-regressions.test-support.js";
 import { joinLocalizationTarget } from "./localization.js";
 import { textCorpusQuery } from "./query.js";
@@ -193,11 +194,14 @@ it.live("raw corpus retains invisible units and empty-source String Table eviden
 				}
 			}
 		]);
-		const indexed = yield* Effect.gen(function* () {
-			return yield* (yield* GameTextIndexRefresh).refresh({
+		const [indexed, materialized] = yield* Effect.gen(function* () {
+			const result = yield* (yield* GameTextIndexRefresh).refresh({
 				projectRoot: fixture.projectRoot
 			});
+			return [result, yield* materializeTextCorpus(result.corpus)] as const;
 		}).pipe(Effect.provide(fixture.layer()));
+		expect(materialized).toEqual(fixture.raw());
+		expect(materialized).toEqual({ ...indexed.corpus });
 		expect(indexed.corpus).toEqual(fixture.raw());
 		expect(indexed.corpus.units).toHaveLength(4);
 		expect(indexed.corpus.coverage.textOccurrences).toBe(4);

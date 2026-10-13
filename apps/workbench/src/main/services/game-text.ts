@@ -30,6 +30,7 @@ import {
 	evaluateGameTextSourceQuality,
 	textQualityQuery,
 	makeRetainedGameTextIndexWith,
+	materializeTextCorpus,
 	GameTextIndexSteps,
 	GameTextIndexProgressReporter,
 	type GameTextIndexProgress,
@@ -270,7 +271,8 @@ export const WorkbenchGameTextLive = Layer.effect(
 		});
 		const scanCorpus = (projectRoot: string, _index: SavedAssetScan) =>
 			refreshIndex.refresh({ projectRoot }).pipe(
-				Effect.map((result) => ({ ...result.corpus })),
+				// The plain copy outlives this scope; its units decode in bounded host slices.
+				Effect.flatMap((result) => materializeTextCorpus(result.corpus)),
 				Effect.scoped
 			);
 
