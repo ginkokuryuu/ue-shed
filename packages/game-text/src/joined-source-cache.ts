@@ -1,11 +1,15 @@
 import { Effect, Schema } from "effect";
-import { constants, zstdCompressSync, zstdDecompressSync } from "node:zlib";
+import { promisify } from "node:util";
+import { constants, zstdCompress, zstdDecompressSync } from "node:zlib";
 import { encodeWtf8 } from "./wtf8.js";
 import { snapshotCheck } from "./snapshot-format.js";
 import { snapshotNodeChecksum, type SnapshotSourceColumn } from "./snapshot-file.js";
 import type { SharedIndexWriter } from "./shared-index.js";
 import type { JoinStrings } from "./joined-target-input.js";
 import { validatePackedStrings, type PackedStrings } from "./shared-string-codec.js";
+import { HostSliceClock } from "./host-slices.js";
+
+const zstdCompressAsync = promisify(zstdCompress);
 
 const maximumSourceCacheBytes = 96 * 1024 ** 2;
 const sourceTrigramBytes = 128 ** 3 / 8;
@@ -56,6 +60,7 @@ export const prepareJoinedSourceCache = Effect.fn("JoinedTarget.sourceCache")(fu
 	columns: readonly Uint32Array[],
 	options: { readonly minimumEntries?: number; readonly maximumBytes?: number } = {}
 ) {
+	const clock = new HostSliceClock();
 	let maximum = -1;
 	for (const values of columns) for (const id of values) if (id > maximum) maximum = id;
 	const selected = new Uint8Array(maximum + 1);
@@ -79,6 +84,7 @@ export const prepareJoinedSourceCache = Effect.fn("JoinedTarget.sourceCache")(fu
 			(id) => id >= publishedCount
 		);
 		if (!fresh.length) continue;
+		if (clock.expired()) yield* Effect.yieldNow;
 		const values = yield* writer.strings(fresh);
 		for (let index = 0; index < fresh.length; index++)
 			appended.set(fresh[index]!, encodeWtf8(values[index]!));
@@ -94,6 +100,7 @@ export const prepareJoinedSourceCache = Effect.fn("JoinedTarget.sourceCache")(fu
 		length += bytesAt(ids[index]!).length;
 		if (length + ids.byteLength + starts.byteLength + sourceTrigramBytes + count > bound)
 			return undefined;
+		if (clock.step()) yield* Effect.yieldNow;
 	}
 	starts[count] = length;
 	const bytes = new Uint8Array(length),
@@ -106,10 +113,12 @@ export const prepareJoinedSourceCache = Effect.fn("JoinedTarget.sourceCache")(fu
 			simple[index] = 1;
 			addSourceTrigrams(trigrams, value);
 		}
+		if (clock.step()) yield* Effect.yieldNow;
 	}
-	const compressed = zstdCompressSync(bytes, {
-		params: { [constants.ZSTD_c_compressionLevel]: 1 }
-	});
+	// The libuv thread pool compresses; the bytes equal the synchronous codec's output.
+	const compressed = yield* Effect.promise(() =>
+		zstdCompressAsync(bytes, { params: { [constants.ZSTD_c_compressionLevel]: 1 } })
+	);
 	const data = compressed.length < bytes.length ? compressed : bytes,
 		codec: 0 | 1 = data === bytes ? 0 : 1;
 	const storedBound =

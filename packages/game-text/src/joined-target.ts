@@ -32,7 +32,8 @@ import { joinedQueryColumns } from "./joined-query-columns.js";
 import { joinedQueryPlaces } from "./joined-query-places.js";
 import { prepareJoinedSourceCache } from "./joined-source-cache.js";
 import { joinedPhysicalChunkName } from "./joined-column-chunks.js";
-import { StringArena, sortPackedStringsByLocale } from "./shared-string-codec.js";
+import { StringArena, sortPackedStringsByLocaleSteps } from "./shared-string-codec.js";
+import { HostSliceClock, runHostSteps, sortRowsInSlices } from "./host-slices.js";
 
 const noteMetadata = Schema.decodeUnknownOption(
 	Schema.fromJsonString(
@@ -150,6 +151,8 @@ export const refreshJoinedTarget = Effect.fn("JoinedTarget.refresh")(function* (
 		);
 		if (incremental) return incremental;
 	}
+	// A full join runs on the host thread in bounded slices.
+	const clock = new HostSliceClock();
 	const empty = (yield* writer.intern("identity", [""]))[0]!;
 	const strings = new JoinStrings(reader, empty);
 	const manifest = yield* loadJoinFile(reader, paths[0]!, input.fileErrors?.[paths[0]!]);
@@ -176,12 +179,14 @@ export const refreshJoinedTarget = Effect.fn("JoinedTarget.refresh")(function* (
 		occurrenceCount = c.source.length;
 	// The native projection emits sorted package paths and preserves traversal order
 	// within each package. Shared IDs and shard rows do not encode that order.
-	const pathOrder = Uint32Array.from(packages.paths, (_, row) => row);
-	pathOrder.sort((a, b) =>
-		comparePackageTextPathBytes(
-			strings.bytes(packages.paths[a]!),
-			strings.bytes(packages.paths[b]!)
-		)
+	const pathOrder = yield* sortRowsInSlices(
+		Uint32Array.from(packages.paths, (_, row) => row),
+		(a, b) =>
+			comparePackageTextPathBytes(
+				strings.bytes(packages.paths[a]!),
+				strings.bytes(packages.paths[b]!)
+			),
+		clock
 	);
 	const pathRank = new Uint32Array(pathOrder.length);
 	for (let rank = 0; rank < pathOrder.length; rank++) pathRank[pathOrder[rank]!] = rank;
@@ -219,6 +224,7 @@ export const refreshJoinedTarget = Effect.fn("JoinedTarget.refresh")(function* (
 		const values = yield* reader.strings(ids);
 		const gathered = yield* writer.intern("identity", values.map(stripPackageNamespace));
 		for (let row = 0; row < ids.length; row++) normalized[ids[row]!] = gathered[row]!;
+		if (clock.expired()) yield* Effect.yieldNow;
 	}
 	let tableCount = 0;
 	for (let row = 0; row < occurrenceCount; row++)
@@ -310,16 +316,22 @@ export const refreshJoinedTarget = Effect.fn("JoinedTarget.refresh")(function* (
 					? 0
 					: packages.packageRow[a]! - packages.packageRow[b]!)
 			: 0);
-	const order = Uint32Array.from({ length: occurrenceCount }, (_, row) => row);
-	order.sort((a, b) => compareOccurrence(a, b) || emissionOrder(a, b));
+	const order = yield* sortRowsInSlices(
+		Uint32Array.from({ length: occurrenceCount }, (_, row) => row),
+		(a, b) => compareOccurrence(a, b) || emissionOrder(a, b),
+		clock
+	);
 	// Raw membership preserves saved identity. Query facts below use only this line's slice.
-	const rawOrder = Uint32Array.from(order);
 	const rawCompare = (a: number, b: number) =>
 		compareUnit(c, a, b, empty) ||
 		(c.identity[a]! < 2 && c.key[a] !== empty
 			? 0
 			: packages.packageRow[a]! - packages.packageRow[b]!);
-	rawOrder.sort((a, b) => rawCompare(a, b) || emissionOrder(a, b));
+	const rawOrder = yield* sortRowsInSlices(
+		Uint32Array.from(order),
+		(a, b) => rawCompare(a, b) || emissionOrder(a, b),
+		clock
+	);
 	const unit = new Uint32Array(occurrenceCount),
 		next = new Uint32Array(occurrenceCount).fill(absent);
 	const visibleOccurrence = new Uint8Array(occurrenceCount);
@@ -333,6 +345,7 @@ export const refreshJoinedTarget = Effect.fn("JoinedTarget.refresh")(function* (
 			if (i + 1 < end) next[occurrence] = rawOrder[i + 1]!;
 		}
 		start = end;
+		if (clock.step()) yield* Effect.yieldNow;
 	}
 	const m = manifest.columns,
 		mo = manifest.order;
@@ -371,7 +384,10 @@ export const refreshJoinedTarget = Effect.fn("JoinedTarget.refresh")(function* (
 		}
 	}
 	let count = 0;
-	for (const _group of groups()) count++;
+	for (const _group of groups()) {
+		count++;
+		if (clock.step()) yield* Effect.yieldNow;
+	}
 	const line = Object.fromEntries(
 		[
 			"namespace",
@@ -463,7 +479,7 @@ export const refreshJoinedTarget = Effect.fn("JoinedTarget.refresh")(function* (
 		pendingFiles.length = 0;
 	});
 	let previousFolderPackage = absent;
-	for (const row of packages.packageRow)
+	for (const row of packages.packageRow) {
 		if (row !== previousFolderPackage) {
 			previousFolderPackage = row;
 			const label = textFileLabel(packagePath(packages, row));
@@ -471,6 +487,8 @@ export const refreshJoinedTarget = Effect.fn("JoinedTarget.refresh")(function* (
 			pendingFiles.push({ row, value: label });
 			if (pendingFiles.length === 8192) yield* flushFiles();
 		}
+		if (clock.step()) yield* Effect.yieldNow;
+	}
 	if (pendingFiles.length) yield* flushFiles();
 	const pendingSources: { row: number; value: string }[] = [];
 	const flushSources = Effect.fn("JoinedTarget.sources")(function* () {
@@ -495,7 +513,7 @@ export const refreshJoinedTarget = Effect.fn("JoinedTarget.refresh")(function* (
 		for (let i = 0; i < ids.length; i++) manifestFiles[pendingEvidenceFiles[i]!.row] = ids[i]!;
 		pendingEvidenceFiles.length = 0;
 	});
-	for (const group of groups())
+	for (const group of groups()) {
 		if (group.os === group.oe) {
 			for (let i = group.ms; i < group.me; i++) {
 				const row = mo[i]!;
@@ -503,6 +521,8 @@ export const refreshJoinedTarget = Effect.fn("JoinedTarget.refresh")(function* (
 				if (pendingEvidenceFiles.length === 8192) yield* flushEvidenceFiles();
 			}
 		}
+		if (clock.step()) yield* Effect.yieldNow;
+	}
 	if (pendingEvidenceFiles.length) yield* flushEvidenceFiles();
 	const statusReason = (status: number | undefined) =>
 		reasonBit(
@@ -845,11 +865,13 @@ export const refreshJoinedTarget = Effect.fn("JoinedTarget.refresh")(function* (
 			marks.po![row] = p.row === absent ? 0 : p.row + 1;
 		}
 		row++;
+		if (clock.step()) yield* Effect.yieldNow;
 	}
 	yield* flushSources();
 	const sourceFirst = new Uint32Array(maximumId).fill(absent);
 	const unitFirstLine = new Uint32Array(occurrenceCount).fill(absent);
-	for (let row = 0; row < count; row++)
+	for (let row = 0; row < count; row++) {
+		if (clock.step()) yield* Effect.yieldNow;
 		for (let i = line.occ_start![row]!; i < line.occ_end![row]!; i++) {
 			const occurrence = order[i]!;
 			const representative = unit[occurrence]!;
@@ -871,28 +893,33 @@ export const refreshJoinedTarget = Effect.fn("JoinedTarget.refresh")(function* (
 						line.problems![previous]! |= 32;
 			}
 		}
+	}
 	const folderIds = new Uint32Array(folderValues.length);
-	for (let start = 0; start < folderValues.length; start += 8192)
+	for (let start = 0; start < folderValues.length; start += 8192) {
 		folderIds.set(
 			yield* writer.intern("paths", folderValues.slice(start, start + 8192)),
 			start
 		);
+		if (clock.expired()) yield* Effect.yieldNow;
+	}
 	const folderColumn = Uint32Array.from(
 		folderRows.subarray(0, folderCount),
 		(id) => folderIds[id]!
 	);
 	const marks = yield* finishJoinedTarget(input, columns, reader, writer);
 	yield* strings.need([c.namespace, c.key]);
-	const queryColumns = joinedQueryColumns({
-		packages,
-		line,
-		order,
-		rawOrder,
-		representative: unit,
-		next,
-		packageFiles,
-		empty
-	});
+	const queryColumns = yield* runHostSteps(
+		joinedQueryColumns({
+			packages,
+			line,
+			order,
+			rawOrder,
+			representative: unit,
+			next,
+			packageFiles,
+			empty
+		})
+	);
 	const lineIds = new StringArena(256 * 1024, count);
 	const rawIdStarts = queryColumns["query.raw.id_starts"]!;
 	const rawIdValues = queryColumns["query.raw.id_utf8"]!;
@@ -901,8 +928,9 @@ export const refreshJoinedTarget = Effect.fn("JoinedTarget.refresh")(function* (
 		rawIdValues.byteOffset,
 		rawIdValues.byteLength
 	);
-	for (let start = 0; start < count; start += 8192) {
-		const end = Math.min(count, start + 8192);
+	for (let start = 0; start < count; start += 2048) {
+		if (clock.expired()) yield* Effect.yieldNow;
+		const end = Math.min(count, start + 2048);
 		const namespaces = yield* writer.strings(Array.from(line.namespace!.subarray(start, end)));
 		const keys = yield* writer.strings(Array.from(line.key!.subarray(start, end)));
 		for (let row = start; row < end; row++) {
@@ -926,7 +954,10 @@ export const refreshJoinedTarget = Effect.fn("JoinedTarget.refresh")(function* (
 	new Uint8Array(lineIdValues.buffer).set(packedLineIds.bytes);
 	queryColumns["query.line.id_utf8"] = lineIdValues;
 	queryColumns["query.line.id_starts"] = Uint32Array.from(packedLineIds.offsets);
-	queryColumns["query.line.order"] = sortPackedStringsByLocale(packedLineIds);
+	// Smaller runs keep each locale-sorted run inside one slice; the stable merge is unchanged.
+	queryColumns["query.line.order"] = yield* runHostSteps(
+		sortPackedStringsByLocaleSteps(packedLineIds, undefined, 1024, clock)
+	);
 	// The emission order above already sorts package rows by path bytes.
 	queryColumns["query.package.order"] = Uint32Array.from(pathOrder);
 	const sourceColumns: SnapshotSourceColumn[] = [];
@@ -978,7 +1009,8 @@ export const refreshJoinedTarget = Effect.fn("JoinedTarget.refresh")(function* (
 			load: async () => values
 		});
 	}
-	for (const [name, values] of Object.entries(line))
+	// Column checksums run one column per step.
+	for (const [name, values] of Object.entries(line)) {
 		add(
 			`line.${name}`,
 			values,
@@ -988,9 +1020,15 @@ export const refreshJoinedTarget = Effect.fn("JoinedTarget.refresh")(function* (
 					? "source"
 					: undefined
 		);
+		if (clock.expired()) yield* Effect.yieldNow;
+	}
 	for (let ci = 0; ci < culture.length; ci++)
-		for (const [name, values] of Object.entries(culture[ci]!)) add(`c${ci}.${name}`, values);
-	for (const [name, values] of Object.entries(queryColumns))
+		for (const [name, values] of Object.entries(culture[ci]!)) {
+			add(`c${ci}.${name}`, values);
+			if (clock.expired()) yield* Effect.yieldNow;
+		}
+	for (const [name, values] of Object.entries(queryColumns)) {
+		if (clock.expired()) yield* Effect.yieldNow;
 		add(
 			name,
 			values,
@@ -1009,6 +1047,7 @@ export const refreshJoinedTarget = Effect.fn("JoinedTarget.refresh")(function* (
 							? "identity"
 							: undefined
 		);
+	}
 	add("occurrence.rows", order);
 	add("manifest.rows", mo);
 	add("facet.folders", folderColumn, "paths");

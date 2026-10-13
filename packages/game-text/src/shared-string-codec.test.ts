@@ -8,8 +8,26 @@ import {
 	stringBytes,
 	packedStringReader,
 	sortPackedStringsByLocale,
+	sortPackedStringsByLocaleSteps,
 	validatePackedStrings
 } from "./shared-string-codec.js";
+import { HostSliceClock, runHostStepsSync } from "./host-slices.js";
+
+it("orders locale ties the same for every run size and slice budget", () => {
+	const words = ["á", "á", "A", "a", "b", "B", "é", "é", ""];
+	const values = Array.from({ length: 5000 }, (_, row) => words[(row * 7919) % words.length]!);
+	const packed = packedStrings(values);
+	const expected = Array.from(sortPackedStringsByLocale(packed));
+	for (const runSize of [1, 3, 64, 1024]) {
+		const steps = sortPackedStringsByLocaleSteps(
+			packed,
+			undefined,
+			runSize,
+			new HostSliceClock(0, 1)
+		);
+		expect(Array.from(runHostStepsSync(steps))).toEqual(expected);
+	}
+});
 import { SnapshotFormatError } from "./snapshot-format.js";
 
 describe("A64 byte dictionary", () => {

@@ -3,12 +3,15 @@ import { absent, unitId, type JoinPackages } from "./joined-target-input.js";
 import {
 	StringArena,
 	packedStringReader,
-	sortPackedStringsByLocale
+	sortPackedStringsByLocaleSteps
 } from "./shared-string-codec.js";
 import { snapshotCheck } from "./snapshot-format.js";
+import { HostSliceClock, type HostSteps } from "./host-slices.js";
 
-/** Numeric query entries retain raw-unit predicates and each gathered occurrence slice. */
-export function joinedQueryColumns(input: {
+/** Numeric query entries retain raw-unit predicates and each gathered occurrence slice.
+ * Host steps yield between bounded slices; `runHostSteps` drives them from an Effect.
+ */
+export function* joinedQueryColumns(input: {
 	readonly packages: JoinPackages;
 	readonly line: Record<string, Uint32Array>;
 	readonly order: Uint32Array;
@@ -17,8 +20,9 @@ export function joinedQueryColumns(input: {
 	readonly next: Uint32Array;
 	readonly packageFiles: Uint32Array;
 	readonly empty: number;
-}) {
+}): HostSteps<Record<string, Uint32Array>> {
 	const { packages, line, order, rawOrder, representative, next, packageFiles, empty } = input;
+	const clock = new HostSliceClock();
 	const c = packages.occurrence,
 		strings = packages.strings;
 	const occurrenceLine = new Uint32Array(order.length);
@@ -39,6 +43,7 @@ export function joinedQueryColumns(input: {
 		}
 		groupFlags[row] =
 			(line.occ_end![row]! - line.occ_start![row]! > 1 ? 1 : 0) | (sources.size > 1 ? 16 : 0);
+		if (clock.step()) yield;
 	}
 	let rawCount = 0;
 	for (const member of rawOrder) if (representative[member] === member) rawCount++;
@@ -58,6 +63,7 @@ export function joinedQueryColumns(input: {
 		for (let position = line.occ_start![row]!; position < line.occ_end![row]!; position++)
 			units.add(representative[order[position]!]!);
 		sliceCount += units.size;
+		if (clock.step()) yield;
 	}
 	lineStarts[line.source!.length] = sliceCount;
 	const fields = [
@@ -115,7 +121,10 @@ export function joinedQueryColumns(input: {
 			strings.string(c.namespace[member]!),
 			strings.string(c.key[member]!)
 		);
-	for (const member of rawRepresentatives) ids.add(Buffer.from(encodeWtf8(unitName(member))));
+	for (const member of rawRepresentatives) {
+		ids.add(Buffer.from(encodeWtf8(unitName(member))));
+		if (clock.step()) yield;
+	}
 	const packedIds = ids.finish();
 	const id = packedStringReader(packedIds);
 	function add(
@@ -188,16 +197,24 @@ export function joinedQueryColumns(input: {
 		columns.words![row] = words;
 		columns.visible![row] = Number(visible);
 	}
-	for (let row = 0; row < rawCount; row++)
+	for (let row = 0; row < rawCount; row++) {
 		add(raw, row, rawRepresentatives[row]!, absent, rawMembers, rawSources, rawFiles);
+		if (clock.step()) yield;
+	}
 	const rawOrderColumn = Uint32Array.from({ length: rawCount }, (_, row) => row);
 	let ordered = true;
-	for (let row = 1; row < rawCount; row++)
+	for (let row = 1; row < rawCount; row++) {
 		if (id(row - 1).localeCompare(id(row)) > 0) {
 			ordered = false;
 			break;
 		}
-	if (!ordered) rawOrderColumn.set(sortPackedStringsByLocale(packedIds, rawOrderColumn));
+		if (clock.step()) yield;
+	}
+	// Smaller runs keep each locale-sorted run inside one slice; the stable merge is unchanged.
+	if (!ordered)
+		rawOrderColumn.set(
+			yield* sortPackedStringsByLocaleSteps(packedIds, rawOrderColumn, 1024, clock)
+		);
 	let sliceRow = 0;
 	for (let row = 0; row < line.source!.length; row++) {
 		const units = new Set<number>();
@@ -210,6 +227,7 @@ export function joinedQueryColumns(input: {
 		});
 		for (const first of selected)
 			add(slice, sliceRow++, first, row, sliceMembers, sliceSources, sliceFiles);
+		if (clock.step()) yield;
 	}
 	for (const [prefix, columns, members, sources, files] of [
 		["raw", raw, rawMembers, rawSources, rawFiles],

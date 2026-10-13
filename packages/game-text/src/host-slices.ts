@@ -1,4 +1,3 @@
-import { performance } from "node:perf_hooks";
 import { Effect } from "effect";
 
 /** Host-thread work runs in short slices so a server host keeps answering while an index builds.
@@ -24,6 +23,27 @@ export class HostSliceClock {
 		if (now - this.started < this.budgetMs) return false;
 		this.started = now;
 		return true;
+	}
+}
+
+/** Synchronous step functions yield (no value) whenever their slice clock expires. */
+export type HostSteps<A> = Generator<void, A, void>;
+
+/** Runs host steps in the Effect scheduler, letting the event loop run between slices. */
+export const runHostSteps = <A>(steps: HostSteps<A>) =>
+	Effect.gen(function* () {
+		for (;;) {
+			const next = steps.next();
+			if (next.done) return next.value;
+			yield* Effect.yieldNow;
+		}
+	});
+
+/** Runs host steps to completion on the current call stack, for synchronous callers. */
+export function runHostStepsSync<A>(steps: HostSteps<A>): A {
+	for (;;) {
+		const next = steps.next();
+		if (next.done) return next.value;
 	}
 }
 

@@ -1,5 +1,6 @@
 import { decodeWtf8 } from "./wtf8.js";
 import { projectRelativePath } from "./project-relative-path.js";
+import { HostSliceClock, sortRowsInSlices } from "./host-slices.js";
 import { Effect, Schema } from "effect";
 import type { LocalizationTarget } from "@ue-shed/localization";
 import { localizationGatherCoverage } from "./localization.js";
@@ -233,6 +234,7 @@ export const loadJoinPackages = Effect.fn("JoinedTarget.packages")(function* (
 	projectRoot: string,
 	target: LocalizationTarget
 ) {
+	const clock = new HostSliceClock();
 	const names = Object.keys(reader.manifest.active)
 		.filter((name) => name.startsWith("package-text."))
 		.sort();
@@ -303,6 +305,7 @@ export const loadJoinPackages = Effect.fn("JoinedTarget.packages")(function* (
 				"Invalid occurrence range"
 			);
 			packageRow.fill(pkg, offset + start, offset + end);
+			if (clock.step()) yield* Effect.yieldNow;
 		}
 		offset += shard.columns["occurrence.source"]!.length;
 	}
@@ -323,10 +326,13 @@ export const loadJoinPackages = Effect.fn("JoinedTarget.packages")(function* (
 	let previousPackage = absent;
 	let ratings = new Map<number, number>();
 	let currentPath = "";
-	for (let row = 0; row < packageCount; row++)
+	for (let row = 0; row < packageCount; row++) {
 		hash[row] = pathHash(normalizedPackagePath(packagePath(packages, row)));
-	packages.order.sort((a, b) => hash[a]! - hash[b]! || a - b);
+		if (clock.step()) yield* Effect.yieldNow;
+	}
+	yield* sortRowsInSlices(packages.order, (a, b) => hash[a]! - hash[b]! || a - b, clock);
 	for (let row = 0; row < occurrenceCount; row++) {
+		if (clock.step()) yield* Effect.yieldNow;
 		const packageIndex = packageRow[row]!;
 		if (packageIndex !== previousPackage) {
 			previousPackage = packageIndex;

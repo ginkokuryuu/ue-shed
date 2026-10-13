@@ -16,6 +16,7 @@ import {
 } from "./localization-key-changes.js";
 import { textFileKey } from "./text-origin.js";
 import { localizationStates } from "./localization-schema.js";
+import { HostSliceClock } from "./host-slices.js";
 
 const notFound = localizationStates.indexOf("not_found");
 const notGathered = localizationStates.indexOf("not_gathered");
@@ -66,9 +67,12 @@ export const finishJoinedTarget = Effect.fn("JoinedTarget.marks")(function* (
 		(m.options![row]! & 1024 ? manifest.pathPrefix : "") + strings.string(m.path![row]!);
 	const matches = (row: number, state: number) =>
 		culture.some((marks) => marks.state![row] === state);
+	const clock = new HostSliceClock();
 	const oldRows: number[] = [];
-	for (let row = 0; row < count; row++)
+	for (let row = 0; row < count; row++) {
 		if (!isSaved(row) && isResolved(row) && matches(row, notFound)) oldRows.push(row);
+		if (clock.step()) yield* Effect.yieldNow;
+	}
 	const pairs: LocalizationKeyChangePair[] = [];
 	let ambiguous = 0;
 	const paired = new Uint8Array(count);
@@ -87,6 +91,7 @@ export const finishJoinedTarget = Effect.fn("JoinedTarget.marks")(function* (
 				const counts = wantedSources.get(line.source![row]!);
 				if (counts) counts.saved++;
 			}
+			if (clock.step()) yield* Effect.yieldNow;
 		}
 		const keys = (row: number, tier: number, loose = false): readonly string[] => {
 			const source = isSaved(row) ? line.source![row]! : manifestSource(row);
@@ -148,13 +153,16 @@ export const finishJoinedTarget = Effect.fn("JoinedTarget.marks")(function* (
 			const index = buildIndex(tier),
 				forward = new Uint32Array(count),
 				reverse = new Uint32Array(count);
-			for (let row = 0; row < count; row++)
+			for (let row = 0; row < count; row++) {
 				if (!paired[row] && isSaved(row) && isResolved(row) && matches(row, notGathered)) {
 					const older = reachable(row, tier, index);
 					for (const old of older) reverse[old]!++;
 					if (older.size === 1) forward[row] = [...older][0]! + 1;
 				}
+				if (clock.step()) yield* Effect.yieldNow;
+			}
 			for (let row = 0; row < count; row++) {
+				if (clock.step()) yield* Effect.yieldNow;
 				const old = forward[row]! - 1;
 				if (old < 0 || reverse[old] !== 1 || paired[old]) continue;
 				const sourceIds = [
@@ -196,7 +204,7 @@ export const finishJoinedTarget = Effect.fn("JoinedTarget.marks")(function* (
 			}
 		}
 		const indexes = [0, 1, 2].map((tier) => buildIndex(tier, true));
-		for (let row = 0; row < count; row++)
+		for (let row = 0; row < count; row++) {
 			if (
 				!paired[row] &&
 				isSaved(row) &&
@@ -205,6 +213,8 @@ export const finishJoinedTarget = Effect.fn("JoinedTarget.marks")(function* (
 				indexes.some((index, tier) => reachable(row, tier, index, true).size > 0)
 			)
 				ambiguous++;
+			if (clock.step()) yield* Effect.yieldNow;
+		}
 	}
 	if (input.keyChangePairs?.length) {
 		const merged = mergeLocalizationKeyChanges(pairs, input.keyChangePairs);
@@ -221,10 +231,12 @@ export const finishJoinedTarget = Effect.fn("JoinedTarget.marks")(function* (
 			changes.set(`${ids[0]}:${ids[1]}`, (index + 1) * 2);
 			changes.set(`${ids[2]}:${ids[3]}`, (index + 1) * 2 + 1);
 		}
-		for (let row = 0; row < count; row++)
+		for (let row = 0; row < count; row++) {
 			line.key_change![row] = isResolved(row)
 				? (changes.get(`${line.namespace![row]}:${line.key![row]}`) ?? 0)
 				: 0;
+			if (clock.step()) yield* Effect.yieldNow;
+		}
 	}
 	const review = input.review?.target === input.target.name ? input.review : undefined;
 	if (review) {
@@ -245,7 +257,8 @@ export const finishJoinedTarget = Effect.fn("JoinedTarget.marks")(function* (
 				cultures.set(batch[row]!.culture, start + row);
 			}
 		}
-		for (let row = 0; row < count; row++)
+		for (let row = 0; row < count; row++) {
+			if (clock.step()) yield* Effect.yieldNow;
 			if (isResolved(row)) {
 				const selected = records.get(line.namespace![row]!)?.get(line.key![row]!);
 				for (let ci = 0; ci < culture.length; ci++) {
@@ -264,8 +277,10 @@ export const finishJoinedTarget = Effect.fn("JoinedTarget.marks")(function* (
 					marks.review_record![row] = recordIndex + 1;
 				}
 			}
+		}
 	}
 	for (let row = 0; row < count; row++) {
+		if (clock.step()) yield* Effect.yieldNow;
 		let problems = line.problems![row]!;
 		if (line.key_change![row] && !(line.key_change![row]! & 1)) problems |= 1;
 		if (line.reasons![row]! & (1 << 11)) problems |= 2;

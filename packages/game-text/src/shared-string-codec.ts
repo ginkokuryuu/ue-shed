@@ -1,6 +1,7 @@
 import { isUtf8 } from "node:buffer";
 import { decodeWtf8, encodeWtf8, hasWtf8Surrogate, isWtf8 } from "./wtf8.js";
 import { snapshotCheck } from "./snapshot-format.js";
+import { HostSliceClock, runHostStepsSync, type HostSteps } from "./host-slices.js";
 export interface PackedStrings {
 	readonly bytes: Buffer;
 	readonly offsets: Uint32Array | Float64Array;
@@ -88,6 +89,20 @@ export function sortPackedStringsByLocale(
 	order = Uint32Array.from({ length: strings.offsets.length - 1 }, (_, row) => row),
 	runSize = 8192
 ): Uint32Array {
+	return runHostStepsSync(
+		sortPackedStringsByLocaleSteps(strings, order, runSize, new HostSliceClock(Infinity))
+	);
+}
+
+/** Host steps for `sortPackedStringsByLocale`. The merge is stable, so every run size gives the
+ * same order as one stable sort; callers in host slices use smaller runs.
+ */
+export function* sortPackedStringsByLocaleSteps(
+	strings: PackedStrings,
+	order = Uint32Array.from({ length: strings.offsets.length - 1 }, (_, row) => row),
+	runSize = 8192,
+	clock = new HostSliceClock()
+): HostSteps<Uint32Array> {
 	snapshotCheck(Number.isInteger(runSize) && runSize > 0, "sort.locale", "Invalid sort run size");
 	const rows = order.slice(),
 		boundaries = [0];
@@ -110,6 +125,7 @@ export function sortPackedStringsByLocale(
 		rows.set(sorted, start);
 		boundaries.push(end);
 		start = end;
+		if (clock.expired()) yield;
 	}
 	const runCount = boundaries.length - 1,
 		cursors = Uint32Array.from(boundaries.slice(0, -1)),
@@ -144,6 +160,7 @@ export function sortPackedStringsByLocale(
 			keys[run] = decodeWtf8(stringBytes(strings, rows[cursor + 1]!));
 		else heap[0] = heap[--size]!;
 		if (size) down(0);
+		if (clock.step()) yield;
 	}
 	return result;
 }
