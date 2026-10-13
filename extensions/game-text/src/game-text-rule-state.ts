@@ -181,6 +181,16 @@ export interface RuleDraftProblem {
 	readonly field: string;
 	readonly message: string;
 }
+/** A rule field's `aria-invalid` value: whether validation reported a problem with it. */
+export function invalidField(
+	problems: readonly RuleDraftProblem[] | undefined,
+	ruleId: string,
+	field: string
+): "true" | "false" {
+	return problems?.some((issue) => issue.ruleId === ruleId && issue.field === field)
+		? "true"
+		: "false";
+}
 export function draftProblems(
 	document: GameTextRuleDocument | undefined
 ): readonly RuleDraftProblem[] {

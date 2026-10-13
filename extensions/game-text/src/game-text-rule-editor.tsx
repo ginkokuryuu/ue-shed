@@ -12,6 +12,7 @@ import { tokens } from "@ue-shed/ui-theme/tokens.stylex.js";
 import { For, Match, Show, Switch, createEffect, createMemo, createSignal } from "solid-js";
 import { CultureRuleFields } from "./game-text-culture-rule-fields.js";
 import {
+	invalidField,
 	shownLimit,
 	typedLimit,
 	type GameTextRuleState,
@@ -278,17 +279,11 @@ export function GameTextRuleEditor(props: {
 										min="1"
 										step="1"
 										aria-label={`Maximum characters for ${rule().id}`}
-										aria-invalid={
-											props.editor
-												.problems()
-												.some(
-													(issue) =>
-														issue.ruleId === rule().id &&
-														issue.field === "maximumCharacters"
-												)
-												? "true"
-												: "false"
-										}
+										aria-invalid={invalidField(
+											props.editor.problems(),
+											rule().id,
+											"maximumCharacters"
+										)}
 										aria-describedby={"rule-errors-" + rule().id}
 										{...stylex.attrs(styles.input)}
 										value={shownLimit(selectedBudgetRule()?.maximumCharacters)}
@@ -523,17 +518,11 @@ export function GameTextRuleEditor(props: {
 								<span>Recovery guidance</span>
 								<textarea
 									aria-label={`Recovery guidance for ${rule().id}`}
-									aria-invalid={
-										props.editor
-											.problems()
-											.some(
-												(issue) =>
-													issue.ruleId === rule().id &&
-													issue.field === "recovery"
-											)
-											? "true"
-											: "false"
-									}
+									aria-invalid={invalidField(
+										props.editor.problems(),
+										rule().id,
+										"recovery"
+									)}
 									aria-describedby={"rule-errors-" + rule().id}
 									{...stylex.attrs(styles.textarea)}
 									value={rule().recovery}

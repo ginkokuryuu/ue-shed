@@ -58,12 +58,8 @@ import { clauseParts } from "./game-text-filter-model.js";
 import { DisplayMenu } from "./game-text-display-menu.js";
 import { FacetsPane } from "./game-text-facets.js";
 import { FolderBrowser } from "./game-text-folder-browser.js";
-import {
-	LinePageHeader,
-	LineProblem,
-	LineProperties,
-	type LinePosition
-} from "./game-text-line-page.js";
+import { LinePageHeader, LineProblem, LineProperties } from "./game-text-line-page.js";
+import { createLineNavigation } from "./game-text-line-navigation.js";
 import {
 	FilterMenu,
 	FilterPills,
@@ -71,7 +67,7 @@ import {
 	type FilterCounts
 } from "./game-text-filter-menu.js";
 import { BulkBar, createLineSelection } from "./game-text-bulk-bar.js";
-import { GroupedResults, type GroupLoaded, type LoadedRow } from "./game-text-grouped-results.js";
+import { GroupedResults } from "./game-text-grouped-results.js";
 import { reviewLensLabel } from "./game-text-review.js";
 import { createGameTextLocalizationState } from "./game-text-localization-state.js";
 import {
@@ -375,183 +371,29 @@ export function GameTextRoute(props: {
 		const selected = localization.selection();
 		return selected === undefined ? undefined : { localization: selected };
 	};
-	// A picked line opens its page. Its place and neighbours come from the rows each group reports,
-	// or the flat page's rows, so the page follows grouping, open groups and loaded pages.
-	let resultsSection: HTMLElement | undefined;
 	let searchInput: HTMLInputElement | undefined;
-	let linePane: HTMLElement | undefined;
-	let returnRow: HTMLElement | undefined;
-	const [paneCollapsed, setPaneCollapsed] = createSignal(false);
-	const collapsed = () => paneCollapsed() && !lineOpen();
-	const lineOpen = () => selectedId() !== undefined || localization.selectedId() !== undefined;
-	const [groupRows, setGroupRows] = createSignal<ReadonlyMap<string, readonly LoadedRow[]>>(
-		new Map()
-	);
-	// A line only in the gather has no unit, so a closed page (no unit either) must not match it.
-	const isOpenLine = (row: LoadedRow) => {
-		const line = localization.selectedId();
-		if (line !== undefined) return row.line === line;
-		const unit = selectedId();
-		return unit !== undefined && row.unit === unit;
-	};
-	const flatRows = (): readonly LoadedRow[] => {
-		const current = page();
-		if (!current) return [];
-		if (!current.localization)
-			return current.units.map((unit) => ({ unit: unit.id, line: undefined }));
-		const units = new Set(current.units.map((unit) => unit.id));
-		return current.localization.lines.map((line) => ({
-			line: line.id,
-			unit:
-				line.origin.kind === "corpus"
-					? line.origin.unitIds.find((id) => units.has(id))
-					: undefined
-		}));
-	};
-	// Where the open line is: its group (if grouped) and its place in that group's loaded rows.
-	const openLineAt = () => {
-		const groups = page()?.groups?.entries;
-		if (!groups) {
-			const rows = flatRows();
-			const index = rows.findIndex(isOpenLine);
-			return index < 0 ? undefined : { group: -1, rows, index, before: 0 };
-		}
-		let before = 0;
-		for (const [group, entry] of groups.entries()) {
-			const rows = groupRows().get(entry.key) ?? [];
-			const index = rows.findIndex(isOpenLine);
-			if (index >= 0) return { group, rows, index, before };
-			before += entry.count;
-		}
-		return undefined;
-	};
-	// Folder, asset and origin groups list a line in each place it is used, so counting across them
-	// would overshoot the total; there the place is counted within the line's group.
-	const linePosition = (): LinePosition | undefined => {
-		const current = page();
-		const at = openLineAt();
-		if (current === undefined || at === undefined) return undefined;
-		const groups = current.groups?.entries;
-		const entry = groups?.[at.group];
-		if (groups === undefined || entry === undefined)
-			return {
-				index: at.index,
-				total: current.total,
-				first: at.index === 0,
-				last: at.index + 1 >= current.total
-			};
-		const first = at.group === 0 && at.index === 0;
-		const last = at.group === groups.length - 1 && at.index + 1 >= entry.count;
-		const by = group();
-		return by === "folder" || by === "asset" || by === "origin"
-			? {
-					index: at.index,
-					total: entry.count,
-					group: entry.label || "the project root",
-					first,
-					last
-				}
-			: { index: at.before + at.index, total: current.total, first, last };
-	};
-	// A step that has to open a group or load its next page finishes when that group reports its
-	// rows: the row to pick is the first, the last, or a place in the group. A step lands only while
-	// the line it started from is still open, so going back to the list or opening another line
-	// cancels it.
-	let pendingStep:
-		| {
-				readonly group: string;
-				readonly pick: "first" | "last" | number;
-				readonly from: LoadedRow;
-		  }
-		| undefined;
-	const selectRow = (row: LoadedRow | undefined) => {
-		if (row === undefined) return;
-		if (
-			document.activeElement instanceof HTMLElement &&
-			document.activeElement.hasAttribute("data-row")
-		)
-			returnRow = document.activeElement;
-		setPaneCollapsed(false);
-		setSelectedId(row.unit);
-		localization.setSelectedId(row.line);
-	};
-	const stillOpen = (from: LoadedRow) => untrack(() => isOpenLine(from));
-	// Each open group's next-page loader, while it has more pages.
-	const groupMore = new Map<string, () => void>();
-	const groupLoaded: GroupLoaded = (group, rows, more) => {
-		setGroupRows((current) => new Map(current).set(group, rows));
-		if (more === undefined) groupMore.delete(group);
-		else groupMore.set(group, more);
-		const step = pendingStep;
-		if (step === undefined || step.group !== group) return;
-		if (!stillOpen(step.from)) {
-			pendingStep = undefined;
-			return;
-		}
-		// A group's last line is its last matching line, so its pages load until none are left.
-		if (step.pick === "last" && more !== undefined) {
-			more();
-			return;
-		}
-		pendingStep = undefined;
-		selectRow(
-			step.pick === "first" ? rows[0] : step.pick === "last" ? rows.at(-1) : rows[step.pick]
-		);
-	};
-	// Without groups, a step past the loaded rows loads the next page and picks this row.
-	let pendingFlat: { readonly index: number; readonly from: LoadedRow } | undefined;
-	createEffect(flatRows, (rows) => {
-		const step = pendingFlat;
-		if (step === undefined || rows.length <= step.index) return;
-		pendingFlat = undefined;
-		if (stillOpen(step.from)) selectRow(rows[step.index]);
+	const navigation = createLineNavigation({
+		page,
+		group,
+		unit: selectedId,
+		setUnit: setSelectedId,
+		line: localization.selectedId,
+		setLine: localization.setSelectedId,
+		moreResults: () => moreResults(),
+		focusSearch: () => searchInput?.focus()
 	});
-	// Opening a closed group goes through its header, as a click would.
-	const groupControl = (key: string, selector: string) =>
-		Array.from(resultsSection?.querySelectorAll<HTMLElement>("section[data-group]") ?? [])
-			.find((section) => section.dataset.group === key)
-			?.querySelector<HTMLButtonElement>(selector);
-	const moveLine = (step: -1 | 1) => {
-		const at = openLineAt();
-		const from = at?.rows[at.index];
-		if (at === undefined || from === undefined) return;
-		const next = at.rows[at.index + step];
-		if (next !== undefined) {
-			selectRow(next);
-			return;
-		}
-		const groups = page()?.groups?.entries;
-		if (!groups) {
-			const current = page();
-			if (step === 1 && (current?.localization?.nextCursor ?? current?.nextCursor)) {
-				pendingFlat = { index: at.index + 1, from };
-				moreResults();
-			}
-			return;
-		}
-		const entry = groups[at.group];
-		if (!entry) return;
-		// The group's next page, when there is one.
-		const more = step === 1 ? groupMore.get(entry.key) : undefined;
-		if (more) {
-			pendingStep = { group: entry.key, pick: at.index + 1, from };
-			more();
-			return;
-		}
-		// The neighbouring group, opened if it is closed.
-		const neighbour = groups[at.group + step];
-		if (!neighbour) return;
-		const header = groupControl(neighbour.key, 'button[aria-expanded="false"]');
-		const rest = step === -1 ? groupMore.get(neighbour.key) : undefined;
-		if (header || rest) {
-			pendingStep = { group: neighbour.key, pick: step === 1 ? "first" : "last", from };
-			if (header) header.click();
-			else rest?.();
-			return;
-		}
-		const loaded = groupRows().get(neighbour.key) ?? [];
-		selectRow(step === 1 ? loaded[0] : loaded.at(-1));
-	};
+	const {
+		lineOpen,
+		paneCollapsed,
+		setPaneCollapsed,
+		collapsed,
+		groupRows,
+		groupLoaded,
+		linePosition,
+		selectRow,
+		moveLine,
+		closeLine
+	} = navigation;
 	// Lines ticked for bulk actions, in the list's order for shift-click ranges. A new target
 	// starts a new selection.
 	const selection = createLineSelection({
@@ -577,61 +419,6 @@ export function GameTextRoute(props: {
 					checking: selection.ticked().size > 0
 				}
 			: undefined;
-	createEffect(lineOpen, (open) => {
-		if (open)
-			queueMicrotask(() =>
-				linePane?.querySelector<HTMLButtonElement>("button")?.focus({ preventScroll: true })
-			);
-	});
-	createEffect(
-		() => ({
-			unit: selectedId(),
-			line: localization.selectedId()
-		}),
-		() => {
-			queueMicrotask(() =>
-				resultsSection
-					?.querySelector<HTMLElement>('[data-row][aria-current="true"]')
-					?.scrollIntoView?.({ block: "nearest" })
-			);
-		}
-	);
-	const [focusBack, setFocusBack] = createSignal<LoadedRow>();
-	createEffect(
-		() => ({ wanted: focusBack(), page: page(), groups: groupRows() }),
-		({ wanted }) => {
-			if (!wanted) return;
-			queueMicrotask(() => {
-				const row = Array.from(
-					resultsSection?.querySelectorAll<HTMLElement>("[data-row]") ?? []
-				).find((element) =>
-					wanted.line
-						? element.dataset.line === wanted.line
-						: wanted.unit !== undefined && element.dataset.unit === wanted.unit
-				);
-				if (row) {
-					row.focus({ preventScroll: true });
-					setFocusBack(undefined);
-				}
-			});
-		}
-	);
-	/** Closes the line's page; focus returns to its row unless the caller keeps it. */
-	const closeLine = (returnFocus = true) => {
-		const row =
-			resultsSection?.querySelector<HTMLElement>('[data-row][aria-current="true"]') ??
-			returnRow;
-		pendingFlat = undefined;
-		pendingStep = undefined;
-		if (returnFocus) setFocusBack({ unit: selectedId(), line: localization.selectedId() });
-		setSelectedId(undefined);
-		localization.setSelectedId(undefined);
-		if (!returnFocus) return;
-		queueMicrotask(() => {
-			if (row?.isConnected) row.focus({ preventScroll: true });
-			else searchInput?.focus();
-		});
-	};
 	// Review state and line facts still filter through the selection, one choice at a time.
 	const extraFields = (): readonly ExtraField[] => {
 		if (!localization.active()) return [];
@@ -778,11 +565,7 @@ export function GameTextRoute(props: {
 				? untrack(() => page()?.localization?.lines.length ?? page()?.units.length ?? 50)
 				: 50;
 		let started = 0;
-		// A new search replaces the rows a pending step was counting on.
-		if (!request.cursor && !request.localizationCursor) {
-			pendingFlat = undefined;
-			pendingStep = undefined;
-		}
+		if (!request.cursor && !request.localizationCursor) navigation.cancelSteps();
 		setError(undefined);
 		setSearchFailed(false);
 		setSearching(true);
@@ -856,6 +639,12 @@ export function GameTextRoute(props: {
 			attachRuleFile(result);
 		} else if (result.status === "failed") setQualityFailure(result.error);
 	};
+	// Review flags written from a line's translations reload the view when they change.
+	const translationReview = () => ({
+		client: props.client,
+		busy: loading() || operations.busy(),
+		onChanged: () => load(false)
+	});
 
 	const load = (refresh: boolean) => {
 		setPreparing(true);
@@ -1861,9 +1650,7 @@ export function GameTextRoute(props: {
 									{/* Keep the paged list beside the line detail so selection, groups and pages survive. */}
 									<section
 										aria-label="Results"
-										ref={(element) => {
-											resultsSection = element;
-										}}
+										ref={navigation.setList}
 										{...stylex.attrs(styles.pane)}
 									>
 										<GameTextColumns culture={localization.culture()} />
@@ -1968,9 +1755,7 @@ export function GameTextRoute(props: {
 									</section>
 									<aside
 										aria-label="Text focus"
-										ref={(element) => {
-											linePane = element;
-										}}
+										ref={navigation.setPane}
 										{...stylex.attrs(
 											styles.pane,
 											collapsed() && styles.hiddenPane
@@ -2041,14 +1826,7 @@ export function GameTextRoute(props: {
 																	<TranslationsDetail
 																		model={localization}
 																		edits={edits}
-																		review={{
-																			client: props.client,
-																			busy:
-																				loading() ||
-																				operations.busy(),
-																			onChanged: () =>
-																				load(false)
-																		}}
+																		review={translationReview()}
 																	/>
 																</div>
 															)}
@@ -2113,13 +1891,7 @@ export function GameTextRoute(props: {
 															<TranslationsDetail
 																model={localization}
 																edits={edits}
-																review={{
-																	client: props.client,
-																	busy:
-																		loading() ||
-																		operations.busy(),
-																	onChanged: () => load(false)
-																}}
+																review={translationReview()}
 															/>
 															<h3 {...stylex.attrs(styles.section)}>
 																Where it appears

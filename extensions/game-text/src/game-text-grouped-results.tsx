@@ -27,7 +27,7 @@ export interface LoadedRow {
 }
 
 /** A page's rows in display order: localization lines with their first listed unit, or units. */
-function loadedRows(page: TextCorpusSearchPage): readonly LoadedRow[] {
+export function loadedRows(page: TextCorpusSearchPage): readonly LoadedRow[] {
 	if (!page.localization) return page.units.map((unit) => ({ unit: unit.id, line: undefined }));
 	const units = new Set(page.units.map((unit) => unit.id));
 	return page.localization.lines.map((line) => ({
