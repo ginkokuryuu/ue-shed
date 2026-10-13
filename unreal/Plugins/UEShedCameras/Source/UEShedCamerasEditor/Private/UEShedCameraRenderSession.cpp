@@ -422,6 +422,9 @@ struct FUEShedCameraRenderSession::FState
 	uint32 AppliedResolutionX = 0, AppliedResolutionY = 0;
 	bool ScreenshotApplied = false;
 	bool ScreenshotWarmupApplied = false;
+	bool ScreenshotWarmupChanged = false;
+	IConsoleVariable *ScreenshotWarmupVariable = nullptr;
+	FDelegateHandle ScreenshotWarmupChangeHandle;
 	int32 SavedScreenshotWarmup = 0, AppliedScreenshotWarmup = 0;
 	uint32 SavedScreenshotWarmupFlags = 0;
 	bool GameView = false, LockedCamera = false, DisableInput = false, EnableFading = false, DrawAxes = false,
@@ -520,7 +523,8 @@ struct FUEShedCameraRenderSession::FState
 			return true;
 		const auto *Variable =
 		    IConsoleManager::Get().FindConsoleVariable(TEXT("r.HighResScreenshotDelay"));
-		return Variable && Variable->GetInt() == AppliedScreenshotWarmup &&
+		return !ScreenshotWarmupChanged && Variable &&
+		       Variable->GetInt() == AppliedScreenshotWarmup &&
 		       Variable->GetFlags() == SavedScreenshotWarmupFlags;
 	}
 	bool ApplyScreenshotWarmup()
@@ -535,18 +539,29 @@ struct FUEShedCameraRenderSession::FState
 		SavedScreenshotWarmup = Variable->GetInt();
 		SavedScreenshotWarmupFlags = Variable->GetFlags();
 		AppliedScreenshotWarmup = Renderer->GetIntegerField(TEXT("screenshotWarmupFrames"));
+		ScreenshotWarmupChanged = false;
 		ScreenshotWarmupApplied = true;
 		SetScreenshotWarmupValue(Variable, AppliedScreenshotWarmup);
-		return OwnsScreenshotWarmup();
+		if (!OwnsScreenshotWarmup())
+			return false;
+		ScreenshotWarmupVariable = Variable;
+		ScreenshotWarmupChangeHandle = Variable->OnChangedDelegate().AddLambda(
+		    [this](IConsoleVariable *) { ScreenshotWarmupChanged = true; });
+		return true;
 	}
 	void RestoreScreenshotWarmup()
 	{
 		if (!ScreenshotWarmupApplied)
 			return;
-		if (OwnsScreenshotWarmup())
+		const bool Owned = OwnsScreenshotWarmup();
+		auto *Variable =
+		    IConsoleManager::Get().FindConsoleVariable(TEXT("r.HighResScreenshotDelay"));
+		if (Variable && Variable == ScreenshotWarmupVariable)
+			Variable->OnChangedDelegate().Remove(ScreenshotWarmupChangeHandle);
+		ScreenshotWarmupVariable = nullptr;
+		ScreenshotWarmupChangeHandle.Reset();
+		if (Owned)
 		{
-			auto *Variable =
-			    IConsoleManager::Get().FindConsoleVariable(TEXT("r.HighResScreenshotDelay"));
 			SetScreenshotWarmupValue(Variable, SavedScreenshotWarmup);
 			if (Variable->GetInt() != SavedScreenshotWarmup ||
 			    Variable->GetFlags() != SavedScreenshotWarmupFlags)

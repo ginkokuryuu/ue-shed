@@ -329,8 +329,8 @@ bool FUEShedCameraScreenshotWarmupTest::RunTest(const FString &Parameters)
 		              ->GetStringField(TEXT("code")),
 		          FString(TEXT("invalid_policy")));
 	}
-	for (const FString Mode :
-	     {TEXT("32"), TEXT("128"), TEXT("cancel"), TEXT("lease"), TEXT("takeover"), TEXT("omit")})
+	for (const FString Mode : {TEXT("32"), TEXT("128"), TEXT("cancel"), TEXT("lease"),
+	                           TEXT("takeover"), TEXT("same-value"), TEXT("omit")})
 	{
 		auto Request =
 		    UEShedLegacyRenderRequest(FGuid::NewGuid().ToString(EGuidFormats::Digits), World, true);
@@ -370,14 +370,17 @@ bool FUEShedCameraScreenshotWarmupTest::RunTest(const FString &Parameters)
 			          Session->Poll(TEXT("warmup"))->GetStringField(TEXT("code")),
 			          FString(TEXT("lease_expired")));
 		}
-		else if (Mode == TEXT("takeover"))
+		else if (Mode == TEXT("takeover") || Mode == TEXT("same-value"))
 		{
-			Variable->Set(64, static_cast<EConsoleVariableFlags>(BeforeFlags & ECVF_SetByMask));
+			const int32 ExternalValue = Mode == TEXT("same-value") ? Frames : 64;
+			Variable->Set(ExternalValue,
+			              static_cast<EConsoleVariableFlags>(BeforeFlags & ECVF_SetByMask));
 			Session->Tick();
 			TestEqual(TEXT("External warmup takeover is reported"),
 			          Session->Poll(TEXT("warmup"))->GetStringField(TEXT("code")),
 			          FString(TEXT("editor_busy")));
-			TestEqual(TEXT("External console value is preserved"), Variable->GetInt(), 64);
+			TestEqual(TEXT("External console value is preserved"), Variable->GetInt(),
+			          ExternalValue);
 			TestEqual(TEXT("Loss of restoration is explicit"),
 			          Session->Close()->GetStringField(TEXT("restoration")),
 			          FString(TEXT("failed")));
