@@ -3,7 +3,12 @@ import { tokens } from "@ue-shed/ui-theme/tokens.stylex.js";
 import type { LocalizationProjectRule, TextTerminologyEntry } from "@ue-shed/game-text/browser";
 import { Button } from "@ue-shed/ui";
 import { For, Show, createSignal } from "solid-js";
-import type { RuleDraftProblem } from "./game-text-rule-state.js";
+import {
+	invalidField,
+	shownLimit,
+	typedLimit,
+	type RuleDraftProblem
+} from "./game-text-rule-state.js";
 import { styles } from "./game-text-styles.js";
 
 const fieldStyles = stylex.create({
@@ -84,15 +89,11 @@ export function CultureRuleFields(props: {
 							type="number"
 							min="1"
 							aria-label="Default maximum characters"
-							aria-invalid={
-								props.problems?.some(
-									(issue) =>
-										issue.ruleId === props.rule.id &&
-										issue.field === "defaultMaximumCharacters"
-								)
-									? "true"
-									: "false"
-							}
+							aria-invalid={invalidField(
+								props.problems,
+								props.rule.id,
+								"defaultMaximumCharacters"
+							)}
 							aria-describedby={"rule-errors-" + props.rule.id}
 							value={rule().defaultMaximumCharacters ?? ""}
 							onInput={(event) => {
@@ -102,7 +103,7 @@ export function CultureRuleFields(props: {
 										? current
 										: {
 												...current,
-												defaultMaximumCharacters: Number(
+												defaultMaximumCharacters: typedLimit(
 													event.currentTarget.value
 												)
 											}
@@ -155,23 +156,22 @@ export function CultureRuleFields(props: {
 										type="number"
 										min="1"
 										aria-label={`Maximum characters for ${culture}`}
-										aria-invalid={
-											props.problems?.some(
-												(issue) =>
-													issue.ruleId === props.rule.id &&
-													issue.field === culture
-											)
-												? "true"
-												: "false"
-										}
+										aria-invalid={invalidField(
+											props.problems,
+											props.rule.id,
+											culture
+										)}
 										aria-describedby={"rule-errors-" + props.rule.id}
-										value={
+										value={shownLimit(
 											Object.entries(rule().cultures).find(
 												([key]) => key === culture
-											)?.[1] ?? ""
-										}
+											)?.[1]
+										)}
 										onInput={(event) =>
-											updateBudget(culture, Number(event.currentTarget.value))
+											updateBudget(
+												culture,
+												typedLimit(event.currentTarget.value)
+											)
 										}
 									/>
 								</label>
@@ -234,17 +234,11 @@ export function CultureRuleFields(props: {
 																		fieldStyles.input
 																	)}
 																	aria-label={`${culture} alternatives ${index + 1}`}
-																	aria-invalid={
-																		props.problems?.some(
-																			(issue) =>
-																				issue.ruleId ===
-																					props.rule.id &&
-																				issue.field ===
-																					culture
-																		)
-																			? "true"
-																			: "false"
-																	}
+																	aria-invalid={invalidField(
+																		props.problems,
+																		props.rule.id,
+																		culture
+																	)}
 																	aria-describedby={
 																		"rule-errors-" +
 																		props.rule.id

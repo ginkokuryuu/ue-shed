@@ -104,7 +104,7 @@ it("confirms bulk review, reports progress and retains partial failure context",
 	await user.click(screen.getByRole("button", { name: "Mark reviewed (501)" }));
 	expect(requests).toHaveLength(0);
 	await user.click(screen.getByRole("button", { name: "Confirm review" }));
-	await screen.findByText("Marking reviewed: 500 / 501");
+	await screen.findByText("Marking reviewed: 500 of 501");
 	expect(requests.map((request) => request.changes.length)).toEqual([500, 1]);
 	await Effect.runPromise(
 		Deferred.succeed(pending, {
@@ -114,12 +114,13 @@ it("confirms bulk review, reports progress and retains partial failure context",
 			recovery: "Make the file writable and retry the remaining translation."
 		})
 	);
+	// A partial failure is announced as an alert and keeps what was done.
 	await waitFor(() =>
-		expect(screen.getByRole("status").textContent).toContain(
+		expect(screen.getByRole("alert").textContent).toContain(
 			"Marked 500 translations reviewed. The remaining review file could not be written."
 		)
 	);
-	expect(screen.getByRole("status").getAttribute("title")).toContain(
+	expect(screen.getByRole("alert").getAttribute("title")).toContain(
 		"retry the remaining translation"
 	);
 	expect(changed).toHaveBeenCalledOnce();

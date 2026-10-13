@@ -95,20 +95,36 @@ function visibleTranslations(detail: LocalizationFocus, culture: string | undefi
 		);
 }
 
+const TARGET_TOOLTIP =
+	"The localization target in this project: it decides which translations, PO files and Unreal steps are used.";
+
+/** Which translations the workspace shows: the target, and the cultures picked within it. */
 export function LocalizationControls(props: {
 	readonly model: GameTextLocalizationState;
 	readonly disabled?: boolean;
-	readonly syncAction?: JSX.Element;
 	/** Each culture's work over the current filters, for the culture picker. */
 	readonly cultureWork?: readonly TextCultureFacet[] | undefined;
 }) {
 	return (
 		<>
-			<Show when={props.model.targets().length > 1}>
+			<Show
+				when={props.model.targets().length > 1}
+				fallback={
+					// A project with one target has nothing to choose, but still says which it is.
+					<Show when={props.model.targets()[0]}>
+						{(target) => (
+							<span title={TARGET_TOOLTIP} {...stylex.attrs(styles.contextLabel)}>
+								<span {...stylex.attrs(styles.muted)}>Target </span>
+								{target().name}
+							</span>
+						)}
+					</Show>
+				}
+			>
 				<LocalizationPicker
 					label="Localization target"
-					icon="target"
-					tooltip="Choose a localization target within the selected project. This controls which translations, PO files, and Unreal sync steps are used."
+					prefix="Target"
+					tooltip={TARGET_TOOLTIP}
 					value={props.model.target() ?? "Choose target"}
 					values={props.model.targets().map((target) => target.name)}
 					disabled={props.disabled || (!props.model.ready() && !props.model.error())}
@@ -120,29 +136,42 @@ export function LocalizationControls(props: {
 			</Show>
 			<Show when={props.model.active()}>
 				{(active) => (
-					<>
-						<CulturePicker
-							disabled={props.disabled === true}
-							cultures={active().target.cultures}
-							picked={props.model.cultures()}
-							work={props.cultureWork}
-							onToggle={props.model.toggleCulture}
-							onAll={() => props.model.selectCulture("")}
-						/>
-						<Show when={active().notSynced > 0}>
-							<span
-								role="status"
-								title="Translations saved in PO files that Unreal has not imported yet"
-								{...stylex.attrs(styles.muted, styles.accent)}
-							>
-								{active().notSynced.toLocaleString()} not synced
-							</span>
-						</Show>
-						{props.syncAction}
-					</>
+					<CulturePicker
+						disabled={props.disabled === true}
+						cultures={active().target.cultures}
+						picked={props.model.cultures()}
+						work={props.cultureWork}
+						onToggle={props.model.toggleCulture}
+						onAll={() => props.model.selectCulture("")}
+					/>
 				)}
 			</Show>
 		</>
+	);
+}
+
+/** Translations in PO files that Unreal has not imported yet, beside the action that syncs them. */
+export function LocalizationSync(props: {
+	readonly model: GameTextLocalizationState;
+	readonly action?: JSX.Element;
+}) {
+	return (
+		<Show when={props.model.active()}>
+			{(active) => (
+				<>
+					<Show when={active().notSynced > 0}>
+						<span
+							role="status"
+							title="Translations saved in PO files that Unreal has not imported yet"
+							{...stylex.attrs(styles.muted, styles.accent)}
+						>
+							{active().notSynced.toLocaleString()} not synced
+						</span>
+					</Show>
+					{props.action}
+				</>
+			)}
+		</Show>
 	);
 }
 
@@ -267,8 +296,21 @@ export function TranslationsDetail(props: {
 		readonly onChanged: () => void;
 	};
 }) {
+	// A line Unreal has not gathered has nothing here yet; its problem already says so above.
+	const nothingYet = () => {
+		const detail = props.focus ?? props.model.detail();
+		return (
+			detail !== undefined &&
+			!props.focus &&
+			["not_gathered", "changed_since_gather"].includes(detail.scopeSummary?.state ?? "") &&
+			detail.keyChange === undefined &&
+			detail.locations.length === 0 &&
+			detail.nextCultureOffset === undefined &&
+			visibleTranslations(detail, props.model.culture()).length === 0
+		);
+	};
 	return (
-		<Show when={props.model.active()}>
+		<Show when={props.model.active() && !nothingYet()}>
 			<section aria-label="Translations" {...stylex.attrs(styles.detailSection)}>
 				<h3 {...stylex.attrs(styles.section)}>Translations</h3>
 				<Show
@@ -304,17 +346,22 @@ export function TranslationsDetail(props: {
 									)}
 								</Show>
 								<KeyChangeDetail detail={detail()} edits={props.edits} />
-								<For each={visibleTranslations(detail(), props.model.culture())}>
+								<For
+									each={visibleTranslations(detail(), props.model.culture())}
+									keyed={(translation) => translation.culture}
+								>
 									{(translation) => (
 										<article
 											dir="auto"
-											lang={translation.culture}
-											aria-label={"Translation " + translation.culture}
+											lang={translation().culture}
+											aria-label={"Translation " + translation().culture}
 											{...stylex.attrs(styles.card)}
 										>
 											<div {...stylex.attrs(styles.bar)}>
-												<strong>{translation.culture}</strong>
-												<Show when={displayedState(detail(), translation)}>
+												<strong>{translation().culture}</strong>
+												<Show
+													when={displayedState(detail(), translation())}
+												>
 													{(state) => (
 														<span
 															{...stylex.attrs(
@@ -328,9 +375,9 @@ export function TranslationsDetail(props: {
 												</Show>
 												<Show
 													when={
-														displayedState(detail(), translation) !==
+														displayedState(detail(), translation()) !==
 															"not_synced" &&
-														translation.poTranslation !== null
+														translation().poTranslation !== null
 													}
 												>
 													<span {...stylex.attrs(styles.accent)}>
@@ -338,15 +385,18 @@ export function TranslationsDetail(props: {
 													</span>
 												</Show>
 											</div>
-											<Show when={translation.gameTextKind !== "unavailable"}>
+											<Show
+												when={translation().gameTextKind !== "unavailable"}
+											>
 												<span {...stylex.attrs(styles.muted)}>
 													In the game
 												</span>
 												<p {...stylex.attrs(styles.notes)}>
-													{translation.gameTranslation}
-													{translation.gameTextKind === "source_outdated"
+													{translation().gameTranslation}
+													{translation().gameTextKind ===
+													"source_outdated"
 														? " (source text — the translation is out of date)"
-														: translation.gameTextKind ===
+														: translation().gameTextKind ===
 															  "source_untranslated"
 															? " (source text — not translated)"
 															: ""}
@@ -354,56 +404,58 @@ export function TranslationsDetail(props: {
 											</Show>
 											<Show
 												when={
-													translation.archiveTranslation &&
-													(translation.gameTextKind === "unavailable" ||
-														translation.gameTextKind ===
+													translation().archiveTranslation &&
+													(translation().gameTextKind === "unavailable" ||
+														translation().gameTextKind ===
 															"source_outdated")
 												}
 											>
 												<span {...stylex.attrs(styles.muted)}>
-													{translation.facts.includes("needs_update")
+													{translation().facts.includes("needs_update")
 														? "Translation (out of date)"
 														: "Translation"}
 												</span>
 												<p {...stylex.attrs(styles.notes)}>
-													{translation.archiveTranslation}
+													{translation().archiveTranslation}
 												</p>
 											</Show>
-											<Show when={translation.poTranslation !== null}>
+											<Show when={translation().poTranslation !== null}>
 												<span {...stylex.attrs(styles.accent)}>
 													In PO, not synced
 												</span>
 												<p {...stylex.attrs(styles.notes)}>
-													{translation.poTranslation}
+													{translation().poTranslation}
 												</p>
 											</Show>
 											<Show
 												when={
-													translation.translationSource &&
-													(translation.translationSource !==
+													translation().translationSource &&
+													(translation().translationSource !==
 														detail().source ||
-														translation.facts.includes("needs_update"))
+														translation().facts.includes(
+															"needs_update"
+														))
 												}
 											>
 												<span {...stylex.attrs(styles.muted)}>
 													Written for this source
 												</span>
 												<p {...stylex.attrs(styles.notes)}>
-													{translation.translationSource}
+													{translation().translationSource}
 												</p>
 											</Show>
-											<For each={translation.translatorComments}>
+											<For each={translation().translatorComments}>
 												{(comment) => (
 													<p {...stylex.attrs(styles.notes)}>{comment}</p>
 												)}
 											</For>
-											<Show when={translation.flags.length}>
+											<Show when={translation().flags.length}>
 												<span {...stylex.attrs(styles.muted)}>
-													PO flags: {translation.flags.join(", ")}
+													PO flags: {translation().flags.join(", ")}
 												</span>
 											</Show>
 											<Show
-												when={translation.nextContextOffset !== undefined}
+												when={translation().nextContextOffset !== undefined}
 											>
 												<Button
 													size="compact"
@@ -412,20 +464,20 @@ export function TranslationsDetail(props: {
 														(
 															props.onMoreContext ??
 															props.model.moreContext
-														)(translation.culture)
+														)(translation().culture)
 													}
 												>
 													Show more PO comments and flags
 												</Button>
 											</Show>
-											<For each={translation.unknownReasons}>
+											<For each={translation().unknownReasons}>
 												{(reason) => (
 													<span {...stylex.attrs(styles.muted)}>
 														{unknownLabels[reason]}
 													</span>
 												)}
 											</For>
-											<Show when={translation.reducedSourceChecking}>
+											<Show when={translation().reducedSourceChecking}>
 												<span {...stylex.attrs(styles.muted)}>
 													This PO format stores less source information.
 												</span>
@@ -436,7 +488,7 @@ export function TranslationsDetail(props: {
 														client={review().client}
 														target={props.model.target()}
 														detail={detail()}
-														translation={translation}
+														translation={translation()}
 														busy={review().busy}
 														onChanged={review().onChanged}
 													/>
@@ -447,7 +499,7 @@ export function TranslationsDetail(props: {
 													<TranslationEditor
 														model={edits()}
 														detail={detail()}
-														translation={translation}
+														translation={translation()}
 													/>
 												)}
 											</Show>

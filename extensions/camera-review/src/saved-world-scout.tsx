@@ -37,23 +37,17 @@ export function SavedWorldScout(props: {
 	readonly onMapPathChange?: ((path: string) => void) | undefined;
 	readonly client: Pick<
 		MapReviewClientApi,
-		| "readSavedWorld"
-		| "savedWorldMaps"
-		| "savedWorldProgress"
-		| "chooseProjectAndMaps"
-		| "openMapInUnreal"
+		"readSavedWorld" | "savedWorldMaps" | "savedWorldProgress" | "openMapInUnreal"
 	>;
 }) {
 	const mapsAction = createEffectAction();
 	const worldAction = createEffectAction();
-	const chooseAction = createEffectAction();
 	const progressSubscription = createEffectSubscription();
 	const store = new WorldScoutRetainedStore();
 	let pointMap: PointMapController | undefined;
 
 	const [world, setWorld] = createSignal<SavedWorld>();
 	const [maps, setMaps] = createSignal<readonly SavedWorldMap[]>([]);
-	const [projectLabel, setProjectLabel] = createSignal<string>();
 	const [selectedMapPath, setSelectedMapPath] = createSignal<string>();
 	const [error, setError] = createSignal<string>();
 	const [progress, setProgress] = createSignal<SavedWorldProgress>(idleSavedWorldProgress());
@@ -228,34 +222,6 @@ export function SavedWorldScout(props: {
 			if (choice && choice.mapPath !== selectedMapPath()) selectMap(choice.mapPath);
 		}
 	);
-	const chooseProject = () => {
-		const choose = props.client.chooseProjectAndMaps;
-		if (choose === undefined) {
-			setError("This Workbench host cannot choose a project from the UI yet.");
-			return;
-		}
-		setError(undefined);
-		chooseAction.run(choose(), {
-			onFailure: (cause) => setError(Cause.pretty(cause)),
-			onSuccess: (choice) => {
-				if (choice.status === "cancelled") return;
-				if (choice.status === "failed") {
-					setError(`${choice.message} ${choice.recovery}`);
-					return;
-				}
-				const initialMap = choice.maps[0];
-				if (initialMap === undefined) {
-					setError("No maps were chosen for offline review.");
-					return;
-				}
-				setProjectLabel(choice.projectName);
-				setMaps(choice.maps);
-				setSelectedMapPath(initialMap.mapPath);
-				load(initialMap.mapPath);
-			}
-		});
-	};
-
 	const selectStreamIndex = (streamIndex: number) => {
 		const actor = store.actorAt(streamIndex);
 		if (actor === undefined) return;
@@ -294,26 +260,11 @@ export function SavedWorldScout(props: {
 			<header {...stylex.attrs(styles.header)}>
 				<div>
 					<h2 {...stylex.attrs(styles.title)}>Actors from project files</h2>
-					<Show when={projectLabel()}>
-						{(label) => (
-							<p {...stylex.attrs(styles.projectLabel)}>Project · {label()}</p>
-						)}
-					</Show>
 				</div>
-				<div {...stylex.attrs(styles.headerActions)}>
-					<button
-						type="button"
-						onClick={chooseProject}
-						disabled={props.client.chooseProjectAndMaps === undefined}
-						{...stylex.attrs(styles.chooseButton)}
-					>
-						Choose project
-					</button>
-					<div {...stylex.attrs(styles.source)}>
-						<span {...stylex.attrs(styles.sourceDot)} />
-						<strong>Project files</strong>
-						<code>{world()?.authority.mapPackage ?? "not loaded"}</code>
-					</div>
+				<div {...stylex.attrs(styles.source)}>
+					<span {...stylex.attrs(styles.sourceDot)} />
+					<strong>Project files</strong>
+					<code>{world()?.authority.mapPackage ?? "not loaded"}</code>
 				</div>
 			</header>
 
@@ -329,7 +280,7 @@ export function SavedWorldScout(props: {
 						<p>
 							{error() === undefined
 								? "The selected level and its external actor packages are being read from disk."
-								: "Pick a different project or map, then retry."}
+								: "Check the project selected in the workspace project picker, or pick a different map, then retry."}
 						</p>
 						<Show when={error() === undefined}>
 							<div {...stylex.attrs(styles.progressBlock)}>
@@ -373,15 +324,6 @@ export function SavedWorldScout(props: {
 									{...stylex.attrs(styles.retry)}
 								>
 									Retry
-								</button>
-							</Show>
-							<Show when={props.client.chooseProjectAndMaps !== undefined}>
-								<button
-									type="button"
-									onClick={chooseProject}
-									{...stylex.attrs(styles.retry)}
-								>
-									Choose project
 								</button>
 							</Show>
 						</div>
@@ -583,32 +525,6 @@ const styles = stylex.create({
 		borderBottomColor: tokens.colorBorder,
 		borderBottomStyle: "solid",
 		borderBottomWidth: 1
-	},
-	projectLabel: {
-		margin: "6px 0 0",
-		color: "#02b8cc",
-		fontSize: 11,
-		fontWeight: 500,
-		letterSpacing: ".04em"
-	},
-	headerActions: {
-		display: "flex",
-		flexDirection: "column",
-		alignItems: "flex-end",
-		gap: 8
-	},
-	chooseButton: {
-		borderStyle: "solid",
-		borderWidth: 1,
-		borderRadius: tokens.radiusControl,
-		backgroundColor: { default: "transparent", ":hover": "rgba(255, 255, 255, 0.04)" },
-		color: { default: tokens.colorText, ":disabled": tokens.colorTextFaint },
-		borderColor: { default: tokens.colorBorder, ":disabled": tokens.colorBorder },
-		cursor: { default: "pointer", ":disabled": "not-allowed" },
-		padding: "5px 12px",
-		fontSize: 12,
-		fontWeight: 500,
-		letterSpacing: ".04em"
 	},
 	fallbackActions: { display: "flex", flexWrap: "wrap", gap: 10, justifyContent: "center" },
 	title: {

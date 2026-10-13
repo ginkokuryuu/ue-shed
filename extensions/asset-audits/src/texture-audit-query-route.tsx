@@ -432,8 +432,8 @@ export function TextureAuditRoute(props: {
 				</Match>
 				<Match when={state().status === "not_configured"}>
 					<div {...stylex.attrs(styles.noticeCard)}>
-						<strong>No project configured.</strong> Choose a project in the Workbench
-						header, then select Retry.
+						<strong>No project selected.</strong> Choose a project using the workspace
+						project picker, then select Rescan assets.
 					</div>
 				</Match>
 				<Match when={state().status === "cancelled"}>

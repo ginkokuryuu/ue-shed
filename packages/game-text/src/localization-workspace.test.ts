@@ -21,6 +21,7 @@ import { applyLocalizationKeyChanges, localizationKeyChanges } from "./localizat
 import { textCorpusQuery } from "./query.js";
 import {
 	WorkspaceQualityPage,
+	WorkspaceQualityRequest,
 	WorkspaceQualityFocusResult,
 	WorkspaceChangesResult,
 	WorkspaceReportPage,
@@ -200,9 +201,11 @@ it("exports and replays the exact localization quality filter and culture with c
 	const report = exportReport(selection);
 	expect(report.findings).toEqual(fixture.workspace.search(selection).findings);
 	expect(report.corpusCoverage).toEqual(fixture.text.coverage);
-	expect(workspaceQualityCsv(report).startsWith('\uFEFF"Target"')).toBe(true);
-	expect(workspaceQualityCsv(report).endsWith("\r\n")).toBe(true);
-	const preset = Schema.decodeUnknownSync(GameTextInvestigationPreset)({
+	const csv = workspaceQualityCsv(report);
+	expect(csv.startsWith('\uFEFF"Target"')).toBe(true);
+	expect(csv.split("\r\n")[0]).toContain('"Finding ID","Scan status"');
+	expect(csv.endsWith("\r\n")).toBe(true);
+	const input = {
 		schemaVersion: 1,
 		kind: "game_text",
 		sort: "domain_order",
@@ -214,18 +217,44 @@ it("exports and replays the exact localization quality filter and culture with c
 			workspaceFilter: selection.filter,
 			localization: { target: selection.target, culture: selection.culture }
 		}
-	});
+	};
+	const preset = Schema.decodeUnknownSync(GameTextInvestigationPreset)(input);
+	const source = {
+		projectRoot: "C:/Project",
+		generation: null,
+		authority: "project_files"
+	} as const;
 	const exported = await Effect.runPromise(
-		exportGameTextInvestigation(
-			fixture.text,
-			preset,
-			{ projectRoot: "C:/Project", generation: null, authority: "project_files" },
-			undefined,
-			report
-		)
+		exportGameTextInvestigation(fixture.text, preset, source, undefined, report)
 	);
 	expect(exported.result).toEqual({ mode: "localization_quality", report });
 	expect(Schema.decodeUnknownSync(GameTextInvestigationExport)(exported)).toEqual(exported);
 	expect(gameTextInvestigationCsv(exported)).toContain("finding_id");
 	expect(gameTextInvestigationCsv(exported)).toContain("format_arguments");
+	// The workspace filter belongs to a quality query over a target; other shapes are rejected.
+	const { localization: _localization, ...withoutTarget } = input.query;
+	for (const query of [withoutTarget, { ...input.query, mode: "corpus" }])
+		expect(
+			Schema.decodeUnknownResult(GameTextInvestigationPreset)({ ...input, query })._tag
+		).toBe("Failure");
+	const unavailable = await Effect.runPromise(
+		Effect.flip(exportGameTextInvestigation(fixture.text, preset, source))
+	);
+	expect(unavailable.message).toBe("The localization quality workspace is unavailable.");
+	expect(unavailable.recovery).not.toContain("selected");
+	for (const mismatched of [
+		{ ...report, filter: "all" as const },
+		{ ...report, culture: cultureCode("en") },
+		{
+			...report,
+			target: Schema.decodeUnknownSync(WorkspaceQualityRequest.fields.target)("Other")
+		}
+	]) {
+		const failure = await Effect.runPromise(
+			Effect.flip(
+				exportGameTextInvestigation(fixture.text, preset, source, undefined, mismatched)
+			)
+		);
+		expect(failure.message).toBe("The quality report does not match this preset's selection.");
+	}
 });

@@ -683,16 +683,7 @@ export function localizationReportCsv(
 /** A spreadsheet of the same finding summaries the quality list displays. */
 export function workspaceQualityCsv(report: WorkspaceQualityReport): string {
 	return spreadsheetCsv([
-		[
-			"Target",
-			"Culture",
-			"Check",
-			"Source",
-			"Problem",
-			"Context",
-			"Finding ID",
-			"Scan coverage"
-		],
+		["Target", "Culture", "Check", "Source", "Problem", "Context", "Finding ID", "Scan status"],
 		...report.findings.map((finding) => [
 			report.target,
 			finding.culture ?? "Source",

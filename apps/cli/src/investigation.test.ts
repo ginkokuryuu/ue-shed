@@ -1,8 +1,9 @@
-import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join, resolve } from "node:path";
+import { dirname, join, resolve } from "node:path";
 import { Effect, Layer } from "effect";
-import { expect, it } from "vitest";
+import { describe, expect, it } from "vitest";
+import { useSavedFixtureProject } from "../../../fixtures/unreal-project/saved-project.test-support.js";
 import { runCli } from "./command.js";
 import { CliRuntime } from "./cli-runtime.js";
 
@@ -89,3 +90,72 @@ it.skipIf(!process.env.UE_SHED_UASSET_EXECUTABLE).each(["game_text", "texture_au
 	},
 	60_000
 );
+
+describe.skipIf(!process.env.UE_SHED_UASSET_EXECUTABLE)("localization quality presets", () => {
+	const fixture = useSavedFixtureProject();
+
+	it("replays the quality list with the target's review file, as Workbench does", async () => {
+		let output = "";
+		const runtime = Layer.succeed(
+			CliRuntime,
+			CliRuntime.of({
+				print: (value) =>
+					Effect.sync(() => {
+						output += value;
+					}),
+				printError: () => Effect.void,
+				setExitCode: (code) => Effect.die(`Unexpected exit ${code}`)
+			})
+		);
+		const run = async (args: readonly string[]) => {
+			output = "";
+			await Effect.runPromise(runCli(args).pipe(Effect.provide(runtime)));
+			return output;
+		};
+		const preset = {
+			schemaVersion: 1,
+			kind: "game_text",
+			sort: "domain_order",
+			query: {
+				mode: "quality",
+				query: "",
+				capability: "all",
+				lens: "all",
+				qualityFilter: "all",
+				workspaceFilter: "format_arguments",
+				localization: { target: "FixtureGame", culture: "de" }
+			}
+		};
+		const presetPath = join(fixture.root, "Saved", "localization-quality.json");
+		await mkdir(dirname(presetPath), { recursive: true });
+		await writeFile(presetPath, JSON.stringify(preset));
+		const args = ["investigations", "run", fixture.root, "--preset", presetPath];
+		const before = JSON.parse(await run(args));
+		expect(before.result).toMatchObject({
+			mode: "localization_quality",
+			report: { target: "FixtureGame", culture: "de", filter: "format_arguments" }
+		});
+		expect(before.result.report.findings.length).toBeGreaterThan(0);
+		const csv = await run([...args, "--format", "csv"]);
+		expect(csv).toContain('"finding_id","kind","culture","source","problem","context"');
+		// An accepted finding leaves the replay exactly as it leaves the Workbench list.
+		await run([
+			"loc",
+			"review",
+			"accept",
+			fixture.root,
+			"--target",
+			"FixtureGame",
+			"--culture",
+			"de",
+			"--check",
+			"localization.format_arguments",
+			"--line",
+			"Fixture.Localization.Table,NamedArgument"
+		]);
+		const after = JSON.parse(await run(args));
+		expect(after.result.report.findings.length).toBeLessThan(
+			before.result.report.findings.length
+		);
+	}, 60_000);
+});

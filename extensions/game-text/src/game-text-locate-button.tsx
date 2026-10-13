@@ -1,6 +1,7 @@
 import * as stylex from "@stylexjs/stylex";
 import type { EditorAssetLocateResult } from "@ue-shed/protocol";
 import { Button, createEffectAction } from "@ue-shed/ui";
+import { Effect } from "effect";
 import { Show, createEffect, createSignal } from "solid-js";
 import type { GameTextClientApi } from "./game-text-client.js";
 import { styles } from "./game-text-styles.js";
@@ -10,17 +11,6 @@ type LocateFeedback =
 	| { readonly status: "locating" }
 	| EditorAssetLocateResult
 	| { readonly status: "failed"; readonly message: string; readonly recovery: string };
-
-function label(feedback: LocateFeedback): string {
-	if (feedback.status === "idle") return "Show in Unreal";
-	if (feedback.status === "locating") return "Opening…";
-	if (feedback.status === "located") return "Opened";
-	if (feedback.status === "failed") return "Failed";
-	if (feedback.reason === "not_connected") return "Unreal offline";
-	if (feedback.reason === "capability_missing") return "Plugin needed";
-	if (feedback.reason === "asset_not_found") return "Not found";
-	return "Unavailable";
-}
 
 function message(feedback: LocateFeedback): string | undefined {
 	if (feedback.status === "idle") return undefined;
@@ -48,14 +38,13 @@ export function ShowInUnrealButton(props: {
 			<Button
 				type="button"
 				size="compact"
-				aria-label="Show in Unreal"
 				title={props.objectPath}
 				disabled={feedback().status === "locating"}
 				onClick={() => {
 					const objectPath = props.objectPath;
 					setFeedback({ status: "locating" });
 					action.run(props.client.locateAsset(objectPath), {
-						onSuccess: (result) =>
+						onSuccess: (result) => {
 							setFeedback(
 								result.objectPath === objectPath
 									? result
@@ -64,17 +53,23 @@ export function ShowInUnrealButton(props: {
 											message: "Unreal returned a different asset.",
 											recovery: "Retry showing this asset."
 										}
-							),
-						onFailure: (cause) =>
+							);
+							// Success is said once; the button is ready to use again.
+							if (result.status === "located" && result.objectPath === objectPath)
+								action.run(Effect.sleep("4 seconds"), {
+									onSuccess: () => setFeedback({ status: "idle" })
+								});
+						},
+						onFailure: () =>
 							setFeedback({
 								status: "failed",
-								message: String(cause),
+								message: "Unreal did not answer.",
 								recovery: "Check the editor connection and retry showing the asset."
 							})
 					});
 				}}
 			>
-				{label(feedback())}
+				{feedback().status === "locating" ? "Opening…" : "Show in Unreal"}
 			</Button>
 			<Show when={message(feedback())}>
 				{(detail) => (

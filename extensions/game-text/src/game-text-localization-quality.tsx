@@ -215,7 +215,7 @@ export function GameTextLocalizationQuality(props: {
 						setMessage(
 							result.status === "failed"
 								? result.message + " " + result.recovery
-								: "Writing checks are unavailable. Rescan to try again."
+								: "Quality checks are unavailable. Rescan to try again."
 						);
 					}
 				}
@@ -482,7 +482,7 @@ export function GameTextLocalizationQuality(props: {
 						disabled={props.disabled}
 						onClick={props.onLoadRules}
 					>
-						Load rules
+						Choose another rules file…
 					</Button>
 				</Show>
 			</div>
@@ -604,7 +604,7 @@ export function GameTextLocalizationQuality(props: {
 														role="status"
 														{...stylex.attrs(styles.muted)}
 													>
-														Loading writing checks…
+														Loading quality checks…
 													</p>
 												) : undefined
 											}
@@ -727,7 +727,7 @@ export function GameTextLocalizationQuality(props: {
 														Text preview shortened.
 													</span>
 												</Show>
-												<span {...stylex.attrs(styles.warning)}>
+												<span {...stylex.attrs(styles.findingFacts)}>
 													{finding().problem}
 												</span>
 												<h3 {...stylex.attrs(styles.section)}>
@@ -873,7 +873,7 @@ export function GameTextLocalizationQuality(props: {
 														Text preview shortened.
 													</span>
 												</Show>
-												<span {...stylex.attrs(styles.warning)}>
+												<span {...stylex.attrs(styles.findingFacts)}>
 													{qualityFindingFacts(finding())}
 												</span>
 												<h3 {...stylex.attrs(styles.section)}>

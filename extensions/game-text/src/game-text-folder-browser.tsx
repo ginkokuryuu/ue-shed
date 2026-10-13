@@ -71,7 +71,13 @@ export function FolderBrowser(props: {
 							aria-pressed={
 								props.menu ? undefined : chosen(value(entry)) ? "true" : "false"
 							}
-							aria-label={`${name(entry)} ${entry.count.toLocaleString()} lines`}
+							aria-label={
+								`${name(entry)} ${entry.count.toLocaleString()} lines` +
+								(entry.needWork > 0
+									? `, ${entry.needWork.toLocaleString()} need work` +
+										(SEVERE.has(entry.worst) ? ", including key problems" : "")
+									: "")
+							}
 							title={entry.label}
 							onClick={() => toggle(value(entry))}
 							{...stylex.attrs(styles.item, chosen(value(entry)) && styles.chosen)}

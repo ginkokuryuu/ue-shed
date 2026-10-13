@@ -112,15 +112,15 @@ function inactiveCleanupClient(): Pick<CustodianClientApi, "prepare" | "execute"
 }
 
 describe("ProjectCustodianRoute", () => {
-	it("keeps an unconfigured host read-only and requests an explicit root", async () => {
-		let choices = 0;
+	it("keeps an unconfigured host read-only and points to the workspace project picker", async () => {
+		let scans = 0;
 		const client: CustodianClientApi = {
 			...inactiveCleanupClient(),
-			configuredScan: () => Effect.succeed({ status: "not_configured" }),
-			chooseAndScan: () => {
-				choices += 1;
-				return Effect.succeed({ status: "cancelled" });
-			}
+			configuredScan: () =>
+				Effect.sync(() => {
+					scans += 1;
+					return { status: "not_configured" as const };
+				})
 		};
 
 		render(() => (
@@ -128,19 +128,20 @@ describe("ProjectCustodianRoute", () => {
 				<ProjectCustodianRoute client={client} />
 			</EffectRuntimeProvider>
 		));
-		await screen.findByRole("heading", { name: "Choose a scan root" });
+		await screen.findByRole("heading", { name: "No project selected" });
+		expect(screen.getByText(/workspace project picker/u)).toBeDefined();
 		expect(screen.getByText("Guarded cleanup")).toBeDefined();
 		expect(screen.queryByRole("button", { name: /delete|clean|apply/iu })).toBeNull();
+		expect(screen.queryByRole("button", { name: /choose/iu })).toBeNull();
 
-		fireEvent.click(screen.getAllByRole("button", { name: "Choose scan root…" })[0]!);
-		await waitFor(() => expect(choices).toBe(1));
+		fireEvent.click(screen.getByRole("button", { name: "Rescan" }));
+		await waitFor(() => expect(scans).toBe(2));
 	});
 
 	it("shows measured inventory and exposes guarded cleanup review", async () => {
 		const client: CustodianClientApi = {
 			...inactiveCleanupClient(),
-			configuredScan: () => Effect.succeed({ status: "completed", report: sampleReport }),
-			chooseAndScan: () => Effect.succeed({ status: "cancelled" })
+			configuredScan: () => Effect.succeed({ status: "completed", report: sampleReport })
 		};
 
 		render(() => (
@@ -182,7 +183,6 @@ describe("ProjectCustodianRoute", () => {
 		let executed = 0;
 		const client: CustodianClientApi = {
 			configuredScan: () => Effect.succeed({ status: "completed", report: sampleReport }),
-			chooseAndScan: () => Effect.succeed({ status: "cancelled" }),
 			prepare: () => {
 				prepared += 1;
 				return Effect.succeed({ status: "completed", proposal });

@@ -93,7 +93,7 @@ it("groups compact exports and presets, closes menus and keeps host actions avai
 			);
 			expect(screen.queryByRole("dialog", { name: "Export formats" })).toBeNull();
 			await waitFor(() =>
-				expect(screen.getByRole("status").textContent).toContain("1 matching result:")
+				expect(screen.getByRole("status").textContent).toBe("Exported 1 row: /export")
 			);
 		}
 		await user.click(screen.getByRole("button", { name: "Presets" }));
@@ -167,10 +167,81 @@ it("restores presets, reports file failures and cancellation, and hides stale re
 		await waitFor(() => expect(view.getByRole("status").textContent).toBe("Cancelled."));
 		fireEvent.click(view.getByRole("button", { name: "Export CSV" }));
 		await waitFor(() =>
-			expect(view.getByRole("status").textContent).toContain(
+			expect(view.getByRole("alert").textContent).toBe(
 				"Disk full. Choose another destination."
 			)
 		);
+		expect(view.getByRole("status").textContent).toBe("");
+	} finally {
+		view.unmount();
+		await runtime.dispose();
+	}
+});
+
+it("keeps compact results and disabled reasons out of the toolbar flow", async () => {
+	const runtime = ManagedRuntime.make(Layer.empty);
+	const [disabled, setDisabled] = createSignal(true);
+	const user = userEvent.setup();
+	const view = render(() => (
+		<EffectRuntimeProvider runtime={runtime}>
+			<InvestigationActions
+				compact
+				query="text"
+				revision={1}
+				disabled={disabled()}
+				disabledReason="Wait for the search to finish before exporting."
+				onOpen={() => undefined}
+				client={{
+					export: () =>
+						Effect.succeed({
+							status: "failed",
+							message: "Disk full.",
+							recovery: "Choose another destination."
+						}),
+					save: () =>
+						Effect.succeed({
+							status: "saved",
+							path: "/preset.json",
+							rowCount: 0,
+							replayCommand: "pnpm ue-shed investigations run"
+						}),
+					open: () => Effect.succeed({ status: "cancelled" })
+				}}
+			/>
+		</EffectRuntimeProvider>
+	));
+	try {
+		const panel = view.getByRole("region", { name: "Investigation files" });
+		const tools = panel.firstElementChild;
+		expect(view.queryByRole("note")).toBeNull();
+		expect(panel.textContent).not.toContain("Wait for the search");
+		const exporter = view.getByRole("button", { name: "Export" });
+		const anchor = exporter.parentElement;
+		if (!anchor) throw new Error("The export tool has no hover anchor.");
+		await user.hover(anchor);
+		expect((await screen.findByRole("tooltip")).textContent).toContain("Wait for the search");
+		await user.unhover(anchor);
+
+		setDisabled(false);
+		flush();
+		await user.click(exporter);
+		await user.click(screen.getByRole("button", { name: "CSV" }));
+		const failure = await view.findByRole("alert");
+		expect(failure.textContent).toBe("Disk full. Choose another destination.");
+		// Results share one slot after the tools; nothing is inserted before them.
+		expect(panel.firstElementChild).toBe(tools);
+		expect(panel.children).toHaveLength(2);
+
+		await user.click(view.getByRole("button", { name: "Presets" }));
+		await user.click(screen.getByRole("button", { name: "Save preset…" }));
+		await waitFor(() =>
+			expect(view.getByRole("status").textContent).toBe("Saved preset: /preset.json")
+		);
+		expect(view.queryByRole("alert")).toBeNull();
+		expect(panel.children).toHaveLength(2);
+		await user.click(view.getByRole("button", { name: "Presets" }));
+		expect(screen.getByRole("button", { name: "Copy CLI replay" })).toBeDefined();
+		expect(screen.getByText("pnpm ue-shed investigations run")).toBeDefined();
 	} finally {
 		view.unmount();
 		await runtime.dispose();

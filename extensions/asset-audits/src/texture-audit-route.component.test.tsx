@@ -32,7 +32,6 @@ const record = {
 };
 function makeClient(overrides: Partial<TextureAuditClientApi> = {}): TextureAuditClientApi {
 	return {
-		chooseProjectAndScan: () => Effect.die("unused"),
 		locateAsset: (requestedPath) =>
 			Effect.sync(() => {
 				return {
@@ -179,8 +178,6 @@ describe("TextureAuditRoute", () => {
 	it("uses the globally selected project and exposes no second chooser", async () => {
 		let rescans = 0;
 		const client: TextureAuditClientApi = {
-			chooseProjectAndScan: () =>
-				Effect.die("the route must use the Workbench header for project choice"),
 			locateAsset: () => Effect.die("unused"),
 			record: () => Effect.die("unused"),
 			search: () => Effect.die("unused"),
@@ -206,8 +203,9 @@ describe("TextureAuditRoute", () => {
 				<TextureAuditRoute client={client} />
 			</EffectRuntimeProvider>
 		));
-		expect(await screen.findByText("No project configured.")).toBeDefined();
-		expect(screen.queryByRole("button", { name: "Choose project" })).toBeNull();
+		expect(await screen.findByText("No project selected.")).toBeDefined();
+		expect(screen.getByText(/workspace project picker/u)).toBeDefined();
+		expect(screen.queryByRole("button", { name: /Choose project/u })).toBeNull();
 		await userEvent.setup().click(screen.getByRole("button", { name: "Rescan assets" }));
 		expect(rescans).toBe(2);
 	});

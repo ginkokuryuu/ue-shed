@@ -6,6 +6,7 @@ import { it } from "@effect/vitest";
 import { makeLocalizationEvidenceTestLayer } from "@ue-shed/localization";
 import {
 	corpus as localizationCorpus,
+	cultureCode,
 	evidence as localizationEvidence,
 	poDocument,
 	unit as localizationUnit,
@@ -187,8 +188,6 @@ it.effect(
 				expect((yield* service.configuredRefresh(false)).status).toBe("completed");
 				expect((yield* service.configuredRefresh(true)).status).toBe("failed");
 				expect((yield* service.configuredScan()).status).toBe("failed");
-				expect((yield* service.chooseAndRefresh()).status).toBe("failed");
-				expect((yield* service.chooseAndScan()).status).toBe("failed");
 				expect(yield* service.saveQualityRules(STARTER_GAME_TEXT_RULES)).toMatchObject({
 					status: "failed",
 					error: { code: "write_failed" }
@@ -467,9 +466,6 @@ it.effect("reuses navigation results and refreshes only when requested", () =>
 			expect(yield* Ref.get(scans)).toBe(1);
 			expect((yield* service.configuredRefresh(true)).status).toBe("completed");
 			expect(yield* Ref.get(scans)).toBe(2);
-			expect((yield* service.chooseAndRefresh()).status).toBe("completed");
-			expect((yield* service.configuredRefresh(false)).status).toBe("completed");
-			expect(yield* Ref.get(scans)).toBe(3);
 		}).pipe(
 			Effect.provide(
 				gameTextLive.pipe(
@@ -895,49 +891,6 @@ it.effect("translates a typed scan failure into the failed result variant", () =
 	)
 );
 
-it.effect("uses the globally selected project when scanning", () =>
-	Effect.gen(function* () {
-		const service = yield* WorkbenchGameText;
-		const result = yield* service.chooseAndScan();
-		expect(result).toEqual({ corpus: emptyCorpus, status: "completed" });
-	}).pipe(
-		Effect.provide(
-			gameTextLive.pipe(
-				Layer.provide(
-					Layer.mergeAll(
-						configuration,
-						makeTextCorpusServiceTestLayer({
-							scan: () => Effect.die("full project scan is not used"),
-							scanFromProjectIndex: () => Effect.succeed(emptyCorpus)
-						}),
-						selectedProject
-					)
-				)
-			)
-		)
-	)
-);
-
-it.effect("cancels choose-and-scan when global project selection is cancelled", () =>
-	Effect.gen(function* () {
-		const service = yield* WorkbenchGameText;
-		const result = yield* service.chooseAndScan();
-		expect(result).toEqual({ status: "cancelled" });
-	}).pipe(
-		Effect.provide(
-			gameTextLive.pipe(
-				Layer.provide(
-					Layer.mergeAll(
-						configuration,
-						makeTextCorpusServiceTestLayer({ scan: () => Effect.die("not used") }),
-						unselectedProject
-					)
-				)
-			)
-		)
-	)
-);
-
 it.effect(
 	"returns typed actionable rule failures without replacing the retained corpus query",
 	() =>
@@ -1046,9 +999,12 @@ it.effect(
 			expect(loaded.status).toBe("completed");
 			if (loaded.status !== "completed") return;
 			expect(loaded.document).toEqual(validQualityDocument);
+			// The renderer learns that Save has a destination, but never the destination's path.
+			expect(loaded.ruleFile).toBe("attached");
+			expect(JSON.stringify(loaded)).not.toContain(qualityRulesPath);
 
 			const previewed = yield* service.previewQualityRules(revisedDocument);
-			expect(previewed.status).toBe("completed");
+			expect(previewed).toMatchObject({ status: "completed", ruleFile: "attached" });
 			const invalid = yield* service.previewQualityRules(invalidDocument);
 			expect(invalid).toMatchObject({
 				error: { code: "invalid_rules" },
@@ -1163,6 +1119,99 @@ it("exports one captured generation when the project changes during the save dia
 	}
 });
 
+it("exports the selected target's localization quality list as a replayable report", async () => {
+	const root = await mkdtemp(join(tmpdir(), "ue-shed-localization-quality-"));
+	let outputPath = join(root, "export.json");
+	const dialog = Layer.succeed(
+		ElectronDialog,
+		ElectronDialog.of({
+			chooseDirectory: () => Effect.succeed({ status: "cancelled" }),
+			chooseFile: () => Effect.succeed({ status: "cancelled" }),
+			chooseFiles: () => Effect.succeed({ status: "cancelled" }),
+			chooseSaveFile: () =>
+				Effect.sync(() => ({ status: "selected" as const, path: outputPath }))
+		})
+	);
+	const reader = makeLocalizationEvidenceTestLayer({
+		discover: () =>
+			Effect.succeed({ schemaVersion: 1, targets: [localizationTarget], diagnostics: [] }),
+		read: () => Effect.succeed(localizationEvidence(poDocument(""))),
+		targets: () => Effect.die("unused")
+	});
+	const query = {
+		mode: "quality" as const,
+		query: "",
+		capability: "all" as const,
+		lens: "all" as const,
+		qualityFilter: "all" as const,
+		workspaceFilter: "empty_translation" as const,
+		localization: { target: localizationTarget.name, culture: cultureCode("de") }
+	};
+	try {
+		await Effect.runPromise(
+			Effect.gen(function* () {
+				const service = yield* WorkbenchGameText;
+				expect((yield* service.configuredRefresh(true)).status).toBe("completed");
+				// Without a loaded target the export reports guidance instead of an empty list.
+				expect(yield* service.investigationExport(query, "json")).toMatchObject({
+					status: "failed"
+				});
+				expect(yield* service.localizationTarget(localizationTarget.name)).toMatchObject({
+					status: "ready"
+				});
+				const listed = yield* service.localizationQualitySearch({
+					target: localizationTarget.name,
+					culture: cultureCode("de"),
+					filter: "empty_translation"
+				});
+				if (listed.status !== "ready") throw new Error("Missing quality list.");
+				expect(listed.page.total).toBeGreaterThan(0);
+				expect(yield* service.investigationExport(query, "json")).toMatchObject({
+					status: "saved",
+					rowCount: listed.page.total
+				});
+				const exported = JSON.parse(
+					yield* Effect.promise(() => readFile(outputPath, "utf8"))
+				);
+				expect(exported.preset.query).toEqual(query);
+				expect(exported.result).toMatchObject({
+					mode: "localization_quality",
+					report: {
+						target: localizationTarget.name,
+						culture: "de",
+						filter: "empty_translation",
+						total: listed.page.total
+					}
+				});
+				expect(exported.result.report.findings).toEqual(listed.page.findings);
+				outputPath = join(root, "export.csv");
+				expect((yield* service.investigationExport(query, "csv")).status).toBe("saved");
+				const csv = yield* Effect.promise(() => readFile(outputPath, "utf8"));
+				expect(csv.split("\r\n")[0]).toContain('"Finding ID","Scan status"');
+			}).pipe(
+				Effect.provide(
+					WorkbenchGameTextLive.pipe(
+						Layer.provide(reader),
+						Layer.provide(
+							Layer.mergeAll(
+								selectedProject,
+								dialog,
+								makeLocalFilesTestLayer(),
+								makeTextCorpusServiceTestLayer({
+									scan: () => Effect.die("unused"),
+									scanFromProjectIndex: () => Effect.succeed(localizationCorpus())
+								})
+							)
+						)
+					)
+				)
+			)
+		);
+	} finally {
+		await rm(root, { recursive: true, force: true });
+	}
+});
+
 it("restores embedded rules without retaining another rule file's write destination", async () => {
 	const root = await mkdtemp(join(tmpdir(), "ue-shed-preset-rules-"));
 	const presetPath = join(root, "preset.json");
@@ -1203,6 +1252,11 @@ it("restores embedded rules without retaining another rule file's write destinat
 				expect((yield* service.chooseQualityRules()).status).toBe("completed");
 				openPath = presetPath;
 				expect((yield* service.investigationOpen()).status).toBe("opened");
+				// Embedded preset rules have no file, so a remounted editor offers Save preset.
+				expect(yield* service.previewQualityRules(validQualityDocument)).toMatchObject({
+					status: "completed",
+					ruleFile: "none"
+				});
 				expect(yield* service.saveQualityRules(validQualityDocument)).toMatchObject({
 					status: "failed",
 					error: { code: "write_failed" }

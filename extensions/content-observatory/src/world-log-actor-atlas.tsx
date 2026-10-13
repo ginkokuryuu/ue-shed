@@ -299,7 +299,7 @@ export function WorldLogScene(props: {
 	return (
 		<section aria-label="Saved actor point map" {...stylex.attrs(styles.actorAtlas)}>
 			<header {...stylex.attrs(styles.actorAtlasHeader)}>
-				<div>
+				<div {...stylex.attrs(styles.actorAtlasHeading)}>
 					<h2 {...stylex.attrs(styles.atlasTitle)}>{frameTitle()}</h2>
 					<code {...stylex.attrs(styles.actorAtlasPath)}>{mapPath()}</code>
 				</div>

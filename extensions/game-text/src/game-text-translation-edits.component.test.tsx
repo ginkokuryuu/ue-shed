@@ -141,7 +141,9 @@ it("retains unwritten PO edits after a partial write and requires a new check", 
 		)
 	);
 	await user.click(screen.getByRole("button", { name: "Write to PO" }));
-	await screen.findByText(/Partially written: 1 translations written; 1 edits remain/u);
+	await screen.findByText(
+		/^Wrote 1 translation to 1 PO file\. 1 edit not written, because this file could not be replaced: Localization\/fr\/Game\.po\./u
+	);
 	expect(screen.getByRole("button", { name: "1 staged" })).toBeDefined();
 	expect(screen.queryByText("Ready to write")).toBeNull();
 	expect(screen.getByRole("button", { name: "Write to PO" })).toHaveProperty("disabled", true);

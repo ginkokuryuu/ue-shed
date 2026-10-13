@@ -483,6 +483,8 @@ export const styles = stylex.create({
 		borderBottomStyle: "solid",
 		borderBottomWidth: 1
 	},
+	// The long map path shrinks first so the actor summary stays inside narrow windows.
+	actorAtlasHeading: { flexGrow: 1, flexShrink: 1, minWidth: 0 },
 	atlasTitle: {
 		margin: 0,
 		fontSize: 14,

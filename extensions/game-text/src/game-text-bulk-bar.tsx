@@ -4,12 +4,13 @@ import {
 	type LocalizationLineId,
 	type LocalizationLinePreview,
 	type LocalizationReviewChange,
-	type LocalizationSelection
+	type LocalizationSelection,
+	textCountLabel
 } from "@ue-shed/game-text/browser";
 import { Button, createEffectAction } from "@ue-shed/ui";
 import { tokens } from "@ue-shed/ui-theme/tokens.stylex.js";
 import { Effect } from "effect";
-import { Show, createMemo, createSignal } from "solid-js";
+import { Show, createEffect, createMemo, createSignal, untrack } from "solid-js";
 import {
 	MAX_SELECTED_LINES,
 	REVIEW_BATCH,
@@ -34,25 +35,39 @@ export function createLineSelection(input: {
 	const [ticked, setTicked] = createSignal<
 		ReadonlyMap<LocalizationLineId, LocalizationLinePreview>
 	>(new Map());
-	const [capped, setCapped] = createSignal(false);
+	// Why the last tick did less than asked: the selection was full, or a range's start is not
+	// among the loaded lines.
+	const [note, setNote] = createSignal<string>();
 	let anchor: LocalizationLineId | undefined;
 	const toggle = (line: LocalizationLinePreview, range: boolean) => {
 		const on = !ticked().has(line.id);
-		const span = range ? lineRange(input.order(), anchor, line.id) : [line];
+		const order = input.order();
+		const span = range ? lineRange(order, anchor, line.id) : [line];
 		const next = new Map(ticked());
-		let full = false;
+		let skipped = 0;
 		for (const item of span.length === 0 ? [line] : span) {
 			if (!on) next.delete(item.id);
 			else if (next.size < MAX_SELECTED_LINES || next.has(item.id)) next.set(item.id, item);
-			else full = true;
+			else skipped++;
 		}
+		const unloaded =
+			range &&
+			anchor !== undefined &&
+			anchor !== line.id &&
+			!order.some((item) => item.id === anchor);
+		setNote(
+			skipped > 0
+				? `${skipped.toLocaleString()} not ticked: a selection holds at most ${MAX_SELECTED_LINES.toLocaleString()} lines.`
+				: unloaded
+					? "Shift-click ticks a range only between lines shown in open groups."
+					: undefined
+		);
 		anchor = line.id;
-		setCapped(full);
 		setTicked(next);
 	};
 	const clear = () => {
 		anchor = undefined;
-		setCapped(false);
+		setNote(undefined);
 		setTicked(new Map());
 	};
 	// Each ticked line as the list last loaded it, so a reload after a write shows its new state.
@@ -62,7 +77,7 @@ export function createLineSelection(input: {
 	});
 	return {
 		ticked: current,
-		capped,
+		note,
 		isTicked: (id: LocalizationLineId) => ticked().has(id),
 		toggle,
 		clear
@@ -92,8 +107,18 @@ export function BulkBar(props: {
 	const action = createEffectAction();
 	const [confirming, setConfirming] = createSignal(false);
 	const [working, setWorking] = createSignal(false);
-	const [message, setMessage] = createSignal<string | undefined>(undefined);
+	// The last action's result; a failure is announced as an alert.
+	const [message, setMessage] = createSignal<
+		{ readonly text: string; readonly failed: boolean } | undefined
+	>(undefined);
 	const lines = createMemo(() => [...props.selection.ticked().values()]);
+	// A result describes the lines it ran on, so changing the selection retires it.
+	createEffect(
+		() => props.selection.ticked(),
+		() => {
+			if (!untrack(working)) setMessage(undefined);
+		}
+	);
 	// Reviews written from this bar, so a ticked line in a closed group, which the list has not
 	// reloaded, does not offer them again.
 	const [written, setWritten] = createSignal<ReadonlySet<string>>(new Set());
@@ -104,11 +129,20 @@ export function BulkBar(props: {
 			(change) => !written().has(reviewKey(change))
 		)
 	);
-	const carries = createMemo(() => carryEdits(lines()));
+	// Carries not staged yet: the count on the button is what a click stages.
+	const carries = createMemo(() =>
+		carryEdits(lines()).filter(
+			({ edit }) =>
+				props.edits.stagedFor(edit.culture, {
+					namespace: edit.namespace,
+					key: edit.key
+				}) === undefined
+		)
+	);
 	const count = () => lines().length;
 	const run = <A, E>(
 		effect: Effect.Effect<A, E>,
-		done: (value: A) => string | undefined,
+		done: (value: A) => { readonly text: string; readonly failed: boolean } | undefined,
 		failed: string
 	) => {
 		if (working()) return;
@@ -121,10 +155,12 @@ export function BulkBar(props: {
 			},
 			onFailure: () => {
 				setWorking(false);
-				setMessage(failed);
+				setMessage({ text: failed, failed: true });
 			}
 		});
 	};
+	const ok = (text: string) => ({ text, failed: false });
+	const notOk = (text: string) => ({ text, failed: true });
 	const exportLines = () => {
 		const request = props.client.localizationLinesFile;
 		const localization = props.localization;
@@ -133,11 +169,11 @@ export function BulkBar(props: {
 			request(exportRequest(localization, lines())),
 			(result) =>
 				result.status === "saved"
-					? `Exported ${result.rowCount.toLocaleString()} lines.`
+					? ok(`Exported ${textCountLabel(result.rowCount, "line")}.`)
 					: result.status === "failed"
-						? `${result.message} ${result.recovery}`
+						? notOk(`${result.message} ${result.recovery}`)
 						: result.status === "not_ready"
-							? "Translations are still loading. Try again in a moment."
+							? notOk("Translations are still loading. Try again in a moment.")
 							: undefined,
 			"The lines could not be exported. Try again."
 		);
@@ -154,7 +190,9 @@ export function BulkBar(props: {
 			for (const batch of batches(changes, REVIEW_BATCH)) {
 				yield* Effect.sync(() =>
 					setMessage(
-						`Marking reviewed: ${marked.toLocaleString()} / ${changes.length.toLocaleString()}`
+						ok(
+							`Marking reviewed: ${marked.toLocaleString()} of ${changes.length.toLocaleString()}`
+						)
 					)
 				);
 				const result = yield* request({ target, changes: batch });
@@ -168,25 +206,21 @@ export function BulkBar(props: {
 			write,
 			({ marked, result }) => {
 				if (marked > 0) props.onChanged();
-				const done = `Marked ${marked.toLocaleString()} translations reviewed.`;
+				const done = `Marked ${textCountLabel(marked, "translation")} reviewed.`;
 				return result?.status === "failed"
-					? `${marked > 0 ? done + " " : ""}${result.message} ${result.recovery}`
+					? notOk(`${marked > 0 ? done + " " : ""}${result.message} ${result.recovery}`)
 					: result?.status === "not_ready"
-						? "Translations are still loading. Try again in a moment."
-						: done;
+						? notOk(
+								`${marked > 0 ? done + " " : ""}Translations are still loading. Try the rest in a moment.`
+							)
+						: ok(done);
 			},
 			"Review state could not be saved. Rescan and try again."
 		);
 	};
 	// Staged edits are written in one request, so carrying stops at its limit.
 	const carry = () => {
-		const fresh = carries().filter(
-			({ edit }) =>
-				props.edits.stagedFor(edit.culture, {
-					namespace: edit.namespace,
-					key: edit.key
-				}) === undefined
-		);
+		const fresh = carries();
 		const room = Math.max(0, MAX_LOCALIZATION_EDITS - props.edits.edits().length);
 		const staged = fresh.slice(0, room);
 		if (staged.length > 0) {
@@ -194,21 +228,31 @@ export function BulkBar(props: {
 			props.edits.setOpen(true);
 		}
 		setMessage(
-			`Staged ${staged.length.toLocaleString()} translations to carry.` +
-				(staged.length < fresh.length
-					? ` Write them first: at most ${MAX_LOCALIZATION_EDITS} edits are staged at once.`
-					: "")
+			ok(
+				`Staged ${textCountLabel(staged.length, "translation")} to carry.` +
+					(staged.length < fresh.length
+						? ` ${textCountLabel(fresh.length - staged.length, "translation")} left: write the staged edits first, since at most ${MAX_LOCALIZATION_EDITS} are staged at once.`
+						: "")
+			)
 		);
 	};
-	const copyKeys = () =>
+	const copyKeys = () => {
+		const keyed = lines().filter((line) => line.identity !== null);
 		run(
 			Effect.tryPromise({
-				try: () => navigator.clipboard.writeText(keysText(lines())),
+				try: () => navigator.clipboard.writeText(keysText(keyed)),
 				catch: String
 			}),
-			() => `Copied ${count().toLocaleString()} keys.`,
+			() =>
+				ok(
+					`Copied ${textCountLabel(keyed.length, "key")}` +
+						(keyed.length < count()
+							? ` (${textCountLabel(count() - keyed.length, "line")} without a key).`
+							: ".")
+				),
 			"The keys could not be copied."
 		);
+	};
 	const clear = () => {
 		setMessage(undefined);
 		setWritten(new Set<string>());
@@ -218,8 +262,15 @@ export function BulkBar(props: {
 		<Show when={count() > 0}>
 			<div role="toolbar" aria-label="Selected lines" {...stylex.attrs(styles.bar)}>
 				<Show when={confirming()}>
-					<span>Mark {reviews().length} current translations reviewed?</span>
-					<Button size="compact" onClick={markReviewed}>
+					<span>
+						Mark {textCountLabel(reviews().length, "current translation")} reviewed in
+						the project's review file?
+					</span>
+					<Button
+						size="compact"
+						disabled={working() || props.busy}
+						onClick={markReviewed}
+					>
 						Confirm review
 					</Button>
 					<Button size="compact" onClick={() => setConfirming(false)}>
@@ -260,10 +311,21 @@ export function BulkBar(props: {
 				<Button size="compact" tone="quiet" disabled={working()} onClick={copyKeys}>
 					Copy keys
 				</Button>
-				<Show when={message() ?? (props.selection.capped() ? capNote : undefined)}>
-					{(text) => (
-						<span role="status" title={text()} {...stylex.attrs(styles.message)}>
-							{text()}
+				<Show when={props.selection.note()}>
+					{(note) => (
+						<span role="status" title={note()} {...stylex.attrs(styles.message)}>
+							{note()}
+						</span>
+					)}
+				</Show>
+				<Show when={message()}>
+					{(current) => (
+						<span
+							role={current().failed ? "alert" : "status"}
+							title={current().text}
+							{...stylex.attrs(styles.message, current().failed && styles.failed)}
+						>
+							{current().text}
 						</span>
 					)}
 				</Show>
@@ -280,8 +342,6 @@ export function BulkBar(props: {
 		</Show>
 	);
 }
-
-const capNote = `A selection holds at most ${MAX_SELECTED_LINES.toLocaleString()} lines.`;
 
 const styles = stylex.create({
 	bar: {
@@ -318,6 +378,7 @@ const styles = stylex.create({
 		whiteSpace: "normal",
 		color: tokens.colorTextMuted
 	},
+	failed: { color: tokens.colorWarning },
 	close: {
 		marginLeft: "auto",
 		width: 24,

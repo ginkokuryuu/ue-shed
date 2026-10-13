@@ -11,7 +11,7 @@ export function culturesLabel(picked: readonly string[]): string {
 	return `${picked.length.toLocaleString()} cultures`;
 }
 
-/** "3 missing · 1 to update · 2 not synced", or "Up to date". */
+/** "3 not translated · 1 need update · 2 not synced", or "Up to date". */
 function workLine(facet: TextCultureFacet | undefined): string | undefined {
 	if (facet === undefined) return undefined;
 	const parts = [
@@ -20,6 +20,14 @@ function workLine(facet: TextCultureFacet | undefined): string | undefined {
 		facet.notSynced > 0 ? `${facet.notSynced.toLocaleString()} not synced` : undefined
 	].filter((part) => part !== undefined);
 	return parts.length > 0 ? parts.join(" · ") : "Up to date";
+}
+
+/** The culture's worst work sets its colour: red, amber, then blue; up to date stays quiet. */
+function workTone(facet: TextCultureFacet | undefined) {
+	if (facet === undefined) return styles.quiet;
+	if (facet.missing > 0) return styles.danger;
+	if (facet.toUpdate > 0) return styles.warning;
+	return facet.notSynced > 0 ? styles.sync : styles.quiet;
 }
 
 /**
@@ -98,6 +106,12 @@ export function CulturePicker(props: {
 							});
 					}}
 				>
+					{/* "All cultures" and "5 cultures" already say what they are. */}
+					<Show when={props.picked.length > 0 && props.picked.length <= 3}>
+						<span {...stylex.attrs(styles.prefix)}>
+							{props.picked.length === 1 ? "Culture " : "Cultures "}
+						</span>
+					</Show>
 					{culturesLabel(props.picked)} <span aria-hidden="true">▾</span>
 				</Button>
 			)}
@@ -118,7 +132,9 @@ export function CulturePicker(props: {
 						type="button"
 						aria-pressed={isPicked(culture) ? "true" : "false"}
 						aria-label={culture}
-						title={workLine(workOf(culture))}
+						aria-describedby={
+							workLine(workOf(culture)) ? `${id}-${culture}` : undefined
+						}
 						disabled={props.disabled}
 						onClick={() => props.onToggle(culture)}
 						onKeyDown={move}
@@ -134,13 +150,8 @@ export function CulturePicker(props: {
 						<Show when={workLine(workOf(culture))}>
 							{(line) => (
 								<span
-									{...stylex.attrs(
-										styles.work,
-										line() === "Up to date" && styles.quiet,
-										!workOf(culture)?.missing &&
-											!workOf(culture)?.toUpdate &&
-											styles.sync
-									)}
+									id={`${id}-${culture}`}
+									{...stylex.attrs(styles.work, workTone(workOf(culture)))}
 								>
 									{line()}
 								</span>
@@ -154,6 +165,7 @@ export function CulturePicker(props: {
 }
 
 const styles = stylex.create({
+	prefix: { color: tokens.colorTextMuted },
 	panel: {
 		display: "grid",
 		gap: 2,
@@ -171,6 +183,8 @@ const styles = stylex.create({
 		zIndex: 20
 	},
 	sync: { color: tokens.colorAccent },
+	danger: { color: tokens.colorDanger },
+	warning: { color: tokens.colorWarning },
 	choice: {
 		display: "flex",
 		alignItems: "center",
@@ -209,7 +223,6 @@ const styles = stylex.create({
 	code: { width: 64, flexShrink: 0, fontFamily: tokens.fontMono, fontSize: 12 },
 	work: {
 		flex: 1,
-		color: tokens.colorWarning,
 		fontSize: 12,
 		textAlign: "end",
 		whiteSpace: "nowrap"

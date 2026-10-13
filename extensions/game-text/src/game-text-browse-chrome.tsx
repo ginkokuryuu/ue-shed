@@ -11,21 +11,17 @@ export function browseStateLabel(state: LocalizationState): string {
 const states = ["translated", "needs_update", "not_translated", "outside_target"] as const;
 
 /** Counts are supplied by the query over matching lines and the picked cultures. They can
- * overlap across cultures, so they are not presented as parts of one percentage bar. */
-export function BrowseSummary(props: {
-	readonly page: TextCorpusSearchPage | undefined;
-	readonly culture: string | undefined;
-	readonly cultures: readonly string[];
-}) {
+ * overlap across cultures, so they are not presented as parts of one percentage bar. They sit in
+ * the list's footer, beside the picked culture count. */
+export function BrowseSummary(props: { readonly page: TextCorpusSearchPage | undefined }) {
 	return (
 		<Show when={props.page?.localization}>
 			{(localization) => (
-				<section aria-label="Translation summary" {...stylex.attrs(styles.summary)}>
-					<span {...stylex.attrs(styles.scope)}>
-						{props.culture ??
-							(props.cultures.length ? "Picked cultures" : "All cultures")}
-						<span {...stylex.attrs(styles.muted)}> · matching lines</span>
-					</span>
+				<section
+					aria-label="Translation summary"
+					title="Matching lines in each translation state, for the picked cultures"
+					{...stylex.attrs(styles.summary)}
+				>
 					<For each={states}>
 						{(state) => (
 							<span {...stylex.attrs(styles.stat)}>
@@ -84,10 +80,12 @@ export function stateTone(state: LocalizationState | undefined) {
 }
 
 export const browseStyles = stylex.create({
+	// A status bar: one line at every width, where only the state counts give way.
 	footer: {
 		display: "flex",
 		alignItems: "center",
 		gap: 16,
+		whiteSpace: "nowrap",
 		minHeight: 26,
 		paddingInline: 16,
 		borderTopWidth: 1,
@@ -121,26 +119,20 @@ export const browseStyles = stylex.create({
 const styles = stylex.create({
 	summary: {
 		display: "flex",
-		flexWrap: "wrap",
 		alignItems: "center",
-		gap: "8px 16px",
-		padding: "8px 16px",
-		borderBottomWidth: 1,
-		borderBottomStyle: "solid",
-		borderBottomColor: tokens.colorBorder,
-		color: tokens.colorTextMuted,
-		fontSize: 12,
-		flexShrink: 0
+		gap: 12,
+		flexShrink: 1,
+		minWidth: 0,
+		overflow: "hidden",
+		whiteSpace: "nowrap"
 	},
-	scope: { color: tokens.colorText, fontWeight: 500 },
-	muted: { color: tokens.colorTextMuted, fontWeight: 400 },
 	stat: {
 		display: "inline-flex",
 		alignItems: "center",
-		gap: 6,
+		gap: 5,
 		fontVariantNumeric: "tabular-nums"
 	},
-	dot: { width: 7, height: 7, borderRadius: 2, backgroundColor: "currentColor" },
+	dot: { width: 6, height: 6, borderRadius: 2, backgroundColor: "currentColor" },
 	success: { color: tokens.colorSuccess },
 	warning: { color: tokens.colorWarning },
 	danger: { color: tokens.colorDanger },

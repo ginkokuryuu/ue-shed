@@ -39,7 +39,6 @@ export const workbenchInvokeChannels = {
 	configExplorer: { query: "config-explorer:query" },
 	projectCustodian: {
 		configuredScan: "project-custodian:configured-scan",
-		chooseAndScan: "project-custodian:choose-and-scan",
 		prepare: "project-custodian:prepare",
 		execute: "project-custodian:execute",
 		cancel: "project-custodian:cancel"
@@ -59,9 +58,7 @@ export const workbenchInvokeChannels = {
 		investigationSave: "asset-audits:textures:investigation-save",
 		investigationOpen: "asset-audits:textures:investigation-open",
 		loadConfiguredProject: "asset-audits:textures:configured-scan",
-		chooseProjectAndScan: "asset-audits:textures:choose-and-scan",
 		refreshConfiguredProject: "asset-audits:textures:configured-refresh",
-		chooseProjectAndRefresh: "asset-audits:textures:choose-and-refresh",
 		progress: "asset-audits:textures:progress",
 		search: "asset-audits:textures:search",
 		record: "asset-audits:textures:record",
@@ -90,9 +87,7 @@ export const workbenchInvokeChannels = {
 		investigationSave: "game-text:investigation-save",
 		investigationOpen: "game-text:investigation-open",
 		loadConfiguredProject: "game-text:configured-scan",
-		chooseProjectAndScan: "game-text:choose-and-scan",
 		refreshConfiguredProject: "game-text:configured-refresh",
-		chooseProjectAndRefresh: "game-text:choose-and-refresh",
 		progress: "game-text:progress",
 		search: "game-text:search",
 		focus: "game-text:focus",
@@ -105,8 +100,7 @@ export const workbenchInvokeChannels = {
 		qualityFocus: "game-text:quality:focus"
 	},
 	inputAtlas: {
-		loadConfiguredProject: "input-atlas:configured-scan",
-		chooseProjectAndScan: "input-atlas:choose-and-scan"
+		loadConfiguredProject: "input-atlas:configured-scan"
 	},
 	contentObservatory: {
 		status: "content-observatory:status",
@@ -144,7 +138,6 @@ export const workbenchInvokeChannels = {
 		savedWorld: "map-review:saved-world",
 		savedWorldMaps: "map-review:saved-world-maps",
 		savedWorldProgress: "map-review:saved-world-progress",
-		chooseProjectAndMaps: "map-review:choose-project-and-maps",
 		focusActor: "map-review:focus-actor",
 		approveCandidate: "map-review:approve-candidate",
 		authorFromSelection: "map-review:author-from-selection",

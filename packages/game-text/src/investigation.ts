@@ -34,8 +34,16 @@ export const GameTextInvestigationQuery = Schema.Struct({
 	 */
 	localization: TextCorpusSearchRequest.fields.localization,
 	qualityFilter: TextQualityFilter,
+	/** The localization quality list's filter; only a quality query over a target has one. */
 	workspaceFilter: Schema.optionalKey(WorkspaceQualityFilter)
-});
+}).check(
+	Schema.makeFilter((query) =>
+		query.workspaceFilter === undefined ||
+		(query.mode === "quality" && query.localization !== undefined)
+			? undefined
+			: "A localization quality filter needs quality mode and a localization target."
+	)
+);
 export type GameTextInvestigationQuery = Schema.Schema.Type<typeof GameTextInvestigationQuery>;
 export const GameTextInvestigationPreset = Schema.Struct({
 	schemaVersion: Schema.Literal(1),
@@ -128,7 +136,8 @@ export function exportGameTextInvestigation(
 			return yield* Effect.fail(
 				new InvestigationError({
 					message: "The localization quality workspace is unavailable.",
-					recovery: "Load the selected target and retry the export."
+					recovery:
+						"Check that the preset's localization target is gathered in the project, then retry the export."
 				})
 			);
 		if (

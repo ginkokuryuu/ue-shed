@@ -37,11 +37,19 @@ export const TextQualityQuerySummary = Schema.Struct({
 });
 export type TextQualityQuerySummary = Schema.Schema.Type<typeof TextQualityQuerySummary>;
 
+/**
+ * Whether the host keeps a standalone rules file it can save these rules to. Hosts report only
+ * this fact; the file's path never crosses the result.
+ */
+export const TextQualityRuleFile = Schema.Literals(["attached", "none"]);
+export type TextQualityRuleFile = Schema.Schema.Type<typeof TextQualityRuleFile>;
+
 export const TextQualityQueryRunResult = Schema.Union([
 	Schema.Struct({
 		document: GameTextRuleDocument,
 		status: Schema.Literal("completed"),
-		summary: TextQualityQuerySummary
+		summary: TextQualityQuerySummary,
+		ruleFile: Schema.optionalKey(TextQualityRuleFile)
 	}),
 	Schema.Struct({ status: Schema.Literal("cancelled") }),
 	Schema.Struct({ status: Schema.Literal("not_ready") }),
@@ -69,7 +77,8 @@ export const TextQualityRuleUpdateResult = Schema.Union([
 	Schema.Struct({
 		document: GameTextRuleDocument,
 		status: Schema.Literal("completed"),
-		summary: TextQualityQuerySummary
+		summary: TextQualityQuerySummary,
+		ruleFile: Schema.optionalKey(TextQualityRuleFile)
 	}),
 	Schema.Struct({ status: Schema.Literal("not_ready") }),
 	Schema.Struct({

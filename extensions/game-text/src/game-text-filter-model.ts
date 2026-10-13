@@ -105,33 +105,59 @@ export function hasValue(
 	);
 }
 
+/** The operator a field's pill uses, if the field has one. */
+export function fieldOp(
+	filter: TextFilter,
+	field: TextFilterField
+): TextFilterClause["op"] | undefined {
+	return filter.find((clause) => clause.field === field)?.op;
+}
+
 /**
- * Adds or removes one value. Values join the field's existing clause with the same operator, so a
- * field reads as one pill: "Problem is any of Key changed, Not gathered yet".
+ * Adds or removes one value. A field reads as one pill, "Problem is any of Key changed, Not
+ * gathered yet": a value already in a pill leaves it, and a new value joins the field's pill with
+ * that pill's operator. Only a field without a pill takes the given clause's operator.
  */
 export function toggleValue(filter: TextFilter, clause: TextFilterClause): TextFilter {
 	const value = clause.values[0];
 	if (value === undefined) return filter;
-	// Moving a value to the other operator must remove its opposite first.
-	filter = filter.flatMap((item) => {
-		if (item.field !== clause.field || item.op === clause.op) return [item];
-		const kept = withValues(
-			item,
-			item.values.filter((entry) => entry !== value)
-		);
-		return kept === undefined ? [] : [kept];
-	});
-	const index = filter.findIndex((item) => item.field === clause.field && item.op === clause.op);
+	const holding = filter.findIndex(
+		(item) =>
+			item.field === clause.field && item.values.some((entry: string) => entry === value)
+	);
+	const index = holding >= 0 ? holding : filter.findIndex((item) => item.field === clause.field);
 	const existing = filter[index];
 	if (existing === undefined) return [...filter, clause];
 	const values: readonly string[] = existing.values;
-	const next = values.includes(value)
-		? values.filter((item) => item !== value)
-		: [...values, value];
+	const next = holding >= 0 ? values.filter((item) => item !== value) : [...values, value];
 	const replaced = next.length === 0 ? undefined : withValues(existing, next);
 	return replaced === undefined
 		? filter.filter((_, position) => position !== index)
 		: filter.map((item, position) => (position === index ? replaced : item));
+}
+
+/**
+ * Switches one pill between "is" and "is not". Filters saved with both operators for a field
+ * merge into one pill when the switch would leave two with the same operator.
+ */
+export function flipClause(filter: TextFilter, index: number): TextFilter {
+	const clause = filter[index];
+	if (clause === undefined) return filter;
+	const op = clause.op === "is" ? ("is_not" as const) : ("is" as const);
+	const twin = filter.findIndex(
+		(item, position) => position !== index && item.field === clause.field && item.op === op
+	);
+	if (twin < 0)
+		return filter.map((item, position) => (position === index ? { ...clause, op } : item));
+	const twinClause = filter[twin];
+	const twinValues: readonly string[] = twinClause?.values ?? [];
+	const values: readonly string[] = clause.values;
+	const merged =
+		twinClause &&
+		withValues(twinClause, [...twinValues, ...values.filter((v) => !twinValues.includes(v))]);
+	return filter.flatMap((item, position) =>
+		position === index ? [] : position === twin && merged ? [merged] : [item]
+	);
 }
 
 /** The same clause with other values, keeping only values its field accepts. */

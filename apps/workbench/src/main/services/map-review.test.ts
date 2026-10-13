@@ -302,22 +302,13 @@ for (const editorProjectRoot of [
 	it.effect(`fences saved map review to the selected project (${editorProjectRoot})`, () =>
 		Effect.gen(function* () {
 			const service = yield* WorkbenchMapReview;
-			const choice = yield* service.chooseProjectAndMaps();
 			const invalidOpen = yield* service.openMapInUnreal!("Content/Maps/NotInProject.umap");
 			expect(invalidOpen.outcome).toBe("failed");
 			const opened = yield* service.openMapInUnreal!("Content/Maps/L_Alpha.umap");
 			const matches = editorProjectRoot === mapReviewProject.project.projectRoot;
 			expect(opened.outcome).toBe(matches ? "opened" : "failed");
 			expect((yield* service.editorWorld!()).status).toBe(matches ? "ready" : "unavailable");
-			expect(choice.status).toBe("configured");
-			if (choice.status !== "configured") return;
-			expect(choice.projectName).toBe("MyProj");
-			// The selected project exposes its discovered maps as project-relative paths.
-			expect(choice.maps.map((map) => map.mapPath)).toEqual([
-				"Content/Maps/L_Alpha.umap",
-				"Content/Maps/L_Beta.umap"
-			]);
-			// That same cached inventory backs savedWorldMaps without a second native map picker.
+			// The shell-selected project's cached inventory exposes project-relative map paths.
 			const maps = yield* service.savedWorldMaps();
 			expect(maps.map((map) => map.mapPath)).toEqual([
 				"Content/Maps/L_Alpha.umap",

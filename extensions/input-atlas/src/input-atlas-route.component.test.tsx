@@ -73,7 +73,6 @@ function renderRoute(client?: Partial<InputAtlasClientApi>) {
 		<EffectRuntimeProvider runtime={runtime}>
 			<InputAtlasRoute
 				client={{
-					chooseProjectAndScan: () => Effect.succeed(completed),
 					loadConfiguredProject: () => Effect.succeed(completed),
 					...client
 				}}
@@ -99,18 +98,30 @@ describe("InputAtlasRoute interactions", () => {
 		expect(screen.getByText("D:/Projects/DemoGame")).toBeDefined();
 	});
 
-	it("keeps the route responsive while a newly chosen project is scanning", async () => {
+	it("keeps the route responsive while the selected project is rescanning", async () => {
 		const user = userEvent.setup();
-		renderRoute({ chooseProjectAndScan: () => Effect.never });
+		let scans = 0;
+		renderRoute({
+			loadConfiguredProject: () =>
+				Effect.suspend(() => (scans++ === 0 ? Effect.succeed(completed) : Effect.never))
+		});
 		await screen.findByText("SpaceBar");
 
-		await user.click(screen.getByRole("button", { name: "Choose project…" }));
+		await user.click(screen.getByRole("button", { name: "Rescan" }));
 
 		expect(screen.getByRole("progressbar")).toBeDefined();
 		expect(screen.getByText("Rescanning DemoGame…")).toBeDefined();
+		expect(screen.getByRole("button", { name: "Rescan" }).hasAttribute("disabled")).toBe(true);
+	});
+
+	it("directs users to the workspace project picker when no project is selected", async () => {
+		renderRoute({ loadConfiguredProject: () => Effect.succeed({ status: "not_configured" }) });
 		expect(
-			screen.getByRole("button", { name: "Choose project…" }).hasAttribute("disabled")
-		).toBe(true);
+			await screen.findByText(
+				"No project selected. Choose a project using the workspace project picker, then return here."
+			)
+		).toBeDefined();
+		expect(screen.queryByRole("button", { name: /Choose project/ })).toBeNull();
 	});
 
 	it("resolves the contest when a context is switched off", async () => {

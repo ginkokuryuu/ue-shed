@@ -155,7 +155,6 @@ import {
 	EditorPlaySessionStateResponse,
 	EditorAssetLocateResult,
 	SavedWorld,
-	SavedWorldChoice,
 	SavedWorldMap,
 	SavedWorldProgress
 } from "@ue-shed/protocol";
@@ -596,11 +595,6 @@ export const invokeContracts = {
 		args: EmptyArgs,
 		result: CustodianRunResult
 	}),
-	"project-custodian:choose-and-scan": invoke({
-		channel: "project-custodian:choose-and-scan",
-		args: EmptyArgs,
-		result: CustodianRunResult
-	}),
 	"project-custodian:prepare": invoke({
 		channel: "project-custodian:prepare",
 		args: Schema.Tuple([CustodianPrepareIntent]),
@@ -661,19 +655,9 @@ export const invokeContracts = {
 		args: EmptyArgs,
 		result: TextureAuditRunResult
 	}),
-	"asset-audits:textures:choose-and-scan": invoke({
-		channel: "asset-audits:textures:choose-and-scan",
-		args: EmptyArgs,
-		result: TextureAuditRunResult
-	}),
 	"asset-audits:textures:configured-refresh": invoke({
 		channel: "asset-audits:textures:configured-refresh",
 		args: Schema.Tuple([Schema.Boolean]),
-		result: TextureAuditQueryRunResult
-	}),
-	"asset-audits:textures:choose-and-refresh": invoke({
-		channel: "asset-audits:textures:choose-and-refresh",
-		args: EmptyArgs,
 		result: TextureAuditQueryRunResult
 	}),
 	"asset-audits:textures:progress": invoke({
@@ -726,19 +710,9 @@ export const invokeContracts = {
 		args: EmptyArgs,
 		result: TextCorpusQueryRunResult
 	}),
-	"game-text:choose-and-scan": invoke({
-		channel: "game-text:choose-and-scan",
-		args: EmptyArgs,
-		result: TextCorpusQueryRunResult
-	}),
 	"game-text:configured-refresh": invoke({
 		channel: "game-text:configured-refresh",
 		args: Schema.Tuple([Schema.Boolean]),
-		result: TextCorpusQueryRunResult
-	}),
-	"game-text:choose-and-refresh": invoke({
-		channel: "game-text:choose-and-refresh",
-		args: EmptyArgs,
 		result: TextCorpusQueryRunResult
 	}),
 	"game-text:progress": invoke({
@@ -913,11 +887,6 @@ export const invokeContracts = {
 	}),
 	"input-atlas:configured-scan": invoke({
 		channel: "input-atlas:configured-scan",
-		args: EmptyArgs,
-		result: EnhancedInputRunResult
-	}),
-	"input-atlas:choose-and-scan": invoke({
-		channel: "input-atlas:choose-and-scan",
 		args: EmptyArgs,
 		result: EnhancedInputRunResult
 	}),
@@ -1140,11 +1109,6 @@ export const invokeContracts = {
 		channel: "map-review:saved-world-progress",
 		args: EmptyArgs,
 		result: SavedWorldProgress
-	}),
-	"map-review:choose-project-and-maps": invoke({
-		channel: "map-review:choose-project-and-maps",
-		args: EmptyArgs,
-		result: SavedWorldChoice
 	}),
 	"map-review:focus-actor": invoke({
 		channel: "map-review:focus-actor",

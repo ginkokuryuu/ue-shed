@@ -6,7 +6,8 @@ import {
 	type TextCorpusSearchCounts,
 	type TextFileScopeSummary,
 	type TextOriginKind,
-	type TextWhere
+	type TextWhere,
+	textCountLabel
 } from "@ue-shed/game-text/browser";
 import { AnchoredPopover, Button, Chip, ToolButton, ToolIcon } from "@ue-shed/ui";
 import { tokens } from "@ue-shed/ui-theme/tokens.stylex.js";
@@ -167,13 +168,19 @@ export function WhereFilter(props: {
 					>
 						<ToolButton
 							{...trigger}
-							label={triggerLabel()}
+							label="Changed files"
+							showLabel
 							tooltip={
 								props.fileScope
-									? `${fileScopeLine(props.fileScope)}. Edit the file list used to scope these lines.`
-									: "Paste changed file paths to review only their text. Your pasted list is kept when this closes."
+									? `${fileScopeLine(props.fileScope)}. Edit the list to change which lines show.`
+									: "Paste changed file paths to see only the text they hold."
 							}
 							badge={files()}
+							badgeLabel={
+								files() === undefined
+									? undefined
+									: textCountLabel(files() ?? 0, "file")
+							}
 							disabled={props.disabled}
 							aria-pressed={files() !== undefined ? "true" : "false"}
 						>

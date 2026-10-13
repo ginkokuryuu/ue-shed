@@ -13,6 +13,7 @@ import {
 	CHOICE_FIELDS,
 	FIELD_LABELS,
 	clauseParts,
+	flipClause,
 	hasValue,
 	toggleValue,
 	type ChoiceField
@@ -42,6 +43,8 @@ interface Option {
 	readonly label: string;
 	readonly count: number | undefined;
 	readonly selected: boolean;
+	/** Chosen in an "is not" pill: marked as left out rather than ticked. */
+	readonly excluded?: boolean;
 	readonly select: () => void;
 }
 
@@ -87,7 +90,10 @@ export function FilterMenu(props: {
 		const clause = makeClause(field, value);
 		if (clause !== undefined) props.onChange(toggleValue(props.filter, clause));
 	};
-	const chosen = (field: TextFilterField, value: string) => hasValue(props.filter, field, value);
+	const chosen = (field: TextFilterField, value: string) =>
+		hasValue(props.filter, field, value) || hasValue(props.filter, field, value, "is_not");
+	const excluded = (field: TextFilterField, value: string) =>
+		hasValue(props.filter, field, value, "is_not");
 	const choiceField = (field: ChoiceField): Field => ({
 		key: field,
 		label: FIELD_LABELS[field],
@@ -110,6 +116,7 @@ export function FilterMenu(props: {
 						label,
 						count,
 						selected: chosen(field, value),
+						excluded: excluded(field, value),
 						select: () => toggle(field, value)
 					}
 				];
@@ -130,6 +137,7 @@ export function FilterMenu(props: {
 						label: entry.label,
 						count: entry.count,
 						selected: chosen(field, value),
+						excluded: excluded(field, value),
 						select: () => toggle(field, value)
 					};
 				});
@@ -140,9 +148,10 @@ export function FilterMenu(props: {
 						...found,
 						{
 							key: `folder-typed:${needle}`,
-							label: `Starts with ${needle}`,
+							label: `Path starts with ${needle}`,
 							count: undefined,
 							selected: chosen("folder", needle),
+							excluded: excluded("folder", needle),
 							select: () => toggle("folder", needle)
 						}
 					]
@@ -235,8 +244,9 @@ export function FilterMenu(props: {
 				<ToolButton
 					{...trigger}
 					label="Filter"
-					tooltip="Narrow lines by state, problem, location, or review flags."
+					showLabel
 					badge={props.filter.length || undefined}
+					badgeLabel={`${props.filter.length.toLocaleString()} active`}
 					disabled={props.disabled}
 				>
 					<ToolIcon name="filter" />
@@ -395,9 +405,10 @@ function OptionRows(props: { readonly options: readonly Option[] }) {
 					role="menuitemcheckbox"
 					aria-checked={option.selected ? "true" : "false"}
 					aria-label={
-						option.count === undefined
+						(option.count === undefined
 							? option.label
-							: `${option.label} ${option.count.toLocaleString()}`
+							: `${option.label} ${option.count.toLocaleString()}`) +
+						(option.excluded ? ", left out" : "")
 					}
 					onClick={() => option.select()}
 					{...stylex.attrs(styles.option)}
@@ -406,7 +417,7 @@ function OptionRows(props: { readonly options: readonly Option[] }) {
 						aria-hidden="true"
 						{...stylex.attrs(styles.box, option.selected && styles.boxOn)}
 					>
-						{option.selected ? "✓" : ""}
+						{option.excluded ? "−" : option.selected ? "✓" : ""}
 					</span>
 					<span {...stylex.attrs(styles.label)}>{option.label}</span>
 					<Show when={option.count !== undefined}>
@@ -461,14 +472,7 @@ export function FilterPills(props: {
 	readonly filter: TextFilter;
 	readonly onChange: (filter: TextFilter) => void;
 }) {
-	const flip = (index: number) =>
-		props.onChange(
-			props.filter.map((clause, position) =>
-				position === index
-					? { ...clause, op: clause.op === "is" ? ("is_not" as const) : ("is" as const) }
-					: clause
-			)
-		);
+	const flip = (index: number) => props.onChange(flipClause(props.filter, index));
 	return (
 		<Show when={props.filter.length > 0}>
 			<div role="list" aria-label="Filters" {...stylex.attrs(styles.pills)}>
@@ -486,7 +490,10 @@ export function FilterPills(props: {
 								>
 									{parts().op}
 								</button>
-								<span {...stylex.attrs(styles.pillPart, styles.pillValue)}>
+								<span
+									title={parts().values}
+									{...stylex.attrs(styles.pillPart, styles.pillValue)}
+								>
 									{parts().values}
 								</span>
 								<button
@@ -670,7 +677,13 @@ const styles = stylex.create({
 		cursor: "pointer",
 		backgroundColor: { default: "transparent", ":hover": tokens.colorSurfaceHover }
 	},
-	pillValue: { color: tokens.colorTextStrong },
+	pillValue: {
+		maxWidth: 320,
+		overflow: "hidden",
+		textOverflow: "ellipsis",
+		whiteSpace: "nowrap",
+		color: tokens.colorTextStrong
+	},
 	pillRemove: {
 		backgroundColor: { default: "transparent", ":hover": tokens.colorSurfaceHover },
 		color: tokens.colorTextMuted,

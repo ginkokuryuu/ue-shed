@@ -1,21 +1,50 @@
 import { describe, expect, it } from "vitest";
 import { cultureCell, cultureSummary, lineState } from "./game-text-culture-state.js";
-import { clauseParts, hasValue, legacyFilter, toggleValue } from "./game-text-filter-model.js";
+import type { TextFilter } from "@ue-shed/game-text/browser";
+import {
+	clauseParts,
+	fieldOp,
+	flipClause,
+	hasValue,
+	legacyFilter,
+	toggleValue
+} from "./game-text-filter-model.js";
 import { migratePreferences } from "./game-text-preferences.js";
 
 describe("filter pills", () => {
-	it("moves a value out of the opposite operator without losing other exclusions", () => {
-		const result = toggleValue(
-			[{ field: "translation", op: "is_not", values: ["missing", "to_update"] }],
-			{ field: "translation", op: "is", values: ["missing"] }
-		);
-		expect(result).toEqual([
-			{ field: "translation", op: "is_not", values: ["to_update"] },
-			{ field: "translation", op: "is", values: ["missing"] }
-		]);
+	it("keeps one pill per field: values leave or join it under its operator", () => {
+		const excluded: TextFilter = [
+			{ field: "translation", op: "is_not", values: ["missing", "to_update"] }
+		];
+		// Picking an excluded value takes it out of the exclusion instead of adding "is".
+		const result = toggleValue(excluded, {
+			field: "translation",
+			op: "is",
+			values: ["missing"]
+		});
+		expect(result).toEqual([{ field: "translation", op: "is_not", values: ["to_update"] }]);
+		// A new value joins the existing pill with its operator.
 		expect(
-			toggleValue(result, { field: "translation", op: "is_not", values: ["missing"] })
-		).toEqual([{ field: "translation", op: "is_not", values: ["to_update", "missing"] }]);
+			toggleValue(result, { field: "translation", op: "is", values: ["not_synced"] })
+		).toEqual([{ field: "translation", op: "is_not", values: ["to_update", "not_synced"] }]);
+		expect(fieldOp(result, "translation")).toBe("is_not");
+		expect(fieldOp(result, "problem")).toBeUndefined();
+	});
+	it("merges saved pills with both operators when one is switched", () => {
+		const saved: TextFilter = [
+			{ field: "origin", op: "is", values: ["asset"] },
+			{ field: "origin", op: "is_not", values: ["cpp"] },
+			{ field: "editing", op: "is", values: ["editable"] }
+		];
+		expect(flipClause(saved, 1)).toEqual([
+			{ field: "origin", op: "is", values: ["asset", "cpp"] },
+			{ field: "editing", op: "is", values: ["editable"] }
+		]);
+		expect(flipClause(saved, 2)).toEqual([
+			saved[0],
+			saved[1],
+			{ field: "editing", op: "is_not", values: ["editable"] }
+		]);
 	});
 	it("joins values of one field into one pill and drops it when empty", () => {
 		const one = toggleValue([], { field: "problem", op: "is", values: ["key_changed"] });
@@ -28,11 +57,11 @@ describe("filter pills", () => {
 			op: "is any of",
 			values: "Key changed, Not gathered yet"
 		});
-		// "is not" is a separate pill for the same field.
-		const excluded = toggleValue(two, { field: "problem", op: "is_not", values: ["finding"] });
-		expect(excluded).toHaveLength(2);
-		expect(hasValue(excluded, "problem", "finding", "is_not")).toBe(true);
-		expect(clauseParts(excluded[1]!).op).toBe("is not");
+		// Switching the pill excludes every value in it at once.
+		const excluded = flipClause(two, 0);
+		expect(excluded).toHaveLength(1);
+		expect(hasValue(excluded, "problem", "not_gathered", "is_not")).toBe(true);
+		expect(clauseParts(excluded[0]!).op).toBe("is none of");
 		const back = toggleValue(
 			toggleValue(two, { field: "problem", op: "is", values: ["key_changed"] }),
 			{ field: "problem", op: "is", values: ["not_gathered"] }

@@ -81,14 +81,6 @@ export const assetAuditsClient: TextureAuditClientApi = TextureAuditClient.of({
 				operation: "assetAudits.loadConfiguredProject"
 			})
 	),
-	chooseProjectAndScan: Effect.fn("TextureAuditClient.chooseProjectAndScan")(
-		(): Effect.Effect<TextureAuditQueryRunResult, TextureAuditClientError> =>
-			request({
-				decode: decodeTextureAuditQueryRunResult,
-				invoke: () => window.ueShed.assetAudits.chooseProjectAndRefresh(),
-				operation: "assetAudits.chooseProjectAndScan"
-			})
-	),
 	progress: Effect.fn("TextureAuditClient.progress")(() =>
 		request({
 			decode: Schema.decodeUnknownEffect(WorkbenchTaskProgress),

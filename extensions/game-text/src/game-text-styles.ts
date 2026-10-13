@@ -35,18 +35,49 @@ export const styles = stylex.create({
 		color: tokens.colorText,
 		fontFamily: tokens.fontBody
 	},
-	toolbar: {
+	/** The title row: the workspace's views on the left, the project's scan state on the right. */
+	titleRow: {
 		display: "flex",
-		flexWrap: "wrap",
 		alignItems: "center",
-		gap: tokens.space2,
+		gap: 16,
 		flexShrink: 0,
-		padding: "10px 16px",
+		height: 40,
+		// Lines up with the toolbar's search field below.
+		paddingInline: 12,
 		borderBottomWidth: 1,
 		borderBottomStyle: "solid",
 		borderBottomColor: tokens.colorBorder
 	},
-	heading: { margin: 0, fontSize: 14, color: tokens.colorTextStrong, fontWeight: 600 },
+	/** Which translations are shown, and what Unreal still has to take in. */
+	contextBar: {
+		display: "flex",
+		flexWrap: "wrap",
+		alignItems: "center",
+		gap: 8,
+		flexShrink: 0,
+		minHeight: 36,
+		paddingBlock: 2,
+		paddingInline: 12,
+		boxSizing: "border-box",
+		borderBottomWidth: 1,
+		borderBottomStyle: "solid",
+		borderBottomColor: tokens.colorBorder,
+		fontSize: 12
+	},
+	contextLabel: { paddingInline: 4, fontSize: 12, color: tokens.colorText, whiteSpace: "nowrap" },
+	contextActions: {
+		display: "flex",
+		alignItems: "center",
+		gap: 8,
+		marginLeft: "auto"
+	},
+	heading: {
+		margin: 0,
+		fontSize: 14,
+		color: tokens.colorTextStrong,
+		fontWeight: 600,
+		whiteSpace: "nowrap"
+	},
 	indexProgress: {
 		display: "inline-flex",
 		alignItems: "center",
@@ -54,7 +85,7 @@ export const styles = stylex.create({
 		maxWidth: "100%",
 		height: 18,
 		verticalAlign: "top",
-		color: tokens.colorAccent
+		color: tokens.colorTextMuted
 	},
 	scanReadout: {
 		minWidth: 0,
@@ -62,31 +93,26 @@ export const styles = stylex.create({
 		textOverflow: "ellipsis",
 		whiteSpace: "nowrap"
 	},
-	headerActions: {
-		display: "flex",
-		flexWrap: "wrap",
-		alignItems: "center",
-		gap: 8,
-		flexShrink: 0
-	},
 	browseActions: {
 		display: "flex",
 		flexWrap: "wrap",
 		alignItems: "center",
-		gap: 6,
+		gap: 4,
 		minWidth: 0,
 		flexGrow: 1,
 		flexBasis: "auto"
 	},
 	browseBar: {
-		padding: "10px 16px",
+		padding: "8px 12px",
 		borderBottomWidth: 1,
 		borderBottomStyle: "solid",
 		borderBottomColor: tokens.colorBorder
 	},
+	// Takes the title row's free space, so changing scan text never moves the tabs or Rescan.
 	coverage: {
-		flexBasis: "100%",
-		order: 1,
+		flexGrow: 1,
+		flexShrink: 1,
+		flexBasis: 0,
 		minWidth: 0,
 		height: 18,
 		lineHeight: "18px",
@@ -109,6 +135,8 @@ export const styles = stylex.create({
 		fontSize: 12
 	},
 	warning: { color: tokens.colorWarning },
+	/** What a finding observed: plain text, since findings are not severities. */
+	findingFacts: { color: tokens.colorText, fontSize: 12 },
 	accent: { color: tokens.colorAccent },
 	danger: { color: tokens.colorDanger },
 	gridCollapsed: { gridTemplateColumns: "minmax(0, 1fr)" },
@@ -132,15 +160,19 @@ export const styles = stylex.create({
 		strokeWidth: 1.5,
 		flexShrink: 0
 	},
+	// Starts from its contents (the 150 px input, count and option), so the toolbar wraps only when
+	// even those and the named tools cannot share a row; spare room then goes mostly to the search.
 	search: {
 		display: "flex",
 		alignItems: "center",
-		gap: tokens.space2,
-		flex: 1,
-		minWidth: 340,
-		flexBasis: 340,
-		flexShrink: 0,
-		padding: "6px 10px",
+		gap: 6,
+		flexGrow: 2,
+		flexShrink: 1,
+		flexBasis: 0,
+		boxSizing: "border-box",
+		height: 36,
+		paddingBlock: 0,
+		paddingInline: 8,
 		borderWidth: 1,
 		borderStyle: "solid",
 		borderColor: tokens.colorBorderInteractive,
@@ -173,6 +205,16 @@ export const styles = stylex.create({
 		fontSize: 13,
 		outlineWidth: 0,
 		"::placeholder": { color: tokens.colorTextMuted }
+	},
+	// The shortcut hint gives way first on narrow windows; the shortcut itself still works.
+	shortcut: {
+		display: { default: "inline", "@media (max-width: 1279px)": "none" }
+	},
+	divider: {
+		alignSelf: "stretch",
+		width: 1,
+		marginBlock: 6,
+		backgroundColor: tokens.colorBorder
 	},
 	count: {
 		color: tokens.colorTextMuted,
@@ -310,8 +352,10 @@ export const styles = stylex.create({
 		zIndex: 20
 	},
 	readProblemsTrigger: {
-		height: 26,
-		padding: "2px 4px",
+		height: 18,
+		padding: "0 4px",
+		lineHeight: "18px",
+		verticalAlign: "top",
 		borderWidth: 0,
 		borderRadius: tokens.radiusControl,
 		backgroundColor: { default: "transparent", ":hover": tokens.colorSurfaceHover },

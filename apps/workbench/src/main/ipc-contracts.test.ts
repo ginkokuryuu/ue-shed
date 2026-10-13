@@ -228,7 +228,6 @@ const validArgsByChannel = {
 		}
 	],
 	"project-custodian:configured-scan": [],
-	"project-custodian:choose-and-scan": [],
 	"project-custodian:prepare": [
 		{
 			root: "C:/Projects",
@@ -250,9 +249,7 @@ const validArgsByChannel = {
 	"project:progress": [],
 	"project:launch": ["ue_shed"],
 	"asset-audits:textures:configured-scan": [],
-	"asset-audits:textures:choose-and-scan": [],
 	"asset-audits:textures:configured-refresh": [true],
-	"asset-audits:textures:choose-and-refresh": [],
 	"asset-audits:textures:progress": [],
 	"asset-audits:textures:investigation-export": [{ findingsOnly: false, query: "" }, "json"],
 	"asset-audits:textures:investigation-save": [{ findingsOnly: false, query: "" }],
@@ -263,9 +260,7 @@ const validArgsByChannel = {
 	"asset-audits:textures:preview-offline": ["/Game/Textures/Example"],
 	"asset-audits:textures:preview-offline-batch": [{ objectPaths: ["/Game/Textures/Example"] }],
 	"game-text:configured-scan": [],
-	"game-text:choose-and-scan": [],
 	"game-text:configured-refresh": [true],
-	"game-text:choose-and-refresh": [],
 	"game-text:progress": [],
 	"game-text:investigation-export": [
 		{ mode: "corpus", qualityFilter: "all", query: "", capability: "all", lens: "all" },
@@ -343,7 +338,6 @@ const validArgsByChannel = {
 	"blueprint-graphs:read": ["C:/Project/Content/BP_Example.uasset"],
 	"blueprint-graphs:search": [{ query: "example" }],
 	"input-atlas:configured-scan": [],
-	"input-atlas:choose-and-scan": [],
 	"authoring:configured-table": [],
 	"authoring:configured-catalog": [],
 	"authoring:open-catalog-table": ["/Game/Data/Example", "live"],
@@ -439,7 +433,6 @@ const validArgsByChannel = {
 	"map-review:saved-world": ["Content/Fixture/Offline/L_OfflineWorld.umap"],
 	"map-review:saved-world-maps": [],
 	"map-review:saved-world-progress": [],
-	"map-review:choose-project-and-maps": [],
 	"map-review:focus-actor": ["/Game/Fixture.Map:PersistentLevel.Actor", true],
 	"map-review:capture": [{ viewIds: ["view-1"] }],
 	"map-review:apply-visibility-policy": [{ policyId: "natural", viewIds: ["view-1"] }],
@@ -565,7 +558,6 @@ const validResultByChannel = {
 		status: "failed"
 	},
 	"project-custodian:configured-scan": { status: "not_configured" },
-	"project-custodian:choose-and-scan": { status: "cancelled" },
 	"project-custodian:prepare": {
 		status: "failed",
 		error: {
@@ -613,9 +605,7 @@ const validResultByChannel = {
 	},
 	"project:launch": { mode: "ue_shed", status: "launched" },
 	"asset-audits:textures:configured-scan": { status: "not_configured" },
-	"asset-audits:textures:choose-and-scan": { status: "cancelled" },
 	"asset-audits:textures:configured-refresh": { status: "not_configured" },
-	"asset-audits:textures:choose-and-refresh": { status: "cancelled" },
 	"asset-audits:textures:progress": {
 		completed: 0,
 		phase: "idle",
@@ -658,9 +648,7 @@ const validResultByChannel = {
 		]
 	},
 	"game-text:configured-scan": { status: "not_configured" },
-	"game-text:choose-and-scan": { status: "cancelled" },
 	"game-text:configured-refresh": { status: "not_configured" },
-	"game-text:choose-and-refresh": { status: "cancelled" },
 	"game-text:progress": {
 		completed: 0,
 		phase: "idle",
@@ -711,7 +699,6 @@ const validResultByChannel = {
 	"blueprint-graphs:read": { status: "cancelled" },
 	"blueprint-graphs:search": { status: "not_configured" },
 	"input-atlas:configured-scan": { status: "not_configured" },
-	"input-atlas:choose-and-scan": { status: "cancelled" },
 	"authoring:configured-table": { status: "not_configured" },
 	"authoring:configured-catalog": { status: "not_configured" },
 	"authoring:open-catalog-table": { status: "cancelled" },
@@ -841,12 +828,6 @@ const validResultByChannel = {
 		processedPackages: 40,
 		totalPackages: 84
 	},
-	"map-review:choose-project-and-maps": {
-		status: "configured",
-		projectRoot: "D:/Projects/DemoGame",
-		projectName: "DemoGame",
-		maps: [{ label: "Offline World", mapPath: "Content/Fixture/Offline/L_OfflineWorld.umap" }]
-	},
 	"map-review:focus-actor": {
 		actorId: "/Game/Fixture.Map:PersistentLevel.Actor",
 		status: "not_supported"
@@ -959,9 +940,9 @@ const malformedArgsByChannel = {
 	"map-capture:tile": [{ manifestPath: "", relativePath: "../outside.png" }]
 } satisfies Partial<Record<InvokeChannel, IpcFixtureValue>>;
 
-it("registers exactly 145 invoke channels plus renderer events", () => {
-	expect(invokeChannelNames).toHaveLength(145);
-	expect(new Set(invokeChannelNames).size).toBe(145);
+it("registers exactly 138 invoke channels plus renderer events", () => {
+	expect(invokeChannelNames).toHaveLength(138);
+	expect(new Set(invokeChannelNames).size).toBe(138);
 	expect(invokeChannelNames).toEqual(
 		expect.arrayContaining([
 			"game-text:localization:quality-search",
@@ -1181,8 +1162,47 @@ it("preserves optional localization selection in corpus focus requests", () => {
 	).toBe(true);
 });
 
+it("tells the renderer whether a quality rule file is attached, never where it is", () => {
+	const completed = {
+		document: qualityRuleDocument,
+		status: "completed",
+		summary: {
+			characterBudgetCount: 0,
+			coverage: {
+				discoveredPackages: 0,
+				failedPackages: 0,
+				inspectedPackages: 0,
+				partialPackages: 0,
+				resolvedOccurrences: 0,
+				textOccurrences: 0,
+				textUnits: 0,
+				unresolvedOccurrences: 0,
+				unsupportedTextProperties: 0
+			},
+			diagnosticCount: 0,
+			findingCount: 0,
+			roles: [],
+			rules: [],
+			ruleDocumentVersion: 1,
+			schemaVersion: 1,
+			status: "complete",
+			terminologyCount: 0
+		}
+	};
+	for (const channel of [
+		"game-text:quality:choose-rules",
+		"game-text:quality:preview-rules",
+		"game-text:quality:save-rules"
+	] as const) {
+		const decode = Schema.decodeUnknownResult(invokeContracts[channel].result);
+		for (const ruleFile of ["attached", "none"])
+			expect(Result.isSuccess(decode({ ...completed, ruleFile }))).toBe(true);
+		expect(Result.isFailure(decode({ ...completed, ruleFile: "C:/Rules.json" }))).toBe(true);
+	}
+});
+
 it("keeps legacy Game Text scan replies bounded instead of accepting a full corpus", () => {
-	for (const channel of ["game-text:configured-scan", "game-text:choose-and-scan"] as const) {
+	for (const channel of ["game-text:configured-scan", "game-text:configured-refresh"] as const) {
 		const decoded = Schema.decodeUnknownResult(invokeContracts[channel].result)({
 			status: "completed",
 			corpus: { units: [] }

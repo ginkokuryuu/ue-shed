@@ -50,7 +50,9 @@ export const runInvestigation = Effect.fn("Cli.workflow.investigation")(
 						);
 						const corpus = indexed.corpus;
 						const localized = indexed.query;
+						// Replays the Workbench quality list: the same join, review file and rules.
 						const workspace =
+							preset.query.mode === "quality" &&
 							preset.query.workspaceFilter !== undefined &&
 							preset.query.localization &&
 							indexed.localizationJoin
@@ -66,7 +68,7 @@ export const runInvestigation = Effect.fn("Cli.workflow.investigation")(
 												corpus,
 												indexed.localizationJoin,
 												indexed.evidence,
-												{},
+												{ review: indexed.review.file },
 												preset.rules
 											),
 											indexed.localizationJoin
