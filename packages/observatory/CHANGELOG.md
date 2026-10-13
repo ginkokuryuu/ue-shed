@@ -1,5 +1,14 @@
 # @ue-shed/observatory
 
+## 0.13.0
+
+### Patch Changes
+
+- @ue-shed/engine@0.13.0
+    - @ue-shed/observability@0.13.0
+    - @ue-shed/protocol@0.13.0
+    - @ue-shed/unreal-connection@0.13.0
+
 ## 0.12.0
 
 ### Patch Changes
