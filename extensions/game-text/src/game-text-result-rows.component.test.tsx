@@ -1,5 +1,6 @@
 import { cleanup, fireEvent, render } from "@solidjs/testing-library";
 import { afterEach, expect, it, vi } from "vitest";
+import { createSignal, flush } from "solid-js";
 import { joinLocalizationTarget, textCorpusQuery } from "@ue-shed/game-text/browser";
 import {
 	corpus,
@@ -11,6 +12,38 @@ import {
 import { GameTextResultRows } from "./game-text-result-rows.js";
 
 afterEach(cleanup);
+
+it("preserves focused row elements while refreshed previews and handlers update", () => {
+	const query = textCorpusQuery(corpus([unit("K", "Before", "Content/Text/Table.uasset")]));
+	const initial = query.search({ query: "", capability: "all", pageSize: 50 });
+	const [page, setPage] = createSignal(initial);
+	const onSelect = vi.fn();
+	const { container } = render(() => (
+		<GameTextResultRows
+			page={page()}
+			culture={undefined}
+			selectedId={undefined}
+			selectedLocalizationId={undefined}
+			onSelect={onSelect}
+		/>
+	));
+	const original = container.querySelector<HTMLButtonElement>("button[data-row]")!;
+	original.focus();
+	setPage({
+		...initial,
+		units: initial.units.map((item) => ({
+			...item,
+			source: { status: "consistent", value: "After" }
+		}))
+	});
+	flush();
+	expect(container.querySelector("button[data-row]")).toBe(original);
+	expect(document.activeElement).toBe(original);
+	expect(original.textContent).toContain("After");
+	expect(original.textContent).not.toContain("Before");
+	fireEvent.click(original);
+	expect(onSelect).toHaveBeenLastCalledWith(initial.units[0]?.id, undefined);
+});
 
 it("keeps contexts and selection on the gathered line when two lines share a unit", () => {
 	const table = unit("K", "Source", "Content/Text/Table.uasset", "UI [Beta]");

@@ -63,6 +63,8 @@ type ImportedTarget = Effect.Success<ReturnType<typeof importLocalizationTarget>
 export interface GameTextIndexRefreshResult {
 	/** Present on the steps implementation; optional for existing host-provided refresh adapters. */
 	readonly project?: GameTextProjectIndex | undefined;
+	/** Immutable generation and joined-layer identity, when supplied by the compact index. */
+	readonly queryRevision?: string | undefined;
 	readonly joined: JoinedTargetReader;
 	readonly query: TextCorpusQuery;
 	/** Asynchronous search adapter; worker-backed when selected by the host's layer. */

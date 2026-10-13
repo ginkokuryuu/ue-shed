@@ -60,6 +60,13 @@ the vendor editor, clipboard or context menus work; those interactions require b
 - Show loading, stale, reconnecting, error, and unsupported states.
 - Check Solid behavior instead of copying React habits.
 
+For refreshed query results, use Solid 2's functional `For` key, such as
+`keyed={(row) => row.id}`, to preserve a row's owner and DOM while replacing its data. In this mode
+the child receives item and index accessors; read the item with `row()` so text, attributes and
+event handlers see the replacement value. Grouped paginated lists should publish a reload only
+after restoring their previously loaded page count, so intermediate pages do not remove focused
+rows or collapse the scroll range.
+
 Test user behavior and reactive lifetimes. Cover duplicate subscriptions, stale updates, cleanup, and
 teardown in a live app where unit tests are not enough.
 

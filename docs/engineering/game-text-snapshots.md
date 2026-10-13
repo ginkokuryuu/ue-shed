@@ -27,8 +27,10 @@ bundle that resolves them through `import.meta.url`.
 Leaving the installed package unbundled also preserves these paths. Verify a cold refresh that
 uses multiple layers in the packaged host; a small warm fixture can miss an absent cold worker.
 
-The accepted target-only generated 1× cache is 81.8 MiB; Workbench's source-plus-target path
-measures 140.8 MiB on the same inputs. This fixture result does not impose a global cache quota
+The accepted target-only generated 1× cache is 81.8 MiB. Workbench prepares that same target-first
+model for raw source and localization browsing; its fresh cache also measures 81.8 MiB. Older
+source-plus-target caches measure 140.8 MiB and retain their previous layers until explicitly
+rebuilt. This fixture result does not impose a global cache quota
 across projects, targets, staging or pinned generations. Full measurements and rejected alternatives
 are in the [consolidated experiment record](../research/game-text-pipeline-performance-2026-10-13.md).
 Backend adoption remains governed by the shared builder contract below. Gather coverage is unchanged;
@@ -116,6 +118,21 @@ dependencies before using a handle. Repairing a missing or malformed file invali
 failed import even when the restored content reuses its historical file-layer key. Unchanged
 observations reuse their keys, so concurrent targets with identical inputs remain compatible.
 Existing pinned models retain their original evidence when later observations change.
+
+Worker-enabled index steps retain a bounded map of eight query workers, keyed by configuration,
+physical generation and joined-layer identity. Overlapping unchanged models share a worker while
+keeping their own reader scopes. A model opens its worker before publication; lazily reopening
+the current manifest after publication would lose its historical generation after compaction.
+Closing one model leaves other pins usable. The last pin awaits worker retirement, and changed
+joins use a different worker. Metrics count starts, stops and retirement duration.
+
+A target model contains the complete raw source projection. Hosts needing both views can import
+the target before refreshing packages and build one join. Workbench uses the selected target for
+the same project, or the first discovered target, with source-only recovery when target discovery
+or import is unavailable. Target selection still validates imports, review records and carried key
+changes before comparing the optional `queryRevision` and borrowing the existing model. An
+unchanged package refresh clears the old selection while retaining its resource pin until a
+replacement takes ownership; discovery failures and empty target lists release that pin.
 
 A writer consumes a `SnapshotSource`: ordered section descriptors with a bounded load operation.
 `snapshotColumnsSource` adapts existing columns; streaming importers can supply descriptors that

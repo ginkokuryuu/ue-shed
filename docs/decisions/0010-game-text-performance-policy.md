@@ -31,6 +31,13 @@ Their overall results did not justify the storage, memory or interaction cost.
 builder is not adopted by this decision. A replacement must demonstrate format, lifecycle,
 invalidation, cancellation, query and policy parity through the shared capability boundary.
 
+Hosts needing source and localization browsing should prepare the target-first model and use its
+raw projection for source requests. Validate target inputs before borrowing a matching immutable
+query revision. Share scoped query workers across unchanged generations, acquire replacement pins
+before releasing previous pins, and keep source-only recovery. Workers open before exposing a
+model so compaction cannot remove the files needed by a later first search. Solid 2 keyed results
+preserve DOM identity, and paginated reloads publish their restored pages together.
+
 ## Evidence and consequences
 
 The [consolidated experiment record](../research/game-text-pipeline-performance-2026-10-13.md)
@@ -38,9 +45,15 @@ retains the before/after measurements and rejected trials. The latest repeated c
 cold readiness from 72.55 to 69.14 seconds and reopening from 3.347 to 2.450 seconds for about
 2.7 MiB more persisted data. Matching searches have no general improvement; one sparse search is
 about 5 ms slower. Cold RSS ranges overlap. These are backend-only timings. The later same-input
-Workbench check in that record measures 185.18 seconds cold and 13.32 seconds for repeated rescans,
-with a 140.8 MiB source-plus-target cache. Host preparation and model materialization remain
-additional costs; the earlier small screenshot fixture cannot substitute for that comparison.
+Workbench check in that record initially measured 185.18 seconds cold and 13.32 seconds for repeated
+rescans, with a 140.8 MiB source-plus-target cache. That host built two joins and retired two query
+workers per refresh; its default corpus and join wrappers were already lazy. The subsequent
+same-harness comparison on the latest UX baseline measures cold readiness **178.96 → 126.84 s**,
+cached-session Rescan **11.91 → 2.46 s**, and fresh cache **140.8 → 81.8 MiB**. These are click-to-usable
+measurements on the same retained inputs. A separate single headless control takes 70.46 seconds
+in Node 26 and 122.60 seconds in Electron's embedded runtime, with identical output. It identifies
+remaining runtime cost without attributing it to rendering. The small screenshot fixture cannot
+substitute for this comparison.
 
 Future changes should measure the complete affected path, cache bytes and sampled process memory
 alongside isolated stages. Compare the same inputs in alternating fresh processes and verify

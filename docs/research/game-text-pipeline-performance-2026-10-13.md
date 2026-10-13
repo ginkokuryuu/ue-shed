@@ -2,8 +2,9 @@
 
 [ADR 0010](../decisions/0010-game-text-performance-policy.md) adopts the retained implementation
 at `5332c6e1` in performance PR #67, stacked on UX PR #66. The accepted target-only generated 1× cache is
-**81.8 MiB**. This record consolidates the initial two-hour investigation and both one-hour
-continuations. It records historical measurements; [Game Text snapshots](../engineering/game-text-snapshots.md)
+**81.8 MiB**. This record consolidates the initial two-hour investigation, both one-hour
+continuations and the same-workload Workbench investigation. It records historical measurements;
+[Game Text snapshots](../engineering/game-text-snapshots.md)
 owns the maintained implementation contract.
 
 ## Results and measurement boundaries
@@ -65,7 +66,7 @@ medians do not sum exactly. Worker encode/verify counters sum concurrent work, n
 Those backend timers exclude Electron launch, painting and typing debounce. Sampled RSS can miss brief allocations;
 post-GC array-buffer checkpoints are a different measure.
 
-## Same 583,507-line workload: backend versus Workbench
+## Historical same-workload comparison: backend versus Workbench
 
 The follow-up uses the **exact retained 1× project, package records and localization files** from
 above. It supersedes the smaller screenshot-fixture comparison for this question. Three fresh
@@ -83,24 +84,26 @@ as in the original retained-record experiment. OS caches are warm.
 | Workbench **Scan project**, existing cache, fresh process  |       3 |   6.436 s |     6.178–6.492 s |
 | Subsequent Workbench **Rescan**, existing cache, open app  |       9 |  13.316 s |    9.812–17.700 s |
 
-These are current observations, not another before/after optimization claim. The historical
+These observations precede the host repair below; they are not a before/after optimization claim. The historical
 69.14/2.45-second medians remain valid backend-only results from the earlier three-pair comparison.
 The current cold backend range is wide; its current median is 74.39 seconds including the first
 page. The 1.26-second small-fixture rescan cannot stand in for this larger workload.
 
-Workbench runs its normal source-first preparation, constructs a separate localization view,
-materializes full source/localization models, and loads the visible group through its worker-backed
-query and IPC. The backend benchmark prepares only the selected target and uses bounded direct
+Workbench used source-first preparation, built a separate localization join and opened a query
+worker for each model. Both object wrappers were already lazy: the earlier explanation that
+refresh materialized both complete object models was incorrect. Visible groups load through
+worker-backed queries and IPC. The backend benchmark prepares only the selected target and uses bounded direct
 queries. Workbench runs Electron 43.7.7 / Node 24.21.0 with its production renderer; the backend
 runs Node 26.5.0. These differences are part of the measured desktop path. The timings do not
 isolate a runtime-version effect or attribute every additional second to rendering.
 
 Cached rescans reread **zero packages** and reparse **zero localization files**. In the nine repeated
 rescans, the source-refresh IPC has a 9.123-second median and target preparation a 2.742-second
-median. The host eagerly accesses `indexed.corpus` in `services/game-text.ts`, followed by
-`localizationJoin`, `review` and `evidence` in `services/game-text-localization.ts`. That object
-materialization remains on the refresh path even when the numeric index is reused. The source
-and target IPC medians describe separate work; their medians need not add to the end-to-end median.
+median. The later investigation reproduced the delay in plain Electron without a main-process
+debugger: rescans retired two large query workers, each taking roughly 3–4 seconds to terminate,
+with the main process largely waiting. Preparing two joins also inflated cold work. Accessing the
+lazy corpus/join wrappers did not itself materialize every line. The source and target IPC medians
+describe separate work; their medians need not add to the end-to-end median.
 
 Timing starts at the actual renderer click. The endpoint requires enabled Rescan, no scan activity,
 loaded visible rows, no open-group loading, completed observed blocking requests, and two animation
@@ -133,6 +136,64 @@ Raw precision, stage/IPC timings, comparisons and per-profile cache bytes are in
 `phases.workbenchRetainedUi` of the consolidated JSON. The probes and original evidence are preserved
 in `out/game-text-experiments-2026-10-13/same-workload-evidence.zip`; build, search, line-focus and
 translation-editor checks are successful. This follow-up does not change the indexing algorithm.
+
+## Host repair on the latest UX baseline
+
+The repeated before/after comparison uses baseline `99c57825`, which merges the latest committed
+PR #66 review (`c1c948d7`) into the performance branch. Both variants use the same production
+Solid 2 renderer, so these timings isolate the host pipeline change. Plain Electron launches with
+renderer CDP only; no main-process inspector is attached. The input paths, retained adapters,
+empty query, ten cultures, first 50-row problem group and click-to-usable endpoint match the large
+workload above. Native discovery/extraction and application startup remain excluded.
+
+Three fresh profiles per revision and mode run in sequential blocks with warm OS caches. Each
+profile supplies three ordinary rescans. Cached profiles start with an identical copy of the
+baseline derived cache. These are a separate repeated comparison, not a splice into the earlier
+alternating backend runs.
+
+| Actual Workbench click to usable results | Samples per variant |       Before median (range) |        After median (range) |
+| ---------------------------------------- | ------------------: | --------------------------: | --------------------------: |
+| Cold scan                                |                   3 | 178.962 s (168.539–184.217) | 126.842 s (124.261–129.963) |
+| Rescan after cold scan                   |                   9 |    13.114 s (11.448–15.532) |       2.563 s (2.464–2.729) |
+| Cached scan in a fresh process           |                   3 |       6.257 s (6.203–6.281) |       4.809 s (4.771–4.812) |
+| Subsequent Rescan in that process        |                   9 |     11.912 s (9.381–15.113) |       2.463 s (2.414–2.514) |
+
+Workbench now prepares one primary target index, whose raw projection also serves source browsing.
+Localization validates current inputs before reusing that model. Scoped worker ownership shares
+one worker across overlapping readers of the same immutable join and releases it when the last
+pin closes. Changed generations receive fresh workers. Source-only fallback remains available
+when target preparation fails. The selected target survives inventory-generation changes within
+the shell's selected project; the route still cannot select a project.
+
+Solid 2 functional keys preserve group and row DOM identity when reloads supply new objects with
+the same IDs. Paginated reloads publish the restored page count atomically, retaining the previous
+rows while later pages load or fail. Component tests cover 100 loaded rows, focus and updated row
+handlers. These renderer changes are present in both timing variants and have their own correctness
+evidence; this comparison does not assign them a separate speedup.
+
+Fresh Workbench derived caches settle at **81.776 MiB**, down from **140.824 MiB**. Reopening a copied
+old cache leaves it at **140.824 MiB**: this change does not automatically prune its existing source
+layers. These figures exclude native Catalog, retained inputs, staging and experimental copies.
+All 132 full JSON query pages across twelve profiles equal the original backend values, including
+positive, sparse, uppercase and Unicode-whitespace queries. No page errors or renderer long tasks
+were observed; the final cold/cached runs' largest sampled frame gaps are 33.7/33.5 ms.
+
+Six separate German-editor checks retain the typed draft through an actual Rescan. Their sparse
+16-row query has rescan medians of 2.201 seconds after cold scans and 2.200 seconds after cached
+scans, three samples each. This different visible workload is excluded from the default-list table.
+No translation files are written by those checks.
+
+One headless control per runtime uses the same input adapter, tsx loader and fresh C: cache volume:
+Node 26.5.0 reaches the first page in **70.455 seconds**, while Electron's embedded Node 24.21.0 takes
+**122.602 seconds**, with identical result hashes. No window or renderer exists in this control.
+This is diagnostic evidence, not a repeated speed claim or an isolated Node-version comparison:
+runtime, worker bootstrap and execution behavior remain to be separated. The remaining cold gap
+cannot be attributed to Solid rendering. An earlier control on D: failed with `ENOSPC` and supplies
+no timing result.
+
+Raw click/IPC samples, cache bytes and the runtime control are under `phases.workbenchHostRepair`
+in the consolidated JSON. The complete probes, logs, page values, screenshots and profiles are
+archived locally in `out/game-text-experiments-2026-10-13/host-repair-evidence.zip`.
 
 ## Small screenshot fixture: supplementary UI check
 
@@ -237,9 +298,12 @@ Positive/sparse/multiterm/uppercase/Unicode-whitespace query hash:
 `7e06ad0a562c94c3ac08eab33f2dbfd3f1c94ab418788bc4548c82c87124ffd8`.
 All paired results match. Native, focus, quality, sorting and bulk hashes remain in the JSON record.
 
-Latest code verification: `pnpm run check:repository --maxWorkers=4` passes **2,430 tests**,
-94 expected skips and 326 files; precommit and Effect architecture pass. The separate **1,000-seed**
-differential suite passes nine tests. Targeted cache/codec tests pass 12 tests. An initial default
+Host-repair verification: `pnpm run check:repository --maxWorkers=4` passes **2,453 tests**,
+95 expected skips and 328 test files; precommit and Effect architecture pass. A final focused rerun
+passes 51 tests across seven files, including selected-target recovery, worker lifetime and Solid 2
+row/pagination checks; Workbench typecheck and the production builds pass. The preceding retained
+runtime gate passed 2,430 tests with 94 expected skips and 326 files. Its separate **1,000-seed**
+differential suite passed nine tests, and targeted cache/codec tests passed 12 tests. An initial default
 repository attempt had 13 timeouts and no assertion failures; its affected suites pass 71 tests
 with four workers, followed by the complete bounded-worker pass without increased timeouts.
 
@@ -255,7 +319,8 @@ recording continued after each one-hour trial window.
 [The consolidated JSON](game-text-pipeline-performance-2026-10-13.json) preserves raw timing/RSS
 samples at their original precision, output hashes, exploratory comparisons and per-phase
 verification. Recomputable summary fields, duplicate profiles and non-timing dictionary counters
-are removed. Query milliseconds share each run's query/match arrays.
+are removed from the original phases. Query milliseconds share each run's query/match arrays.
+The host-repair phase retains compact click/IPC samples; its full observations are in the archive.
 
 The original full reports, traces, logs, probes and candidate modules are archived locally in
 `out/game-text-experiments-2026-10-13/evidence.zip`, with checksums in `manifest.json`. One accepted
@@ -266,6 +331,12 @@ experiment directories, including a retry with a verified literal path, with onl
 the consolidation has not reclaimed that disk space. The three original JSON files remain
 available in git at `5332c6e1`. Generic generated inputs under `test-results/game-text-scale` are
 retained separately.
+
+The same-workload follow-ups have separate `same-workload-evidence.zip` and
+`host-repair-evidence.zip` archives. The latter's file hashes and archive checksum are in
+`host-repair-manifest.json`; copied applications, dependency trees and profile caches are excluded.
+Automatic approval review also rejected removal of the host-repair duplicate caches with only
+`blocked by policy`. Those copies remain; archiving the probes has not reclaimed their disk space.
 
 The maintained public harness is `scripts/benchmark-game-text-pipeline.ts`. Build each revision
 and provide its explicit module/native artifacts. For retained-record cold replay, pass `--records`
@@ -279,6 +350,7 @@ node --import tsx scripts/benchmark-game-text-pipeline.ts `
   --before-reader <before-uasset> --output test-results/game-text-paired.json --runs 3
 ```
 
-Remaining opportunities are mechanical Rust-backed construction, fewer serial passes and
-column-driven quality evaluation. They require new benchmarks and parity evidence. Performance
+Remaining opportunities include explaining the headless Electron runtime gap, mechanical
+Rust-backed construction, fewer serial passes and column-driven quality evaluation. They require
+new benchmarks and parity evidence. Performance
 work does not fix the [saved-scan gaps compared with Unreal gather](../engineering/game-text-gather-coverage.md).

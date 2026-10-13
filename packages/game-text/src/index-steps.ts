@@ -42,6 +42,7 @@ import { reuseJoinedQueryProjection, type JoinedQueryProjection } from "./joined
 import { instrumentIndexQuery } from "./index-query.js";
 import { columnarTextCorpusQuery } from "./columnar-query.js";
 import { makeGameTextSearchWorker } from "./search-worker-node.js";
+import { SearchWorkerInput } from "./search-worker-protocol.js";
 import {
 	indexedTextCorpus,
 	indexedLocalizationJoin,
@@ -212,6 +213,20 @@ export const makeGameTextIndexSteps = (
 		const projections = yield* Cache.make({
 			capacity: 2,
 			lookup: (_key: string) => Effect.succeed<JoinedQueryProjection | undefined>(undefined)
+		});
+		const workers = yield* RcMap.make({
+			capacity: 8,
+			lookup: (key: string) =>
+				Schema.decodeUnknownEffect(Schema.fromJsonString(SearchWorkerInput))(key).pipe(
+					Effect.mapError((cause) =>
+						failure("search-worker", String(cause), "Rescan the project.")
+					),
+					Effect.flatMap((input) =>
+						makeGameTextSearchWorker(input, {
+							latestOnly: options.latestSearchOnly ?? false
+						})
+					)
+				)
 		});
 		const withSession = <A, E, R>(
 			configuration: SharedIndexOptions,
@@ -566,14 +581,26 @@ export const makeGameTextIndexSteps = (
 					failure("evidence", String(cause), "Refresh the Game Text index and retry.")
 				)
 			);
+			const workerKey = JSON.stringify({
+				configuration,
+				generation: joined.reader.manifest.generation,
+				joinedKey: joined.reader.manifest.active.joined!
+			});
+			// Acquire the worker's reader before exposing the model: later compaction may unlink
+			// these files. Overlapping models pin one worker for the same immutable joined view.
 			const search = options.searchWorker
-				? yield* makeGameTextSearchWorker(
-						{
-							configuration,
-							generation: joined.reader.manifest.generation,
-							joinedKey: joined.reader.manifest.active.joined!
-						},
-						{ latestOnly: options.latestSearchOnly ?? false }
+				? yield* RcMap.get(workers, workerKey).pipe(
+						Effect.mapError((cause) =>
+							cause instanceof GameTextIndexError ||
+							cause instanceof SnapshotStoreError ||
+							cause instanceof SnapshotFormatError
+								? cause
+								: failure(
+										"search-worker",
+										"Too many query workers are active.",
+										"Wait for active queries to finish and retry."
+									)
+						)
 					)
 				: Effect.fn("GameTextIndex.search")((request: TextCorpusSearchRequest) =>
 						Effect.try({
@@ -590,6 +617,7 @@ export const makeGameTextIndexSteps = (
 			return {
 				...result,
 				project: target.project,
+				queryRevision: `${joined.reader.manifest.generation}:${target.join.key}`,
 				joined,
 				query,
 				search,

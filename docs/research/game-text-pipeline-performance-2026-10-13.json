@@ -2,7 +2,7 @@
 	"formatVersion": 2,
 	"date": "2026-10-13",
 	"acceptedImplementationCommit": "5332c6e1d323a38781b9a27cd25321a18ae181d7",
-	"compaction": "One record for all three phases. Raw timing/RSS samples and hashes keep their original precision. Recomputable median/min/max fields, duplicated profiles and non-timing dictionary counters are omitted. Per-run first/repeated query milliseconds share the queries/matches arrays. Full original reports, traces and probes are archived locally and remain in git at the accepted implementation commit.",
+	"compaction": "One record for the original three phases and desktop follow-ups. Raw timing/RSS precision and hashes are preserved. Original phases omit recomputable summaries and duplicate profiles. Desktop host-repair samples retain click, header, frame and IPC durations; repeated non-timing fields are represented in verification. Complete observations, probes, traces and screenshots are archived locally; historical source reports remain in git.",
 	"phases": {
 		"pipeline": {
 			"baselineCommit": "8a45ffaf",
@@ -7559,6 +7559,2209 @@
 					}
 				],
 				"packagedColdLayerWorker": "passed on all three cold caches"
+			}
+		},
+		"workbenchHostRepair": {
+			"date": "2026-10-13",
+			"baselineCommit": "99c57825 (latest committed PR 66 review c1c948d7 merged onto performance baseline)",
+			"implementation": "Scoped worker reuse, one target-first workspace model, Solid 2 keyed rows and atomic paginated reloads",
+			"dataset": {
+				"lines": 583507,
+				"occurrences": 1028205,
+				"packages": 16500,
+				"inventoryPackages": 166518,
+				"localizationFiles": 21,
+				"cultures": 10
+			},
+			"environment": {
+				"os": "Windows",
+				"electron": "43.7.7",
+				"node": "24.21.0",
+				"renderer": "Same production renderer for both variants; isolates main-process pipeline changes"
+			},
+			"method": [
+				"Exact retained 1x input paths and record adapter used in prior backend measurements; no native enumeration/extraction or application startup.",
+				"Plain Electron launch with renderer CDP only, no main-process debugger; capture-phase click to rows present, Rescan enabled, no group loading, no blocking requests, two animation-frame observations.",
+				"Three fresh profiles per revision and mode, sequential blocks with warm OS caches. Cached profiles copy the identical baseline derived cache into otherwise fresh profiles.",
+				"Default empty query, all ten cultures, first problem group with 50 rows, no quality rule document. Draft checks use a separately reported sparse query with 16 rows.",
+				"Runtime control: one unbundled headless run per executable through the same tsx loader, fresh caches on the same C: volume; diagnostic only, not a repeated before/after claim.",
+				"Initial runtime control on D: failed with ENOSPC and supplies no timing result."
+			],
+			"results": {
+				"baseline": {
+					"cold": {
+						"summary": {
+							"scan": {
+								"samples": 3,
+								"medianMs": 178961.5,
+								"minMs": 168538.89990234375,
+								"maxMs": 184216.89990234375
+							},
+							"rescan": {
+								"samples": 9,
+								"medianMs": 13114.199951171875,
+								"minMs": 11447.800048828125,
+								"maxMs": 15531.699951171875
+							},
+							"draftRescan": null
+						},
+						"samples": [
+							{
+								"label": "baseline-cold-0-scan",
+								"statusReadyMs": 183265.10009765625,
+								"strictReadyMs": 184216.89990234375,
+								"frameMaxGapMs": 33.60000000000582,
+								"visibleRows": 50,
+								"ipc": [
+									{
+										"channel": "game-text:configured-refresh",
+										"ms": 91958.39135742188
+									},
+									{
+										"channel": "game-text:localization:targets",
+										"ms": 7.3857421875
+									},
+									{
+										"channel": "game-text:localization:target",
+										"ms": 91041.4501953125
+									},
+									{
+										"channel": "game-text:search",
+										"ms": 85.636962890625,
+										"query": ""
+									},
+									{
+										"channel": "game-text:search",
+										"ms": 924.69677734375,
+										"query": "",
+										"openGroup": "not_gathered"
+									}
+								]
+							},
+							{
+								"label": "baseline-cold-0-rescan-0",
+								"statusReadyMs": 10613,
+								"strictReadyMs": 11511.5,
+								"frameMaxGapMs": 17.199999999982538,
+								"visibleRows": 50,
+								"ipc": [
+									{
+										"channel": "game-text:configured-refresh",
+										"ms": 7792.300048828125
+									},
+									{
+										"channel": "game-text:localization:targets",
+										"ms": 3.910888671875
+									},
+									{
+										"channel": "game-text:localization:target",
+										"ms": 2577.32275390625
+									},
+									{
+										"channel": "game-text:search",
+										"ms": 82.217041015625,
+										"query": ""
+									},
+									{
+										"channel": "game-text:search",
+										"ms": 875.646728515625,
+										"query": "",
+										"openGroup": "not_gathered"
+									}
+								]
+							},
+							{
+								"label": "baseline-cold-0-rescan-1",
+								"statusReadyMs": 13517.400146484375,
+								"strictReadyMs": 14463.60009765625,
+								"frameMaxGapMs": 33.10000000000582,
+								"visibleRows": 50,
+								"ipc": [
+									{
+										"channel": "game-text:configured-refresh",
+										"ms": 10561.02490234375
+									},
+									{
+										"channel": "game-text:localization:targets",
+										"ms": 4.064208984375
+									},
+									{
+										"channel": "game-text:localization:target",
+										"ms": 2722.240478515625
+									},
+									{
+										"channel": "game-text:search",
+										"ms": 80.409423828125,
+										"query": ""
+									},
+									{
+										"channel": "game-text:search",
+										"ms": 922.69873046875,
+										"query": "",
+										"openGroup": "not_gathered"
+									}
+								]
+							},
+							{
+								"label": "baseline-cold-0-rescan-2",
+								"statusReadyMs": 12900.199951171875,
+								"strictReadyMs": 13813.699951171875,
+								"frameMaxGapMs": 17.29999999998836,
+								"visibleRows": 50,
+								"ipc": [
+									{
+										"channel": "game-text:configured-refresh",
+										"ms": 9657.296142578125
+									},
+									{
+										"channel": "game-text:localization:targets",
+										"ms": 4.331787109375
+									},
+									{
+										"channel": "game-text:localization:target",
+										"ms": 3009.594482421875
+									},
+									{
+										"channel": "game-text:search",
+										"ms": 79.187255859375,
+										"query": ""
+									},
+									{
+										"channel": "game-text:search",
+										"ms": 886.51904296875,
+										"query": "",
+										"openGroup": "not_gathered"
+									}
+								]
+							},
+							{
+								"label": "baseline-cold-1-scan",
+								"statusReadyMs": 167497.19995117188,
+								"strictReadyMs": 168538.89990234375,
+								"frameMaxGapMs": 33.5,
+								"visibleRows": 50,
+								"ipc": [
+									{
+										"channel": "game-text:configured-refresh",
+										"ms": 90140.65161132812
+									},
+									{
+										"channel": "game-text:localization:targets",
+										"ms": 7.181884765625
+									},
+									{
+										"channel": "game-text:localization:target",
+										"ms": 77101.70458984375
+									},
+									{
+										"channel": "game-text:search",
+										"ms": 89.075927734375,
+										"query": ""
+									},
+									{
+										"channel": "game-text:search",
+										"ms": 1015.02294921875,
+										"query": "",
+										"openGroup": "not_gathered"
+									}
+								]
+							},
+							{
+								"label": "baseline-cold-1-rescan-0",
+								"statusReadyMs": 12271.300048828125,
+								"strictReadyMs": 13130.099853515625,
+								"frameMaxGapMs": 17.199999999982538,
+								"visibleRows": 50,
+								"ipc": [
+									{
+										"channel": "game-text:configured-refresh",
+										"ms": 8801.523681640625
+									},
+									{
+										"channel": "game-text:localization:targets",
+										"ms": 4.222412109375
+									},
+									{
+										"channel": "game-text:localization:target",
+										"ms": 3237.653076171875
+									},
+									{
+										"channel": "game-text:search",
+										"ms": 78.53173828125,
+										"query": ""
+									},
+									{
+										"channel": "game-text:search",
+										"ms": 841.84521484375,
+										"query": "",
+										"openGroup": "not_gathered"
+									}
+								]
+							},
+							{
+								"label": "baseline-cold-1-rescan-1",
+								"statusReadyMs": 10940.39990234375,
+								"strictReadyMs": 11747.39990234375,
+								"frameMaxGapMs": 17.300000000017462,
+								"visibleRows": 50,
+								"ipc": [
+									{
+										"channel": "game-text:configured-refresh",
+										"ms": 8089.014404296875
+									},
+									{
+										"channel": "game-text:localization:targets",
+										"ms": 3.73193359375
+									},
+									{
+										"channel": "game-text:localization:target",
+										"ms": 2628.774658203125
+									},
+									{
+										"channel": "game-text:search",
+										"ms": 72.722900390625,
+										"query": ""
+									},
+									{
+										"channel": "game-text:search",
+										"ms": 791.3466796875,
+										"query": "",
+										"openGroup": "not_gathered"
+									}
+								]
+							},
+							{
+								"label": "baseline-cold-1-rescan-2",
+								"statusReadyMs": 10499.2001953125,
+								"strictReadyMs": 11447.800048828125,
+								"frameMaxGapMs": 17.20000000001164,
+								"visibleRows": 50,
+								"ipc": [
+									{
+										"channel": "game-text:configured-refresh",
+										"ms": 7417.472900390625
+									},
+									{
+										"channel": "game-text:localization:targets",
+										"ms": 3.37109375
+									},
+									{
+										"channel": "game-text:localization:target",
+										"ms": 2852.689208984375
+									},
+									{
+										"channel": "game-text:search",
+										"ms": 79.4306640625,
+										"query": ""
+									},
+									{
+										"channel": "game-text:search",
+										"ms": 919.86865234375,
+										"query": "",
+										"openGroup": "not_gathered"
+									}
+								]
+							},
+							{
+								"label": "baseline-cold-2-scan",
+								"statusReadyMs": 178064.30004882812,
+								"strictReadyMs": 178961.5,
+								"frameMaxGapMs": 33.30000000001746,
+								"visibleRows": 50,
+								"ipc": [
+									{
+										"channel": "game-text:configured-refresh",
+										"ms": 88243.919921875
+									},
+									{
+										"channel": "game-text:localization:targets",
+										"ms": 7.33203125
+									},
+									{
+										"channel": "game-text:localization:target",
+										"ms": 89552.6025390625
+									},
+									{
+										"channel": "game-text:search",
+										"ms": 84.91162109375,
+										"query": ""
+									},
+									{
+										"channel": "game-text:search",
+										"ms": 867.5107421875,
+										"query": "",
+										"openGroup": "not_gathered"
+									}
+								]
+							},
+							{
+								"label": "baseline-cold-2-rescan-0",
+								"statusReadyMs": 14643.60009765625,
+								"strictReadyMs": 15531.699951171875,
+								"frameMaxGapMs": 17.300000000017462,
+								"visibleRows": 50,
+								"ipc": [
+									{
+										"channel": "game-text:configured-refresh",
+										"ms": 11224.34619140625
+									},
+									{
+										"channel": "game-text:localization:targets",
+										"ms": 3.817138671875
+									},
+									{
+										"channel": "game-text:localization:target",
+										"ms": 3187.02197265625
+									},
+									{
+										"channel": "game-text:search",
+										"ms": 80.205322265625,
+										"query": ""
+									},
+									{
+										"channel": "game-text:search",
+										"ms": 868.83447265625,
+										"query": "",
+										"openGroup": "not_gathered"
+									}
+								]
+							},
+							{
+								"label": "baseline-cold-2-rescan-1",
+								"statusReadyMs": 12232.5,
+								"strictReadyMs": 13114.199951171875,
+								"frameMaxGapMs": 17.300000000017462,
+								"visibleRows": 50,
+								"ipc": [
+									{
+										"channel": "game-text:configured-refresh",
+										"ms": 9051.8994140625
+									},
+									{
+										"channel": "game-text:localization:targets",
+										"ms": 3.6640625
+									},
+									{
+										"channel": "game-text:localization:target",
+										"ms": 2945.927978515625
+									},
+									{
+										"channel": "game-text:search",
+										"ms": 81.961181640625,
+										"query": ""
+									},
+									{
+										"channel": "game-text:search",
+										"ms": 856.9990234375,
+										"query": "",
+										"openGroup": "not_gathered"
+									}
+								]
+							},
+							{
+								"label": "baseline-cold-2-rescan-2",
+								"statusReadyMs": 11799.60009765625,
+								"strictReadyMs": 12714.5,
+								"frameMaxGapMs": 17.20000000001164,
+								"visibleRows": 50,
+								"ipc": [
+									{
+										"channel": "game-text:configured-refresh",
+										"ms": 8470.834716796875
+									},
+									{
+										"channel": "game-text:localization:targets",
+										"ms": 3.662109375
+									},
+									{
+										"channel": "game-text:localization:target",
+										"ms": 3101.493896484375
+									},
+									{
+										"channel": "game-text:search",
+										"ms": 80.334716796875,
+										"query": ""
+									},
+									{
+										"channel": "game-text:search",
+										"ms": 896.99267578125,
+										"query": "",
+										"openGroup": "not_gathered"
+									}
+								]
+							}
+						]
+					},
+					"cached": {
+						"summary": {
+							"scan": {
+								"samples": 3,
+								"medianMs": 6256.89990234375,
+								"minMs": 6203.199951171875,
+								"maxMs": 6280.699951171875
+							},
+							"rescan": {
+								"samples": 9,
+								"medianMs": 11912.099853515625,
+								"minMs": 9381.400146484375,
+								"maxMs": 15113.39990234375
+							},
+							"draftRescan": null
+						},
+						"samples": [
+							{
+								"label": "baseline-cached-0-scan",
+								"statusReadyMs": 5433.7998046875,
+								"strictReadyMs": 6280.699951171875,
+								"frameMaxGapMs": 17.100000000000364,
+								"visibleRows": 50,
+								"ipc": [
+									{
+										"channel": "game-text:configured-refresh",
+										"ms": 2557.7646484375
+									},
+									{
+										"channel": "game-text:localization:targets",
+										"ms": 7.212646484375
+									},
+									{
+										"channel": "game-text:localization:target",
+										"ms": 2608.062744140625
+									},
+									{
+										"channel": "game-text:search",
+										"ms": 86.305908203125,
+										"query": ""
+									},
+									{
+										"channel": "game-text:search",
+										"ms": 815.6904296875,
+										"query": "",
+										"openGroup": "not_gathered"
+									}
+								]
+							},
+							{
+								"label": "baseline-cached-0-rescan-0",
+								"statusReadyMs": 11069.39990234375,
+								"strictReadyMs": 11912.099853515625,
+								"frameMaxGapMs": 17.299999999999272,
+								"visibleRows": 50,
+								"ipc": [
+									{
+										"channel": "game-text:configured-refresh",
+										"ms": 8257.53662109375
+									},
+									{
+										"channel": "game-text:localization:targets",
+										"ms": 4.003173828125
+									},
+									{
+										"channel": "game-text:localization:target",
+										"ms": 2575.435791015625
+									},
+									{
+										"channel": "game-text:search",
+										"ms": 77.01416015625,
+										"query": ""
+									},
+									{
+										"channel": "game-text:search",
+										"ms": 822.9931640625,
+										"query": "",
+										"openGroup": "not_gathered"
+									}
+								]
+							},
+							{
+								"label": "baseline-cached-0-rescan-1",
+								"statusReadyMs": 8557.2001953125,
+								"strictReadyMs": 9381.400146484375,
+								"frameMaxGapMs": 17.200000000000728,
+								"visibleRows": 50,
+								"ipc": [
+									{
+										"channel": "game-text:configured-refresh",
+										"ms": 6122.01611328125
+									},
+									{
+										"channel": "game-text:localization:targets",
+										"ms": 3.618408203125
+									},
+									{
+										"channel": "game-text:localization:target",
+										"ms": 2210.843505859375
+									},
+									{
+										"channel": "game-text:search",
+										"ms": 78.475830078125,
+										"query": ""
+									},
+									{
+										"channel": "game-text:search",
+										"ms": 794.88232421875,
+										"query": "",
+										"openGroup": "not_gathered"
+									}
+								]
+							},
+							{
+								"label": "baseline-cached-0-rescan-2",
+								"statusReadyMs": 10075,
+								"strictReadyMs": 10947.199951171875,
+								"frameMaxGapMs": 17.200000000004366,
+								"visibleRows": 50,
+								"ipc": [
+									{
+										"channel": "game-text:configured-refresh",
+										"ms": 7549.8984375
+									},
+									{
+										"channel": "game-text:localization:targets",
+										"ms": 3.46875
+									},
+									{
+										"channel": "game-text:localization:target",
+										"ms": 2300.1728515625
+									},
+									{
+										"channel": "game-text:search",
+										"ms": 73.527587890625,
+										"query": ""
+									},
+									{
+										"channel": "game-text:search",
+										"ms": 850.974365234375,
+										"query": "",
+										"openGroup": "not_gathered"
+									}
+								]
+							},
+							{
+								"label": "baseline-cached-1-scan",
+								"statusReadyMs": 5408.099853515625,
+								"strictReadyMs": 6256.89990234375,
+								"frameMaxGapMs": 17.199999999999932,
+								"visibleRows": 50,
+								"ipc": [
+									{
+										"channel": "game-text:configured-refresh",
+										"ms": 2490.305419921875
+									},
+									{
+										"channel": "game-text:localization:targets",
+										"ms": 7.103759765625
+									},
+									{
+										"channel": "game-text:localization:target",
+										"ms": 2659.62353515625
+									},
+									{
+										"channel": "game-text:search",
+										"ms": 91.5888671875,
+										"query": ""
+									},
+									{
+										"channel": "game-text:search",
+										"ms": 820.30859375,
+										"query": "",
+										"openGroup": "not_gathered"
+									}
+								]
+							},
+							{
+								"label": "baseline-cached-1-rescan-0",
+								"statusReadyMs": 12878,
+								"strictReadyMs": 13862.400146484375,
+								"frameMaxGapMs": 17.200000000000728,
+								"visibleRows": 50,
+								"ipc": [
+									{
+										"channel": "game-text:configured-refresh",
+										"ms": 9948.50927734375
+									},
+									{
+										"channel": "game-text:localization:targets",
+										"ms": 4.162353515625
+									},
+									{
+										"channel": "game-text:localization:target",
+										"ms": 2688.51708984375
+									},
+									{
+										"channel": "game-text:search",
+										"ms": 81.162109375,
+										"query": ""
+									},
+									{
+										"channel": "game-text:search",
+										"ms": 954.35498046875,
+										"query": "",
+										"openGroup": "not_gathered"
+									}
+								]
+							},
+							{
+								"label": "baseline-cached-1-rescan-1",
+								"statusReadyMs": 10137,
+								"strictReadyMs": 10980.800048828125,
+								"frameMaxGapMs": 17.299999999999272,
+								"visibleRows": 50,
+								"ipc": [
+									{
+										"channel": "game-text:configured-refresh",
+										"ms": 7604.379638671875
+									},
+									{
+										"channel": "game-text:localization:targets",
+										"ms": 3.51025390625
+									},
+									{
+										"channel": "game-text:localization:target",
+										"ms": 2295.599365234375
+									},
+									{
+										"channel": "game-text:search",
+										"ms": 78.367431640625,
+										"query": ""
+									},
+									{
+										"channel": "game-text:search",
+										"ms": 812.130615234375,
+										"query": "",
+										"openGroup": "not_gathered"
+									}
+								]
+							},
+							{
+								"label": "baseline-cached-1-rescan-2",
+								"statusReadyMs": 11665.39990234375,
+								"strictReadyMs": 12466.5,
+								"frameMaxGapMs": 17.30000000000291,
+								"visibleRows": 50,
+								"ipc": [
+									{
+										"channel": "game-text:configured-refresh",
+										"ms": 8262.966064453125
+									},
+									{
+										"channel": "game-text:localization:targets",
+										"ms": 3.61279296875
+									},
+									{
+										"channel": "game-text:localization:target",
+										"ms": 3158.86083984375
+									},
+									{
+										"channel": "game-text:search",
+										"ms": 80.896484375,
+										"query": ""
+									},
+									{
+										"channel": "game-text:search",
+										"ms": 784.933837890625,
+										"query": "",
+										"openGroup": "not_gathered"
+									}
+								]
+							},
+							{
+								"label": "baseline-cached-2-scan",
+								"statusReadyMs": 5402.599853515625,
+								"strictReadyMs": 6203.199951171875,
+								"frameMaxGapMs": 17.200000000000728,
+								"visibleRows": 50,
+								"ipc": [
+									{
+										"channel": "game-text:configured-refresh",
+										"ms": 2518.2548828125
+									},
+									{
+										"channel": "game-text:localization:targets",
+										"ms": 7.43505859375
+									},
+									{
+										"channel": "game-text:localization:target",
+										"ms": 2635.224853515625
+									},
+									{
+										"channel": "game-text:search",
+										"ms": 83.90673828125,
+										"query": ""
+									},
+									{
+										"channel": "game-text:search",
+										"ms": 773.75048828125,
+										"query": "",
+										"openGroup": "not_gathered"
+									}
+								]
+							},
+							{
+								"label": "baseline-cached-2-rescan-0",
+								"statusReadyMs": 12145.800048828125,
+								"strictReadyMs": 13213.89990234375,
+								"frameMaxGapMs": 17.200000000000728,
+								"visibleRows": 50,
+								"ipc": [
+									{
+										"channel": "game-text:configured-refresh",
+										"ms": 9253.177490234375
+									},
+									{
+										"channel": "game-text:localization:targets",
+										"ms": 4.016845703125
+									},
+									{
+										"channel": "game-text:localization:target",
+										"ms": 2663.29638671875
+									},
+									{
+										"channel": "game-text:search",
+										"ms": 80.80126953125,
+										"query": ""
+									},
+									{
+										"channel": "game-text:search",
+										"ms": 1049.08935546875,
+										"query": "",
+										"openGroup": "not_gathered"
+									}
+								]
+							},
+							{
+								"label": "baseline-cached-2-rescan-1",
+								"statusReadyMs": 9222.099853515625,
+								"strictReadyMs": 9982.300048828125,
+								"frameMaxGapMs": 17.200000000000728,
+								"visibleRows": 50,
+								"ipc": [
+									{
+										"channel": "game-text:configured-refresh",
+										"ms": 6677.99609375
+									},
+									{
+										"channel": "game-text:localization:targets",
+										"ms": 3.705810546875
+									},
+									{
+										"channel": "game-text:localization:target",
+										"ms": 2315.937744140625
+									},
+									{
+										"channel": "game-text:search",
+										"ms": 79.160400390625,
+										"query": ""
+									},
+									{
+										"channel": "game-text:search",
+										"ms": 737.61962890625,
+										"query": "",
+										"openGroup": "not_gathered"
+									}
+								]
+							},
+							{
+								"label": "baseline-cached-2-rescan-2",
+								"statusReadyMs": 14282.5,
+								"strictReadyMs": 15113.39990234375,
+								"frameMaxGapMs": 17.200000000004366,
+								"visibleRows": 50,
+								"ipc": [
+									{
+										"channel": "game-text:configured-refresh",
+										"ms": 11086.903076171875
+									},
+									{
+										"channel": "game-text:localization:targets",
+										"ms": 3.473388671875
+									},
+									{
+										"channel": "game-text:localization:target",
+										"ms": 2962.170654296875
+									},
+									{
+										"channel": "game-text:search",
+										"ms": 82.943115234375,
+										"query": ""
+									},
+									{
+										"channel": "game-text:search",
+										"ms": 803.901611328125,
+										"query": "",
+										"openGroup": "not_gathered"
+									}
+								]
+							}
+						]
+					}
+				},
+				"final": {
+					"cold": {
+						"summary": {
+							"scan": {
+								"samples": 3,
+								"medianMs": 126841.69995117188,
+								"minMs": 124261.30004882812,
+								"maxMs": 129963.09985351562
+							},
+							"rescan": {
+								"samples": 9,
+								"medianMs": 2563.39990234375,
+								"minMs": 2463.60009765625,
+								"maxMs": 2729.400146484375
+							},
+							"draftRescan": {
+								"samples": 3,
+								"medianMs": 2201.300048828125,
+								"minMs": 2181.89990234375,
+								"maxMs": 2248.300048828125
+							}
+						},
+						"samples": [
+							{
+								"label": "final-cold-0-scan",
+								"statusReadyMs": 125961.60009765625,
+								"strictReadyMs": 126841.69995117188,
+								"frameMaxGapMs": 33.700000000004366,
+								"visibleRows": 50,
+								"ipc": [
+									{
+										"channel": "game-text:configured-refresh",
+										"ms": 125510.625
+									},
+									{
+										"channel": "game-text:localization:targets",
+										"ms": 5.618408203125
+									},
+									{
+										"channel": "game-text:localization:target",
+										"ms": 182.620361328125
+									},
+									{
+										"channel": "game-text:search",
+										"ms": 85.506103515625,
+										"query": ""
+									},
+									{
+										"channel": "game-text:search",
+										"ms": 851.598388671875,
+										"query": "",
+										"openGroup": "not_gathered"
+									}
+								]
+							},
+							{
+								"label": "final-cold-0-rescan-0",
+								"statusReadyMs": 2350.10009765625,
+								"strictReadyMs": 2729.400146484375,
+								"frameMaxGapMs": 17.30000000000291,
+								"visibleRows": 50,
+								"ipc": [
+									{
+										"channel": "game-text:configured-refresh",
+										"ms": 2020.563232421875
+									},
+									{
+										"channel": "game-text:localization:targets",
+										"ms": 3.87109375
+									},
+									{
+										"channel": "game-text:localization:target",
+										"ms": 151.1904296875
+									},
+									{
+										"channel": "game-text:search",
+										"ms": 24.276611328125,
+										"query": ""
+									},
+									{
+										"channel": "game-text:search",
+										"ms": 353.5126953125,
+										"query": "",
+										"openGroup": "not_gathered"
+									}
+								]
+							},
+							{
+								"label": "final-cold-0-rescan-1",
+								"statusReadyMs": 2040.60009765625,
+								"strictReadyMs": 2463.60009765625,
+								"frameMaxGapMs": 17.19999999999709,
+								"visibleRows": 50,
+								"ipc": [
+									{
+										"channel": "game-text:configured-refresh",
+										"ms": 1717.531982421875
+									},
+									{
+										"channel": "game-text:localization:targets",
+										"ms": 3.176025390625
+									},
+									{
+										"channel": "game-text:localization:target",
+										"ms": 151.345947265625
+									},
+									{
+										"channel": "game-text:search",
+										"ms": 27.615966796875,
+										"query": ""
+									},
+									{
+										"channel": "game-text:search",
+										"ms": 396.080322265625,
+										"query": "",
+										"openGroup": "not_gathered"
+									}
+								]
+							},
+							{
+								"label": "final-cold-0-rescan-2",
+								"statusReadyMs": 2152.099853515625,
+								"strictReadyMs": 2563.39990234375,
+								"frameMaxGapMs": 17,
+								"visibleRows": 50,
+								"ipc": [
+									{
+										"channel": "game-text:configured-refresh",
+										"ms": 1822.747314453125
+									},
+									{
+										"channel": "game-text:localization:targets",
+										"ms": 3.04443359375
+									},
+									{
+										"channel": "game-text:localization:target",
+										"ms": 156.18505859375
+									},
+									{
+										"channel": "game-text:search",
+										"ms": 24.157470703125,
+										"query": ""
+									},
+									{
+										"channel": "game-text:search",
+										"ms": 379.375244140625,
+										"query": "",
+										"openGroup": "not_gathered"
+									}
+								]
+							},
+							{
+								"label": "final-cold-0-draft-rescan",
+								"statusReadyMs": 2169.10009765625,
+								"strictReadyMs": 2201.300048828125,
+								"frameMaxGapMs": 17.20000000001164,
+								"visibleRows": 16,
+								"ipc": [
+									{
+										"channel": "game-text:configured-refresh",
+										"ms": 1722.774658203125
+									},
+									{
+										"channel": "game-text:focus",
+										"ms": 0.0869140625
+									},
+									{
+										"channel": "game-text:localization:targets",
+										"ms": 3.71875
+									},
+									{
+										"channel": "game-text:localization:target",
+										"ms": 191.41357421875
+									},
+									{
+										"channel": "game-text:localization:focus",
+										"ms": 217.775390625
+									},
+									{
+										"channel": "game-text:focus",
+										"ms": 3.625732421875
+									},
+									{
+										"channel": "game-text:search",
+										"ms": 8.2841796875,
+										"query": "45678"
+									},
+									{
+										"channel": "game-text:search",
+										"ms": 2.1669921875,
+										"query": "45678",
+										"openGroup": "not_gathered"
+									},
+									{
+										"channel": "game-text:search",
+										"ms": 6.919189453125,
+										"query": "45678",
+										"openGroup": "finding"
+									}
+								]
+							},
+							{
+								"label": "final-cold-1-scan",
+								"statusReadyMs": 123396.10009765625,
+								"strictReadyMs": 124261.30004882812,
+								"frameMaxGapMs": 33.40000000000873,
+								"visibleRows": 50,
+								"ipc": [
+									{
+										"channel": "game-text:configured-refresh",
+										"ms": 122950.0595703125
+									},
+									{
+										"channel": "game-text:localization:targets",
+										"ms": 4.953369140625
+									},
+									{
+										"channel": "game-text:localization:target",
+										"ms": 187.237548828125
+									},
+									{
+										"channel": "game-text:search",
+										"ms": 84.98291015625,
+										"query": ""
+									},
+									{
+										"channel": "game-text:search",
+										"ms": 836.43701171875,
+										"query": "",
+										"openGroup": "not_gathered"
+									}
+								]
+							},
+							{
+								"label": "final-cold-1-rescan-0",
+								"statusReadyMs": 2254.5,
+								"strictReadyMs": 2630.099853515625,
+								"frameMaxGapMs": 17.19999999999709,
+								"visibleRows": 50,
+								"ipc": [
+									{
+										"channel": "game-text:configured-refresh",
+										"ms": 1922.2783203125
+									},
+									{
+										"channel": "game-text:localization:targets",
+										"ms": 3.58056640625
+									},
+									{
+										"channel": "game-text:localization:target",
+										"ms": 152.656982421875
+									},
+									{
+										"channel": "game-text:search",
+										"ms": 23.76025390625,
+										"query": ""
+									},
+									{
+										"channel": "game-text:search",
+										"ms": 353.08251953125,
+										"query": "",
+										"openGroup": "not_gathered"
+									}
+								]
+							},
+							{
+								"label": "final-cold-1-rescan-1",
+								"statusReadyMs": 2076.5,
+								"strictReadyMs": 2463.60009765625,
+								"frameMaxGapMs": 17.20000000001164,
+								"visibleRows": 50,
+								"ipc": [
+									{
+										"channel": "game-text:configured-refresh",
+										"ms": 1736.538330078125
+									},
+									{
+										"channel": "game-text:localization:targets",
+										"ms": 3.56103515625
+									},
+									{
+										"channel": "game-text:localization:target",
+										"ms": 156.59521484375
+									},
+									{
+										"channel": "game-text:search",
+										"ms": 27.415771484375,
+										"query": ""
+									},
+									{
+										"channel": "game-text:search",
+										"ms": 361.493408203125,
+										"query": "",
+										"openGroup": "not_gathered"
+									}
+								]
+							},
+							{
+								"label": "final-cold-1-rescan-2",
+								"statusReadyMs": 2098.800048828125,
+								"strictReadyMs": 2478.300048828125,
+								"frameMaxGapMs": 17.199999999982538,
+								"visibleRows": 50,
+								"ipc": [
+									{
+										"channel": "game-text:configured-refresh",
+										"ms": 1770.468017578125
+									},
+									{
+										"channel": "game-text:localization:targets",
+										"ms": 3.21337890625
+									},
+									{
+										"channel": "game-text:localization:target",
+										"ms": 155.183349609375
+									},
+									{
+										"channel": "game-text:search",
+										"ms": 23.711181640625,
+										"query": ""
+									},
+									{
+										"channel": "game-text:search",
+										"ms": 353.06982421875,
+										"query": "",
+										"openGroup": "not_gathered"
+									}
+								]
+							},
+							{
+								"label": "final-cold-1-draft-rescan",
+								"statusReadyMs": 2170.60009765625,
+								"strictReadyMs": 2181.89990234375,
+								"frameMaxGapMs": 17.199999999982538,
+								"visibleRows": 16,
+								"ipc": [
+									{
+										"channel": "game-text:configured-refresh",
+										"ms": 1730.0439453125
+									},
+									{
+										"channel": "game-text:focus",
+										"ms": 0.1123046875
+									},
+									{
+										"channel": "game-text:localization:targets",
+										"ms": 5.66943359375
+									},
+									{
+										"channel": "game-text:localization:target",
+										"ms": 194.263671875
+									},
+									{
+										"channel": "game-text:localization:focus",
+										"ms": 213.96533203125
+									},
+									{
+										"channel": "game-text:focus",
+										"ms": 3.5361328125
+									},
+									{
+										"channel": "game-text:search",
+										"ms": 7.889892578125,
+										"query": "45678"
+									},
+									{
+										"channel": "game-text:search",
+										"ms": 1.847900390625,
+										"query": "45678",
+										"openGroup": "not_gathered"
+									},
+									{
+										"channel": "game-text:search",
+										"ms": 7.11474609375,
+										"query": "45678",
+										"openGroup": "finding"
+									}
+								]
+							},
+							{
+								"label": "final-cold-2-scan",
+								"statusReadyMs": 129112,
+								"strictReadyMs": 129963.09985351562,
+								"frameMaxGapMs": 33.400000000001455,
+								"visibleRows": 50,
+								"ipc": [
+									{
+										"channel": "game-text:configured-refresh",
+										"ms": 128680.4990234375
+									},
+									{
+										"channel": "game-text:localization:targets",
+										"ms": 5.061279296875
+									},
+									{
+										"channel": "game-text:localization:target",
+										"ms": 175.067626953125
+									},
+									{
+										"channel": "game-text:search",
+										"ms": 82.082763671875,
+										"query": ""
+									},
+									{
+										"channel": "game-text:search",
+										"ms": 818.46435546875,
+										"query": "",
+										"openGroup": "not_gathered"
+									}
+								]
+							},
+							{
+								"label": "final-cold-2-rescan-0",
+								"statusReadyMs": 2326.800048828125,
+								"strictReadyMs": 2712.10009765625,
+								"frameMaxGapMs": 17.20000000001164,
+								"visibleRows": 50,
+								"ipc": [
+									{
+										"channel": "game-text:configured-refresh",
+										"ms": 1914.67919921875
+									},
+									{
+										"channel": "game-text:localization:targets",
+										"ms": 4.1865234375
+									},
+									{
+										"channel": "game-text:localization:target",
+										"ms": 227.6005859375
+									},
+									{
+										"channel": "game-text:search",
+										"ms": 28.342529296875,
+										"query": ""
+									},
+									{
+										"channel": "game-text:search",
+										"ms": 361.9443359375,
+										"query": "",
+										"openGroup": "not_gathered"
+									}
+								]
+							},
+							{
+								"label": "final-cold-2-rescan-1",
+								"statusReadyMs": 2186.300048828125,
+								"strictReadyMs": 2580.60009765625,
+								"frameMaxGapMs": 17.10000000000582,
+								"visibleRows": 50,
+								"ipc": [
+									{
+										"channel": "game-text:configured-refresh",
+										"ms": 1858.523193359375
+									},
+									{
+										"channel": "game-text:localization:targets",
+										"ms": 3.29541015625
+									},
+									{
+										"channel": "game-text:localization:target",
+										"ms": 155.360107421875
+									},
+									{
+										"channel": "game-text:search",
+										"ms": 26.779052734375,
+										"query": ""
+									},
+									{
+										"channel": "game-text:search",
+										"ms": 363.8095703125,
+										"query": "",
+										"openGroup": "not_gathered"
+									}
+								]
+							},
+							{
+								"label": "final-cold-2-rescan-2",
+								"statusReadyMs": 2086.5,
+								"strictReadyMs": 2463.800048828125,
+								"frameMaxGapMs": 17.20000000001164,
+								"visibleRows": 50,
+								"ipc": [
+									{
+										"channel": "game-text:configured-refresh",
+										"ms": 1757.509521484375
+									},
+									{
+										"channel": "game-text:localization:targets",
+										"ms": 3.185302734375
+									},
+									{
+										"channel": "game-text:localization:target",
+										"ms": 151.066650390625
+									},
+									{
+										"channel": "game-text:search",
+										"ms": 24.4765625,
+										"query": ""
+									},
+									{
+										"channel": "game-text:search",
+										"ms": 347.951416015625,
+										"query": "",
+										"openGroup": "not_gathered"
+									}
+								]
+							},
+							{
+								"label": "final-cold-2-draft-rescan",
+								"statusReadyMs": 2215.699951171875,
+								"strictReadyMs": 2248.300048828125,
+								"frameMaxGapMs": 17.10000000000582,
+								"visibleRows": 16,
+								"ipc": [
+									{
+										"channel": "game-text:configured-refresh",
+										"ms": 1797.89697265625
+									},
+									{
+										"channel": "game-text:focus",
+										"ms": 0.094970703125
+									},
+									{
+										"channel": "game-text:localization:targets",
+										"ms": 3.69970703125
+									},
+									{
+										"channel": "game-text:localization:target",
+										"ms": 156.050537109375
+									},
+									{
+										"channel": "game-text:localization:focus",
+										"ms": 223.068603515625
+									},
+									{
+										"channel": "game-text:focus",
+										"ms": 4.332763671875
+									},
+									{
+										"channel": "game-text:search",
+										"ms": 11.7421875,
+										"query": "45678"
+									},
+									{
+										"channel": "game-text:search",
+										"ms": 2.696533203125,
+										"query": "45678",
+										"openGroup": "not_gathered"
+									},
+									{
+										"channel": "game-text:search",
+										"ms": 21.211181640625,
+										"query": "45678",
+										"openGroup": "finding"
+									}
+								]
+							}
+						]
+					},
+					"cached": {
+						"summary": {
+							"scan": {
+								"samples": 3,
+								"medianMs": 4809.199951171875,
+								"minMs": 4771.10009765625,
+								"maxMs": 4812.199951171875
+							},
+							"rescan": {
+								"samples": 9,
+								"medianMs": 2462.800048828125,
+								"minMs": 2414.400146484375,
+								"maxMs": 2514.300048828125
+							},
+							"draftRescan": {
+								"samples": 3,
+								"medianMs": 2199.800048828125,
+								"minMs": 2182.199951171875,
+								"maxMs": 2214.800048828125
+							}
+						},
+						"samples": [
+							{
+								"label": "final-cached-0-scan",
+								"statusReadyMs": 4024.199951171875,
+								"strictReadyMs": 4809.199951171875,
+								"frameMaxGapMs": 17.5,
+								"visibleRows": 50,
+								"ipc": [
+									{
+										"channel": "game-text:configured-refresh",
+										"ms": 3622.639892578125
+									},
+									{
+										"channel": "game-text:localization:targets",
+										"ms": 5.346923828125
+									},
+									{
+										"channel": "game-text:localization:target",
+										"ms": 149.37109375
+									},
+									{
+										"channel": "game-text:search",
+										"ms": 84.762939453125,
+										"query": ""
+									},
+									{
+										"channel": "game-text:search",
+										"ms": 756.75341796875,
+										"query": "",
+										"openGroup": "not_gathered"
+									}
+								]
+							},
+							{
+								"label": "final-cached-0-rescan-0",
+								"statusReadyMs": 2122.300048828125,
+								"strictReadyMs": 2496.199951171875,
+								"frameMaxGapMs": 17.100000000000364,
+								"visibleRows": 50,
+								"ipc": [
+									{
+										"channel": "game-text:configured-refresh",
+										"ms": 1789.760498046875
+									},
+									{
+										"channel": "game-text:localization:targets",
+										"ms": 3.57568359375
+									},
+									{
+										"channel": "game-text:localization:target",
+										"ms": 155.97705078125
+									},
+									{
+										"channel": "game-text:search",
+										"ms": 25.5869140625,
+										"query": ""
+									},
+									{
+										"channel": "game-text:search",
+										"ms": 353.501708984375,
+										"query": "",
+										"openGroup": "not_gathered"
+									}
+								]
+							},
+							{
+								"label": "final-cached-0-rescan-1",
+								"statusReadyMs": 2064.300048828125,
+								"strictReadyMs": 2446.300048828125,
+								"frameMaxGapMs": 17.200000000000728,
+								"visibleRows": 50,
+								"ipc": [
+									{
+										"channel": "game-text:configured-refresh",
+										"ms": 1731.626953125
+									},
+									{
+										"channel": "game-text:localization:targets",
+										"ms": 3.2216796875
+									},
+									{
+										"channel": "game-text:localization:target",
+										"ms": 154.658447265625
+									},
+									{
+										"channel": "game-text:search",
+										"ms": 26.299072265625,
+										"query": ""
+									},
+									{
+										"channel": "game-text:search",
+										"ms": 355.71875,
+										"query": "",
+										"openGroup": "not_gathered"
+									}
+								]
+							},
+							{
+								"label": "final-cached-0-rescan-2",
+								"statusReadyMs": 2081.699951171875,
+								"strictReadyMs": 2463.2998046875,
+								"frameMaxGapMs": 17.100000000000364,
+								"visibleRows": 50,
+								"ipc": [
+									{
+										"channel": "game-text:configured-refresh",
+										"ms": 1744.321533203125
+									},
+									{
+										"channel": "game-text:localization:targets",
+										"ms": 3.1708984375
+									},
+									{
+										"channel": "game-text:localization:target",
+										"ms": 162.15771484375
+									},
+									{
+										"channel": "game-text:search",
+										"ms": 25.35400390625,
+										"query": ""
+									},
+									{
+										"channel": "game-text:search",
+										"ms": 356.501220703125,
+										"query": "",
+										"openGroup": "not_gathered"
+									}
+								]
+							},
+							{
+								"label": "final-cached-0-draft-rescan",
+								"statusReadyMs": 2151.300048828125,
+								"strictReadyMs": 2182.199951171875,
+								"frameMaxGapMs": 17.100000000000364,
+								"visibleRows": 16,
+								"ipc": [
+									{
+										"channel": "game-text:configured-refresh",
+										"ms": 1742.701904296875
+									},
+									{
+										"channel": "game-text:focus",
+										"ms": 0.092529296875
+									},
+									{
+										"channel": "game-text:localization:targets",
+										"ms": 3.524658203125
+									},
+									{
+										"channel": "game-text:localization:target",
+										"ms": 158.448486328125
+									},
+									{
+										"channel": "game-text:localization:focus",
+										"ms": 216.95947265625
+									},
+									{
+										"channel": "game-text:focus",
+										"ms": 4.15478515625
+									},
+									{
+										"channel": "game-text:search",
+										"ms": 10.55322265625,
+										"query": "45678"
+									},
+									{
+										"channel": "game-text:search",
+										"ms": 2.9697265625,
+										"query": "45678",
+										"openGroup": "not_gathered"
+									},
+									{
+										"channel": "game-text:search",
+										"ms": 10.888916015625,
+										"query": "45678",
+										"openGroup": "finding"
+									}
+								]
+							},
+							{
+								"label": "final-cached-1-scan",
+								"statusReadyMs": 3990.199951171875,
+								"strictReadyMs": 4771.10009765625,
+								"frameMaxGapMs": 17.300000000000182,
+								"visibleRows": 50,
+								"ipc": [
+									{
+										"channel": "game-text:configured-refresh",
+										"ms": 3590.74658203125
+									},
+									{
+										"channel": "game-text:localization:targets",
+										"ms": 4.27880859375
+									},
+									{
+										"channel": "game-text:localization:target",
+										"ms": 150.329833984375
+									},
+									{
+										"channel": "game-text:search",
+										"ms": 83.899658203125,
+										"query": ""
+									},
+									{
+										"channel": "game-text:search",
+										"ms": 753.779296875,
+										"query": "",
+										"openGroup": "not_gathered"
+									}
+								]
+							},
+							{
+								"label": "final-cached-1-rescan-0",
+								"statusReadyMs": 2106.800048828125,
+								"strictReadyMs": 2480.199951171875,
+								"frameMaxGapMs": 17.099999999999454,
+								"visibleRows": 50,
+								"ipc": [
+									{
+										"channel": "game-text:configured-refresh",
+										"ms": 1770.48486328125
+									},
+									{
+										"channel": "game-text:localization:targets",
+										"ms": 3.925048828125
+									},
+									{
+										"channel": "game-text:localization:target",
+										"ms": 161.38330078125
+									},
+									{
+										"channel": "game-text:search",
+										"ms": 24.566650390625,
+										"query": ""
+									},
+									{
+										"channel": "game-text:search",
+										"ms": 353.99951171875,
+										"query": "",
+										"openGroup": "not_gathered"
+									}
+								]
+							},
+							{
+								"label": "final-cached-1-rescan-1",
+								"statusReadyMs": 2085.300048828125,
+								"strictReadyMs": 2460.800048828125,
+								"frameMaxGapMs": 17.19999999999891,
+								"visibleRows": 50,
+								"ipc": [
+									{
+										"channel": "game-text:configured-refresh",
+										"ms": 1757.743408203125
+									},
+									{
+										"channel": "game-text:localization:targets",
+										"ms": 3.438232421875
+									},
+									{
+										"channel": "game-text:localization:target",
+										"ms": 150.376953125
+									},
+									{
+										"channel": "game-text:search",
+										"ms": 26.11669921875,
+										"query": ""
+									},
+									{
+										"channel": "game-text:search",
+										"ms": 358.023193359375,
+										"query": "",
+										"openGroup": "not_gathered"
+									}
+								]
+							},
+							{
+								"label": "final-cached-1-rescan-2",
+								"statusReadyMs": 2071.89990234375,
+								"strictReadyMs": 2448.099853515625,
+								"frameMaxGapMs": 17.19999999999891,
+								"visibleRows": 50,
+								"ipc": [
+									{
+										"channel": "game-text:configured-refresh",
+										"ms": 1748.692138671875
+									},
+									{
+										"channel": "game-text:localization:targets",
+										"ms": 3.173583984375
+									},
+									{
+										"channel": "game-text:localization:target",
+										"ms": 152.79736328125
+									},
+									{
+										"channel": "game-text:search",
+										"ms": 24.382568359375,
+										"query": ""
+									},
+									{
+										"channel": "game-text:search",
+										"ms": 353.1298828125,
+										"query": "",
+										"openGroup": "not_gathered"
+									}
+								]
+							},
+							{
+								"label": "final-cached-1-draft-rescan",
+								"statusReadyMs": 2182.699951171875,
+								"strictReadyMs": 2214.800048828125,
+								"frameMaxGapMs": 17,
+								"visibleRows": 16,
+								"ipc": [
+									{
+										"channel": "game-text:configured-refresh",
+										"ms": 1774.2841796875
+									},
+									{
+										"channel": "game-text:focus",
+										"ms": 0.096435546875
+									},
+									{
+										"channel": "game-text:localization:targets",
+										"ms": 3.5400390625
+									},
+									{
+										"channel": "game-text:localization:target",
+										"ms": 155.791748046875
+									},
+									{
+										"channel": "game-text:localization:focus",
+										"ms": 215.216064453125
+									},
+									{
+										"channel": "game-text:focus",
+										"ms": 4.123046875
+									},
+									{
+										"channel": "game-text:search",
+										"ms": 11.664306640625,
+										"query": "45678"
+									},
+									{
+										"channel": "game-text:search",
+										"ms": 3.575439453125,
+										"query": "45678",
+										"openGroup": "not_gathered"
+									},
+									{
+										"channel": "game-text:search",
+										"ms": 21.4833984375,
+										"query": "45678",
+										"openGroup": "finding"
+									}
+								]
+							},
+							{
+								"label": "final-cached-2-scan",
+								"statusReadyMs": 3972,
+								"strictReadyMs": 4812.199951171875,
+								"frameMaxGapMs": 33.5,
+								"visibleRows": 50,
+								"ipc": [
+									{
+										"channel": "game-text:configured-refresh",
+										"ms": 3556.635498046875
+									},
+									{
+										"channel": "game-text:localization:targets",
+										"ms": 4.994873046875
+									},
+									{
+										"channel": "game-text:localization:target",
+										"ms": 147.801025390625
+									},
+									{
+										"channel": "game-text:search",
+										"ms": 85.16845703125,
+										"query": ""
+									},
+									{
+										"channel": "game-text:search",
+										"ms": 811.5234375,
+										"query": "",
+										"openGroup": "not_gathered"
+									}
+								]
+							},
+							{
+								"label": "final-cached-2-rescan-0",
+								"statusReadyMs": 2073.300048828125,
+								"strictReadyMs": 2462.800048828125,
+								"frameMaxGapMs": 17.100000000000364,
+								"visibleRows": 50,
+								"ipc": [
+									{
+										"channel": "game-text:configured-refresh",
+										"ms": 1740.425537109375
+									},
+									{
+										"channel": "game-text:localization:targets",
+										"ms": 4.0302734375
+									},
+									{
+										"channel": "game-text:localization:target",
+										"ms": 155.016357421875
+									},
+									{
+										"channel": "game-text:search",
+										"ms": 25.160888671875,
+										"query": ""
+									},
+									{
+										"channel": "game-text:search",
+										"ms": 372.92138671875,
+										"query": "",
+										"openGroup": "not_gathered"
+									}
+								]
+							},
+							{
+								"label": "final-cached-2-rescan-1",
+								"statusReadyMs": 2015.60009765625,
+								"strictReadyMs": 2414.400146484375,
+								"frameMaxGapMs": 17.200000000000728,
+								"visibleRows": 50,
+								"ipc": [
+									{
+										"channel": "game-text:configured-refresh",
+										"ms": 1694.74609375
+									},
+									{
+										"channel": "game-text:localization:targets",
+										"ms": 3.1884765625
+									},
+									{
+										"channel": "game-text:localization:target",
+										"ms": 146.0634765625
+									},
+									{
+										"channel": "game-text:search",
+										"ms": 25.68603515625,
+										"query": ""
+									},
+									{
+										"channel": "game-text:search",
+										"ms": 380.04296875,
+										"query": "",
+										"openGroup": "not_gathered"
+									}
+								]
+							},
+							{
+								"label": "final-cached-2-rescan-2",
+								"statusReadyMs": 2117.60009765625,
+								"strictReadyMs": 2514.300048828125,
+								"frameMaxGapMs": 17.200000000000728,
+								"visibleRows": 50,
+								"ipc": [
+									{
+										"channel": "game-text:configured-refresh",
+										"ms": 1800.1669921875
+									},
+									{
+										"channel": "game-text:localization:targets",
+										"ms": 3.084716796875
+									},
+									{
+										"channel": "game-text:localization:target",
+										"ms": 149.569580078125
+									},
+									{
+										"channel": "game-text:search",
+										"ms": 22.975830078125,
+										"query": ""
+									},
+									{
+										"channel": "game-text:search",
+										"ms": 373.711669921875,
+										"query": "",
+										"openGroup": "not_gathered"
+									}
+								]
+							},
+							{
+								"label": "final-cached-2-draft-rescan",
+								"statusReadyMs": 2168.5,
+								"strictReadyMs": 2199.800048828125,
+								"frameMaxGapMs": 17.100000000000364,
+								"visibleRows": 16,
+								"ipc": [
+									{
+										"channel": "game-text:configured-refresh",
+										"ms": 1754.665771484375
+									},
+									{
+										"channel": "game-text:focus",
+										"ms": 0.09765625
+									},
+									{
+										"channel": "game-text:localization:targets",
+										"ms": 3.6533203125
+									},
+									{
+										"channel": "game-text:localization:target",
+										"ms": 162.931884765625
+									},
+									{
+										"channel": "game-text:localization:focus",
+										"ms": 216.6982421875
+									},
+									{
+										"channel": "game-text:focus",
+										"ms": 4.091064453125
+									},
+									{
+										"channel": "game-text:search",
+										"ms": 10.789306640625,
+										"query": "45678"
+									},
+									{
+										"channel": "game-text:search",
+										"ms": 2.8623046875,
+										"query": "45678",
+										"openGroup": "not_gathered"
+									},
+									{
+										"channel": "game-text:search",
+										"ms": 11.4501953125,
+										"query": "45678",
+										"openGroup": "finding"
+									}
+								]
+							}
+						]
+					}
+				}
+			},
+			"cacheBytes": [
+				{
+					"profile": "baseline-cached-0-profile",
+					"bytes": 147664326,
+					"files": 333
+				},
+				{
+					"profile": "baseline-cached-1-profile",
+					"bytes": 147664326,
+					"files": 333
+				},
+				{
+					"profile": "baseline-cached-2-profile",
+					"bytes": 147664326,
+					"files": 333
+				},
+				{
+					"profile": "baseline-cold-0-profile",
+					"bytes": 147664146,
+					"files": 333
+				},
+				{
+					"profile": "baseline-cold-1-profile",
+					"bytes": 147664362,
+					"files": 333
+				},
+				{
+					"profile": "baseline-cold-2-profile",
+					"bytes": 147664330,
+					"files": 333
+				},
+				{
+					"profile": "baseline-profile",
+					"bytes": 147664326,
+					"files": 333
+				},
+				{
+					"profile": "candidate-cached-0-profile",
+					"bytes": 147664326,
+					"files": 333
+				},
+				{
+					"profile": "candidate-cached-1-profile",
+					"bytes": 147664326,
+					"files": 333
+				},
+				{
+					"profile": "candidate-cached-2-profile",
+					"bytes": 147664326,
+					"files": 333
+				},
+				{
+					"profile": "candidate-cold-0-profile",
+					"bytes": 85748750,
+					"files": 325
+				},
+				{
+					"profile": "candidate-cold-1-profile",
+					"bytes": 85748798,
+					"files": 325
+				},
+				{
+					"profile": "candidate-cold-2-profile",
+					"bytes": 85748606,
+					"files": 325
+				},
+				{
+					"profile": "final-cached-0-profile",
+					"bytes": 147664326,
+					"files": 333
+				},
+				{
+					"profile": "final-cached-1-profile",
+					"bytes": 147664326,
+					"files": 333
+				},
+				{
+					"profile": "final-cached-2-profile",
+					"bytes": 147664326,
+					"files": 333
+				},
+				{
+					"profile": "final-cold-0-profile",
+					"bytes": 85748642,
+					"files": 325
+				},
+				{
+					"profile": "final-cold-1-profile",
+					"bytes": 85748722,
+					"files": 325
+				},
+				{
+					"profile": "final-cold-2-profile",
+					"bytes": 85748874,
+					"files": 325
+				}
+			],
+			"runtimeControl": {
+				"node26": {
+					"node": "v26.5.0",
+					"readyMs": 70455.2191,
+					"total": 583507,
+					"hash": "097f17aa317f8de46a927e1651407d2e0e1bf3f89f8575ba6133ae812fee730a",
+					"stages": [
+						{
+							"name": "localization",
+							"ms": 16570.1971
+						},
+						{
+							"name": "packages",
+							"ms": 29674.0316,
+							"packages": 16500
+						},
+						{
+							"name": "join",
+							"ms": 21861.523499999996
+						}
+					]
+				},
+				"electron24": {
+					"node": "v24.21.0",
+					"readyMs": 122602.0515,
+					"total": 583507,
+					"hash": "097f17aa317f8de46a927e1651407d2e0e1bf3f89f8575ba6133ae812fee730a",
+					"stages": [
+						{
+							"name": "localization",
+							"ms": 34402.5169
+						},
+						{
+							"name": "packages",
+							"ms": 58154.6633,
+							"packages": 16500
+						},
+						{
+							"name": "join",
+							"ms": 24666.278999999995
+						}
+					]
+				}
+			},
+			"verification": {
+				"exactJsonValuesEqual": true,
+				"pagesCompared": 132,
+				"zeroRendererLongTasks": true,
+				"zeroPageErrors": true,
+				"translationDraftPreservedProfiles": 6,
+				"interactions": [
+					{
+						"label": "baseline-cold-0",
+						"searchMs": 481.5987000000023,
+						"focusMs": 110.88300000000163,
+						"status": "passed"
+					},
+					{
+						"label": "baseline-cold-1",
+						"searchMs": 1090.1485000000102,
+						"focusMs": 108.87249999999767,
+						"status": "passed"
+					},
+					{
+						"label": "baseline-cold-2",
+						"searchMs": 584.2090999999782,
+						"focusMs": 152.05280000006314,
+						"status": "passed"
+					},
+					{
+						"label": "baseline-cached-0",
+						"searchMs": 1108.0653999999995,
+						"focusMs": 129.18119999999908,
+						"status": "passed"
+					},
+					{
+						"label": "baseline-cached-1",
+						"searchMs": 588.7954000000027,
+						"focusMs": 92.68050000000221,
+						"status": "passed"
+					},
+					{
+						"label": "baseline-cached-2",
+						"searchMs": 477.5187000000151,
+						"focusMs": 96.25169999999343,
+						"status": "passed"
+					},
+					{
+						"label": "final-cold-0",
+						"searchMs": 481.55180000001565,
+						"focusMs": 726.194599999988,
+						"translationEditor": "de focused",
+						"draftAfterRescan": "preserved",
+						"status": "passed"
+					},
+					{
+						"label": "final-cold-1",
+						"searchMs": 480.66989999997895,
+						"focusMs": 466.719299999997,
+						"translationEditor": "de focused",
+						"draftAfterRescan": "preserved",
+						"status": "passed"
+					},
+					{
+						"label": "final-cold-2",
+						"searchMs": 485.3197999999975,
+						"focusMs": 322.2262000000337,
+						"translationEditor": "de focused",
+						"draftAfterRescan": "preserved",
+						"status": "passed"
+					},
+					{
+						"label": "final-cached-0",
+						"searchMs": 484.5635000000002,
+						"focusMs": 361.9872000000014,
+						"translationEditor": "de focused",
+						"draftAfterRescan": "preserved",
+						"status": "passed"
+					},
+					{
+						"label": "final-cached-1",
+						"searchMs": 585.3544000000038,
+						"focusMs": 361.6267999999982,
+						"translationEditor": "de focused",
+						"draftAfterRescan": "preserved",
+						"status": "passed"
+					},
+					{
+						"label": "final-cached-2",
+						"searchMs": 475.60689999999886,
+						"focusMs": 356.8109000000113,
+						"translationEditor": "de focused",
+						"draftAfterRescan": "preserved",
+						"status": "passed"
+					}
+				],
+				"portableRepositoryTestsPassed": 2453,
+				"portableRepositoryTestsSkipped": 95,
+				"portableRepositoryFilesPassed": 328,
+				"targetedTestsPassed": 51,
+				"wireHash": "84b8fba388f93e136caef1ccd667715a7befe9ac750ab2dab72fda6a65abc407",
+				"expectedTotal": 583507,
+				"queryPageSets": 2
+			},
+			"cleanup": "Automatic approval review rejected removal of this run's duplicate caches with only the reason blocked by policy; all copies remain. Probes, reports, traces and screenshots are compacted separately.",
+			"rawEvidence": {
+				"archive": "out/game-text-experiments-2026-10-13/host-repair-evidence.zip",
+				"sha256": "0c64adf5d711cc2fb4eaf8600be5e3c45bc6d24181701869b9560b0fe46f51cb",
+				"manifest": "out/game-text-experiments-2026-10-13/host-repair-manifest.json",
+				"files": 144
 			}
 		}
 	}

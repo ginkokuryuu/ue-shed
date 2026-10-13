@@ -83,6 +83,7 @@ export function GameTextResultRows(props: {
 		if (identity) return [identity.namespace, identity.key].filter(Boolean).join(".");
 		return row.unit ? identityLabel(row.unit) : "No localization key";
 	};
+	const source = (row: ResultRow) => row.line?.source ?? (row.unit ? sourceText(row.unit) : "");
 	const rowLabel = (row: ResultRow) => {
 		const context = row.unit?.contexts[0];
 		const current = mark(row);
@@ -105,11 +106,14 @@ export function GameTextResultRows(props: {
 			.join(" ");
 	};
 	return (
-		<For each={rows()}>
+		<For
+			each={rows()}
+			keyed={(row) => (row.line ? `line:${row.line.id}` : `unit:${row.unit?.id}`)}
+		>
 			{(row) => (
-				<div {...stylex.attrs(local.wrap, selected(row) && styles.selected)}>
+				<div {...stylex.attrs(local.wrap, selected(row()) && styles.selected)}>
 					<span {...stylex.attrs(local.tick)}>
-						<Show when={props.onCheck !== undefined && row.line}>
+						<Show when={props.onCheck !== undefined && row().line}>
 							{(line) => (
 								<input
 									type="checkbox"
@@ -123,46 +127,43 @@ export function GameTextResultRows(props: {
 					</span>
 					<button
 						type="button"
-						aria-current={selected(row) ? "true" : undefined}
-						aria-label={rowLabel(row)}
+						aria-current={selected(row()) ? "true" : undefined}
+						aria-label={rowLabel(row())}
 						data-row=""
-						data-unit={row.unit?.id}
-						data-line={row.line?.id}
-						onClick={() => props.onSelect(row.unit?.id, row.line?.id)}
+						data-unit={row().unit?.id}
+						data-line={row().line?.id}
+						onClick={() => props.onSelect(row().unit?.id, row().line?.id)}
 						{...stylex.attrs(
 							styles.row,
 							local.line,
 							props.culture === undefined && local.lineCompact,
-							selected(row) && styles.selected
+							selected(row()) && styles.selected
 						)}
 					>
 						<span
 							aria-hidden="true"
-							{...stylex.attrs(local.dot, stateTone(mark(row)?.state))}
+							{...stylex.attrs(local.dot, stateTone(mark(row())?.state))}
 						/>
-						<span title={key(row)} {...stylex.attrs(local.key)}>
-							{key(row)}
+						<span title={key(row())} {...stylex.attrs(local.key)}>
+							{key(row())}
 						</span>
 						<span {...stylex.attrs(local.main)}>
-							<span
-								title={row.line?.source ?? (row.unit ? sourceText(row.unit) : "")}
-								{...stylex.attrs(styles.rowText)}
-							>
-								{row.line?.source ?? (row.unit ? sourceText(row.unit) : "")}
+							<span title={source(row())} {...stylex.attrs(styles.rowText)}>
+								{source(row())}
 							</span>
 							<Show
-								when={row.unit}
+								when={row().unit}
 								fallback={
 									<span
-										title={row.line?.manifestLocations.join("\n")}
+										title={row().line?.manifestLocations.join("\n")}
 										{...stylex.attrs(styles.context)}
 									>
-										{row.line?.manifestLocations[0] ?? "Gathered source"}
+										{row().line?.manifestLocations[0] ?? "Gathered source"}
 										{manifestPathOrigin(
-											row.line?.manifestLocations[0] ?? ""
+											row().line?.manifestLocations[0] ?? ""
 										) === "cpp"
 											? " · C++"
-											: row.line?.manifestLocations[0]
+											: row().line?.manifestLocations[0]
 												? " · Gathered source"
 												: ""}
 									</span>
@@ -200,21 +201,21 @@ export function GameTextResultRows(props: {
 								<span
 									dir="auto"
 									lang={culture()}
-									title={mark(row)?.translation ?? undefined}
+									title={mark(row())?.translation ?? undefined}
 									{...stylex.attrs(
 										local.translation,
-										!mark(row)?.translation && local.empty
+										!mark(row())?.translation && local.empty
 									)}
 								>
-									{mark(row)?.translation ?? "No translation"}
+									{mark(row())?.translation ?? "No translation"}
 								</span>
 							)}
 						</Show>
 						<Show
-							when={mark(row)}
+							when={mark(row())}
 							fallback={
 								<Show
-									when={row.line}
+									when={row().line}
 									fallback={
 										<span {...stylex.attrs(local.quiet)}>Saved source</span>
 									}
@@ -227,7 +228,7 @@ export function GameTextResultRows(props: {
 						>
 							{(current) => (
 								<span {...stylex.attrs(local.status)}>
-									<Show when={keyChangeLabel(row.line)}>
+									<Show when={keyChangeLabel(row().line)}>
 										{(label) => (
 											<span {...stylex.attrs(local.severe)}>{label()}</span>
 										)}

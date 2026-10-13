@@ -77,14 +77,15 @@ function failure(code: string) {
 export const makeGameTextLocalization = Effect.fn("Workbench.GameText.localization")(function* (
 	currentCorpus: () => Effect.Effect<TextCorpus | undefined, never, Scope.Scope>,
 	currentProject: () => Effect.Effect<GameTextProjectIndex | undefined, never, Scope.Scope>,
-	currentRules?: () => Effect.Effect<GameTextRuleDocument | undefined, never, Scope.Scope>
+	currentRules?: () => Effect.Effect<GameTextRuleDocument | undefined, never, Scope.Scope>,
+	currentIndex?: () => Effect.Effect<RetainedGameTextIndexResult | undefined, never, Scope.Scope>
 ) {
 	const reader = yield* LocalizationEvidence;
 	const index = yield* GameTextIndexSteps;
 	const currentRoot = () => currentProject().pipe(Effect.map((project) => project?.projectRoot));
 	const refreshIndex = yield* makeRetainedGameTextIndexWith(
 		Effect.fn("Workbench.GameText.prepareTarget")(function* (request) {
-			const project = yield* currentProject();
+			const project = yield* currentProject().pipe(Effect.scoped);
 			if (!project)
 				return yield* Effect.fail(
 					new GameTextIndexError({
@@ -94,7 +95,20 @@ export const makeGameTextLocalization = Effect.fn("Workbench.GameText.localizati
 					})
 				);
 			const imported = yield* index.importTarget(project, request);
-			return yield* index.openTarget(yield* index.buildTarget(project, imported, request));
+			const target = yield* index.buildTarget(project, imported, request);
+			const prepared = yield* (currentIndex?.() ?? Effect.succeed(undefined)).pipe(
+				Effect.scoped
+			);
+			if (
+				prepared?.queryRevision !== undefined &&
+				prepared.queryRevision === `${target.generation}:${target.join.key}`
+			) {
+				// Borrowing the host model pins its reader and worker in this target's scope.
+				// Validation above still observes changed files, reviews and carried key changes.
+				yield* prepared.borrow;
+				return prepared;
+			}
+			return yield* index.openTarget(target);
 		})
 	);
 	const rules = currentRules ?? (() => Effect.succeed(undefined));
@@ -117,6 +131,7 @@ export const makeGameTextLocalization = Effect.fn("Workbench.GameText.localizati
 	>(undefined);
 	const selected = yield* Ref.make<
 		| {
+				readonly projectRoot: string;
 				readonly corpus: TextCorpus;
 				readonly join: LocalizationJoin;
 				readonly evidence: LocalizationTargetEvidence;
@@ -143,6 +158,34 @@ export const makeGameTextLocalization = Effect.fn("Workbench.GameText.localizati
 		  }
 		| undefined
 	>(undefined);
+	const preparation = Effect.fn("Workbench.GameText.localization.preparation")(function* (
+		projectRoot: string
+	) {
+		const discovered = yield* reader.discover({ projectRoot }).pipe(Effect.result);
+		if (
+			Result.isFailure(discovered) ||
+			discovered.success.targets.length > 50 ||
+			discovered.success.targets.some(
+				(target) => target.cultures.length > MAX_LOCALIZATION_CULTURES
+			)
+		)
+			return undefined;
+		const previous = yield* Ref.get(selected);
+		const target =
+			(previous?.projectRoot === projectRoot &&
+				discovered.success.targets.find(
+					(target) => target.name === previous?.join.target
+				)) ||
+			discovered.success.targets[0];
+		if (!target) return undefined;
+		const carried = yield* Ref.get(acrossGather);
+		return {
+			targetName: target.name,
+			tolerateReviewErrors: true,
+			keyChangePairs:
+				carried?.root === projectRoot && carried.target === target.name ? carried.pairs : []
+		};
+	});
 	const beforeGather = Effect.fn("Workbench.GameText.localization.before_gather")(function* (
 		name: LocalizationJoin["target"]
 	) {
@@ -156,13 +199,17 @@ export const makeGameTextLocalization = Effect.fn("Workbench.GameText.localizati
 		);
 	});
 
-	const reset = Effect.fn("Workbench.GameText.localization.reset")(function* () {
+	const reset = Effect.fn("Workbench.GameText.localization.reset")(function* (
+		preservePrepared = false
+	) {
 		yield* Ref.update(revision, (value) => value + 1);
 		yield* Ref.set(discovery, undefined);
 		yield* Ref.set(selected, undefined);
 		yield* Ref.set(qualityCache, undefined);
 		yield* Ref.set(baseline, undefined);
-		yield* refreshIndex.release();
+		// On an unchanged package revision, retain the old target's pin until its replacement
+		// acquires the same immutable worker. It is unavailable through `selected` meanwhile.
+		if (!preservePrepared) yield* refreshIndex.release();
 	});
 	const targets = Effect.fn("Workbench.GameText.localization.targets")(function* () {
 		const corpus = yield* currentCorpus();
@@ -174,13 +221,19 @@ export const makeGameTextLocalization = Effect.fn("Workbench.GameText.localizati
 		const discovered = yield* reader.discover({ projectRoot: root }).pipe(Effect.result);
 		if ((yield* currentCorpus()) !== corpus || (yield* Ref.get(revision)) !== version)
 			return { status: "not_ready" as const };
-		if (Result.isFailure(discovered)) return failure(discovered.failure.code);
+		if (Result.isFailure(discovered)) {
+			yield* refreshIndex.release();
+			return failure(discovered.failure.code);
+		}
 		const available = discovered.success.targets;
+		if (available.length === 0) yield* refreshIndex.release();
 		if (
 			available.length > 50 ||
 			available.some((target) => target.cultures.length > MAX_LOCALIZATION_CULTURES)
-		)
+		) {
+			yield* refreshIndex.release();
 			return failure("bounds_exceeded");
+		}
 		if (!available.length && discovered.success.diagnostics.length)
 			return failure("discovery_incomplete");
 		const result: LocalizationTargetsResult = {
@@ -277,6 +330,7 @@ export const makeGameTextLocalization = Effect.fn("Workbench.GameText.localizati
 					return { status: "not_ready" as const };
 				if (cached?.join.target !== name) yield* Ref.set(baseline, undefined);
 				yield* Ref.set(selected, {
+					projectRoot: root,
 					corpus,
 					join,
 					model,
@@ -752,6 +806,7 @@ export const makeGameTextLocalization = Effect.fn("Workbench.GameText.localizati
 		return { status: "written" as const, relativePath: written.success.relativePath };
 	});
 	return {
+		preparation,
 		beforeGather,
 		linesFile,
 		operationTarget: (name: LocalizationJoin["target"]) =>

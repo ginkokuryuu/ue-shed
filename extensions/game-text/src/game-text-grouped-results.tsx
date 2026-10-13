@@ -63,7 +63,7 @@ export function GroupedResults(props: {
 	readonly groups: readonly TextGroup[];
 	readonly more: number;
 	readonly request: TextCorpusSearchRequest;
-	readonly client: GameTextClientApi;
+	readonly client: Pick<GameTextClientApi, "search">;
 	readonly culture: string | undefined;
 	/** The picked cultures; every culture when empty or absent. */
 	readonly cultures?: readonly string[];
@@ -86,36 +86,31 @@ export function GroupedResults(props: {
 		toggled().get(group.key) ?? (fits() || index === 0);
 	return (
 		<div {...stylex.attrs(styles.list)}>
-			<For each={props.groups.map((group) => group.key)}>
-				{(key, index) => {
-					const initial = untrack(() => props.groups[index()]);
-					if (!initial) return null;
-					const group = () => props.groups.find((entry) => entry.key === key) ?? initial;
-					return (
-						<GroupSection
-							by={props.by}
-							group={group()}
-							revision={props.revision}
-							open={isOpen(group(), index())}
-							onToggle={() =>
-								setToggled((current) =>
-									new Map(current).set(key, !isOpen(group(), index()))
-								)
-							}
-							request={props.request}
-							client={props.client}
-							culture={props.culture}
-							cultures={props.cultures ?? []}
-							selectedId={props.selectedId}
-							selectedLocalizationId={props.selectedLocalizationId}
-							onSelect={props.onSelect}
-							{...(props.onLoaded === undefined
-								? undefined
-								: { onLoaded: props.onLoaded })}
-							ticks={props.ticks}
-						/>
-					);
-				}}
+			<For each={props.groups} keyed={(group) => group.key}>
+				{(group, index) => (
+					<GroupSection
+						by={props.by}
+						group={group()}
+						revision={props.revision}
+						open={isOpen(group(), index())}
+						onToggle={() =>
+							setToggled((current) =>
+								new Map(current).set(group().key, !isOpen(group(), index()))
+							)
+						}
+						request={props.request}
+						client={props.client}
+						culture={props.culture}
+						cultures={props.cultures ?? []}
+						selectedId={props.selectedId}
+						selectedLocalizationId={props.selectedLocalizationId}
+						onSelect={props.onSelect}
+						{...(props.onLoaded === undefined
+							? undefined
+							: { onLoaded: props.onLoaded })}
+						ticks={props.ticks}
+					/>
+				)}
 			</For>
 			<Show when={props.more > 0}>
 				<p {...stylex.attrs(styles.more)}>
@@ -133,7 +128,7 @@ function GroupSection(props: {
 	readonly open: boolean;
 	readonly onToggle: () => void;
 	readonly request: TextCorpusSearchRequest;
-	readonly client: GameTextClientApi;
+	readonly client: Pick<GameTextClientApi, "search">;
 	readonly culture: string | undefined;
 	/** The picked cultures; every culture when empty or absent. */
 	readonly cultures?: readonly string[];
@@ -166,20 +161,21 @@ function GroupSection(props: {
 		setError(undefined);
 		action.run(props.client.search(request), {
 			onSuccess: (result) => {
-				setLoading(false);
 				if (result.status !== "ready") {
+					setLoading(false);
 					setError(
 						"This group could not be loaded. Retry, or rescan if the saved assets changed."
 					);
 					return;
 				}
 				const merged = after ? mergePages(after, result.page) : result.page;
-				setPage(merged);
 				const next = nextPageCursor(merged);
 				if (next !== undefined && loadedRows(merged).length < desired) {
 					load(merged, base, key);
 					return;
 				}
+				setPage(merged);
+				setLoading(false);
 				props.onLoaded?.(
 					key,
 					loadedRows(merged),

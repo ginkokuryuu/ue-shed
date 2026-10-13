@@ -1,5 +1,6 @@
 import { existsSync } from "node:fs";
 import { Worker } from "node:worker_threads";
+import { performance } from "node:perf_hooks";
 import { Effect, Metric, Schema } from "effect";
 import {
 	SearchWorkerInput,
@@ -16,6 +17,11 @@ import { SnapshotStoreError } from "./snapshot-store.js";
 
 type Failure = SnapshotStoreError | SnapshotFormatError;
 const completed = Metric.counter("game_text.index.worker_searches_completed");
+const started = Metric.counter("game_text.index.search_workers_started");
+const stopped = Metric.counter("game_text.index.search_workers_stopped");
+const retirementDuration = Metric.histogram("game_text.index.search_worker_retirement_ms", {
+	boundaries: [1, 10, 100, 1000, 5000, 30000]
+});
 type Pending = {
 	readonly cancelled: Int32Array;
 	readonly lane: string;
@@ -48,10 +54,14 @@ export const makeGameTextSearchWorker = Effect.fn("GameTextIndex.searchWorker")(
 			catch: (cause) => searchWorkerFailure("search.worker.start", cause)
 		}),
 		(worker) =>
-			Effect.promise(async () => {
-				await worker.terminate();
+			Effect.gen(function* () {
+				const start = performance.now();
+				yield* Effect.promise(() => worker.terminate());
+				yield* Metric.update(stopped, 1);
+				yield* Metric.update(retirementDuration, performance.now() - start);
 			})
 	);
+	yield* Metric.update(started, 1);
 	const pending = new Map<number, Pending>();
 	let sequence = 0;
 	let failed: Failure | undefined;

@@ -3,6 +3,10 @@
 "@ue-shed/unreal-assets": patch
 ---
 
+Share scoped query workers across overlapping immutable index readers. Workbench prepares one
+target-first model for source and localization browsing, validates inputs before reusing it, and
+retains unchanged workers across rescans. Keep result rows and loaded pages stable with Solid 2 keys.
+
 Reduce saved-text extraction working memory with bounded ordered native delivery and concurrent
 path validation. Keep package signature checks before and after reads while running them with
 bounded concurrency. Warm bounded query pages instead of every column, reduce source-arena

@@ -1,5 +1,5 @@
 import { it } from "@effect/vitest";
-import { Deferred, Effect, Fiber, Layer } from "effect";
+import { Deferred, Effect, Exit, Fiber, Layer, Metric, Scope } from "effect";
 import { expect } from "vitest";
 import { unlink, writeFile } from "node:fs/promises";
 import { join } from "node:path";
@@ -9,6 +9,61 @@ import { typeScriptIndexBuilderLayer } from "./index-builder.js";
 import { SharedIndex, sharedIndexNodeLayer } from "./shared-index.js";
 import { makeRetainedGameTextIndex } from "./index-retained.js";
 import { makeIndexRegressionFixture } from "./index-refresh-regressions.test-support.js";
+
+it.live(
+	"shares query workers across overlapping unchanged models and pins changed generations",
+	() =>
+		Effect.gen(function* () {
+			const fixture = yield* makeIndexRegressionFixture();
+			yield* Effect.gen(function* () {
+				const steps = yield* GameTextIndexSteps;
+				const started = Metric.counter("game_text.index.search_workers_started");
+				const stopped = Metric.counter("game_text.index.search_workers_stopped");
+				const beforeStarted = (yield* Metric.value(started)).count;
+				const beforeStopped = (yield* Metric.value(stopped)).count;
+				const firstScope = yield* Scope.make();
+				const secondScope = yield* Scope.make();
+				yield* Effect.addFinalizer(() => Scope.close(firstScope, Exit.void));
+				yield* Effect.addFinalizer(() => Scope.close(secondScope, Exit.void));
+				const project = yield* steps.refreshProject(fixture.request);
+				const target = yield* steps.buildTarget(
+					project,
+					yield* steps.importTarget(project, fixture.request)
+				);
+				const first = yield* steps
+					.openTarget(target)
+					.pipe(Effect.provideService(Scope.Scope, firstScope));
+				const second = yield* steps
+					.openTarget(target)
+					.pipe(Effect.provideService(Scope.Scope, secondScope));
+				expect((yield* Metric.value(started)).count - beforeStarted).toBe(1);
+				const request = { query: "Source", capability: "all" as const, pageSize: 10 };
+				const expected = first.query.search(request);
+				yield* Scope.close(firstScope, Exit.void);
+				expect((yield* Metric.value(stopped)).count - beforeStopped).toBe(0);
+				expect(yield* second.search(request)).toEqual(expected);
+				fixture.setSource("Updated");
+				const changedProject = yield* steps.refreshProject(fixture.request);
+				const changed = yield* steps.openTarget(
+					yield* steps.buildTarget(
+						changedProject,
+						yield* steps.importTarget(changedProject, fixture.request)
+					)
+				);
+				expect(changed.queryRevision).not.toBe(second.queryRevision);
+				expect((yield* Metric.value(started)).count - beforeStarted).toBe(2);
+				// The old model has never searched this term; it must still use its pinned snapshot.
+				expect(yield* second.search({ ...request, query: "Updated" })).toEqual(
+					second.query.search({ ...request, query: "Updated" })
+				);
+				expect(yield* changed.search({ ...request, query: "Updated" })).toEqual(
+					changed.query.search({ ...request, query: "Updated" })
+				);
+				yield* Scope.close(secondScope, Exit.void);
+				expect((yield* Metric.value(stopped)).count - beforeStopped).toBe(1);
+			}).pipe(Effect.provide(fixture.layer(true)));
+		}).pipe(Effect.scoped)
+);
 
 it.live.each([
 	{ broken: "missing", other: false },

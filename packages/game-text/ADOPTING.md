@@ -47,6 +47,14 @@ the import to `buildTarget`. These handles stay in the trusted process. The adop
 ordering, requested views, progress presentation, and cancellation; the package owns per-step
 leases, cache validity, immutable publication, and query reader resources.
 `gameTextIndexRefreshLayer` remains a compatible convenience workflow and also exposes the steps.
+
+A localization index also supplies the complete raw source query and corpus. Prepare the chosen
+target first when both views are needed, and use that model for requests without `localization` as
+well. Keep source-only preparation as recovery when target discovery or import is unavailable.
+After validating a target with `importTarget` and `buildTarget`, a compact model's optional
+`queryRevision` identifies its immutable generation and joined key. A matching prepared model can
+be borrowed instead of opened again; adapters without this identity use normal preparation.
+
 Call
 the retained refresh result's Effect-shaped `search(request)`. The host scope owns the worker
 and its pinned reader. `latestSearchOnly` fits a single search view and preserves concurrent group
@@ -58,6 +66,12 @@ concurrent callers. Worker startup and searches have 30-second bounds. Bundled h
 with their dependencies, or leave the installed package unbundled. Verify a cold preparation that
 uses multiple layers through the packaged host, as well as worker-backed search. The synchronous
 `query.search` remains available for headless batch use and bounded direct queries.
+
+Worker-enabled steps share at most eight scoped workers across overlapping models with the same
+configuration, physical generation and joined key. Each model acquires its worker before it is
+exposed, so later file retirement cannot invalidate its first search. Unchanged replacements
+acquire a pin before their predecessors release theirs. Changed joins acquire a separate worker;
+the final pin releases it. Worker starts, stops and retirement duration are observable metrics.
 
 Use `makeRetainedGameTextIndexWith(prepare)` when a host publishes models from its own step
 composition. `makeRetainedGameTextIndex()` retains the convenience workflow. Their `refresh(request)`
