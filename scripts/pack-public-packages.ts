@@ -127,6 +127,20 @@ function run(command: string, args: readonly string[], options: RunOptions = {})
 	return result.stdout.trim();
 }
 
+/**
+ * Selects every public package and its workspace dependencies for one recursive pnpm run. pnpm
+ * orders recursive runs by the workspace graph, so a clean clone needs no prior build.
+ */
+export function publicPackageSelectionArgs(
+	packages: readonly PublicPackage[] = PUBLIC_PACKAGES
+): string[] {
+	return [...packages.flatMap(({ name }) => ["--filter", `${name}...`]), "--recursive"];
+}
+
+function publicPackageBuildArgs() {
+	return [...publicPackageSelectionArgs(), "--if-present", "run", "build"];
+}
+
 async function ensureEmptyOutput(output: string) {
 	if (existsSync(output) && (await readdir(output)).length > 0) {
 		throw new Error(`Package output must be absent or empty: ${output}`);
@@ -601,26 +615,12 @@ export async function packPublicPackages({
 			join(nativeReleaseDirectory, executableName),
 			...(process.platform === "win32" ? [] : ["--skip-version-check"])
 		];
-		run(executable("pnpm"), ["--filter", "@ue-shed/protocol", "build"]);
-		run(executable("pnpm"), ["--filter", "@ue-shed/observability", "build"]);
-		run(executable("pnpm"), ["--filter", "@ue-shed/unreal-connection", "build"]);
-		run(executable("pnpm"), ["--filter", PLUGIN_DISTRIBUTION_PACKAGE_NAME, "build"]);
-		run(executable("pnpm"), ["--filter", ENGINE_PACKAGE_NAME, "build"]);
 		run(
 			executable("pnpm"),
 			assembleArgs(ENGINE_WINDOWS_PACKAGE_NAME, "ue-shed-process-supervisor.exe")
 		);
-		run(executable("pnpm"), ["--filter", "@ue-shed/cameras", "build"]);
-		run(executable("pnpm"), ["--filter", "@ue-shed/observatory", "build"]);
-		run(executable("pnpm"), ["--filter", WASM_PACKAGE_NAME, "build"]);
-		run(executable("pnpm"), ["--filter", "@ue-shed/unreal-assets", "build"]);
-		run(executable("pnpm"), ["--filter", MAP_HISTORY_PACKAGE_NAME, "build"]);
 		run(executable("pnpm"), assembleArgs("@ue-shed/uasset-win32-x64", "uasset.exe"));
-		run(executable("pnpm"), ["--filter", CONFIG_EXPLORER_PACKAGE_NAME, "build"]);
-		run(executable("pnpm"), ["--filter", LOCALIZATION_PACKAGE_NAME, "build"]);
-		run(executable("pnpm"), ["--filter", GAME_TEXT_PACKAGE_NAME, "build"]);
-		run(executable("pnpm"), ["--filter", PROJECT_CUSTODIAN_PACKAGE_NAME, "build"]);
-		run(executable("pnpm"), ["--filter", NIAGARA_PACKAGE_NAME, "build"]);
+		run(executable("pnpm"), publicPackageBuildArgs());
 	}
 	const packed: PackedPackage[] = [];
 	for (const workspacePackage of PUBLIC_PACKAGES) {

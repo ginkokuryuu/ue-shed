@@ -1,13 +1,15 @@
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
 import { existsSync } from "node:fs";
-import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readdir, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
 import {
 	findStrayTypeScriptOutput,
+	PUBLIC_PACKAGES,
 	PUBLIC_VERSION,
+	publicPackageSelectionArgs,
 	validatePackedManifest
 } from "./pack-public-packages.ts";
 
@@ -100,3 +102,91 @@ test("package builds start from an empty dist", async () => {
 		await rm(packageDirectory, { recursive: true, force: true });
 	}
 });
+
+test("public package builds follow the workspace dependency graph", async () => {
+	const repositoryRoot = join(import.meta.dirname, "..");
+	const workDirectory = await mkdtemp(join(tmpdir(), "ue-shed-build-order-"));
+	const orderFile = join(workDirectory, "order.txt");
+	const recorder = join(workDirectory, "record.mjs");
+	try {
+		await writeFile(
+			recorder,
+			[
+				'import { appendFileSync } from "node:fs";',
+				"appendFileSync(process.env.ORDER_FILE, `${process.env.PNPM_PACKAGE_NAME}\\n`);",
+				""
+			].join("\n")
+		);
+		const isWindows = process.platform === "win32";
+		const pnpmArgs = [
+			...publicPackageSelectionArgs(),
+			"--workspace-concurrency=1",
+			"exec",
+			"node",
+			recorder
+		];
+		const result = spawnSync(
+			isWindows ? (process.env.ComSpec ?? "cmd.exe") : "pnpm",
+			isWindows ? ["/d", "/s", "/c", "pnpm", ...pnpmArgs] : pnpmArgs,
+			{
+				cwd: repositoryRoot,
+				encoding: "utf8",
+				env: { ...process.env, ORDER_FILE: orderFile }
+			}
+		);
+		assert.equal(result.status, 0, result.stderr);
+		const order = (await readFile(orderFile, "utf8")).trim().split("\n");
+		const position = new Map(order.map((name, index) => [name, index]));
+		for (const { name } of PUBLIC_PACKAGES) assert.ok(position.has(name), `${name} not built`);
+
+		const violations: string[] = [];
+		for (const directory of await workspacePackageDirectories(repositoryRoot)) {
+			// SAFETY: repository-owned workspace manifests with string dependency ranges.
+			const manifest = JSON.parse(
+				await readFile(join(directory, "package.json"), "utf8")
+			) as WorkspaceManifest;
+			const own = position.get(manifest.name);
+			if (own === undefined) continue;
+			for (const dependencies of [
+				manifest.dependencies,
+				manifest.devDependencies,
+				manifest.optionalDependencies,
+				manifest.peerDependencies
+			]) {
+				for (const [dependency, range] of Object.entries(dependencies ?? {})) {
+					if (!range.startsWith("workspace:")) continue;
+					const before = position.get(dependency);
+					if (before === undefined || before > own) {
+						violations.push(`${manifest.name} builds before ${dependency}`);
+					}
+				}
+			}
+		}
+		assert.deepEqual(violations, []);
+	} finally {
+		await rm(workDirectory, { recursive: true, force: true });
+	}
+});
+
+interface WorkspaceManifest {
+	readonly name: string;
+	readonly dependencies?: Readonly<Record<string, string>>;
+	readonly devDependencies?: Readonly<Record<string, string>>;
+	readonly optionalDependencies?: Readonly<Record<string, string>>;
+	readonly peerDependencies?: Readonly<Record<string, string>>;
+}
+
+async function workspacePackageDirectories(repositoryRoot: string) {
+	const directories: string[] = [];
+	for (const root of ["packages", "extensions", "apps", "examples"]) {
+		const parent = join(repositoryRoot, root);
+		if (!existsSync(parent)) continue;
+		for (const entry of await readdir(parent, { withFileTypes: true })) {
+			const directory = join(parent, entry.name);
+			if (entry.isDirectory() && existsSync(join(directory, "package.json"))) {
+				directories.push(directory);
+			}
+		}
+	}
+	return directories;
+}
