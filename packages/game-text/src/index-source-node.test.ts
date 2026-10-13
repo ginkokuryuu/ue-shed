@@ -15,6 +15,79 @@ import { GameTextIndexSource } from "./index-refresh.js";
 import { gameTextIndexSourceNodeLayer } from "./index-source-node.js";
 import { emptyPackageTextRecord } from "./package-text-record.js";
 
+it.each(["before", "during"] as const)(
+	"rejects a changed bundle %s a concurrent multi-package read",
+	async (when) => {
+		const root = await mkdtemp(join(tmpdir(), "ue-shed-signature-bundles-"));
+		try {
+			await mkdir(join(root, "Content"));
+			const inventory = await Promise.all(
+				Array.from({ length: 65 }, async (_, row) => {
+					const path = `Content/Package${row}.uasset`;
+					await writeFile(join(root, path), `package ${row}`);
+					const value = await stat(join(root, path), { bigint: true });
+					return {
+						path,
+						signature: JSON.stringify([
+							{
+								size: Number(value.size),
+								modifiedMs: Number(value.mtimeNs) / 1_000_000
+							},
+							null,
+							null,
+							null
+						])
+					};
+				})
+			);
+			const changed = join(root, "Content/Package64.uexp");
+			if (when === "before") await writeFile(changed, "new sidecar");
+			let reads = 0;
+			const reader = makeAssetReaderTestLayer({
+				discoverAssets: () => Effect.die("unused"),
+				discoverTables: () => Effect.die("unused"),
+				readAsset: () => Effect.die("unused"),
+				readTable: () => Effect.die("unused"),
+				source: () => Effect.succeed("configured"),
+				scanProject: () => Effect.die("second enumeration"),
+				extractProjectTextPackages: (request) => {
+					reads++;
+					expect(request.paths).toEqual(inventory.map((entry) => entry.path));
+					return Stream.fromEffect(
+						Effect.promise(() => writeFile(changed, "new sidecar"))
+					).pipe(
+						Stream.flatMap(() =>
+							Stream.fromIterable(
+								inventory.map((entry) => emptyPackageTextRecord(entry.path))
+							)
+						)
+					);
+				}
+			});
+			const catalog = makeProjectIndexTestLayer({
+				rebuild: () => Stream.die("unused"),
+				refresh: () => Stream.die("unused"),
+				status: () => Effect.die("unused"),
+				query: () => Effect.die("unused")
+			});
+			const source = gameTextIndexSourceNodeLayer(root).pipe(
+				Layer.provide(reader),
+				Layer.provide(catalog)
+			);
+			const failure = await Effect.runPromise(
+				Effect.gen(function* () {
+					const service = yield* GameTextIndexSource;
+					return yield* Stream.runDrain(service.read(root, inventory)).pipe(Effect.flip);
+				}).pipe(Effect.provide(source))
+			);
+			expect(failure.operation).toBe("signature");
+			expect(reads).toBe(when === "before" ? 0 : 1);
+		} finally {
+			await rm(root, { recursive: true, force: true });
+		}
+	}
+);
+
 it.each([true, false])(
 	"uses committed signature pages with refresh=%s and verifies sidecars",
 	async (refreshProjectIndex) => {

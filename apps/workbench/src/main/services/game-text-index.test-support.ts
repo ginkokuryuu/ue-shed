@@ -35,7 +35,10 @@ export function oracleGameTextIndexLayer<E>(
 			const evidence = yield* LocalizationEvidence;
 			let retained: TextCorpus | undefined;
 			return GameTextIndexRefresh.of({
-				invalidate: () => Effect.void,
+				invalidate: () =>
+					Effect.sync(() => {
+						retained = undefined;
+					}),
 				refresh: Effect.fn("Test.GameTextIndex.refresh")(function* (request) {
 					const corpus =
 						request.targetName === undefined || !retained
@@ -206,7 +209,8 @@ const oracleIndexStepsLayer = Layer.effect(
 		const requests = new WeakMap<GameTextTargetIndex, GameTextIndexRefreshRequest>();
 		return GameTextIndexSteps.of({
 			openProject: (request) => Effect.succeed(oracleProjectIndex(request.projectRoot)),
-			refreshProject: (request) => Effect.succeed(oracleProjectIndex(request.projectRoot)),
+			refreshProject: (request) =>
+				legacy.invalidate(request).pipe(Effect.as(oracleProjectIndex(request.projectRoot))),
 			importTarget: (project, request = {}) =>
 				Effect.gen(function* () {
 					const target =

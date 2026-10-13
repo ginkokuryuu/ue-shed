@@ -11,6 +11,8 @@ import { SnapshotStoreError } from "./snapshot-store.js";
 import { SnapshotFormatError } from "./snapshot-format.js";
 import { openSnapshotFile, type SnapshotFileReader } from "./snapshot-file.js";
 import { GameTextIndexProgressReporter } from "./index-progress.js";
+import { coldMemoryBudget, coldParserReservation, runColdTasks } from "./cold-task-pool.js";
+import { PreparedColdStrings } from "./shared-string-sort.js";
 import type {
 	LocalizationFileImportRequest,
 	LocalizationFileSnapshotKey
@@ -27,7 +29,7 @@ const Reply = Schema.Union([
 			format: Schema.Literals(["manifest", "archive", "po"]),
 			inputBytes: Schema.Number
 		}),
-		rss: Schema.Number
+		preparedStrings: PreparedColdStrings
 	}),
 	Schema.Struct({
 		ok: Schema.Literal(false),
@@ -104,48 +106,30 @@ export const importColdLocalizationTarget = Effect.fn("LocalizationSnapshot.impo
 								stat(join(request.projectRoot, request.relativePath))
 							)
 						);
-						const order = sizes
-							.map((size, row) => ({ row, bytes: size.size }))
-							.sort((a, b) => b.bytes - a.bytes);
-						const replies: Extract<typeof Reply.Type, { ok: true }>[] = [];
-						const started = performance.now(),
-							baselineRss = process.memoryUsage().rss;
+						const tasks = sizes.map((size, row) => ({
+							row,
+							bytes: coldParserReservation(size.size)
+						}));
+						const memoryBudgetBytes = coldMemoryBudget(process.availableMemory());
+						const started = performance.now();
 						if (signal.aborted) throw new Error("Cold target parsing was cancelled.");
-						const first = parserWorker();
-						workers.push(first);
-						const largest = order.shift()!.row;
-						replies[largest] = await prepare(
-							first,
-							requests[largest]!,
-							join(staging, `file-${largest}.snapshot`)
-						);
-						const measuredWorkerRss = Math.max(1, replies[largest]!.rss - baselineRss);
-						completed++;
-						report();
-						// Reserve 4 GB for the coordinator/sort, round each worker up to at least 2 GB.
-						const workerBudget = Math.max(2_000_000_000, measuredWorkerRss * 1.5);
-						const workerCount = Math.max(
-							1,
-							Math.min(
-								8,
-								availableParallelism(),
-								requests.length,
-								Math.floor(16_000_000_000 / workerBudget)
-							)
-						);
-						while (workers.length < workerCount) workers.push(parserWorker());
-						await Promise.all(
-							workers.map(async (worker) => {
-								for (let task = order.shift(); task; task = order.shift()) {
-									replies[task.row] = await prepare(
-										worker,
-										requests[task.row]!,
-										join(staging, `file-${task.row}.snapshot`)
-									);
-									completed++;
-									report();
-								}
-							})
+						const { results: replies, workerCount } = await runColdTasks(
+							tasks,
+							memoryBudgetBytes,
+							Math.min(8, availableParallelism(), requests.length),
+							async (row, slot) => {
+								if (signal.aborted)
+									throw new Error("Cold target parsing was cancelled.");
+								const worker = workers[slot] ?? (workers[slot] = parserWorker());
+								const reply = await prepare(
+									worker,
+									requests[row]!,
+									join(staging, `file-${row}.snapshot`)
+								);
+								completed++;
+								report();
+								return reply;
+							}
 						);
 						await Promise.all(workers.map((worker) => worker.terminate()));
 						workers.length = 0;
@@ -159,7 +143,7 @@ export const importColdLocalizationTarget = Effect.fn("LocalizationSnapshot.impo
 							readers,
 							replies,
 							workerCount,
-							measuredWorkerRss,
+							memoryBudgetBytes,
 							parseMs
 						};
 					} catch (cause) {
@@ -193,6 +177,8 @@ export const importColdLocalizationTarget = Effect.fn("LocalizationSnapshot.impo
 		const entries = requests.map((request, row) => ({
 			name: request.relativePath,
 			key: result.replies[row]!.file.key,
+			stagedFile: join(result.staging, `file-${row}.snapshot`),
+			preparedStrings: result.replies[row]!.preparedStrings,
 			source: {
 				columns: [...result.readers[row]!.directory.entries.values()].map((entry) => ({
 					...entry,
@@ -206,7 +192,7 @@ export const importColdLocalizationTarget = Effect.fn("LocalizationSnapshot.impo
 		const metrics = writer.metrics();
 		yield* Effect.annotateCurrentSpan({
 			"localization.import.workerCount": result.workerCount,
-			"localization.import.measuredWorkerRss": result.measuredWorkerRss,
+			"localization.import.memoryBudgetBytes": result.memoryBudgetBytes,
 			"localization.import.parseMs": result.parseMs,
 			"localization.import.probePasses": metrics.probePasses,
 			"localization.import.segments": metrics.segments
@@ -239,7 +225,7 @@ export const importColdLocalizationTarget = Effect.fn("LocalizationSnapshot.impo
 			files,
 			profile: {
 				workerCount: result.workerCount,
-				measuredWorkerRss: result.measuredWorkerRss,
+				memoryBudgetBytes: result.memoryBudgetBytes,
 				parseMs: result.parseMs,
 				publishMs: performance.now() - publishStarted,
 				...metrics

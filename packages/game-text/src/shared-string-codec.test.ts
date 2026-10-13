@@ -5,11 +5,76 @@ import {
 	decodeA64Into,
 	sortBytes,
 	packedStrings,
-	stringBytes
+	stringBytes,
+	packedStringReader,
+	sortPackedStringsByLocale,
+	validatePackedStrings
 } from "./shared-string-codec.js";
 import { SnapshotFormatError } from "./snapshot-format.js";
 
 describe("A64 byte dictionary", () => {
+	it("validates individual boundaries in UTF-8 and separate lone surrogate entries", () => {
+		expect(() =>
+			validatePackedStrings(
+				{ bytes: Buffer.of(0xc3, 0xa9), offsets: Uint32Array.of(0, 1, 2) },
+				"fixture"
+			)
+		).toThrow("Invalid packed string boundary");
+		expect(() =>
+			validatePackedStrings(
+				packedStrings(["", "\ud800", "\udc00", "\ud83d\ude00"]),
+				"fixture"
+			)
+		).not.toThrow();
+		expect(() =>
+			validatePackedStrings(
+				{ bytes: Buffer.of(97, 98), offsets: Uint32Array.of(0, 3, 2) },
+				"fixture"
+			)
+		).toThrow("Invalid packed string range");
+	});
+	it("merges bounded locale runs with the same stable order as the string oracle", () => {
+		const alphabet = [
+			"",
+			"a",
+			"A",
+			"\u00e9",
+			"e\u0301",
+			"\ud800",
+			"\udc00",
+			"\ud83d\ude00",
+			"10",
+			"2"
+		];
+		const values = Array.from(
+			{ length: 207 },
+			(_, row) => `${alphabet[(row * 17) % alphabet.length]}:${row % 7}`
+		);
+		const packed = packedStrings(values);
+		for (const runSize of [1, 7, 32, 8192]) {
+			const order = Uint32Array.from(
+				{ length: values.length },
+				(_, row) => values.length - 1 - row
+			);
+			const original = order.slice();
+			const expected = order.slice().sort((a, b) => values[a]!.localeCompare(values[b]!));
+			expect(sortPackedStringsByLocale(packed, order, runSize)).toEqual(expected);
+			expect(order).toEqual(original);
+		}
+		expect(sortPackedStringsByLocale(packedStrings([]))).toEqual(new Uint32Array());
+		expect(() => sortPackedStringsByLocale(packed, undefined, 0)).toThrow(
+			"Invalid sort run size"
+		);
+	});
+	it("the bounded comparator reader preserves repeated Unicode and lone surrogate IDs", () => {
+		const values = ["", "é", "😀", "\ud800", "\udc00", "ABC", "tail"];
+		const read = packedStringReader(packedStrings(values));
+		for (const row of [0, 1, 0, 1, 2, 3, 2, 4, 5, 6, 0, 3]) expect(read(row)).toBe(values[row]);
+		const order = values.map((_, row) => row).sort((a, b) => read(a).localeCompare(read(b)));
+		expect(order).toEqual(
+			values.map((_, row) => row).sort((a, b) => values[a]!.localeCompare(values[b]!))
+		);
+	});
 	it("expands directly into contiguous UTF-8 and rejects invalid entry boundaries", () => {
 		const values = ["", "café", "caféteria", "ABCDEF0123456789abcdef0123456789", "😀", "tail"];
 		const packed = packedStrings(values),

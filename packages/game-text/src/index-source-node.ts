@@ -152,57 +152,64 @@ export function gameTextIndexSourceNodeLayer(
 				root: string,
 				entries: readonly PackageTextInventoryEntry[]
 			) {
-				for (const entry of entries) {
-					const expected = yield* Schema.decodeUnknownEffect(
-						Schema.fromJsonString(Signature)
-					)(entry.signature).pipe(
-						Effect.mapError((cause) => failure("signature", cause))
-					);
-					const paths = bundlePaths(resolve(root, entry.path));
-					if (expected.length !== paths.length)
-						return yield* Effect.fail(
-							failure(
-								"signature",
-								"The Project Index returned an invalid package bundle signature."
-							)
-						);
-					for (let index = 0; index < paths.length; index++) {
-						const actual = yield* Effect.tryPromise({
-							try: async () => {
-								try {
-									const value = await stat(paths[index]!, { bigint: true });
-									return {
-										size: Number(value.size),
-										modifiedMs: Number(value.mtimeNs) / 1_000_000
-									};
-								} catch (cause) {
-									if (
-										cause instanceof Error &&
-										"code" in cause &&
-										cause.code === "ENOENT"
-									)
-										return null;
-									throw cause;
-								}
-							},
-							catch: (cause) => failure("signature", cause)
-						});
-						const prior = expected[index];
-						if (
-							actual === null
-								? prior !== null
-								: prior == null ||
-									actual.size !== prior.size ||
-									actual.modifiedMs !== prior.modifiedMs
-						)
-							return yield* Effect.fail(
-								failure(
-									"signature",
-									`Package or sidecar changed while reading ${entry.path}.`
-								)
+				yield* Effect.forEach(
+					entries,
+					(entry) =>
+						Effect.gen(function* () {
+							const expected = yield* Schema.decodeUnknownEffect(
+								Schema.fromJsonString(Signature)
+							)(entry.signature).pipe(
+								Effect.mapError((cause) => failure("signature", cause))
 							);
-					}
-				}
+							const paths = bundlePaths(resolve(root, entry.path));
+							if (expected.length !== paths.length)
+								return yield* Effect.fail(
+									failure(
+										"signature",
+										"The Project Index returned an invalid package bundle signature."
+									)
+								);
+							for (let index = 0; index < paths.length; index++) {
+								const actual = yield* Effect.tryPromise({
+									try: async () => {
+										try {
+											const value = await stat(paths[index]!, {
+												bigint: true
+											});
+											return {
+												size: Number(value.size),
+												modifiedMs: Number(value.mtimeNs) / 1_000_000
+											};
+										} catch (cause) {
+											if (
+												cause instanceof Error &&
+												"code" in cause &&
+												cause.code === "ENOENT"
+											)
+												return null;
+											throw cause;
+										}
+									},
+									catch: (cause) => failure("signature", cause)
+								});
+								const prior = expected[index];
+								if (
+									actual === null
+										? prior !== null
+										: prior == null ||
+											actual.size !== prior.size ||
+											actual.modifiedMs !== prior.modifiedMs
+								)
+									return yield* Effect.fail(
+										failure(
+											"signature",
+											`Package or sidecar changed while reading ${entry.path}.`
+										)
+									);
+							}
+						}),
+					{ concurrency: 16, discard: true }
+				);
 			});
 			const extractPackages = reader.extractProjectTextPackages;
 			const read = (root: string, entries: readonly PackageTextInventoryEntry[]) => {

@@ -1,4 +1,6 @@
 import { parentPort } from "node:worker_threads";
+import { mkdir } from "node:fs/promises";
+import { prepareColdStringRuns, type PreparedColdStrings } from "./shared-string-sort.js";
 import { Effect, Schema } from "effect";
 import { LocalizationError } from "@ue-shed/localization";
 import { SnapshotStoreError } from "./snapshot-store.js";
@@ -12,18 +14,19 @@ if (!parentPort) throw new Error("Localization parser requires its owning worker
 parentPort.on(
 	"message",
 	async (task: { request: LocalizationFileImportRequest; stagedFile: string }) => {
-		let peakRss = process.memoryUsage().rss;
-		const sample = setInterval(() => {
-			peakRss = Math.max(peakRss, process.memoryUsage().rss);
-		}, 25);
 		try {
+			let preparedStrings: PreparedColdStrings | undefined;
 			const file = await Effect.runPromise(
-				prepareLocalizationFile(task.request, task.stagedFile)
+				prepareLocalizationFile(task.request, task.stagedFile, async (source) => {
+					const directory = `${task.stagedFile}.strings`;
+					await mkdir(directory);
+					preparedStrings = await prepareColdStringRuns(source, directory);
+				})
 			);
 			parentPort!.postMessage({
 				ok: true,
 				file,
-				rss: Math.max(peakRss, process.memoryUsage().rss)
+				preparedStrings
 			});
 		} catch (error) {
 			// Structured clone strips custom Error properties; send the schema's wire value.
@@ -31,8 +34,6 @@ parentPort.on(
 				Schema.Union([LocalizationError, SnapshotStoreError, SnapshotFormatError])
 			)(error);
 			parentPort!.postMessage({ ok: false, error: encoded });
-		} finally {
-			clearInterval(sample);
 		}
 	}
 );

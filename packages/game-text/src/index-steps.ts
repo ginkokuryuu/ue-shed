@@ -5,12 +5,14 @@ import {
 	Cache,
 	Context,
 	Effect,
+	Exit,
 	Layer,
+	Ref,
 	Schema,
 	Semaphore,
 	RcMap,
 	Struct,
-	type Scope
+	Scope
 } from "effect";
 import {
 	readLocalizationReview,
@@ -41,7 +43,8 @@ import { SnapshotFormatError } from "./snapshot-format.js";
 import { reuseJoinedQueryProjection, type JoinedQueryProjection } from "./joined-query-data.js";
 import { instrumentIndexQuery } from "./index-query.js";
 import { columnarTextCorpusQuery } from "./columnar-query.js";
-import { makeGameTextSearchWorker } from "./search-worker-node.js";
+import { makeGameTextSearchWorkerResource } from "./search-worker-node.js";
+import { SearchWorkerInput } from "./search-worker-protocol.js";
 import {
 	indexedTextCorpus,
 	indexedLocalizationJoin,
@@ -127,11 +130,16 @@ export interface GameTextTargetIndex {
 	readonly join: Join;
 	readonly review: LocalizationReviewSnapshot;
 	readonly generation: string;
+	/** Opaque identity for comparing this validated target with an already opened model. */
+	readonly queryRevision?: string | undefined;
 	readonly fileKeys: GameTextTargetImport["fileKeys"];
 }
 export interface GameTextIndexModel extends GameTextIndexRefreshResult {
 	readonly project: GameTextProjectIndex;
 }
+
+const queryRevisionFor = (project: GameTextProject, generation: string, joinedKey: string) =>
+	JSON.stringify([project.cacheRoot, project.projectRoot, generation, joinedKey]);
 
 const failure = (operation: string, message: string, recovery: string) =>
 	new GameTextIndexError({ operation, message, recovery, retrySafe: true });
@@ -212,6 +220,61 @@ export const makeGameTextIndexSteps = (
 		const projections = yield* Cache.make({
 			capacity: 2,
 			lookup: (_key: string) => Effect.succeed<JoinedQueryProjection | undefined>(undefined)
+		});
+		const workers = yield* RcMap.make({
+			capacity: 8,
+			lookup: (key: string) =>
+				Schema.decodeUnknownEffect(
+					Schema.fromJsonString(
+						Schema.Struct({ input: SearchWorkerInput, instance: Schema.NonEmptyString })
+					)
+				)(key).pipe(
+					Effect.mapError((cause) =>
+						failure("search-worker", String(cause), "Rescan the project.")
+					),
+					Effect.flatMap(({ input }) =>
+						makeGameTextSearchWorkerResource(input, {
+							latestOnly: options.latestSearchOnly ?? false
+						})
+					)
+				)
+		});
+		const workerVersions = yield* RcMap.make({
+			capacity: 8,
+			lookup: (_key: string) => Ref.make(randomUUID())
+		});
+		const acquireWorker = Effect.fn("GameTextIndex.acquireHealthyWorker")(function* (
+			input: SearchWorkerInput
+		) {
+			const version = yield* RcMap.get(workerVersions, JSON.stringify(input));
+			const owner = yield* Effect.scope;
+			const rotate = (instance: string) =>
+				Ref.update(version, (current) => (current === instance ? randomUUID() : current));
+			for (let attempt = 0; attempt < 2; attempt++) {
+				const instance = yield* Ref.get(version);
+				const pin = yield* Scope.fork(owner);
+				const worker = yield* RcMap.get(workers, JSON.stringify({ input, instance })).pipe(
+					Effect.provideService(Scope.Scope, pin),
+					Effect.tapError((cause) =>
+						cause instanceof SnapshotStoreError || cause instanceof SnapshotFormatError
+							? rotate(instance)
+							: Effect.void
+					),
+					Effect.onError(() => Scope.close(pin, Exit.void))
+				);
+				if (worker.healthy()) return worker.search;
+				yield* Scope.close(pin, Exit.void);
+				// Failed instances retain their existing reader pins under a distinct key. Their
+				// eventual cleanup cannot evict the healthy replacement or affect other borrowers.
+				yield* rotate(instance);
+			}
+			return yield* Effect.fail(
+				failure(
+					"search-worker",
+					"The query worker could not stay ready.",
+					"Rescan and retry."
+				)
+			);
 		});
 		const withSession = <A, E, R>(
 			configuration: SharedIndexOptions,
@@ -419,7 +482,7 @@ export const makeGameTextIndexSteps = (
 			project: GameTextProjectIndex,
 			target: GameTextTargetImport,
 			input: GameTextTargetBuildRequest = {}
-		) {
+		): Effect.fn.Return<GameTextTargetIndex, IndexFailure> {
 			const request = yield* Schema.decodeUnknownEffect(GameTextTargetBuildRequest)(
 				input
 			).pipe(
@@ -483,6 +546,7 @@ export const makeGameTextIndexSteps = (
 					const join = yield* Effect.scoped(builder.refreshJoinedTarget(joinInput));
 					if ((yield* index.inspect()).active["joined.invalidated"])
 						yield* (yield* index.writer()).publishBatch([], ["joined.invalidated"]);
+					const generation = (yield* index.inspect()).generation;
 					return {
 						project,
 						view: target.view,
@@ -490,7 +554,8 @@ export const makeGameTextIndexSteps = (
 						fileKeys: target.fileKeys,
 						join,
 						review,
-						generation: (yield* index.inspect()).generation
+						generation,
+						queryRevision: queryRevisionFor(project, generation, join.key)
 					} satisfies GameTextTargetIndex;
 				})
 			);
@@ -566,14 +631,26 @@ export const makeGameTextIndexSteps = (
 					failure("evidence", String(cause), "Refresh the Game Text index and retry.")
 				)
 			);
+			const workerInput = {
+				configuration,
+				generation: joined.reader.manifest.generation,
+				joinedKey: joined.reader.manifest.active.joined!
+			};
+			// Acquire the worker's reader before exposing the model: later compaction may unlink
+			// these files. Overlapping models pin one worker for the same immutable joined view.
 			const search = options.searchWorker
-				? yield* makeGameTextSearchWorker(
-						{
-							configuration,
-							generation: joined.reader.manifest.generation,
-							joinedKey: joined.reader.manifest.active.joined!
-						},
-						{ latestOnly: options.latestSearchOnly ?? false }
+				? yield* acquireWorker(workerInput).pipe(
+						Effect.mapError((cause) =>
+							cause instanceof GameTextIndexError ||
+							cause instanceof SnapshotStoreError ||
+							cause instanceof SnapshotFormatError
+								? cause
+								: failure(
+										"search-worker",
+										"Too many query workers are active.",
+										"Wait for active queries to finish and retry."
+									)
+						)
 					)
 				: Effect.fn("GameTextIndex.search")((request: TextCorpusSearchRequest) =>
 						Effect.try({
@@ -590,6 +667,11 @@ export const makeGameTextIndexSteps = (
 			return {
 				...result,
 				project: target.project,
+				queryRevision: queryRevisionFor(
+					target.project,
+					joined.reader.manifest.generation,
+					target.join.key
+				),
 				joined,
 				query,
 				search,

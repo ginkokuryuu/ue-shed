@@ -68,7 +68,9 @@ function occurrenceGroups(
 	const groups = new Map<string, TextOccurrence[]>();
 	for (const occurrence of unit.occurrences) {
 		if (!matchesTextRole(occurrence, role)) continue;
-		groups.set(occurrence.source, [...(groups.get(occurrence.source) ?? []), occurrence]);
+		const group = groups.get(occurrence.source);
+		if (group) group.push(occurrence);
+		else groups.set(occurrence.source, [occurrence]);
 	}
 	return [...groups]
 		.sort(([left], [right]) => left.localeCompare(right))
@@ -114,6 +116,10 @@ export function termMatches(
 	caseSensitive: boolean
 ): ReadonlyArray<{ readonly end: number; readonly matched: string; readonly start: number }> {
 	const expression = new RegExp(escapedRegExp(term), caseSensitive ? "gu" : "giu");
+	return matchesExpression(source, expression);
+}
+
+function matchesExpression(source: string, expression: RegExp) {
 	return [...source.matchAll(expression)].map((match) => ({
 		end: (match.index ?? 0) + match[0].length,
 		matched: match[0],
@@ -121,22 +127,49 @@ export function termMatches(
 	}));
 }
 
-function terminologyFindings(options: {
-	readonly role: TextRole;
-	readonly rule: Extract<TextQualityRule, { readonly kind: "terminology" }>;
-	readonly unit: TextUnit;
-}): readonly TextQualityFinding[] {
-	const entries = [...options.rule.terms].sort((left, right) => {
+type TerminologyRule = Extract<TextQualityRule, { readonly kind: "terminology" }>;
+function prepareTerminology(rule: TerminologyRule) {
+	const entries = [...rule.terms].sort((left, right) => {
 		const leftKey = left.kind === "forbidden" ? `0:${left.term}` : `1:${left.term}`;
 		const rightKey = right.kind === "forbidden" ? `0:${right.term}` : `1:${right.term}`;
 		return leftKey.localeCompare(rightKey);
 	});
-	return occurrenceGroups(options.unit, options.role).flatMap(({ occurrences, source }) =>
-		entries.flatMap((entry): readonly TextQualityFinding[] => {
-			const discouraged =
-				entry.kind === "forbidden" ? [entry.term] : [...entry.alternatives].sort();
-			return discouraged.flatMap((term) =>
-				termMatches(source, term, options.rule.caseSensitive).map((match) => ({
+	return entries.flatMap((entry) => {
+		const discouraged =
+			entry.kind === "forbidden" ? [entry.term] : [...entry.alternatives].sort();
+		return discouraged.map((term) => ({
+			entry,
+			term,
+			asciiTerm: /^\p{ASCII}*$/u.test(term) ? term.toLowerCase() : undefined,
+			expression: new RegExp(escapedRegExp(term), rule.caseSensitive ? "gu" : "giu")
+		}));
+	});
+}
+
+function terminologyFindings(options: {
+	readonly role: TextRole;
+	readonly rule: Extract<TextQualityRule, { readonly kind: "terminology" }>;
+	readonly unit: TextUnit;
+	readonly terms: ReturnType<typeof prepareTerminology>;
+}): readonly TextQualityFinding[] {
+	return occurrenceGroups(options.unit, options.role).flatMap(({ occurrences, source }) => {
+		const asciiSource =
+			!options.rule.caseSensitive && /^\p{ASCII}*$/u.test(source)
+				? source.toLowerCase()
+				: undefined;
+		return options.terms.flatMap(
+			({ entry, term, asciiTerm, expression }): readonly TextQualityFinding[] => {
+				// A negative literal test is safe for case-sensitive terms, and for ASCII-only
+				// case folding. Unicode /iu behavior and all positive match offsets stay with RegExp.
+				if (
+					options.rule.caseSensitive
+						? !source.includes(term)
+						: asciiSource !== undefined &&
+							asciiTerm !== undefined &&
+							!asciiSource.includes(asciiTerm)
+				)
+					return [];
+				return matchesExpression(source, expression).map((match) => ({
 					actual: {
 						end: match.end,
 						kind: "terminology_match" as const,
@@ -158,10 +191,10 @@ function terminologyFindings(options: {
 					role: options.role.id,
 					ruleId: options.rule.id,
 					textUnitId: options.unit.id
-				}))
-			);
-		})
-	);
+				}));
+			}
+		);
+	});
 }
 
 function findingsForRule(options: {
@@ -169,11 +202,11 @@ function findingsForRule(options: {
 	readonly rule: TextQualityRule;
 	readonly units: readonly TextUnit[];
 }): readonly TextQualityFinding[] {
-	return options.units.flatMap((unit) =>
-		options.rule.kind === "character_budget"
-			? characterBudgetFindings({ role: options.role, rule: options.rule, unit })
-			: terminologyFindings({ role: options.role, rule: options.rule, unit })
-	);
+	const { role, rule, units } = options;
+	if (rule.kind === "character_budget")
+		return units.flatMap((unit) => characterBudgetFindings({ role, rule, unit }));
+	const terms = prepareTerminology(rule);
+	return units.flatMap((unit) => terminologyFindings({ role, rule, unit, terms }));
 }
 
 /** Pure quality evaluation over an already-built TextCorpus. */

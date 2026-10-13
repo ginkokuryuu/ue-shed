@@ -3,6 +3,9 @@ import { packageTextJsonLines } from "./package-text-ndjson.js";
 import { Schema } from "effect";
 import { PackageTextStored, packageTextColumns } from "./package-text-columns.js";
 import { writeSnapshotFile } from "./snapshot-file.js";
+import { mkdir } from "node:fs/promises";
+import { prepareColdStringRuns } from "./shared-string-sort.js";
+import { encodeWtf8 } from "./wtf8.js";
 
 const Request = Schema.Struct({
 	input: Schema.String,
@@ -17,7 +20,7 @@ parentPort?.on("message", async (request: typeof Request.Encoded) => {
 		const { input, output, expected } = Schema.decodeUnknownSync(Request)(request);
 		const records: PackageTextStored[] = [];
 		for await (const line of packageTextJsonLines(input)) records.push(decodeRecord(line));
-		records.sort((a, b) => (a.path < b.path ? -1 : a.path > b.path ? 1 : 0));
+		records.sort((a, b) => Buffer.compare(encodeWtf8(a.path), encodeWtf8(b.path)));
 		if (
 			records.length !== expected.length ||
 			records.some((record, row) => {
@@ -31,9 +34,13 @@ parentPort?.on("message", async (request: typeof Request.Encoded) => {
 			})
 		)
 			throw new Error("Cold records differ from their signature/header inventory");
-		await writeSnapshotFile(output, packageTextColumns(records), 1);
-		parentPort?.postMessage("ok");
+		const source = packageTextColumns(records);
+		const staging = `${output}.strings`;
+		await mkdir(staging);
+		const preparedStrings = await prepareColdStringRuns(source, staging);
+		await writeSnapshotFile(output, source, 1);
+		parentPort?.postMessage({ ok: true, preparedStrings });
 	} catch (cause) {
-		parentPort?.postMessage(String(cause));
+		parentPort?.postMessage({ ok: false, error: String(cause) });
 	}
 });

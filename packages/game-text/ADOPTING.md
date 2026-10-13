@@ -7,7 +7,8 @@ Workbench unless a named verification failure leaves the public package contract
 ## Fast path
 
 1. Inspect the target's package manifest, Node version, Effect version, selected-project model, and
-   saved-asset reader configuration.
+   saved-asset reader configuration. The Node entry supports Node 22.15+ in the 22.x line, or
+   Node 23.8+ (including 24 and 26); Node 22.14 lacks the required built-in Zstd APIs.
 2. Install the exact `@ue-shed/game-text` version. Reuse a compatible existing
    `@ue-shed/unreal-assets` and `@ue-shed/uasset` installation when present.
 3. In the target's trusted Node process, compose one scoped `AssetReader` layer and
@@ -47,14 +48,33 @@ the import to `buildTarget`. These handles stay in the trusted process. The adop
 ordering, requested views, progress presentation, and cancellation; the package owns per-step
 leases, cache validity, immutable publication, and query reader resources.
 `gameTextIndexRefreshLayer` remains a compatible convenience workflow and also exposes the steps.
+
+A localization index also supplies the complete raw source query and corpus. Prepare the chosen
+target first when both views are needed, and use that model for requests without `localization` as
+well. Keep source-only preparation as recovery when target discovery or import is unavailable.
+After validating a target with `importTarget` and `buildTarget`, a compact model's optional
+`queryRevision` is an opaque identity shared by the validated target handle and its opened model.
+Compare it only within the same project, cache and backend. Borrow a matching prepared model
+instead of opening it again. Never construct or parse the identity, persist it as a durable ID,
+or depend on its encoding across releases; adapters without it use normal preparation.
+
 Call
 the retained refresh result's Effect-shaped `search(request)`. The host scope owns the worker
 and its pinned reader. `latestSearchOnly` fits a single search view and preserves concurrent group
 pages while cancelling replaced pages and older filter selections; leave it false for independent
 concurrent callers. Worker startup and searches have 30-second bounds. Bundled hosts must emit
 `dist/search-worker.js` from the installed package beside the bundle that resolves it through
-`import.meta.url`. Verify the packaged worker through the host transport. The synchronous
+`import.meta.url`. Cold preparation also resolves `localization-import-worker.js`,
+`package-text-worker.js` and `cold-layer-worker.js` beside that bundle. Emit those worker entries
+with their dependencies, or leave the installed package unbundled. Verify a cold preparation that
+uses multiple layers through the packaged host, as well as worker-backed search. The synchronous
 `query.search` remains available for headless batch use and bounded direct queries.
+
+Worker-enabled steps share at most eight scoped workers across overlapping models with the same
+configuration, physical generation and joined key. Each model acquires its worker before it is
+exposed, so later file retirement cannot invalidate its first search. Unchanged replacements
+acquire a pin before their predecessors release theirs. Changed joins acquire a separate worker;
+the final pin releases it. Worker starts, stops and retirement duration are observable metrics.
 
 Use `makeRetainedGameTextIndexWith(prepare)` when a host publishes models from its own step
 composition. `makeRetainedGameTextIndex()` retains the convenience workflow. Their `refresh(request)`

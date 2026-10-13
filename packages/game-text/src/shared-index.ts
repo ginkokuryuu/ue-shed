@@ -28,6 +28,7 @@ import {
 } from "./snapshot-store.js";
 import { SharedStringFiles, SharedSegment, maximumSharedSegments } from "./shared-string-file.js";
 import { sortColdStrings, FileReuse, type ColdLayerSource } from "./shared-string-sort.js";
+import { prepareColdLayers, type ColdLayerTask } from "./cold-layer-pool.js";
 import {
 	StringArena,
 	absentId,
@@ -37,7 +38,7 @@ import {
 } from "./shared-string-codec.js";
 
 const Natural = Schema.Int.check(Schema.isGreaterThanOrEqualTo(0));
-const LayerRecord = Schema.Struct({
+export const LayerRecord = Schema.Struct({
 	file: Schema.String.check(Schema.isPattern(/^layer-[a-f0-9-]+\.snapshot$/u)),
 	key: Schema.String.check(Schema.isMaxLength(1024)),
 	storeGeneration: Schema.String,
@@ -713,23 +714,55 @@ function makeSharedIndexNodeLayer(options: SharedIndexOptions) {
 									const maps = yield* boundary("cold.sort", () =>
 										sortColdStrings(entries, files, staging)
 									);
+									const prepared = yield* boundary("cold.layers", () =>
+										prepareColdLayers(
+											directory,
+											manifest.generation,
+											files.segments,
+											maps.reduce(
+												(total, mapping) =>
+													total +
+													[...mapping.maps.values()].reduce(
+														(bytes, ids) => bytes + ids.byteLength,
+														0
+													),
+												0
+											) >=
+												512 * 1024
+												? entries
+												: [],
+											maps
+										)
+									);
 									const layers = { ...manifest.layers },
 										active = { ...manifest.active };
 									for (let row = 0; row < entries.length; row++) {
 										const entry = entries[row]!;
-										layers[entry.key] = yield* boundary("cold.layer", () =>
-											convertLayer(
-												directory,
-												files,
-												entry.name,
-												entry.key,
-												manifest.generation,
-												entry.source,
-												undefined,
-												maps[row]!.maps,
-												maps[row]!.hashes
-											)
-										);
+										const converted = prepared.get(row);
+										if (converted) {
+											files.readBytes += converted.readBytes;
+											files.timings.collectMs += converted.timings.collectMs!;
+											files.timings.reuseMs += converted.timings.reuseMs!;
+											files.timings.layerEncodeMs +=
+												converted.timings.layerEncodeMs!;
+											files.timings.layerVerifyMs +=
+												converted.timings.layerVerifyMs!;
+										}
+										layers[entry.key] =
+											converted?.record ??
+											(yield* boundary("cold.layer", () =>
+												convertLayer(
+													directory,
+													files,
+													entry.name,
+													entry.key,
+													manifest.generation,
+													entry.source,
+													undefined,
+													maps[row]!.maps,
+													maps[row]!.hashes
+												)
+											));
 										active[entry.name] = entry.key;
 									}
 									for (const name of removedNames) delete active[name];
@@ -973,6 +1006,33 @@ function makeSharedIndexNodeLayer(options: SharedIndexOptions) {
 			return { open, writer, inspect: read, cached };
 		})
 	).pipe(Layer.provide(snapshotStoreNodeLayer(configuration(options))));
+}
+
+/** Internal mechanical worker boundary. The coordinator retains the lease and publishes the root. */
+export async function convertColdLayer(task: typeof ColdLayerTask.Type) {
+	const files = new SharedStringFiles(task.directory, [...task.segments]);
+	const reader = await openSnapshotFile(task.stagedFile);
+	try {
+		const record = await convertLayer(
+			task.directory,
+			files,
+			task.name,
+			task.key,
+			task.generation,
+			{
+				columns: [...reader.directory.entries.values()].map((entry) => ({
+					...entry,
+					load: () => reader.load(entry.name)
+				}))
+			},
+			undefined,
+			new Map(task.maps.map((map) => [map.domain, map.ids])),
+			task.hashes
+		);
+		return { record, readBytes: files.readBytes, timings: files.timings };
+	} finally {
+		await reader.close();
+	}
 }
 
 async function convertLayer(

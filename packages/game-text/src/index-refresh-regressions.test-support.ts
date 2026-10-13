@@ -129,6 +129,9 @@ export const makeIndexRegressionFixture = Effect.fn("Test.GameText.indexFixture"
 		evidence,
 		source,
 		layer,
+		setTargets: (available: readonly LocalizationTarget[]) => {
+			targets = available;
+		},
 		addTarget: (name: string) => {
 			const next = Schema.decodeUnknownSync(LocalizationTarget)({ ...authored, name });
 			targets = [...targets, next];

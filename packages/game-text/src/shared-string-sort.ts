@@ -19,6 +19,12 @@ export const FileReuse = Schema.Record(
 		})
 	).pipe(Schema.mutable, Schema.mutableKey)
 );
+export const PreparedColdStrings = Schema.Struct({
+	runs: Schema.Array(Schema.String),
+	domains: Schema.Array(Schema.Struct({ name: Schema.String, count: Natural })),
+	hashes: FileReuse
+});
+export type PreparedColdStrings = typeof PreparedColdStrings.Type;
 
 /** Only temporary sort files use this framing. Persisted segments retain snapshot CRCs. */
 class RunWriter {
@@ -60,11 +66,12 @@ class RunWriter {
 }
 class RunReader {
 	private readonly handle: number;
-	private readonly buffer = Buffer.allocUnsafe(1024 * 1024);
+	private readonly buffer: Buffer;
 	private position = 0;
 	private end = 0;
-	constructor(path: string) {
+	constructor(path: string, bufferBytes = 1024 * 1024) {
 		this.handle = openSync(path, "r");
+		this.buffer = Buffer.allocUnsafe(bufferBytes);
 	}
 	private fill() {
 		this.end = readSync(this.handle, this.buffer, 0, this.buffer.length, null);
@@ -112,6 +119,94 @@ export interface ColdLayerSource {
 	readonly name: string;
 	readonly key: string;
 	readonly source: SnapshotSource;
+	readonly preparedStrings?: PreparedColdStrings;
+	/** Immutable local snapshot prepared under the cold importer's scope. */
+	readonly stagedFile?: string;
+}
+
+/** Workers sort bounded local runs while their parsed columns are still available.
+ * Occurrences and owners stay local; publication assigns deterministic global IDs.
+ */
+export async function prepareColdStringRuns(
+	source: SnapshotSource,
+	staging: string,
+	runBytes = 16 * 1024 ** 2
+): Promise<PreparedColdStrings> {
+	const domains: { name: string; count: number }[] = [];
+	for (const column of source.columns)
+		if (column.kind === "strings" && !domains.some((value) => value.name === column.domain))
+			domains.push({ name: column.domain!, count: column.stringCount! });
+	const starts: number[] = [];
+	let total = 0;
+	for (const domain of domains) {
+		starts.push(total);
+		total += domain.count;
+	}
+	snapshotCheck(total < 0xffffffff, "sort", "Cold occurrence count exceeds u32");
+	const capacity = Math.max(1, Math.floor(runBytes / 12));
+	const occurrences = new Uint32Array(capacity),
+		owners = new Uint16Array(capacity),
+		positions = new Uint32Array(domains.length);
+	let arena = new StringArena(runBytes),
+		rows = 0,
+		bytes = 0;
+	const runs: string[] = [],
+		hashes: typeof FileReuse.Type = {};
+	const reusable = source.columns.some((column) => column.name === "file.meta");
+	const flush = () => {
+		if (!rows) return;
+		const values = arena.finish(),
+			order = sortBytes(values),
+			path = join(staging, `strings-${runs.length}.run`),
+			writer = new RunWriter(path);
+		try {
+			for (const row of order) {
+				const key = stringBytes(values, row);
+				writer.u32(key.length);
+				writer.u32(occurrences[row]!);
+				writer.u32(owners[row]!);
+				writer.bytes(key);
+			}
+		} finally {
+			writer.close();
+		}
+		runs.push(path);
+		arena = new StringArena(runBytes);
+		rows = 0;
+		bytes = 0;
+	};
+	for (const column of source.columns) {
+		if (column.kind !== "strings") continue;
+		const data = await column.load();
+		snapshotCheck(data instanceof Uint8Array, column.name, "Invalid cold string block");
+		const block = decodeStringBlock(data),
+			owner = domains.findIndex((value) => value.name === column.domain);
+		if (reusable) {
+			const list = hashes[column.domain!] ?? [];
+			list.push({
+				start: positions[owner]!,
+				count: block.count,
+				hash: createHash("sha256").update(data).digest("hex")
+			});
+			hashes[column.domain!] = list;
+		}
+		for (let row = 0; row < block.count; row++) {
+			const key = block.bytes(row);
+			if (bytes + key.length + 12 > runBytes || rows === capacity) flush();
+			arena.add(key);
+			occurrences[rows] = starts[owner]! + positions[owner]!++;
+			owners[rows++] = owner;
+			bytes += key.length + 12;
+		}
+	}
+	flush();
+	for (let owner = 0; owner < domains.length; owner++)
+		snapshotCheck(
+			positions[owner] === domains[owner]!.count,
+			"sort",
+			"Cold domain count differs"
+		);
+	return { runs, domains, hashes };
 }
 
 /** Global deduplication in 64 MiB byte runs. Empty stores need no probes. Existing stores
@@ -154,7 +249,7 @@ export async function sortColdStrings(
 		owners = new Uint16Array(capacity);
 	let bytes = 0,
 		rows = 0;
-	const runs: string[] = [];
+	const runs: { path: string; offset: number; owners?: Uint16Array }[] = [];
 	const flush = () => {
 		if (!rows) return;
 		const values = arena.finish(),
@@ -172,12 +267,40 @@ export async function sortColdStrings(
 		} finally {
 			writer.close();
 		}
-		runs.push(path);
+		runs.push({ path, offset: 0 });
 		arena = new StringArena(runBytes);
 		rows = 0;
 		bytes = 0;
 	};
 	for (let file = 0; file < entries.length; file++) {
+		const prepared = entries[file]!.preparedStrings;
+		if (prepared) {
+			const range = ranges[file]!,
+				owners = new Uint16Array(prepared.domains.length);
+			snapshotCheck(
+				prepared.domains.length === range.size,
+				"sort",
+				"Prepared domain count differs"
+			);
+			let position = 0;
+			const offset = [...range.values()][0]?.start ?? 0;
+			for (let owner = 0; owner < prepared.domains.length; owner++) {
+				const domain = prepared.domains[owner]!,
+					value = range.get(domain.name);
+				snapshotCheck(
+					value !== undefined &&
+						value.count === domain.count &&
+						value.start === offset + position,
+					"sort",
+					"Prepared domain range differs"
+				);
+				owners[owner] = value.owner;
+				position += domain.count;
+			}
+			hashes[file] = prepared.hashes;
+			for (const path of prepared.runs) runs.push({ path, offset, owners });
+			continue;
+		}
 		const positions = new Map<string, number>();
 		const reusable = entries[file]!.source.columns.some((entry) => entry.name === "file.meta");
 		for (const column of entries[file]!.source.columns) {
@@ -219,6 +342,7 @@ export async function sortColdStrings(
 	arena = new StringArena(0, 0);
 	const readers: RunReader[] = [],
 		writers: RunWriter[] = [];
+	const origins = new Map<RunReader, { offset: number; owners?: Uint16Array }>();
 	const counts = new Uint32Array(domains.length),
 		rankOwners: Uint16Array[] = [],
 		ranks: Uint32Array[] = [];
@@ -229,8 +353,16 @@ export async function sortColdStrings(
 	const next = (reader: RunReader): Head | undefined => {
 		const length = reader.u32(true);
 		if (length === undefined) return undefined;
-		const occurrence = reader.u32()!,
-			owner = reader.u32()!;
+		const local = reader.u32()!,
+			localOwner = reader.u32()!,
+			origin = origins.get(reader)!,
+			occurrence = local + origin.offset,
+			owner = origin.owners ? origin.owners[localOwner] : localOwner;
+		snapshotCheck(
+			occurrence < mapping.length && owner !== undefined && owner < domains.length,
+			"sort",
+			"Prepared key outside domain range"
+		);
 		return { reader, key: reader.bytes(length), occurrence, owner };
 	};
 	const compare = (a: Head, b: Head) => Buffer.compare(a.key, b.key) || a.owner - b.owner;
@@ -264,8 +396,13 @@ export async function sortColdStrings(
 	try {
 		for (let domain = 0; domain < domains.length; domain++)
 			writers.push(new RunWriter(join(staging, `domain-${domain}`)));
-		for (const path of runs) {
-			const reader = new RunReader(path);
+		const bufferBytes = Math.max(
+			16 * 1024,
+			Math.min(1024 * 1024, Math.floor((16 * 1024 ** 2) / Math.max(1, runs.length)))
+		);
+		for (const run of runs) {
+			const reader = new RunReader(run.path, bufferBytes);
+			origins.set(reader, run);
 			readers.push(reader);
 			const head = next(reader);
 			if (head) push(head);

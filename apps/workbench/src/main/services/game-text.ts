@@ -182,10 +182,23 @@ export const WorkbenchGameTextLive = Layer.effect(
 		};
 		const steps = yield* GameTextIndexSteps;
 		const refreshIndex = yield* makeRetainedGameTextIndexWith(
-			Effect.fn("Workbench.GameText.prepareSource")(function* (request) {
+			Effect.fn("Workbench.GameText.prepareWorkspace")(function* (request) {
+				const opened = yield* steps.openProject(request);
+				const preferred = yield* localization
+					.preparation(request.projectRoot)
+					.pipe(Effect.scoped);
+				// A target index also contains the complete raw source projection. Importing it first
+				// lets the cold pipeline prepare one joined index for both views.
+				const imported = yield* steps
+					.importTarget(opened, preferred)
+					.pipe(Effect.catch(() => steps.importTarget(opened)));
 				const project = yield* steps.refreshProject(request);
-				const imported = yield* steps.importTarget(project);
-				return yield* steps.openTarget(yield* steps.buildTarget(project, imported));
+				const target = yield* steps.buildTarget(
+					project,
+					imported,
+					imported.view.kind === "source" ? {} : preferred
+				);
+				return yield* steps.openTarget(target);
 			})
 		).pipe(Effect.provideService(GameTextIndexProgressReporter, reportProgress));
 		const dialog = yield* ElectronDialog;
@@ -324,7 +337,8 @@ export const WorkbenchGameTextLive = Layer.effect(
 		const localization = yield* makeGameTextLocalization(
 			() => currentModel(retainedCorpus),
 			() => currentModel((index) => index.project),
-			() => currentValue(qualityDocument)
+			() => currentValue(qualityDocument),
+			currentIndex
 		).pipe(Effect.provideService(GameTextIndexProgressReporter, reportProgress));
 		const runRefresh = (projectRoot: string, index: WorkbenchProjectCandidates) =>
 			Effect.gen(function* () {
@@ -355,7 +369,14 @@ export const WorkbenchGameTextLive = Layer.effect(
 									"The project changed during the scan.",
 									"Refresh to read the current project generation."
 								);
-							yield* localization.reset();
+							const previous = yield* Ref.get(modelSelection);
+							const unchangedPackages =
+								previous?.projectRoot === projectRoot &&
+								indexed.project !== undefined &&
+								previous.indexed.project?.packageKey ===
+									indexed.project.packageKey &&
+								previous.indexed.project.generation === indexed.project.generation;
+							yield* localization.reset(unchangedPackages);
 							return yield* Effect.gen(function* () {
 								const latest = yield* project.current();
 								if (

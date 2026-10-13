@@ -72,10 +72,11 @@ accidentally non-private workspace from being published, but it does not select 
 The staged WASM package uses pnpm's publication manifest semantics without rerunning its build, and
 the gate compares that complete tarball with a normal workspace `pnpm pack`. A digest difference is
 a release failure even when the runtime payloads happen to match.
-Primary development and release tooling runs on Node.js 26. Public packages still declare Node.js
-22.14 as their minimum, but the former hosted compatibility job incorrectly attempted to build the
-Node 26 monorepo under Node 22 and was removed. A replacement must build artifacts with Node 26,
-then exercise only the packed consumer under Node 22.
+Primary development and release tooling runs on Node.js 26. Public packages generally declare
+Node.js 22.14 as their minimum. Game Text requires Node 22.15+ in the 22.x line, or Node 23.8+,
+because its compact index uses built-in Zstd APIs. The former hosted compatibility job incorrectly
+attempted to build the Node 26 monorepo under Node 22 and was removed. A replacement must build
+artifacts with Node 26, then exercise the packed consumer under each package's declared minimum.
 
 Authenticate to npm outside the repository, then publish from the clean committed release:
 

@@ -1,6 +1,10 @@
-import { decodeWtf8, encodeWtf8 } from "./wtf8.js";
+import { encodeWtf8 } from "./wtf8.js";
 import { absent, unitId, type JoinPackages } from "./joined-target-input.js";
-import { StringArena } from "./shared-string-codec.js";
+import {
+	StringArena,
+	packedStringReader,
+	sortPackedStringsByLocale
+} from "./shared-string-codec.js";
 import { snapshotCheck } from "./snapshot-format.js";
 
 /** Numeric query entries retain raw-unit predicates and each gathered occurrence slice. */
@@ -113,8 +117,7 @@ export function joinedQueryColumns(input: {
 		);
 	for (const member of rawRepresentatives) ids.add(Buffer.from(encodeWtf8(unitName(member))));
 	const packedIds = ids.finish();
-	const id = (row: number) =>
-		decodeWtf8(packedIds.bytes.subarray(packedIds.offsets[row], packedIds.offsets[row + 1]));
+	const id = packedStringReader(packedIds);
 	function add(
 		columns: Record<string, Uint32Array>,
 		row: number,
@@ -194,7 +197,7 @@ export function joinedQueryColumns(input: {
 			ordered = false;
 			break;
 		}
-	if (!ordered) rawOrderColumn.sort((a, b) => id(a).localeCompare(id(b)));
+	if (!ordered) rawOrderColumn.set(sortPackedStringsByLocale(packedIds, rawOrderColumn));
 	let sliceRow = 0;
 	for (let row = 0; row < line.source!.length; row++) {
 		const units = new Set<number>();

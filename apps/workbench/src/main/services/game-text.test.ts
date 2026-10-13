@@ -326,6 +326,7 @@ it.effect("operation refresh reloads evidence and gathers also rescan the retain
 	Effect.gen(function* () {
 		const reads = yield* Ref.make(0);
 		const scans = yield* Ref.make(0);
+		let translation = "Pending";
 		const reader = makeLocalizationEvidenceTestLayer({
 			discover: () =>
 				Effect.succeed({
@@ -335,9 +336,7 @@ it.effect("operation refresh reloads evidence and gathers also rescan the retain
 				}),
 			read: () =>
 				Ref.updateAndGet(reads, (count) => count + 1).pipe(
-					Effect.map((count) =>
-						localizationEvidence(poDocument(count === 1 ? "Pending" : "Translation"))
-					)
+					Effect.map(() => localizationEvidence(poDocument(translation)))
 				),
 			targets: () => Effect.die("unused")
 		});
@@ -348,14 +347,16 @@ it.effect("operation refresh reloads evidence and gathers also rescan the retain
 				notSynced: 2
 			});
 			expect(yield* service.beginOperation()).toBe(true);
+			translation = "Translation";
 			expect(yield* service.refreshAfterOperation(localizationTarget.name, false)).toBe(true);
 			expect(yield* service.localizationTarget(localizationTarget.name)).toMatchObject({
 				notSynced: 0
 			});
-			expect(yield* Ref.get(reads)).toBe(2);
+			// The object oracle has no immutable query identity, so selection reads it again.
+			expect(yield* Ref.get(reads)).toBe(3);
 			expect(yield* Ref.get(scans)).toBe(1);
 			expect(yield* service.refreshAfterOperation(localizationTarget.name, true)).toBe(true);
-			expect(yield* Ref.get(reads)).toBe(3);
+			expect(yield* Ref.get(reads)).toBe(5);
 			expect(yield* Ref.get(scans)).toBe(2);
 			yield* service.endOperation();
 		}).pipe(
@@ -385,6 +386,7 @@ it.effect(
 		Effect.gen(function* () {
 			let reads = 0;
 			let available = true;
+			let translation = "Pending";
 			const reader = makeLocalizationEvidenceTestLayer({
 				discover: () =>
 					Effect.succeed({
@@ -396,9 +398,7 @@ it.effect(
 					Effect.sync(() => {
 						expect(projectRoot).toBe(projectSummary.projectRoot);
 						reads++;
-						return localizationEvidence(
-							poDocument(reads === 1 ? "Pending" : "Translation")
-						);
+						return localizationEvidence(poDocument(translation));
 					}),
 				targets: () => Effect.die("Not used")
 			});
@@ -416,13 +416,14 @@ it.effect(
 				});
 				yield* service.configuredRefresh(false);
 				yield* service.localizationTarget(localizationTarget.name);
-				expect(reads).toBe(1);
+				expect(reads).toBe(2);
+				translation = "Translation";
 				yield* service.configuredRefresh(true);
 				expect(yield* service.localizationTarget(localizationTarget.name)).toMatchObject({
 					status: "ready",
 					notSynced: 0
 				});
-				expect(reads).toBe(2);
+				expect(reads).toBe(4);
 				available = false;
 				yield* service.configuredRefresh(true);
 				expect(yield* service.localizationTargets()).toEqual({
@@ -435,7 +436,7 @@ it.effect(
 					status: "ready",
 					page: { total: 1 }
 				});
-				expect(reads).toBe(2);
+				expect(reads).toBe(4);
 			}).pipe(
 				Effect.provide(
 					WorkbenchGameTextLive.pipe(
