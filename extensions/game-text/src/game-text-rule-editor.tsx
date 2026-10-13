@@ -11,7 +11,13 @@ import { TextQualityRuleId, textCountLabel } from "@ue-shed/game-text/browser";
 import { tokens } from "@ue-shed/ui-theme/tokens.stylex.js";
 import { For, Match, Show, Switch, createEffect, createMemo, createSignal } from "solid-js";
 import { CultureRuleFields } from "./game-text-culture-rule-fields.js";
-import type { GameTextRuleState, RuleEditorState } from "./game-text-rule-state.js";
+import {
+	invalidField,
+	shownLimit,
+	typedLimit,
+	type GameTextRuleState,
+	type RuleEditorState
+} from "./game-text-rule-state.js";
 
 type EditableRule = TextQualityRule | LocalizationProjectRule;
 
@@ -121,7 +127,11 @@ export function GameTextRuleEditor(props: {
 	const dirty = () => props.editor.dirty();
 	const feedback = () => props.editor.feedback();
 	const changeDraft = (document: GameTextRuleDocument) => props.editor.changeDraft(document);
-	const run = (operation: "preview" | "save") => props.editor.run(operation);
+	const run = (operation: "preview" | "save") => {
+		const first = props.editor.problems()[0];
+		if (first) setSelectedRuleId(rules().find((rule) => rule.id === first.ruleId)?.id);
+		props.editor.run(operation);
+	};
 	const [selectedRuleId, setSelectedRuleId] = createSignal<TextQualityRule["id"]>();
 	const failedFeedback = createMemo(() => {
 		const current = feedback();
@@ -187,14 +197,14 @@ export function GameTextRuleEditor(props: {
 							onClick={() => addLocalizationRule("localization_character_budget")}
 							{...stylex.attrs(styles.smallButton)}
 						>
-							Add translation budget
+							Add translation character limit
 						</button>
 						<button
 							type="button"
 							onClick={() => addLocalizationRule("localization_terminology")}
 							{...stylex.attrs(styles.smallButton)}
 						>
-							Add glossary
+							Add translation terminology
 						</button>
 					</div>
 				</Show>
@@ -213,8 +223,8 @@ export function GameTextRuleEditor(props: {
 								<b>
 									{rule.kind === "character_budget" ||
 									rule.kind === "localization_character_budget"
-										? "Budget"
-										: "Terms"}
+										? "Character limit"
+										: "Terminology"}
 								</b>
 								<em {...stylex.attrs(styles.panelCount)}>
 									{findingCount(rule.id)}
@@ -231,6 +241,21 @@ export function GameTextRuleEditor(props: {
 				<Show when={selectedRule()}>
 					{(rule) => (
 						<>
+							<Show
+								when={props.editor
+									.problems()
+									.some((issue) => issue.ruleId === rule().id)}
+							>
+								<ul id={"rule-errors-" + rule().id} role="alert">
+									<For
+										each={props.editor
+											.problems()
+											.filter((issue) => issue.ruleId === rule().id)}
+									>
+										{(issue) => <li>{issue.message}</li>}
+									</For>
+								</ul>
+							</Show>
 							<header {...stylex.attrs(styles.formHeader)}>
 								<h3 {...stylex.attrs(styles.formTitle)}>{rule().id}</h3>
 								<span
@@ -239,7 +264,11 @@ export function GameTextRuleEditor(props: {
 										dirty() && styles.unsavedState
 									)}
 								>
-									{dirty() ? "Unsaved changes" : "Saved"}
+									{dirty()
+										? "Unsaved changes"
+										: props.editor.fileAttached()
+											? "Saved"
+											: "No rule file"}
 								</span>
 							</header>
 							<Show when={selectedBudgetRule()}>
@@ -250,10 +279,16 @@ export function GameTextRuleEditor(props: {
 										min="1"
 										step="1"
 										aria-label={`Maximum characters for ${rule().id}`}
+										aria-invalid={invalidField(
+											props.editor.problems(),
+											rule().id,
+											"maximumCharacters"
+										)}
+										aria-describedby={"rule-errors-" + rule().id}
 										{...stylex.attrs(styles.input)}
-										value={selectedBudgetRule()?.maximumCharacters ?? ""}
+										value={shownLimit(selectedBudgetRule()?.maximumCharacters)}
 										onInput={(event) => {
-											const value = Number(event.currentTarget.value);
+											const value = typedLimit(event.currentTarget.value);
 											changeDraft(
 												replaceRule(draft(), rule().id, (current) =>
 													current.kind === "character_budget"
@@ -307,6 +342,10 @@ export function GameTextRuleEditor(props: {
 												</b>
 												<input
 													aria-label={`${term().kind === "forbidden" ? "Forbidden" : "Preferred"} term ${index + 1}`}
+													aria-invalid={
+														term().term.trim() === "" ? "true" : "false"
+													}
+													aria-describedby={"rule-errors-" + rule().id}
 													{...stylex.attrs(styles.inputCompact)}
 													value={term().term}
 													onInput={(event) =>
@@ -465,6 +504,7 @@ export function GameTextRuleEditor(props: {
 									{(current) => (
 										<CultureRuleFields
 											rule={current()}
+											problems={props.editor.problems()}
 											onChange={(updated) =>
 												changeDraft(
 													replaceLocalizationRule(draft(), updated)
@@ -478,6 +518,12 @@ export function GameTextRuleEditor(props: {
 								<span>Recovery guidance</span>
 								<textarea
 									aria-label={`Recovery guidance for ${rule().id}`}
+									aria-invalid={invalidField(
+										props.editor.problems(),
+										rule().id,
+										"recovery"
+									)}
+									aria-describedby={"rule-errors-" + rule().id}
 									{...stylex.attrs(styles.textarea)}
 									value={rule().recovery}
 									onInput={(event) =>
@@ -493,6 +539,12 @@ export function GameTextRuleEditor(props: {
 							</label>
 						</>
 					)}
+				</Show>
+				<Show when={!props.editor.fileAttached()}>
+					<p role="note">
+						These rules have no file to save to. Load or create a rules file first.
+						Drafts are recovered locally.
+					</p>
 				</Show>
 				<footer {...stylex.attrs(styles.actions)}>
 					<Switch>
@@ -510,10 +562,21 @@ export function GameTextRuleEditor(props: {
 							)}
 						</Match>
 						<Match when={true}>
-							<span>Preview uses the saved text already loaded in Workbench.</span>
+							<span>
+								Preview checks the text from the last scan. Nothing is written until
+								you save.
+							</span>
 						</Match>
 					</Switch>
 					<div {...stylex.attrs(styles.actionButtons)}>
+						<button
+							type="button"
+							disabled={!dirty() || props.editor.busy()}
+							onClick={props.editor.discard}
+							{...stylex.attrs(styles.actionButton)}
+						>
+							Discard edits
+						</button>
 						<Show when={draft().schemaVersion === 1}>
 							<button
 								type="button"
@@ -534,7 +597,14 @@ export function GameTextRuleEditor(props: {
 						</button>
 						<button
 							type="button"
-							disabled={!dirty() || props.editor.busy()}
+							disabled={
+								!dirty() || props.editor.busy() || !props.editor.fileAttached()
+							}
+							title={
+								props.editor.fileAttached()
+									? undefined
+									: "Load or create a rules file before saving."
+							}
 							onClick={() => run("save")}
 							{...stylex.attrs(styles.actionButton)}
 						>

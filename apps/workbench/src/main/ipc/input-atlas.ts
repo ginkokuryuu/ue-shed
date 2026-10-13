@@ -10,7 +10,4 @@ export const register = Effect.gen(function* () {
 	yield* ipc.register(invokeContracts["input-atlas:configured-scan"], () =>
 		inputAtlas.configuredScan()
 	);
-	yield* ipc.register(invokeContracts["input-atlas:choose-and-scan"], () =>
-		inputAtlas.chooseAndScan().pipe(Effect.orDie)
-	);
 }).pipe(Effect.withSpan("Workbench.Ipc.registerInputAtlas"));

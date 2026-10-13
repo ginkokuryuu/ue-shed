@@ -52,7 +52,7 @@ Workbench keeps scan progress visible through localization preparation and the f
 query. It shows the current stage, completed package/file counts when known, and elapsed time from
 starting the operation until results are usable. Index construction and opening use indeterminate
 progress rather than an invented overall percentage or ETA. The completed duration remains visible
-as `ready in`. Library hosts can observe the same index stages through the optional,
+in the Text footer as `Ready in`. Library hosts can observe the same index stages through the optional,
 operation-scoped `GameTextIndexProgressReporter`.
 
 Staged translation review keeps its edit list in a bounded, keyboard-scrollable area. Close,
@@ -122,18 +122,49 @@ The compact corpus path is governed by Plan 033:
 
 The **Text** view is a list of lines and a page per line, built to stay usable with tens of
 thousands of lines, hundreds of problems and a dozen cultures. The toolbar holds the search, which
-matches source text as you type, then **Changed files…**, **Filter**, **Display**, **Export** and
+matches source text as you type, then **Changed files**, **Filter**, **Display**, **Export** and
 **Presets**. Every count comes from the same query as the list (see [Counting](#counting)).
 
-The compact list has **Key**, **Source**, **Translation** and **State** columns. Pick one culture
-to preview its translations and states; with several cultures picked, the state column retains
-the culture strip. **All**, **Translated**, **Stale**, **Missing** and **Outside target** filter
-the real localization states, with other states still available through Filter. The translation
-summary counts matching lines in the picked cultures; counts can overlap across cultures and
-are not presented as percentages of one total. **Ctrl K** (or **Cmd K**) focuses search.
+The compact list has **Key**, **Source** and **State** columns, and a **Translation** column
+while exactly one culture is picked; with none or several, the state column carries the culture
+strip instead. **Filter** is the single entry point for translation states and line facts.
+Translation values read **Not translated**, **Needs update** and **Not synced**; line facts include
+**Outside this target**. **Ctrl K** (or **Cmd K**) focuses search.
+
+The header has two rows. The title row holds the **Text**, **Quality checks** and **Reports**
+views as one segmented switch, the project's scan state (lines, inspected assets and any read problems) and
+**Rescan**. Under it, the translations row says which translations are shown, **Target** and the
+picked cultures, and on its right what Unreal still has to take in: the not-synced count,
+**Sync with Unreal**, staged edits and **Unreal steps**. **Target** names the localization target
+in use within the project, and chooses another when the project has several; it decides which
+translations, PO files and Unreal steps are used. A project without localization targets says so
+in that row.
+
+The Text footer is its status bar: the matching lines in each translation state for the picked
+cultures, how long the project took to become ready, the last successful query round trip
+(excluding the typing debounce) and the picked and total culture counts. State counts can overlap
+across cultures and are not presented as percentages of one total.
+
 Rescan shows inline progress and retains the current list for browsing and searching while the
-new index is prepared. The footer reports the last successful query round trip, excluding the
-typing debounce, and actual matching-line, culture and inspected-asset counts.
+new index is prepared. Scan progress replaces the title row's scan state, with a compact bar beside
+the stage readout only when package/file totals are known. Unknown totals use a small activity
+spinner instead of a looping bar. This keeps idle space and row positions stable; reduced motion
+stops the spinner. The bar measures the named stage, not an overall percentage. Project selection
+belongs to the host's workspace project picker; **Scan project** and **Rescan** only use that
+selected project. Search retains at least 150 px of input space. At 1024 px, both header rows keep
+one line, columns fit the available list width and the **Side pane** toggle can hide the side
+pane, keeping focus on the toggle.
+
+Every command in the header and toolbar is named: **Rescan**, **Changed files**, **Filter**,
+**Display**, **Export**, **Presets**, **Target** and **Sync with Unreal**. Two toggles are icons,
+each where its kind of toggle usually sits: **Search translations** inside the search field, as a
+find option, and **Side pane** at the toolbar's right edge, above the pane it shows or hides. A
+line's per-culture review flags are icons too. Icon tooltips appear on hover or keyboard focus and
+let the pointer pass through to the controls beneath them. Below 1280 px the Ctrl K hint in the
+search field gives way so the toolbar keeps one row. Badges show applied filters, quality finding counts and unsaved rules, and
+are part of each control's accessible name ("Filter, 2 active"). When a target is unavailable,
+only localization-dependent filter values are paused. Source predicates and their inclusion or
+exclusion operator still apply to the list, exports and saved presets.
 
 ### Problems
 
@@ -151,9 +182,13 @@ Each line is classified by what it needs, worst first:
 
 A line counts once for each problem it has and is grouped under its worst. Problem groups mark
 severity: red for key problems, amber for lines waiting on Unreal and translation work, blue for
-translations not yet in Unreal. Findings and facts such as "Gathered only" or "Not found in the
-project" stay grey; facts are not problems. In a single-culture browse row, the labelled state
-badge and dot use green for translated, amber for stale, red for missing and blue for not synced.
+translations not yet in Unreal. Findings and facts such as "Gathered only", "Not found in the
+project" or excluded assets stay grey; facts are not problems. In a single-culture browse row, the
+labelled state badge and dot use green for translated, amber for needs update, red for not
+translated and blue for not synced; the culture picker colours each culture by its worst work the
+same way. Both lines of a changed key are red: **Key changed** on the new key and **Earlier key**
+on the key whose translations the next gather drops. Where colour marks severity, labels for
+assistive technology say it too ("including key problems").
 
 ### Filter
 
@@ -161,7 +196,7 @@ badge and dot use green for translated, amber for stale, red for missing and blu
 typing at the first level finds values across every field:
 
 - **Problem**, as above.
-- **Translation**: missing, to update, not synced, in the cultures shown.
+- **Translation**: not translated, needs update, not synced, in the cultures shown.
 - **Finding**: used in several places, same text with different keys, long text, not localizable.
 - **Folder**, **Asset** and **Origin** (String table, Data table, Asset, C++, Other source). A
   String Table reference inside an asset counts as the asset; gathered-only lines take their
@@ -177,11 +212,14 @@ typing at the first level finds values across every field:
   value each; they show as chips beside the pills.
 
 Each chosen value becomes a pill such as "Problem | is any of | Key changed, Not gathered yet | ×".
-Values of one field join one pill; every pill must match. Clicking the middle part switches between
-"is" and "is not". Once a field has a pill, its other values hide their counts, which would read
-zero. Pills and grouping are saved with the project's view and carried by presets and exports;
-preferences and presets saved before pills open with their toggles, lenses and state chips as
-pills.
+A field has one pill and every pill must match. Picking a value adds it to the field's pill with
+that pill's operator, and picking it again removes it. Clicking the middle part switches the whole
+pill between "is" and "is not"; the menu marks values left out by an "is not" pill with "−". Pills
+saved with both operators for one field merge when one is switched. Once a field has a pill, its
+other values hide their counts, which would read zero. Long values are shortened in the pill and
+shown whole on hover. Pills and grouping are saved with the project's view and carried by presets
+and exports; preferences and presets saved before pills open with their toggles, lenses and state
+chips as pills.
 
 ### Display and groups
 
@@ -192,8 +230,9 @@ Case-insensitive source matching reuses prepared source bytes. Completed query p
 when another request is cancelled.
 
 **Display** groups the list by problem (the default), folder, asset, origin or namespace, or not at
-all. Groups are listed worst first with their line counts and, outside problem grouping, how many
-lines need work. At most 200 groups are listed, with a count of the rest. When every line fits on
+all. Its choices are one radio group: it opens on the current grouping and arrow keys change it.
+Groups are listed worst first with their line counts and, outside problem grouping, how many lines
+need work. At most 200 groups are listed, with a count of the rest. When every line fits on
 one page all groups start open, otherwise the worst one does; each open group loads a page of its
 own lines at a time, and only open groups cost a request.
 
@@ -220,7 +259,7 @@ A name adds its pill; a folder's arrow lists the folders inside it.
 
 ### Changed files
 
-**Changed files…** takes a pasted list, one path per line, from any version control tool
+**Changed files** takes a pasted list, one path per line, from any version control tool
 (`p4 opened`, `git diff --name-only`, and so on) and keeps the text those files hold.
 
 - Saved packages match by asset, whatever the extension (`.uasset`, `.umap`, `.uexp`); an Unreal
@@ -236,31 +275,45 @@ A changed-file list lasts for the session.
 
 Opening a line shows its **page** beside the list; **‹ Lines** closes the detail while retaining
 the list's groups and loaded pages. The header says where the line sits ("2 of 58") and steps to the
-line before or after it, opening the next group or loading its next page when needed.
+line before or after it, opening the next group or loading its next page when needed. Folder,
+asset and origin groups list a line once for each place it is used, so there the place counts
+within the line's group ("3 of 12 in Content/UI"). A line that filters or a rescan removed says
+"Not in the current list". The header stays visible while scrolling. Opening moves focus to the
+page; Escape returns focus to the line's row, and Alt+Up / Alt+Down step between lines and keep
+the selected row visible. These keys are left to text fields while one has focus: in a
+translation editor Escape cancels the draft and Ctrl+Enter (or Cmd+Enter) stages it, and focus
+returns to the card's **Edit** button. Translation cards keep their place, and the field its focus,
+when the line reloads after a write or rescan. A line Unreal has not gathered shows no empty
+Translations section; its problem already says what to do.
 
 The page says the line's worst problem first, in plain words and its severity colour, with what
 resolves it. It keeps the text, key, every culture's translation (with editing, review and
 key-change carrying), **Where it appears** and read problems together. The picked culture's
 translation comes first. It lists the line's
 properties below them: problems, namespace and key, origin, asset and folder, editing, translator
-notes, length and findings. **Show in Unreal** reports success only when the editor confirms asset
-navigation.
+notes, length and findings. An empty namespace reads "global", as in exports. **Show in Unreal**
+reports success only when the editor confirms asset navigation; the button keeps its name and a
+status line says what happened.
 
 ### Bulk actions
 
 While a target is selected, each line has a tick box; shift-click ticks every line from the last
-one ticked, across groups. The selection stays while filters and grouping change, so it can be
-built up from several views, holds up to 5,000 lines, and starts over when the target changes. A
-bar under the list acts on every ticked line:
+one ticked, across the lines shown in open groups, and says so when the last one ticked is not
+shown. The selection stays while filters and grouping change, so it can be built up from several
+views, holds up to 5,000 lines (saying how many were not ticked), and starts over when the target
+changes. A bar under the list acts on every ticked line; its result is announced, a failure as an
+alert, and changing the selection clears it:
 
 - **Export for translators** writes the all-languages CSV for just those lines, with the native
   culture and the picked cultures (every culture when none is picked);
 - **Mark reviewed (n)** sets "Reviewed" on each picked culture's translation that has text to
-  review and is not reviewed yet, through the project's review file, 500 changes per request;
+  review, whose source is current, and is not reviewed yet, through the project's review file,
+  500 changes per request, with confirmation and progress;
 - **Carry translations (n)** stages the earlier keys' translations for ticked lines whose key
-  changed, skipping pairs whose source text changed (the line page offers those one at a time), up
-  to the 500 edits that can be staged at once;
-- **Copy keys** copies each line's namespace and key as two tab-separated columns.
+  changed and that are not staged yet, skipping pairs whose source text changed (the line page
+  offers those one at a time), up to the 500 edits that can be staged at once;
+- **Copy keys** copies each line's namespace and key as two tab-separated columns, and says how
+  many ticked lines had no key.
 
 ### Counting
 
@@ -363,7 +416,28 @@ none. Selecting a finding highlights the matched term and explains **How to fix*
 and translator notes** opens the line in Text. **Edit rules** retains character limits, forbidden
 and preferred terms, alternatives, case sensitivity and recovery guidance, with **Preview** and
 **Save** actions. Rule IDs, assigned roles and scopes remain inspectable beside the editable
-fields. Scan coverage and read problems remain available throughout.
+fields. **Discard edits** restores the loaded rules. All invalid fields are reported with their
+rule and recovery guidance; preview selects the first offending rule. New culture glossary entries
+start blank and cannot be previewed or saved until filled in. Scan coverage and read problems
+remain available throughout.
+
+Rule drafts and translation drafts are recovered per project from validated local preferences,
+including incomplete rule fields. The view's settings and the work in progress are stored apart
+and decoded field by field, so one unreadable field is dropped alone. Each distinct rules document
+is stored once, the hundred most recently opened translation drafts are kept, and work that
+outgrows its storage is removed rather than left to be recovered stale, with a notice to stage,
+write or save it. Writes wait for a pause in typing and are flushed when the window hides, so
+closing Workbench is never blocked. Drafts and staged changes for targets the project no longer
+has are dropped. Translation drafts and staged changes also retain their target, culture,
+namespace and key. Rescans, review writes, PO writes and closing a line retain drafts, group
+toggles, loaded pages and list scroll. Reloading, choosing or creating rules, and opening a
+preset require an explicit discard choice when rules are dirty. Preset rules have no attached file
+until a file is loaded; Save explains this prerequisite. Completed quality results carry an
+optional `ruleFile` (`attached` or `none`), so a recovered draft knows whether Save has a
+destination; the host never sends the file's path. Unstage and Discard all offer Undo until the
+target changes. A partial PO write names the files it could not replace, retains their changes
+and requires a fresh check before retrying; edits a check finds unwritable can be unstaged
+together. **Sync with Unreal** warns when staged edits are not written to PO yet.
 
 ## Agent operation and adoption
 
@@ -380,7 +454,7 @@ transporting bounded schema-validated results to browser code.
 
 ## Saved investigations and exports
 
-The public browser entry point exposes version-1 `GameTextInvestigationPreset` and
+The public browser entry point exposes versioned `GameTextInvestigationPreset` and
 `GameTextInvestigationExport` schemas, `exportGameTextInvestigation`, and
 `gameTextInvestigationCsv`. Corpus and quality query models also provide `export` methods that
 retain all matching units or findings and their full evidence. Existing search page limits remain
@@ -388,20 +462,36 @@ unchanged. A capability filter selects units; exported units retain all their oc
 context. Coverage, role counts, rule counts, and diagnostics retain whole-scan scope.
 
 Workbench's **Export → CSV** produces a spreadsheet for people: one row per saved location in
-**Text**, or one row per finding and affected location in **Quality checks**. Columns retain exact
-Unreal names, keys, translator notes where applicable, and package files. Every cell is quoted,
-embedded quotes are doubled, and text starting with optional whitespace then `=`, `+`, `-` or
-`@` receives a leading apostrophe. Output has a UTF-8 BOM and CRLF endings, including the last row.
-Character counts use the same JavaScript string-length measurement as the line page. JSON keeps
+**Text**, or one row per source finding and affected location in **Quality checks**. With a
+localization target selected, Quality checks exports one row per matching finding summary, retaining
+the target, culture, readable check name, source excerpt, problem, context and scan status. Columns
+retain exact Unreal names, keys, translator notes where applicable, and package files. Every cell is
+quoted, embedded quotes are doubled, and text starting with optional whitespace then `=`, `+`, `-`
+or `@` receives a leading apostrophe. Output has a UTF-8 BOM and CRLF endings, including the last
+row. Character counts use the same JavaScript string-length measurement as the line page. JSON keeps
 the existing provenance document; `gameTextInvestigationCsv` keeps its documented metadata layout.
 
-Use **Presets → Save preset… / Open preset…** to retain or restore the current settings.
-A preset stores the corpus/quality view, search text, filter pills and grouping (or, in presets saved before pills, capability, **No translator notes**, origin and path filters and review lens), finding-type
-filter, existing domain sort order, and optional quality rules. Quality mode requires a rule
-document, including semantic validation of rule and role identities. Workbench captures the
-current corpus, rules, project, and catalog generation before opening an export dialog. The
-renderer receives only file-operation feedback. Opening a preset uses the selected project's
-corpus, and exposes failures without applying invalid rules.
+Use **Presets → Save preset… / Open preset…** to retain or restore the current settings. A preset
+stores the corpus/quality view, search text, filter pills and grouping (or, in presets saved before
+pills, capability, **No translator notes**, origin and path filters and review lens), finding-type
+filter, existing domain sort order, and optional quality rules. Source quality mode requires a rule
+document, including semantic validation of rule and role identities. Localization quality presets
+additionally carry `workspaceFilter`, the target and optional culture, and built-in checks can run
+without a rules file. `workspaceFilter` is valid only in quality mode with a localization target;
+the preset schema rejects other combinations. Their `localization_quality` exports retain all
+matching finding summaries, selection, scan status and coverage through `WorkspaceQualityReport`,
+with the target's review file applied as in the Workbench list. Localization quality presets and
+exports use schema version 2, which older readers reject instead of dropping the finding filter.
+Version-1 corpus and source quality investigations remain readable and retain their version when
+replayed; a version-1 preset cannot carry `workspaceFilter`. An export and its preset use the same
+schema version.
+`localizationQualityWorkspace.export` gives headless clients the same report, and
+`workspaceQualityCsv` writes Workbench's spreadsheet layout from it. The CLI's `--format csv`
+instead writes the `gameTextInvestigationCsv` metadata layout, with `finding_id`, `kind`, `culture`,
+`source`, `problem` and `context` columns. Workbench captures the current corpus, rules, project,
+and catalog generation before opening an export dialog. The renderer receives only file-operation
+feedback. Opening a preset uses the selected project's corpus, and exposes failures without applying
+invalid rules.
 
 While a localization target is selected, exports and presets also record the target and picked
 cultures, so problem and translation pills select the same lines as the list; the export joins the

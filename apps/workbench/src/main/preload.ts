@@ -124,7 +124,6 @@ const workbenchRendererApi = {
 	},
 	projectCustodian: {
 		configuredScan: () => ipcRenderer.invoke("project-custodian:configured-scan"),
-		chooseAndScan: () => ipcRenderer.invoke("project-custodian:choose-and-scan"),
 		prepare: (intent) => ipcRenderer.invoke("project-custodian:prepare", intent),
 		execute: (intent) => ipcRenderer.invoke("project-custodian:execute", intent),
 		cancel: (proposalId: string) => ipcRenderer.invoke("project-custodian:cancel", proposalId)
@@ -150,11 +149,8 @@ const workbenchRendererApi = {
 			ipcRenderer.invoke("asset-audits:textures:investigation-save", query),
 		investigationOpen: () => ipcRenderer.invoke("asset-audits:textures:investigation-open"),
 		loadConfiguredProject: () => ipcRenderer.invoke("asset-audits:textures:configured-scan"),
-		chooseProjectAndScan: () => ipcRenderer.invoke("asset-audits:textures:choose-and-scan"),
 		refreshConfiguredProject: (refresh = true) =>
 			ipcRenderer.invoke("asset-audits:textures:configured-refresh", refresh),
-		chooseProjectAndRefresh: () =>
-			ipcRenderer.invoke("asset-audits:textures:choose-and-refresh"),
 		progress: () => ipcRenderer.invoke("asset-audits:textures:progress"),
 		search: (request) => ipcRenderer.invoke("asset-audits:textures:search", request),
 		record: (objectPath: string) =>
@@ -207,10 +203,8 @@ const workbenchRendererApi = {
 		investigationSave: (query) => ipcRenderer.invoke("game-text:investigation-save", query),
 		investigationOpen: () => ipcRenderer.invoke("game-text:investigation-open"),
 		loadConfiguredProject: () => ipcRenderer.invoke("game-text:configured-scan"),
-		chooseProjectAndScan: () => ipcRenderer.invoke("game-text:choose-and-scan"),
 		refreshConfiguredProject: (refresh = true) =>
 			ipcRenderer.invoke("game-text:configured-refresh", refresh),
-		chooseProjectAndRefresh: () => ipcRenderer.invoke("game-text:choose-and-refresh"),
 		progress: () => ipcRenderer.invoke("game-text:progress"),
 		search: (request) => ipcRenderer.invoke("game-text:search", request),
 		focus: (request) => ipcRenderer.invoke("game-text:focus", request),
@@ -226,8 +220,7 @@ const workbenchRendererApi = {
 		qualityFocus: (request) => ipcRenderer.invoke("game-text:quality:focus", request)
 	},
 	inputAtlas: {
-		loadConfiguredProject: () => ipcRenderer.invoke("input-atlas:configured-scan"),
-		chooseProjectAndScan: () => ipcRenderer.invoke("input-atlas:choose-and-scan")
+		loadConfiguredProject: () => ipcRenderer.invoke("input-atlas:configured-scan")
 	},
 	contentObservatory: {
 		status: () => ipcRenderer.invoke("content-observatory:status"),
@@ -280,7 +273,6 @@ const workbenchRendererApi = {
 			readonly { readonly label: string; readonly mapPath: string }[]
 		> => ipcRenderer.invoke("map-review:saved-world-maps"),
 		savedWorldProgress: () => ipcRenderer.invoke("map-review:saved-world-progress"),
-		chooseProjectAndMaps: () => ipcRenderer.invoke("map-review:choose-project-and-maps"),
 		focusActor: (actorId: string, bringToFront: boolean): Promise<WorldScoutFocusResult> =>
 			ipcRenderer.invoke("map-review:focus-actor", actorId, bringToFront),
 		approveCandidate: (

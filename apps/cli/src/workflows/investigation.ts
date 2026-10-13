@@ -50,11 +50,43 @@ export const runInvestigation = Effect.fn("Cli.workflow.investigation")(
 						);
 						const corpus = indexed.corpus;
 						const localized = indexed.query;
+						// Replays the Workbench quality list: the same join, review file and rules.
+						const workspace =
+							preset.query.mode === "quality" &&
+							preset.query.workspaceFilter !== undefined &&
+							preset.query.localization &&
+							indexed.localizationJoin
+								? text
+										.localizationQualityWorkspace(
+											preset.rules
+												? text.evaluateGameTextSourceQuality(
+														corpus,
+														preset.rules
+													)
+												: undefined,
+											text.checkLocalizationTarget(
+												corpus,
+												indexed.localizationJoin,
+												indexed.evidence,
+												{ review: indexed.review.file },
+												preset.rules
+											),
+											indexed.localizationJoin
+										)
+										.export({
+											target: preset.query.localization.target,
+											filter: preset.query.workspaceFilter,
+											...(preset.query.localization.culture
+												? { culture: preset.query.localization.culture }
+												: undefined)
+										})
+								: undefined;
 						const document = yield* text.exportGameTextInvestigation(
 							corpus,
 							preset,
 							source,
-							localized
+							localized,
+							workspace
 						);
 						return command.format === "json"
 							? json(document)

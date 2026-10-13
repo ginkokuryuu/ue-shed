@@ -17,6 +17,8 @@ import type { GameTextClientApi } from "./game-text-client.js";
 import { LocalizationPicker } from "./game-text-localization-picker.js";
 import { styles } from "./game-text-styles.js";
 
+const POLL_FAILURE = "Unreal steps are unavailable. Reload Game Text to try again.";
+
 const operationLabels = {
 	gather: "Gather text",
 	import: "Import translations",
@@ -120,6 +122,8 @@ export function createGameTextOperations(props: {
 				Stream.fromEffectSchedule(api.state(target), Schedule.spaced("500 millis")),
 				{
 					onValue: (value) => {
+						// A poll that answers again ends an earlier poll failure.
+						if (untrack(copyError) === POLL_FAILURE) setCopyError(undefined);
 						setState(value);
 						setProgress(value.progress?.id === finishedId ? undefined : value.progress);
 						if (
@@ -137,8 +141,7 @@ export function createGameTextOperations(props: {
 							else setResult(value.result);
 						}
 					},
-					onFailure: () =>
-						setCopyError("Unreal steps are unavailable. Reload Game Text to try again.")
+					onFailure: () => setCopyError(POLL_FAILURE)
 				}
 			);
 		}
@@ -342,7 +345,8 @@ export function createGameTextOperations(props: {
 		},
 		copyFiles,
 		copied,
-		copyError
+		copyError,
+		dismissError: () => setCopyError(undefined)
 	};
 }
 export type GameTextOperationsModel = ReturnType<typeof createGameTextOperations>;
@@ -350,6 +354,8 @@ export type GameTextOperationsModel = ReturnType<typeof createGameTextOperations
 export function SyncWithUnreal(props: {
 	readonly model: GameTextOperationsModel;
 	readonly pending: number;
+	/** Staged edits not written to PO yet: a sync imports only what the PO files hold. */
+	readonly unwritten?: number;
 }) {
 	return (
 		<Show when={props.pending > 0 && props.model.state()?.operations.includes("sync")}>
@@ -357,7 +363,14 @@ export function SyncWithUnreal(props: {
 				size="compact"
 				tone="primary"
 				disabled={props.model.busy()}
-				title={props.model.reason()}
+				title={
+					props.model.reason() ??
+					(props.unwritten
+						? `${props.unwritten.toLocaleString()} staged ${
+								props.unwritten === 1 ? "edit is" : "edits are"
+							} not in the PO files yet and won't be synced. Write them first.`
+						: undefined)
+				}
 				onClick={() => props.model.prepare("sync")}
 			>
 				Sync with Unreal
@@ -378,6 +391,7 @@ export function UnrealSteps(props: { readonly model: GameTextOperationsModel }) 
 			<LocalizationPicker
 				label="Unreal steps"
 				value="Unreal steps"
+				reason={props.model.reason()}
 				values={choices().map((choice) => choice.label)}
 				disabled={props.model.busy()}
 				onSelect={(label) => {
@@ -577,7 +591,10 @@ export function OperationPanel(props: { readonly model: GameTextOperationsModel 
 			<Show when={props.model.copyError()}>
 				{(message) => (
 					<span role="alert" {...stylex.attrs(styles.muted, styles.warning)}>
-						{message()}
+						{message()}{" "}
+						<Button size="compact" tone="quiet" onClick={props.model.dismissError}>
+							Dismiss
+						</Button>
 					</span>
 				)}
 			</Show>

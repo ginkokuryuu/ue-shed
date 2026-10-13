@@ -35,15 +35,12 @@ function mount(locateAsset: GameTextClientApi["locateAsset"]) {
 	));
 }
 
-const unavailableCases: readonly {
-	readonly reason: EditorAssetLocateUnavailableReason;
-	readonly label: string;
-}[] = [
-	{ reason: "not_connected", label: "Unreal offline" },
-	{ reason: "capability_missing", label: "Plugin needed" },
-	{ reason: "asset_not_found", label: "Not found" },
-	{ reason: "editor_unavailable", label: "Unavailable" },
-	{ reason: "invalid_object_path", label: "Unavailable" }
+const unavailableCases: readonly { readonly reason: EditorAssetLocateUnavailableReason }[] = [
+	{ reason: "not_connected" },
+	{ reason: "capability_missing" },
+	{ reason: "asset_not_found" },
+	{ reason: "editor_unavailable" },
+	{ reason: "invalid_object_path" }
 ];
 
 describe("Show in Unreal", () => {
@@ -60,18 +57,22 @@ describe("Show in Unreal", () => {
 		await waitFor(() => expect(button.textContent).toBe("Opening…"));
 		expect(button).toHaveProperty("disabled", true);
 		expect(screen.getByRole("status").textContent).toContain("Opening the asset");
-		expect(screen.queryByText("Opened")).toBeNull();
 		await user.click(button);
 		expect(requested).toEqual([objectPath]);
 		await Effect.runPromise(Deferred.succeed(response, located()));
-		await waitFor(() => expect(button.textContent).toBe("Opened"));
+		await waitFor(() =>
+			expect(screen.getByRole("status").textContent).toBe(
+				"Shown in Unreal’s Content Browser."
+			)
+		);
+		// The button keeps its name; the status says what happened.
+		expect(button.textContent).toBe("Show in Unreal");
 		expect(button).toHaveProperty("disabled", false);
-		expect(screen.getByRole("status").textContent).toBe("Shown in Unreal’s Content Browser.");
 	});
 
 	it.each(unavailableCases)(
 		"reports $reason without claiming success and allows retry",
-		async ({ reason, label }) => {
+		async ({ reason }) => {
 			let attempts = 0;
 			mount((path) => {
 				attempts++;
@@ -87,12 +88,14 @@ describe("Show in Unreal", () => {
 			const user = userEvent.setup();
 			const button = screen.getByRole("button", { name: "Show in Unreal" });
 			await user.click(button);
-			await waitFor(() => expect(button.textContent).toBe(label));
-			expect(button).toHaveProperty("disabled", false);
-			expect(screen.getByRole("status").textContent).toContain(
-				"Connect a capable editor and retry."
+			await waitFor(() =>
+				expect(screen.getByRole("status").textContent).toContain(
+					"Connect a capable editor and retry."
+				)
 			);
-			expect(screen.queryByText("Opened")).toBeNull();
+			expect(button.textContent).toBe("Show in Unreal");
+			expect(button).toHaveProperty("disabled", false);
+			expect(screen.queryByText(/Shown in Unreal/u)).toBeNull();
 			await user.click(button);
 			await waitFor(() => expect(attempts).toBe(2));
 		}
@@ -109,20 +112,17 @@ describe("Show in Unreal", () => {
 			)
 		);
 		await userEvent.setup().click(screen.getByRole("button", { name: "Show in Unreal" }));
-		await screen.findByText("Failed");
+		await screen.findByText(/Unreal did not answer/u);
 		expect(screen.getByRole("status").textContent).toContain(
 			"Check the editor connection and retry"
 		);
-		expect(screen.queryByText("Opened")).toBeNull();
+		expect(screen.queryByText(/Shown in Unreal/u)).toBeNull();
 	});
 
 	it("rejects confirmation for a different asset", async () => {
 		mount(() => Effect.succeed(located("/Game/Text/ST_Other.ST_Other")));
 		await userEvent.setup().click(screen.getByRole("button", { name: "Show in Unreal" }));
-		await screen.findByText("Failed");
-		expect(screen.getByRole("status").textContent).toContain(
-			"Unreal returned a different asset."
-		);
-		expect(screen.queryByText("Opened")).toBeNull();
+		await screen.findByText(/Unreal returned a different asset/u);
+		expect(screen.queryByText(/Shown in Unreal/u)).toBeNull();
 	});
 });

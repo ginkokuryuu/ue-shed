@@ -138,7 +138,8 @@ export function ProjectCustodianRoute(props: { readonly client: CustodianClientA
 					error: {
 						code: "scan_failed",
 						message: Cause.pretty(cause),
-						recovery: "Choose a readable directory and retry. No files were changed.",
+						recovery:
+							"Check that the scan root is readable and retry. No files were changed.",
 						retrySafe: true
 					}
 				})
@@ -165,17 +166,10 @@ export function ProjectCustodianRoute(props: { readonly client: CustodianClientA
 				<div {...stylex.attrs(styles.headerActions)}>
 					<Button
 						tone="quiet"
-						disabled={state().status === "loading" || report() === undefined}
+						disabled={state().status === "loading"}
 						onClick={() => run(() => props.client.configuredScan())}
 					>
 						Rescan
-					</Button>
-					<Button
-						tone="primary"
-						disabled={state().status === "loading"}
-						onClick={() => run(() => props.client.chooseAndScan())}
-					>
-						Choose scan root…
 					</Button>
 				</div>
 			</header>
@@ -201,17 +195,9 @@ export function ProjectCustodianRoute(props: { readonly client: CustodianClientA
 					</p>
 				</Match>
 				<Match when={state().status === "not_configured" || state().status === "cancelled"}>
-					<EmptyState title="Choose a scan root">
-						Point at a project, an engine directory, or a folder holding several. The
-						scan never looks outside the root you name.
-						<div {...stylex.attrs(styles.emptyAction)}>
-							<Button
-								tone="primary"
-								onClick={() => run(() => props.client.chooseAndScan())}
-							>
-								Choose scan root…
-							</Button>
-						</div>
+					<EmptyState title="No project selected">
+						Choose a project using the workspace project picker, then return here. The
+						scan never looks outside the selected project.
 					</EmptyState>
 				</Match>
 				<Match when={failedState()}>
@@ -444,7 +430,9 @@ function InventoryRow(props: { readonly item: InventoryItem }) {
 				</span>
 				<span {...stylex.attrs(styles.identity)}>
 					<strong>{props.item.name}</strong>
-					<small>{props.item.root}</small>
+					<small title={props.item.root} {...stylex.attrs(styles.identityPath)}>
+						{props.item.root}
+					</small>
 				</span>
 				<span {...stylex.attrs(styles.rowStatus)}>{status()}</span>
 				<b {...stylex.attrs(styles.rowBytes)}>{humanBytes(props.item.reclaimableBytes)}</b>
@@ -1067,7 +1055,6 @@ const styles = stylex.create({
 		fontSize: 26
 	},
 	emptyCopy: { color: tokens.colorTextMuted, fontSize: 11, lineHeight: 1.7 },
-	emptyAction: { marginTop: 18 },
 	error: {
 		maxWidth: 780,
 		margin: "50px auto",
@@ -1174,7 +1161,7 @@ const styles = stylex.create({
 	},
 	rowSummary: {
 		display: "grid",
-		gridTemplateColumns: "30px 58px minmax(0, 1fr) 88px 88px",
+		gridTemplateColumns: "58px minmax(0, 1fr) 88px 88px",
 		alignItems: "center",
 		gap: 9,
 		padding: "12px 13px",
@@ -1195,7 +1182,14 @@ const styles = stylex.create({
 		letterSpacing: "0"
 	},
 	engineKind: { color: "#02b8cc" },
-	identity: { minWidth: 0, overflow: "hidden" },
+	identity: { display: "grid", gap: 2, minWidth: 0, overflow: "hidden" },
+	identityPath: {
+		overflow: "hidden",
+		color: tokens.colorTextMuted,
+		fontSize: 11,
+		textOverflow: "ellipsis",
+		whiteSpace: "nowrap"
+	},
 	rowStatus: { color: tokens.colorTextMuted, fontSize: 11, textTransform: "none" },
 	rowBytes: { color: tokens.colorTextStrong, fontSize: 11, textAlign: "right" },
 	targets: { padding: "0 13px 10px 110px", backgroundColor: tokens.colorSurfaceInset },

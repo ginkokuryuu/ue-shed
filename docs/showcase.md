@@ -23,6 +23,23 @@ outside the captured image; **Fit capture** returns to the full image. Hover ove
 read world XY, then right-click or use **Copy coordinates**. XY follows Unreal's +X north and +Y
 east orientation and is expressed in Unreal units.
 
+## Project ownership
+
+The Workbench shell exclusively owns choosing, switching, and restoring the active project through
+its shared project picker. Feature routes and extensions consume the host's selected-project
+context; they must never add a route-specific project picker, open a project or directory dialog as
+a fallback, or keep a separate active project. If no project is selected, explain the requirement
+and direct the user to the existing shell picker.
+
+Scan, rescan, export, and preset actions operate on the selected project and must never change
+project selection. Refreshing that project's data is allowed. Localization targets, cultures,
+assets, and maps are selections within the project; label them clearly so they cannot be mistaken
+for project pickers.
+
+This ownership rule applies to the Showcase host, not the headless APIs: libraries and the CLI
+continue to accept explicit project configuration, and other hosts own their own project-selection
+workflow.
+
 ## Take an investigation away
 
 In Game Text, use **Export → CSV / JSON** and **Presets → Save preset… / Open preset…**.
@@ -49,9 +66,11 @@ include the source project, saved-file authority, and catalog generation. Direct
 result artifact when you need the original evidence.
 
 Game Text's Workbench CSV has readable columns for people: one row per saved location in **Text**,
-or one row per finding and affected location in **Quality checks**. It includes exact Unreal
-names, keys, translator notes where applicable, and saved files. Cells that could become
-spreadsheet formulas receive a leading apostrophe; JSON preserves the original values.
+or one row per finding and affected location in **Quality checks**. With a localization target
+selected, Quality checks writes one row per finding summary instead, ending with its finding ID and
+scan status. It includes exact Unreal names, keys, translator notes where applicable, and saved
+files. Cells that could become spreadsheet formulas receive a leading apostrophe; JSON preserves
+the original values.
 
 The CLI investigation CSV (`gameTextInvestigationCsv`) and Texture Audit CSV keep their existing
 layout: a header, one `record_type=metadata` row carrying filters, provenance, coverage and read
@@ -270,7 +289,9 @@ phrase exactly, then choose **Move to Trash**. Execution refuses a running Unrea
 disk evidence, revalidates every target at the last responsible moment, and finishes with a durable
 per-target receipt. Permanent deletion is available only as an explicit proposal choice.
 
-For a real project, set an explicit scan root before opening Workbench:
+For a real project, choose it in the shell project picker; Custodian scans the selected project. To
+scan a folder holding several projects or engine installs instead, set an explicit scan root before
+opening Workbench:
 
 ```powershell
 $env:UE_SHED_CUSTODIAN_ROOT = "D:\Unreal"

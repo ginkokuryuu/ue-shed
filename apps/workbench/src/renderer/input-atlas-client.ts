@@ -29,10 +29,5 @@ export const inputAtlasClient: InputAtlasClientApi = InputAtlasClient.of({
 		request("inputAtlas.loadConfiguredProject", () =>
 			window.ueShed.inputAtlas.loadConfiguredProject()
 		)
-	),
-	chooseProjectAndScan: Effect.fn("InputAtlasClient.chooseProjectAndScan")(() =>
-		request("inputAtlas.chooseProjectAndScan", () =>
-			window.ueShed.inputAtlas.chooseProjectAndScan()
-		)
 	)
 });

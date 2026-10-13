@@ -6,9 +6,10 @@ import {
 	type TextCorpusSearchCounts,
 	type TextFileScopeSummary,
 	type TextOriginKind,
-	type TextWhere
+	type TextWhere,
+	textCountLabel
 } from "@ue-shed/game-text/browser";
-import { AnchoredPopover, Button, Chip } from "@ue-shed/ui";
+import { AnchoredPopover, Button, Chip, ToolButton, ToolIcon } from "@ue-shed/ui";
 import { tokens } from "@ue-shed/ui-theme/tokens.stylex.js";
 import { For, Show, createSignal, createUniqueId } from "solid-js";
 
@@ -122,92 +123,131 @@ export function WhereFilter(props: {
 		props.onChange(textWhere(props.where?.kinds, props.where?.pathPrefix));
 	};
 	return (
-		<AnchoredPopover
-			id={id}
-			ariaLabel={props.filesOnly ? "Changed files" : "Where text comes from"}
-			open={open()}
-			onOpenChange={(next) => {
-				if (next) setDraft(props.where?.files?.join("\n") ?? "");
-				setOpen(next);
-			}}
-			placement="bottom-end"
-			style={styles.panel}
-			trigger={(trigger) => (
-				<Button
-					{...trigger}
-					type="button"
-					size="compact"
-					tone="quiet"
-					disabled={props.disabled}
-					aria-pressed={
-						(props.filesOnly ? files() === undefined : props.where === undefined)
-							? "false"
-							: "true"
-					}
-					title={props.fileScope ? fileScopeLine(props.fileScope) : undefined}
-				>
-					{triggerLabel()}
-				</Button>
-			)}
-		>
-			<Show when={!props.filesOnly}>
-				<WhereOrigins
-					where={props.where}
-					counts={props.counts}
-					searching={props.searching}
-					disabled={props.disabled}
-					selected={selected}
-					toggle={toggle}
-					commitPath={commitPath}
-				/>
-			</Show>
-			<textarea
-				aria-label="Changed files, one path per line"
-				placeholder={
-					"Changed files, one per line:\nContent/UI/WBP_Menu.uasset\nSource/Game/Private/Menu.cpp"
-				}
-				rows={5}
-				value={draft()}
-				onInput={(event) => setDraft(event.currentTarget.value)}
-				{...stylex.attrs(styles.field, styles.list)}
-			/>
-			<Show when={message()}>
-				{(text) => (
-					<span role="alert" {...stylex.attrs(styles.warning)}>
-						{text()}
+		<>
+			<Show when={props.fileScope}>
+				{(scope) => (
+					<span role="status" {...stylex.attrs(styles.note)}>
+						{fileScopeLine(scope())}
 					</span>
 				)}
 			</Show>
-			<Show when={props.where?.files !== undefined && props.fileScope}>
-				{(summary) => (
-					<span {...stylex.attrs(styles.note)}>{fileScopeLine(summary())}</span>
-				)}
-			</Show>
-			<div {...stylex.attrs(styles.actions)}>
-				<Button type="button" size="compact" tone="primary" onClick={showFiles}>
-					Show their text
-				</Button>
-				<Show when={props.where?.files !== undefined}>
-					<Button type="button" size="compact" tone="quiet" onClick={clearFiles}>
-						Clear files
-					</Button>
-				</Show>
-				<Show when={!props.filesOnly && props.where !== undefined}>
-					<Button
-						type="button"
-						size="compact"
-						tone="quiet"
-						onClick={() => {
-							setDraft("");
-							setMessage(undefined);
-							props.onChange(undefined);
-						}}
+			<AnchoredPopover
+				id={id}
+				ariaLabel={props.filesOnly ? "Changed files" : "Where text comes from"}
+				open={open()}
+				onOpenChange={(next) => {
+					if (next && !draft()) setDraft(props.where?.files?.join("\n") ?? "");
+					setOpen(next);
+				}}
+				placement="bottom-end"
+				style={styles.panel}
+				trigger={(trigger) => (
+					<Show
+						when={props.filesOnly}
+						fallback={
+							<Button
+								{...trigger}
+								type="button"
+								size="compact"
+								tone="quiet"
+								disabled={props.disabled}
+								aria-pressed={
+									(
+										props.filesOnly
+											? files() === undefined
+											: props.where === undefined
+									)
+										? "false"
+										: "true"
+								}
+								title={props.fileScope ? fileScopeLine(props.fileScope) : undefined}
+							>
+								{triggerLabel()}
+							</Button>
+						}
 					>
-						Clear all
-					</Button>
+						<ToolButton
+							{...trigger}
+							label="Changed files"
+							showLabel
+							tooltip={
+								props.fileScope
+									? `${fileScopeLine(props.fileScope)}. Edit the list to change which lines show.`
+									: "Paste changed file paths to see only the text they hold."
+							}
+							badge={files()}
+							badgeLabel={
+								files() === undefined
+									? undefined
+									: textCountLabel(files() ?? 0, "file")
+							}
+							disabled={props.disabled}
+							aria-pressed={files() !== undefined ? "true" : "false"}
+						>
+							<ToolIcon name="files" />
+						</ToolButton>
+					</Show>
+				)}
+			>
+				<Show when={!props.filesOnly}>
+					<WhereOrigins
+						where={props.where}
+						counts={props.counts}
+						searching={props.searching}
+						disabled={props.disabled}
+						selected={selected}
+						toggle={toggle}
+						commitPath={commitPath}
+					/>
 				</Show>
-			</div>
-		</AnchoredPopover>
+				<textarea
+					aria-label="Changed files, one path per line"
+					placeholder={
+						"Changed files, one per line:\nContent/UI/WBP_Menu.uasset\nSource/Game/Private/Menu.cpp"
+					}
+					rows={5}
+					value={draft()}
+					onInput={(event) => setDraft(event.currentTarget.value)}
+					{...stylex.attrs(styles.field, styles.list)}
+				/>
+				<Show when={message()}>
+					{(text) => (
+						<span role="alert" {...stylex.attrs(styles.warning)}>
+							{text()}
+						</span>
+					)}
+				</Show>
+				<Show when={props.where?.files !== undefined && props.fileScope}>
+					{(summary) => (
+						<span {...stylex.attrs(styles.note)}>{fileScopeLine(summary())}</span>
+					)}
+				</Show>
+				<div {...stylex.attrs(styles.actions)}>
+					<Button type="button" size="compact" tone="primary" onClick={showFiles}>
+						Show their text
+					</Button>
+					<Show when={props.where?.files !== undefined}>
+						<Button type="button" size="compact" tone="quiet" onClick={clearFiles}>
+							Clear files
+						</Button>
+					</Show>
+					<Show when={!props.filesOnly && props.where !== undefined}>
+						<Button
+							type="button"
+							size="compact"
+							tone="quiet"
+							onClick={() => {
+								setDraft("");
+								setMessage(undefined);
+								props.onChange(undefined);
+							}}
+						>
+							Clear all
+						</Button>
+					</Show>
+				</div>
+			</AnchoredPopover>
+		</>
 	);
 }
 

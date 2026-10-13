@@ -1,4 +1,6 @@
 export * from "./button.js";
+export * from "./tool-button.js";
+export * from "./tool-icon.js";
 export * from "./chip.js";
 export * from "./anchored-popover.js";
 export * from "./actor-explorer.js";

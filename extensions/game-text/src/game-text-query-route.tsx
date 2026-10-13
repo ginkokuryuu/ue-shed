@@ -22,13 +22,23 @@ import {
 	type LocalizationState,
 	LocalizationReviewLens
 } from "@ue-shed/game-text/browser";
-import { Button, Chip, createEffectAction, createEffectSubscription } from "@ue-shed/ui";
+import {
+	Button,
+	Chip,
+	ToolButton,
+	ToolIcon,
+	createEffectAction,
+	createEffectSubscription
+} from "@ue-shed/ui";
 import { InvestigationActions } from "@ue-shed/ui/investigation-actions";
 import type { TaskProgress } from "@ue-shed/ui/task-progress";
 import { Effect, Schedule, Stream } from "effect";
-import { For, Show, createEffect, createSignal, onSettled, untrack } from "solid-js";
+import { For, Show, createEffect, createMemo, createSignal, onSettled, untrack } from "solid-js";
 import type { JSX } from "@solidjs/web";
+import { failureText } from "./game-text-failure.js";
+import { mergePages, nextPageCursor, pageRows } from "./game-text-pages.js";
 import type { GameTextClientApi } from "./game-text-client.js";
+import { GameTextScanProgress } from "./game-text-scan-progress.js";
 import { CopyButton } from "./game-text-copy-button.js";
 import { ShowInUnrealButton } from "./game-text-locate-button.js";
 import { ReadProblems, CoverageNotes } from "./game-text-read-problems.js";
@@ -40,13 +50,16 @@ import {
 	localizationPreferences,
 	migratePreferences,
 	readGameTextPreferences,
-	saveGameTextPreferences,
+	writeGameTextPreferences,
+	type PreferencesSaveResult,
 	type GameTextPreferences
 } from "./game-text-preferences.js";
+import { clauseParts } from "./game-text-filter-model.js";
 import { DisplayMenu } from "./game-text-display-menu.js";
 import { FacetsPane } from "./game-text-facets.js";
 import { FolderBrowser } from "./game-text-folder-browser.js";
 import { LinePageHeader, LineProblem, LineProperties } from "./game-text-line-page.js";
+import { createLineNavigation } from "./game-text-line-navigation.js";
 import {
 	FilterMenu,
 	FilterPills,
@@ -54,7 +67,7 @@ import {
 	type FilterCounts
 } from "./game-text-filter-menu.js";
 import { BulkBar, createLineSelection } from "./game-text-bulk-bar.js";
-import { GroupedResults, type GroupLoaded, type LoadedRow } from "./game-text-grouped-results.js";
+import { GroupedResults } from "./game-text-grouped-results.js";
 import { reviewLensLabel } from "./game-text-review.js";
 import { createGameTextLocalizationState } from "./game-text-localization-state.js";
 import {
@@ -62,14 +75,16 @@ import {
 	StagedEditsButton,
 	StagedEditsPanel
 } from "./game-text-translation-edits.js";
+import { ViewTabs, type ViewTab } from "./game-text-view-tabs.js";
 import {
 	LocalizationControls,
+	LocalizationSync,
 	TranslationsDetail,
 	GatheredDetail,
 	localizationLabels
 } from "./game-text-localization-view.js";
 import { GameTextColumns, GameTextResultRows } from "./game-text-result-rows.js";
-import { BrowseSummary, BrowseStateFilter, browseStyles } from "./game-text-browse-chrome.js";
+import { BrowseSummary, browseStyles } from "./game-text-browse-chrome.js";
 import {
 	createGameTextOperations,
 	OperationPanel,
@@ -82,6 +97,13 @@ import { WhereFilter, textWhere } from "./game-text-where.js";
 
 export { CopyButton } from "./game-text-copy-button.js";
 export type { GameTextPreferences } from "./game-text-preferences.js";
+
+const localizationProblems = new Set([
+	"key_changed",
+	"not_gathered",
+	"changed_since_gather",
+	"translation"
+]);
 
 /** Line states that are facts rather than problems; they filter through the selection. */
 const LINE_FACT_STATES: readonly LocalizationState[] = [
@@ -107,11 +129,7 @@ function elapsedTime(seconds: number): string {
 }
 
 function focusStats(focus: TextCorpusFocus): string {
-	return [
-		textCountLabel(focus.unit.characterCount, "character"),
-		textCountLabel(focus.unit.wordCount, "word"),
-		textCountLabel(focus.totalOccurrences, "location")
-	].join(" · ");
+	return textCountLabel(focus.totalOccurrences, "location");
 }
 
 export function GameTextRoute(props: {
@@ -142,18 +160,38 @@ export function GameTextRoute(props: {
 	const [selectedFindingId, setSelectedFindingId] = createSignal<
 		TextQualityFindingId | undefined
 	>(initial?.selectedFindingId);
+	const [scanRevision, setScanRevision] = createSignal(0);
 	const [summary, setSummary] = createSignal<TextCorpusQuerySummary>();
 	const [page, setPage] = createSignal<TextCorpusSearchPage>();
+	const [committedRequest, setCommittedRequest] = createSignal<TextCorpusSearchRequest>();
 	const [focus, setFocus] = createSignal<TextCorpusFocus>();
 	const [searching, setSearching] = createSignal(true);
 	const [queryMs, setQueryMs] = createSignal<number>();
 	const [loading, setLoading] = createSignal(true);
+	const [projectAvailable, setProjectAvailable] = createSignal(true);
 	const [preparing, setPreparing] = createSignal(true);
 	const [elapsedSeconds, setElapsedSeconds] = createSignal(0);
 	const [preparationSeconds, setPreparationSeconds] = createSignal<number>();
+	const [persistenceFailed, setPersistenceFailed] =
+		createSignal<Exclude<PreferencesSaveResult, "saved">>();
 	const [memoryReady, setMemoryReady] = createSignal(false);
 	const [projectKey, setProjectKey] = createSignal(untrack(() => props.projectKey));
 	const [error, setError] = createSignal<string>();
+	const [retryError, setRetryError] = createSignal<{
+		readonly label: string;
+		readonly run: () => void;
+	}>();
+	const [searchFailed, setSearchFailed] = createSignal(false);
+	/** One error at a time, with the action that recovers from it; search errors also end the count. */
+	const showError = (
+		message: string,
+		retry: () => void,
+		options: { readonly search?: boolean; readonly label?: string } = {}
+	) => {
+		setError(message);
+		setRetryError({ label: options.label ?? "Retry", run: retry });
+		setSearchFailed(options.search ?? false);
+	};
 	const [scanNotice, setScanNotice] = createSignal<string>();
 	const [qualityFailure, setQualityFailure] =
 		createSignal<Extract<TextQualityQueryRunResult, { status: "failed" }>["error"]>();
@@ -170,6 +208,39 @@ export function GameTextRoute(props: {
 		localization.target() && props.client.localizationQualitySearch
 			? workspaceFindingCount()
 			: qualitySummary()?.findingCount;
+	const qualityTab = (): ViewTab<"quality"> => {
+		if (qualityFailure()?.code === "invalid_rules")
+			return {
+				id: "quality",
+				label: "Quality checks",
+				badge: "!",
+				badgeLabel: "rules invalid",
+				badgeTone: "danger"
+			};
+		if (editor.dirty())
+			return {
+				id: "quality",
+				label: "Quality checks",
+				badge: "•",
+				badgeLabel: "unsaved rule changes",
+				badgeTone: "accent"
+			};
+		const count = qualityTabCount();
+		return count === undefined
+			? { id: "quality", label: "Quality checks" }
+			: {
+					id: "quality",
+					label: "Quality checks",
+					badge: count.toLocaleString(),
+					badgeLabel: textCountLabel(count, "finding")
+				};
+	};
+	// Reports read the target's translations, so they are offered only with a target.
+	const viewTabs = (): readonly ViewTab<"corpus" | "quality" | "reports">[] => [
+		{ id: "corpus", label: "Text" },
+		qualityTab(),
+		...(localization.active() ? [{ id: "reports" as const, label: "Reports" }] : [])
+	];
 	const [qualityDocument, setQualityDocument] = createSignal<GameTextRuleDocument | undefined>(
 		initial?.qualityDocument
 	);
@@ -184,7 +255,6 @@ export function GameTextRoute(props: {
 	const refreshAction = createEffectAction();
 	const qualityAction = createEffectAction();
 	const memoryAction = createEffectAction();
-	const persistAction = createEffectAction();
 	const progressSubscription = createEffectSubscription();
 	const elapsedSubscription = createEffectSubscription();
 	let searchGeneration = 0;
@@ -196,10 +266,6 @@ export function GameTextRoute(props: {
 		selectedUnit: selectedId,
 		onPending: () => {
 			setPreparing(true);
-			searchGeneration++;
-			searchAction.cancel();
-			setSearching(true);
-			setPage(undefined);
 		}
 	});
 	const indexBusy = () =>
@@ -256,7 +322,14 @@ export function GameTextRoute(props: {
 		target: localization.target,
 		nativeCulture: () => localization.active()?.target.nativeCulture ?? undefined,
 		busy: () => loading() || operations.busy(),
-		onWritten: () => load(false)
+		onWritten: () => load(false),
+		initial: initial?.editSession
+	});
+	// Targets are only listed after a successful load; work kept for a target the project no longer
+	// has could never be shown or written, so it goes.
+	const unloadedTargets = untrack(localization.targets);
+	createEffect(localization.targets, (targets) => {
+		if (targets !== unloadedTargets) edits.prune(targets.map((target) => target.name));
 	});
 	const editor = createGameTextRuleState({
 		client: props.client,
@@ -272,8 +345,13 @@ export function GameTextRoute(props: {
 			setQualityFailure(undefined);
 			setQualityDocument(result.document);
 			setQualitySummary(result.summary);
+			attachRuleFile(result);
 		}
 	});
+	// The host says whether a rules file is attached; hosts that do not say keep the last answer.
+	function attachRuleFile(result: { readonly ruleFile?: "attached" | "none" | undefined }) {
+		if (result.ruleFile !== undefined) editor.attachFile(result.ruleFile === "attached");
+	}
 
 	const requestFocus = (id: TextUnitId, cursor?: TextCorpusFocus["nextOccurrenceCursor"]) => {
 		const generation = ++focusGeneration;
@@ -288,7 +366,10 @@ export function GameTextRoute(props: {
 			}),
 			{
 				onFailure: (cause) => {
-					if (generation === focusGeneration) setError(String(cause));
+					if (generation === focusGeneration)
+						showError(failureText("Couldn’t open this line.", cause), () =>
+							requestFocus(id, cursor)
+						);
 				},
 				onSuccess: (result) => {
 					if (generation !== focusGeneration) return;
@@ -325,152 +406,29 @@ export function GameTextRoute(props: {
 		const selected = localization.selection();
 		return selected === undefined ? undefined : { localization: selected };
 	};
-	// A picked line opens its page. Its place and neighbours come from the rows each group reports,
-	// or the flat page's rows, so the page follows grouping, open groups and loaded pages.
-	let resultsSection: HTMLElement | undefined;
 	let searchInput: HTMLInputElement | undefined;
-	const lineOpen = () => selectedId() !== undefined || localization.selectedId() !== undefined;
-	const [groupRows, setGroupRows] = createSignal<ReadonlyMap<string, readonly LoadedRow[]>>(
-		new Map()
-	);
-	// A line only in the gather has no unit, so a closed page (no unit either) must not match it.
-	const isOpenLine = (row: LoadedRow) => {
-		const line = localization.selectedId();
-		if (line !== undefined) return row.line === line;
-		const unit = selectedId();
-		return unit !== undefined && row.unit === unit;
-	};
-	const flatRows = (): readonly LoadedRow[] => {
-		const current = page();
-		if (!current) return [];
-		if (!current.localization)
-			return current.units.map((unit) => ({ unit: unit.id, line: undefined }));
-		const units = new Set(current.units.map((unit) => unit.id));
-		return current.localization.lines.map((line) => ({
-			line: line.id,
-			unit:
-				line.origin.kind === "corpus"
-					? line.origin.unitIds.find((id) => units.has(id))
-					: undefined
-		}));
-	};
-	// Where the open line is: its group (if grouped) and its place in that group's loaded rows.
-	const openLineAt = () => {
-		const groups = page()?.groups?.entries;
-		if (!groups) {
-			const rows = flatRows();
-			const index = rows.findIndex(isOpenLine);
-			return index < 0 ? undefined : { group: -1, rows, index, before: 0 };
-		}
-		let before = 0;
-		for (const [group, entry] of groups.entries()) {
-			const rows = groupRows().get(entry.key) ?? [];
-			const index = rows.findIndex(isOpenLine);
-			if (index >= 0) return { group, rows, index, before };
-			before += entry.count;
-		}
-		return undefined;
-	};
-	const linePosition = () => {
-		const total = page()?.total;
-		const at = openLineAt();
-		return total === undefined || at === undefined
-			? undefined
-			: { index: at.before + at.index, total };
-	};
-	// A step that has to open a group or load its next page finishes when that group reports its
-	// rows: the row to pick is the first, the last, or a place in the group. A step lands only while
-	// the line it started from is still open, so going back to the list or opening another line
-	// cancels it.
-	let pendingStep:
-		| {
-				readonly group: string;
-				readonly pick: "first" | "last" | number;
-				readonly from: LoadedRow;
-		  }
-		| undefined;
-	const selectRow = (row: LoadedRow | undefined) => {
-		if (row === undefined) return;
-		setSelectedId(row.unit);
-		localization.setSelectedId(row.line);
-	};
-	const stillOpen = (from: LoadedRow) => untrack(() => isOpenLine(from));
-	// Each open group's next-page loader, while it has more pages.
-	const groupMore = new Map<string, () => void>();
-	const groupLoaded: GroupLoaded = (group, rows, more) => {
-		setGroupRows((current) => new Map(current).set(group, rows));
-		if (more === undefined) groupMore.delete(group);
-		else groupMore.set(group, more);
-		const step = pendingStep;
-		if (step === undefined || step.group !== group) return;
-		if (!stillOpen(step.from)) {
-			pendingStep = undefined;
-			return;
-		}
-		// A group's last line is its last matching line, so its pages load until none are left.
-		if (step.pick === "last" && more !== undefined) {
-			more();
-			return;
-		}
-		pendingStep = undefined;
-		selectRow(
-			step.pick === "first" ? rows[0] : step.pick === "last" ? rows.at(-1) : rows[step.pick]
-		);
-	};
-	// Without groups, a step past the loaded rows loads the next page and picks this row.
-	let pendingFlat: { readonly index: number; readonly from: LoadedRow } | undefined;
-	createEffect(flatRows, (rows) => {
-		const step = pendingFlat;
-		if (step === undefined || rows.length <= step.index) return;
-		pendingFlat = undefined;
-		if (stillOpen(step.from)) selectRow(rows[step.index]);
+	const navigation = createLineNavigation({
+		page,
+		group,
+		unit: selectedId,
+		setUnit: setSelectedId,
+		line: localization.selectedId,
+		setLine: localization.setSelectedId,
+		moreResults: () => moreResults(),
+		focusSearch: () => searchInput?.focus()
 	});
-	// Opening a closed group goes through its header, as a click would.
-	const groupControl = (key: string, selector: string) =>
-		Array.from(resultsSection?.querySelectorAll<HTMLElement>("section[data-group]") ?? [])
-			.find((section) => section.dataset.group === key)
-			?.querySelector<HTMLButtonElement>(selector);
-	const moveLine = (step: -1 | 1) => {
-		const at = openLineAt();
-		const from = at?.rows[at.index];
-		if (at === undefined || from === undefined) return;
-		const next = at.rows[at.index + step];
-		if (next !== undefined) {
-			selectRow(next);
-			return;
-		}
-		const groups = page()?.groups?.entries;
-		if (!groups) {
-			const current = page();
-			if (step === 1 && (current?.localization?.nextCursor ?? current?.nextCursor)) {
-				pendingFlat = { index: at.index + 1, from };
-				moreResults();
-			}
-			return;
-		}
-		const entry = groups[at.group];
-		if (!entry) return;
-		// The group's next page, when there is one.
-		const more = step === 1 ? groupMore.get(entry.key) : undefined;
-		if (more) {
-			pendingStep = { group: entry.key, pick: at.index + 1, from };
-			more();
-			return;
-		}
-		// The neighbouring group, opened if it is closed.
-		const neighbour = groups[at.group + step];
-		if (!neighbour) return;
-		const header = groupControl(neighbour.key, 'button[aria-expanded="false"]');
-		const rest = step === -1 ? groupMore.get(neighbour.key) : undefined;
-		if (header || rest) {
-			pendingStep = { group: neighbour.key, pick: step === 1 ? "first" : "last", from };
-			if (header) header.click();
-			else rest?.();
-			return;
-		}
-		const loaded = groupRows().get(neighbour.key) ?? [];
-		selectRow(step === 1 ? loaded[0] : loaded.at(-1));
-	};
+	const {
+		lineOpen,
+		paneCollapsed,
+		setPaneCollapsed,
+		collapsed,
+		groupRows,
+		groupLoaded,
+		linePosition,
+		selectRow,
+		moveLine,
+		closeLine
+	} = navigation;
 	// Lines ticked for bulk actions, in the list's order for shift-click ranges. A new target
 	// starts a new selection.
 	const selection = createLineSelection({
@@ -496,12 +454,6 @@ export function GameTextRoute(props: {
 					checking: selection.ticked().size > 0
 				}
 			: undefined;
-	const closeLine = () => {
-		pendingFlat = undefined;
-		pendingStep = undefined;
-		setSelectedId(undefined);
-		localization.setSelectedId(undefined);
-	};
 	// Review state and line facts still filter through the selection, one choice at a time.
 	const extraFields = (): readonly ExtraField[] => {
 		if (!localization.active()) return [];
@@ -573,15 +525,25 @@ export function GameTextRoute(props: {
 			assets: current.facets?.assets
 		};
 	};
-	const searchRequest = (): TextCorpusSearchRequest => {
+	const searchRequest = createMemo((): TextCorpusSearchRequest => {
 		const selected = localization.selection();
+		const clauses = selected
+			? filter()
+			: filter().flatMap((clause): TextFilter => {
+					if (clause.field === "translation") return [];
+					if (clause.field !== "problem") return [clause];
+					const values = clause.values.filter(
+						(value) => !localizationProblems.has(value)
+					);
+					return values.length ? [{ ...clause, values }] : [];
+				});
 		return {
 			query: query(),
 			capability: capability(),
 			lens: lens(),
 			withoutNotes: withoutNotes(),
 			...whereField(),
-			...(filter().length > 0 ? { filter: filter() } : undefined),
+			...(clauses.length > 0 ? { filter: clauses } : undefined),
 			...groupField(),
 			facets: {
 				folder: facetFolder(),
@@ -592,29 +554,78 @@ export function GameTextRoute(props: {
 			...(selected ? { localization: selected } : undefined),
 			pageSize: 50
 		};
-	};
+	});
+	const narrowing = createMemo(
+		() =>
+			[
+				query() ? `“${query()}”` : undefined,
+				...filter().map((clause) => {
+					const parts = clauseParts(clause);
+					return `${parts.field} ${parts.op} ${parts.values}`;
+				}),
+				localization.state()
+					? localizationLabels[localization.state() ?? "unknown"]
+					: undefined,
+				localization.review()
+					? reviewLensLabel(localization.review() ?? "reviewed")
+					: undefined,
+				where()?.files ? "changed files" : undefined,
+				localization.cultures().length
+					? "cultures " + localization.cultures().join(", ")
+					: undefined
+			]
+				.filter((item) => item !== undefined)
+				.join("; ") || "the scanned text"
+	);
 	const moreResults = () => {
 		const current = untrack(page);
-		const request = searchRequest();
+		const request = committedRequest() ?? searchRequest();
 		if (current?.localization?.nextCursor)
 			requestPage({ ...request, localizationCursor: current.localization.nextCursor });
 		else if (current?.nextCursor) requestPage({ ...request, cursor: current.nextCursor });
 	};
+	// The last search that showed results: repeating it (after a rescan or write) reloads as many
+	// rows as were loaded, while a new or failed search starts from one page.
+	let previousSearch = "";
 	const requestPage = (request: TextCorpusSearchRequest, debounce = false) => {
 		const generation = ++searchGeneration;
+		const {
+			cursor: _cursor,
+			localizationCursor: _localizationCursor,
+			...baseRequest
+		} = request;
+		const signature = JSON.stringify(baseRequest);
+		const desired =
+			signature === previousSearch
+				? untrack(() => page()?.localization?.lines.length ?? page()?.units.length ?? 50)
+				: 50;
 		let started = 0;
-		// A new search replaces the rows a pending step was counting on.
-		if (!request.cursor && !request.localizationCursor) {
-			pendingFlat = undefined;
-			pendingStep = undefined;
-		}
+		if (!request.cursor && !request.localizationCursor) navigation.cancelSteps();
 		setError(undefined);
+		setSearchFailed(false);
 		setSearching(true);
 		searchAction.run(
 			(debounce ? Effect.sleep("120 millis") : Effect.void).pipe(
 				Effect.flatMap(() => {
 					started = performance.now();
-					return props.client.search(request);
+					return Effect.gen(function* () {
+						let result = yield* props.client.search(request);
+						if (
+							result.status !== "ready" ||
+							request.cursor ||
+							request.localizationCursor
+						)
+							return result;
+						let collected = result.page;
+						while (pageRows(collected) < desired) {
+							const cursor = nextPageCursor(collected);
+							if (!cursor) break;
+							result = yield* props.client.search({ ...request, ...cursor });
+							if (result.status !== "ready") return result;
+							collected = mergePages(collected, result.page);
+						}
+						return { status: "ready" as const, page: collected };
+					});
 				})
 			),
 			{
@@ -622,39 +633,32 @@ export function GameTextRoute(props: {
 					if (generation === searchGeneration) {
 						if (!untrack(loading)) setPreparing(false);
 						setSearching(false);
-						setPage(undefined);
-						setError(String(cause));
+						showError(
+							failureText("Search failed.", cause),
+							() => requestPage(request),
+							{ search: true, label: "Retry search" }
+						);
 					}
 				},
 				onSuccess: (result) => {
 					if (generation !== searchGeneration) return;
 					if (!untrack(loading)) setPreparing(false);
+					setSearching(false);
 					if (result.status === "ready") {
+						previousSearch = signature;
+						setCommittedRequest(baseRequest);
 						setQueryMs(performance.now() - started);
 						setPage((previous) =>
 							(request.cursor || request.localizationCursor) && previous
-								? {
-										...result.page,
-										units: [...previous.units, ...result.page.units],
-										...(result.page.localization && previous.localization
-											? {
-													localization: {
-														...result.page.localization,
-														lines: [
-															...previous.localization.lines,
-															...result.page.localization.lines
-														]
-													}
-												}
-											: undefined)
-									}
+								? mergePages(previous, result.page)
 								: result.page
 						);
-						setSearching(false);
 					} else {
-						setPage(undefined);
-						setSearching(false);
-						setError("The saved assets changed. Rescan the project to search again.");
+						showError(
+							"The saved assets changed since the last scan. Rescan to search again.",
+							() => load(true),
+							{ search: true, label: "Rescan" }
+						);
 					}
 				}
 			}
@@ -667,45 +671,54 @@ export function GameTextRoute(props: {
 			setQualityDocument(result.document);
 			setQualitySummary(result.summary);
 			editor.replace(result.document);
+			attachRuleFile(result);
 		} else if (result.status === "failed") setQualityFailure(result.error);
 	};
+	// Review flags written from a line's translations reload the view when they change.
+	const translationReview = () => ({
+		client: props.client,
+		busy: loading() || operations.busy(),
+		onChanged: () => load(false)
+	});
 
-	const load = (refresh: boolean, choose = false) => {
+	const load = (refresh: boolean) => {
 		setPreparing(true);
 		setLoading(true);
 		setError(undefined);
+		setSearchFailed(false);
 		setScanNotice(undefined);
 		setProgress({ completed: 0, total: 0, phase: "idle", stage: "game_text" });
-		refreshAction.run(
-			choose
-				? props.client.chooseProjectAndScan()
-				: props.client.loadConfiguredProject(refresh),
-			{
-				onFailure: (cause) => {
+		refreshAction.run(props.client.loadConfiguredProject(refresh), {
+			onFailure: (cause) => {
+				setPreparing(false);
+				setLoading(false);
+				showError(failureText("Couldn’t read the project’s saved text.", cause), () =>
+					load(refresh)
+				);
+			},
+			onSuccess: (result: TextCorpusQueryRunResult) => {
+				setLoading(false);
+				setProjectAvailable(result.status !== "not_configured");
+				if (result.status === "completed") {
+					localization.load();
+					setSummary(result.summary);
+					setScanRevision((revision) => revision + 1);
+					if (!untrack(projectKey) && props.client.projectKey) {
+						memoryAction.run(props.client.projectKey(), {
+							onSuccess: setProjectKey
+						});
+					}
+				} else if (result.status === "failed") {
 					setPreparing(false);
-					setLoading(false);
-					setError(String(cause));
-				},
-				onSuccess: (result: TextCorpusQueryRunResult) => {
-					setLoading(false);
-					if (result.status === "completed") {
-						localization.load();
-						setSummary(result.summary);
-						if (!untrack(projectKey) && props.client.projectKey) {
-							memoryAction.run(props.client.projectKey(), {
-								onSuccess: setProjectKey
-							});
-						}
-					} else if (result.status === "failed") {
-						setPreparing(false);
-						setError(result.error.message + " " + result.error.recovery);
-					} else if (result.status === "cancelled") {
-						setPreparing(false);
-						setScanNotice("Project selection was cancelled. Choose a project to scan.");
-					} else setPreparing(false);
-				}
+					showError(result.error.message + " " + result.error.recovery, () =>
+						load(refresh)
+					);
+				} else if (result.status === "cancelled") {
+					setPreparing(false);
+					setScanNotice("Scan cancelled. Your workspace project selection is unchanged.");
+				} else setPreparing(false);
 			}
-		);
+		});
 	};
 
 	const restore = (saved: GameTextPreferences) => {
@@ -715,6 +728,7 @@ export function GameTextRoute(props: {
 		setQualitySummary(undefined);
 		setQualityFailure(undefined);
 		localization.restore(preferences);
+		if (preferences.editSession) edits.restore(preferences.editSession);
 		setQuery(preferences.query);
 		setCapability(preferences.capability);
 		setLens(preferences.lens);
@@ -727,13 +741,15 @@ export function GameTextRoute(props: {
 		setSelectedId(preferences.selectedId);
 		setSelectedFindingId(preferences.selectedFindingId);
 		setQualityDocument(preferences.qualityDocument);
-		editor.replace(preferences.qualityDocument);
+		editor.replace(preferences.qualityDocument, false);
+		if (preferences.qualityEditor) editor.restore(preferences.qualityEditor);
 	};
 
 	// Requests consume committed state, including preferences restored during the first load.
 	createEffect(
 		() => ({
 			summary: summary(),
+			revision: scanRevision(),
 			request: searchRequest(),
 			ready: localization.ready()
 		}),
@@ -767,13 +783,28 @@ export function GameTextRoute(props: {
 					if (reviewed.status === "completed") {
 						setQualityFailure(undefined);
 						setQualitySummary(reviewed.summary);
+						attachRuleFile(reviewed);
 					} else applyQuality(reviewed);
 				},
-				onFailure: (cause) => setError(String(cause))
+				onFailure: (cause) =>
+					showError(failureText("Couldn’t check the rules.", cause), () =>
+						editor.run("preview", document)
+					)
 			});
 		}
 	);
 
+	let pendingSave: { key: string; preferences: GameTextPreferences } | undefined;
+	let saveTimer: number | undefined;
+	const flushPreferences = () => {
+		window.clearTimeout(saveTimer);
+		const save = pendingSave;
+		pendingSave = undefined;
+		if (!save) return;
+		// Synchronous storage: this runs during page hide and route disposal too.
+		const result = writeGameTextPreferences(save.key, save.preferences);
+		setPersistenceFailed(result === "saved" ? undefined : result);
+	};
 	createEffect(
 		() => ({
 			ready: memoryReady(),
@@ -793,6 +824,7 @@ export function GameTextRoute(props: {
 				selectedFindingId: selectedFindingId(),
 				qualityDocument: qualityDocument(),
 				qualityEditor: editor.state(),
+				editSession: edits.session(),
 				localizationTarget: localization.target(),
 				localizationCulture: localization.culture(),
 				localizationCultures:
@@ -807,23 +839,54 @@ export function GameTextRoute(props: {
 		({ ready, key, preferences }) => {
 			if (!ready) return;
 			props.onPreferencesChange?.(preferences);
-			if (key)
-				persistAction.run(saveGameTextPreferences(key, preferences), {
-					onSuccess: () => undefined
-				});
+			pendingSave = key ? { key, preferences } : undefined;
+			// Typing changes drafts on every key, so writes wait for a pause; leaving flushes them.
+			window.clearTimeout(saveTimer);
+			saveTimer = window.setTimeout(flushPreferences, 300);
 		}
 	);
 
 	onSettled(() => {
 		const shortcut = (event: KeyboardEvent) => {
-			if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "k") {
+			if (
+				mode() === "corpus" &&
+				lineOpen() &&
+				!event.defaultPrevented &&
+				!event.isComposing &&
+				!(
+					event.target instanceof Element &&
+					event.target.closest(
+						'[role="dialog"], [role="alertdialog"], input, textarea, select, [contenteditable]'
+					)
+				)
+			) {
+				if (event.key === "Escape") {
+					event.preventDefault();
+					closeLine();
+				}
+				if (event.altKey && (event.key === "ArrowDown" || event.key === "ArrowUp")) {
+					event.preventDefault();
+					moveLine(event.key === "ArrowDown" ? 1 : -1);
+				}
+			}
+			if (
+				mode() === "corpus" &&
+				(event.ctrlKey || event.metaKey) &&
+				event.key.toLowerCase() === "k"
+			) {
 				event.preventDefault();
 				searchInput?.focus({ preventScroll: true });
 				searchInput?.select();
 			}
 		};
+		// Drafts are persisted with the view, so closing the window only needs the last write.
 		window.addEventListener("keydown", shortcut);
-		return () => window.removeEventListener("keydown", shortcut);
+		window.addEventListener("pagehide", flushPreferences);
+		return () => {
+			window.removeEventListener("keydown", shortcut);
+			window.removeEventListener("pagehide", flushPreferences);
+			flushPreferences();
+		};
 	});
 	onSettled(() => {
 		memoryAction.run(
@@ -849,32 +912,47 @@ export function GameTextRoute(props: {
 		);
 	});
 
-	const loadRules = (create?: boolean) => {
-		setQualityFailure(undefined);
-		const operation =
-			create === undefined
-				? props.client.chooseQualityRules()
-				: props.client.createStarterRules?.(create);
-		if (!operation) return;
-		qualityAction.run(operation, {
-			onSuccess: applyQuality,
-			onFailure: (cause) => setError(String(cause))
-		});
+	const [replacement, setReplacement] = createSignal<() => void>();
+	const guardRules = (next: () => void) => {
+		if (editor.dirty()) setReplacement(() => next);
+		else next();
 	};
-	const reloadRules = () => {
-		setQualityFailure(undefined);
-		qualityAction.run(
-			props.client.reloadQualityRules?.() ?? props.client.chooseQualityRules(),
-			{
+	const loadRules = (create?: boolean) =>
+		guardRules(() => {
+			setQualityFailure(undefined);
+			const operation =
+				create === undefined
+					? props.client.chooseQualityRules()
+					: props.client.createStarterRules?.(create);
+			if (!operation) return;
+			qualityAction.run(operation, {
 				onSuccess: applyQuality,
-				onFailure: (cause) => setError(String(cause))
-			}
-		);
-	};
+				onFailure: (cause) =>
+					showError(failureText("Couldn’t open the rules file.", cause), () =>
+						loadRules(create)
+					)
+			});
+		});
+	const reloadRules = () =>
+		guardRules(() => {
+			setQualityFailure(undefined);
+			qualityAction.run(
+				props.client.reloadQualityRules?.() ?? props.client.chooseQualityRules(),
+				{
+					onSuccess: applyQuality,
+					onFailure: (cause) =>
+						showError(
+							failureText("Couldn’t reload the rules file.", cause),
+							reloadRules
+						)
+				}
+			);
+		});
 	const restorePreset = (preset: GameTextInvestigationPreset) => {
 		const { localization: selected, ...saved } = preset.query;
 		restore({
 			...saved,
+			qualityFilter: saved.workspaceFilter ?? saved.qualityFilter,
 			...localizationPreferences(selected),
 			withoutNotes: saved.withoutNotes ?? false,
 			lens: saved.lens ?? "all",
@@ -938,10 +1016,16 @@ export function GameTextRoute(props: {
 				<div {...stylex.attrs(styles.exports)}>
 					<InvestigationActions
 						compact
+						showLabels
 						blocked={operations.busy()}
 						client={client()}
 						disabled={
-							!summary() || (mode() === "corpus" ? searching() : !qualitySummary())
+							!summary() ||
+							(mode() === "corpus"
+								? searching()
+								: localization.active()
+									? qualityTabCount() === undefined
+									: !qualitySummary())
 						}
 						revision={[summary(), qualitySummary()]}
 						query={{
@@ -951,13 +1035,24 @@ export function GameTextRoute(props: {
 							lens: lens(),
 							withoutNotes: withoutNotes(),
 							...whereField(),
-							...(filter().length > 0 ? { filter: filter() } : undefined),
+							...(searchRequest().filter
+								? { filter: searchRequest().filter }
+								: undefined),
 							...groupField(),
 							// Problem and translation pills need the target, as the list does.
 							...localizationField(),
-							qualityFilter: sourceFilter()
+							qualityFilter: sourceFilter(),
+							...(mode() === "quality" && localization.active()
+								? { workspaceFilter: qualityFilter() }
+								: undefined)
 						}}
 						onOpen={restorePreset}
+						onRequestOpen={(open) => guardRules(open)}
+						disabledReason={
+							mode() === "quality"
+								? "Wait for findings to load, or load a rules file to check source text."
+								: "Wait for the search to finish before exporting."
+						}
 						extraExport={
 							localization.active() && props.client.localizationLinesFile
 								? {
@@ -975,7 +1070,7 @@ export function GameTextRoute(props: {
 	const rulesSetup = () => (
 		<section aria-label="Quality rules setup" {...stylex.attrs(styles.card)}>
 			<p>
-				<strong>Set up writing checks</strong> with a rules file for character limits and
+				<strong>Set up Quality checks</strong> with a rules file for character limits and
 				terminology. The starter file contains examples you can customize.
 			</p>
 			<Show when={qualityFailure()}>
@@ -1008,147 +1103,196 @@ export function GameTextRoute(props: {
 	);
 	return (
 		<main {...stylex.attrs(styles.page)}>
-			<div {...stylex.attrs(styles.toolbar)}>
+			<Show when={persistenceFailed()}>
+				{(failure) => (
+					<p role="alert" {...stylex.attrs(styles.muted, styles.warning)}>
+						{failure() === "drafts_not_saved"
+							? "Drafts are too large to keep if Workbench closes. Stage, write or save them before closing."
+							: "This view could not be saved locally. Your drafts last until Workbench closes."}
+					</p>
+				)}
+			</Show>
+			<Show when={replacement()}>
+				<section
+					role="alertdialog"
+					aria-label="Unsaved quality rules"
+					{...stylex.attrs(styles.card)}
+				>
+					<p>
+						Quality rules have unsaved changes. Discard them before replacing the rules?
+					</p>
+					<Button onClick={() => setReplacement(undefined)}>Keep editing</Button>
+					<Button
+						onClick={() => {
+							const next = replacement();
+							setReplacement(undefined);
+							next?.();
+						}}
+					>
+						Discard and continue
+					</Button>
+				</section>
+			</Show>
+			<header {...stylex.attrs(styles.titleRow)}>
 				<h1 {...stylex.attrs(styles.heading)}>Game Text</h1>
-				<div role="tablist" aria-label="Game Text view" {...stylex.attrs(styles.bar)}>
-					<button
-						type="button"
-						role="tab"
-						aria-selected={mode() === "corpus" ? "true" : "false"}
-						onClick={() => setMode("corpus")}
-						{...stylex.attrs(styles.button, mode() === "corpus" && styles.selected)}
-					>
-						Text
-					</button>
-					<button
-						type="button"
-						role="tab"
-						aria-selected={mode() === "quality" ? "true" : "false"}
-						onClick={() => setMode("quality")}
-						{...stylex.attrs(styles.button, mode() === "quality" && styles.selected)}
-					>
-						Quality checks
-						{qualityFailure()?.code === "invalid_rules"
-							? " (rules invalid)"
-							: qualityTabCount() !== undefined
-								? " (" + qualityTabCount() + ")"
-								: ""}
-					</button>
-					<Show when={localization.active()}>
-						<button
-							type="button"
-							role="tab"
-							aria-selected={mode() === "reports" ? "true" : "false"}
-							onClick={() => setMode("reports")}
-							{...stylex.attrs(
-								styles.button,
-								mode() === "reports" && styles.selected
-							)}
-						>
-							Reports
-						</button>
-					</Show>
-				</div>
-				<LocalizationControls
-					model={localization}
-					disabled={operations.busy()}
-					cultureWork={page()?.facets?.cultures}
-					syncAction={
-						<SyncWithUnreal
-							model={operations}
-							pending={localization.active()?.notSynced ?? 0}
-						/>
-					}
+				<ViewTabs
+					label="Game Text view"
+					idPrefix="game-text"
+					tabs={viewTabs()}
+					selected={mode()}
+					onSelect={setMode}
 				/>
-				<StagedEditsButton model={edits} />
-				<UnrealSteps model={operations} />
-				<Show when={summary()}>
-					{(current) => (
-						<span {...stylex.attrs(styles.coverage)}>
+				<span aria-label="Index status" {...stylex.attrs(styles.coverage)}>
+					<Show
+						when={indexBusy()}
+						fallback={
 							<Show
-								when={localization.ready()}
+								when={summary()}
 								fallback={
-									<span role="status">
-										{localization.error()
-											? "Translations unavailable"
-											: "Loading translations…"}
-									</span>
+									projectAvailable()
+										? "Ready to scan project"
+										: "No project selected"
 								}
 							>
-								<b>
-									{(
-										localization.active()?.lines ?? current().counts.all
-									).toLocaleString()}
-								</b>{" "}
-								{(localization.active()?.lines ?? current().counts.all) === 1
-									? "line"
-									: "lines"}{" "}
-								{localization.active() ? "· " : "in "}
+								{(current) => (
+									<>
+										<Show
+											when={localization.ready()}
+											fallback={
+												<span role="status">
+													{localization.error()
+														? "Translations unavailable"
+														: "Loading translations…"}
+												</span>
+											}
+										>
+											<b>
+												{(
+													localization.active()?.lines ??
+													current().counts.all
+												).toLocaleString()}
+											</b>{" "}
+											{(localization.active()?.lines ??
+												current().counts.all) === 1
+												? "line"
+												: "lines"}{" "}
+											{localization.active() ? "· " : "in "}
+										</Show>
+										<b>
+											{current().coverage.inspectedPackages.toLocaleString()}
+										</b>{" "}
+										{current().coverage.inspectedPackages === 1
+											? "asset"
+											: "assets"}
+										<Show when={current().scannedAt}>
+											{" "}
+											· scanned {scanTime(current().scannedAt)}
+										</Show>
+										<ReadProblems summary={current()} />
+									</>
+								)}
 							</Show>
-							<b>{current().coverage.inspectedPackages.toLocaleString()}</b>{" "}
-							{current().coverage.inspectedPackages === 1 ? "asset" : "assets"}
-							<Show when={current().scannedAt}>
-								{" "}
-								· scanned {scanTime(current().scannedAt)}
-							</Show>
-							<ReadProblems summary={current()} />
-							<Show when={!indexBusy() && preparationSeconds() !== undefined}>
-								{" · ready in "}
-								{elapsedTime(preparationSeconds() ?? 0)}
-							</Show>
+						}
+					>
+						<span role="status" {...stylex.attrs(styles.indexProgress)}>
+							<GameTextScanProgress
+								label={progressLabel()}
+								completed={progress().completed}
+								total={progressTotal()}
+							/>
+							<span {...stylex.attrs(styles.scanReadout)}>
+								<span>
+									{loading()
+										? summary()
+											? "Rescanning"
+											: "Opening saved text index"
+										: "Preparing translations and results"}
+								</span>
+								{" · "}
+								{progressLabel()}
+								<Show when={progressTotal() > 0}>
+									{" · "}
+									{progress().completed.toLocaleString()} /{" "}
+									{progressTotal().toLocaleString()}
+								</Show>
+								{" · "}
+								{elapsedTime(elapsedSeconds())} elapsed
+							</span>
 						</span>
-					)}
-				</Show>
+					</Show>
+				</span>
 				<Show when={summary()}>
-					<Button
-						size="compact"
+					<ToolButton
+						label="Rescan"
+						showLabel
+						tooltip={
+							operations.reason() ??
+							"Refresh saved text and translations from the project. Keeps your current list and drafts."
+						}
 						disabled={indexBusy() || operations.busy()}
-						title={operations.reason()}
 						onClick={() => load(true)}
 					>
-						Rescan
-					</Button>
+						<ToolIcon name="refresh" />
+					</ToolButton>
 				</Show>
-			</div>
-			<Show when={indexBusy()}>
-				<progress
-					aria-label={progressLabel()}
-					aria-valuenow={progressTotal() > 0 ? progress().completed : undefined}
-					aria-valuemax={progressTotal() > 0 ? progressTotal() : undefined}
-					max={progressTotal() || 1}
-					value={progressTotal() > 0 ? progress().completed : undefined}
-					{...stylex.attrs(styles.progress)}
-				/>
-				<p role="status" {...stylex.attrs(styles.indexProgress)}>
-					<span>
-						{loading()
-							? summary()
-								? "Rescanning"
-								: "Opening saved text index"
-							: "Preparing translations and results"}
-					</span>
-					{" · "}
-					{progressLabel()}
-					<Show when={progressTotal() > 0}>
-						{" · "}
-						{progress().completed.toLocaleString()} / {progressTotal().toLocaleString()}
+			</header>
+			<Show when={summary()}>
+				<div role="group" aria-label="Translations" {...stylex.attrs(styles.contextBar)}>
+					<Show
+						when={localization.targets().length > 0 || !localization.ready()}
+						fallback={
+							<span {...stylex.attrs(styles.contextLabel, styles.muted)}>
+								This project has no localization targets.
+							</span>
+						}
+					>
+						<LocalizationControls
+							model={localization}
+							disabled={operations.busy() || edits.working()}
+							cultureWork={page()?.facets?.cultures}
+						/>
 					</Show>
-					{" · "}
-					{elapsedTime(elapsedSeconds())} elapsed
-				</p>
-			</Show>
-			<Show when={mode() === "corpus"}>
-				<BrowseSummary
-					page={page()}
-					culture={localization.culture()}
-					cultures={localization.cultures()}
-				/>
+					<div {...stylex.attrs(styles.contextActions)}>
+						<LocalizationSync
+							model={localization}
+							action={
+								<SyncWithUnreal
+									model={operations}
+									pending={localization.active()?.notSynced ?? 0}
+									unwritten={edits.edits().length}
+								/>
+							}
+						/>
+						<StagedEditsButton model={edits} />
+						<UnrealSteps model={operations} />
+					</div>
+				</div>
 			</Show>
 			<OperationPanel model={operations} />
 			<StagedEditsPanel model={edits} />
 			<Show when={localization.error()}>
 				<p role="alert" {...stylex.attrs(styles.problemMessage)}>
-					{localization.error()}
+					{localization.error()}{" "}
+					<Button size="compact" onClick={localization.load}>
+						Retry translations
+					</Button>
+				</p>
+			</Show>
+			<Show
+				when={
+					!localization.active() &&
+					!localization.error() &&
+					filter().some(
+						(clause) =>
+							clause.field === "translation" ||
+							(clause.field === "problem" &&
+								clause.values.some((value) => localizationProblems.has(value)))
+					)
+				}
+			>
+				<p role="note">
+					Localization-dependent filter values are paused until a target is available.
+					Source filters still apply.
 				</p>
 			</Show>
 			<Show when={scanNotice()}>
@@ -1160,7 +1304,9 @@ export function GameTextRoute(props: {
 				{(message) => (
 					<div role="alert" {...stylex.attrs(styles.card)}>
 						{message()}
-						<Button onClick={() => load(true)}>Retry</Button>
+						<Button onClick={() => retryError()?.run()}>
+							{retryError()?.label ?? "Retry"}
+						</Button>
 					</div>
 				)}
 			</Show>
@@ -1170,552 +1316,659 @@ export function GameTextRoute(props: {
 					<Button onClick={() => loadRules()}>Load rules</Button>
 				</p>
 			</Show>
-			<Show
-				when={summary()}
-				fallback={
-					<div {...stylex.attrs(styles.empty)}>
-						<Show
-							when={!loading()}
-							fallback={<span role="status">Loading saved game text…</span>}
-						>
-							<p>
-								Game Text reads the project's saved assets, so Unreal does not need
-								to be running.
-							</p>
-							<Button tone="primary" onClick={() => load(true, !projectKey())}>
-								Scan project
-							</Button>
-						</Show>
-					</div>
-				}
+			<div
+				role="tabpanel"
+				id={"game-text-panel-" + mode()}
+				aria-labelledby={"game-text-tab-" + mode()}
+				{...stylex.attrs(styles.workspace)}
 			>
 				<Show
-					when={mode() !== "reports"}
+					when={summary()}
 					fallback={
-						<Show
-							when={localization.ready()}
-							fallback={
-								<p role="status" {...stylex.attrs(styles.empty)}>
-									Loading translations…
-								</p>
-							}
-						>
-							<Show when={localization.target()}>
-								{(target) => (
-									<GameTextReports
-										disabled={operations.busy()}
-										client={props.client}
-										target={target()}
-										revision={summary()}
-									/>
-								)}
-							</Show>
-						</Show>
-					}
-				>
-					<Show
-						when={mode() === "corpus"}
-						fallback={
+						<div {...stylex.attrs(styles.empty)}>
 							<Show
-								when={
-									localization.target() && props.client.localizationQualitySearch
-								}
-								fallback={
-									<Show when={qualitySummary()} fallback={rulesSetup()}>
-										{(quality) => (
-											<Show when={qualityDocument()}>
-												{(document) => (
-													<GameTextQualityWorkspace
-														disabled={operations.busy()}
-														client={props.client}
-														summary={quality()}
-														document={document()}
-														editor={editor}
-														filter={sourceFilter()}
-														onFilterChange={setQualityFilter}
-														onReplaceRules={reloadRules}
-														onLoadRules={() => loadRules()}
-														selectedId={selectedFindingId()}
-														onSelectionChange={setSelectedFindingId}
-														exports={exports()}
-														onShowText={(id) => {
-															localization.setSelectedId(undefined);
-															setSelectedId(id);
-															setMode("corpus");
-														}}
-													/>
-												)}
-											</Show>
-										)}
-									</Show>
-								}
+								when={!loading()}
+								fallback={<span role="status">Loading saved game text…</span>}
 							>
+								<p>
+									Game Text reads the project's saved assets, so Unreal does not
+									need to be running.
+								</p>
 								<Show
-									when={localization.ready()}
+									when={projectAvailable()}
 									fallback={
-										<p role="status" {...stylex.attrs(styles.empty)}>
-											Loading translations…
+										<p>
+											Choose a project using the workspace project picker,
+											then return here.
 										</p>
 									}
 								>
-									<GameTextLocalizationQuality
-										disabled={operations.busy()}
-										client={props.client}
-										localization={localization}
-										summary={qualitySummary()}
-										document={qualityDocument()}
-										editor={editor}
-										setup={rulesSetup()}
-										exports={exports()}
-										filter={qualityFilter()}
-										onFilterChange={setQualityFilter}
-										selectedId={selectedFindingId()}
-										onSelectionChange={setSelectedFindingId}
-										onLoadRules={() => loadRules()}
-										onReloadRules={reloadRules}
-										onShowText={(id) => {
-											localization.setSelectedId(undefined);
-											setSelectedId(id);
-											setMode("corpus");
-										}}
-									/>
+									<Button tone="primary" onClick={() => load(true)}>
+										Scan project
+									</Button>
+								</Show>
+							</Show>
+						</div>
+					}
+				>
+					<Show
+						when={mode() !== "reports"}
+						fallback={
+							<Show
+								when={localization.ready()}
+								fallback={
+									<p role="status" {...stylex.attrs(styles.empty)}>
+										Loading translations…
+									</p>
+								}
+							>
+								<Show when={localization.target()}>
+									{(target) => (
+										<GameTextReports
+											disabled={operations.busy()}
+											client={props.client}
+											target={target()}
+											revision={summary()}
+										/>
+									)}
 								</Show>
 							</Show>
 						}
 					>
-						<div {...stylex.attrs(styles.workspace)}>
-							<div {...stylex.attrs(styles.bar, styles.browseBar)}>
-								<div {...stylex.attrs(styles.search)}>
-									<svg
-										aria-hidden="true"
-										viewBox="0 0 24 24"
-										{...stylex.attrs(styles.searchIcon)}
-									>
-										<circle cx="10" cy="10" r="6" />
-										<path d="M15 15 L21 21" />
-									</svg>
-									<input
-										ref={(element) => {
-											searchInput = element;
-										}}
-										autofocus
-										type="search"
-										aria-label="Search game text"
-										placeholder={
-											localization.cultures().length > 0 &&
-											localization.searchTranslations()
-												? "Search text and translations"
-												: "Search text"
-										}
-										maxlength={512}
-										disabled={loading() && !summary()}
-										value={query()}
-										{...stylex.attrs(styles.input)}
-										onInput={(event) => setQuery(event.currentTarget.value)}
-										onKeyDown={(event) => {
-											if (event.key === "Enter" && localization.ready())
-												requestPage(searchRequest());
-										}}
-									/>
-									<span role="status" {...stylex.attrs(styles.count)}>
-										{localization.error() && !localization.ready()
-											? "Translations unavailable"
-											: searching() || !page()
-												? "Searching…"
-												: page()?.total === 1
-													? "1 match"
-													: page()?.total.toLocaleString() + " matches"}
-									</span>
-									<kbd {...stylex.attrs(browseStyles.keyboard)}>Ctrl K</kbd>
-								</div>
-								<Show when={localization.active()}>
-									<BrowseStateFilter
-										selected={localization.state()}
-										onChange={localization.setState}
-									/>
-								</Show>
+						<Show
+							when={mode() === "corpus"}
+							fallback={
 								<Show
 									when={
-										localization.active() && localization.cultures().length > 0
+										localization.target() &&
+										props.client.localizationQualitySearch
+									}
+									fallback={
+										<Show when={qualitySummary()} fallback={rulesSetup()}>
+											{(quality) => (
+												<Show when={qualityDocument()}>
+													{(document) => (
+														<GameTextQualityWorkspace
+															disabled={operations.busy()}
+															client={props.client}
+															summary={quality()}
+															document={document()}
+															editor={editor}
+															filter={sourceFilter()}
+															onFilterChange={setQualityFilter}
+															onReplaceRules={reloadRules}
+															onLoadRules={() => loadRules()}
+															selectedId={selectedFindingId()}
+															onSelectionChange={setSelectedFindingId}
+															exports={exports()}
+															onShowText={(id) => {
+																localization.setSelectedId(
+																	undefined
+																);
+																setSelectedId(id);
+																setMode("corpus");
+															}}
+														/>
+													)}
+												</Show>
+											)}
+										</Show>
 									}
 								>
-									<Chip
-										label="Search translations"
-										toggle
-										selected={localization.searchTranslations()}
-										onClick={() =>
-											localization.setSearchTranslations(
-												!localization.searchTranslations()
-											)
-										}
-									/>
-								</Show>
-								<span {...stylex.attrs(styles.grow)} />
-								<WhereFilter
-									where={where()}
-									counts={page()?.counts.origins}
-									fileScope={page()?.fileScope}
-									searching={searching()}
-									disabled={loading() && !summary()}
-									filesOnly
-									onChange={setWhere}
-								/>
-								<FilterMenu
-									filter={filter()}
-									counts={filterCounts()}
-									hasTarget={localization.active() !== undefined}
-									disabled={loading() && !summary()}
-									onChange={setFilter}
-									extraFields={extraFields()}
-									folderBrowser={(typed) => (
-										<FolderBrowser
-											menu
-											typed={typed()}
-											list={page()?.facets?.folders}
-											folder={facetFolder()}
-											filter={filter()}
-											onFolderChange={setFacetFolder}
-											onFilterChange={setFilter}
-										/>
-									)}
-								/>
-								<DisplayMenu
-									group={group() === "none" ? undefined : groupField()?.group}
-									disabled={loading() && !summary()}
-									onGroupChange={(next) => setGroup(next ?? "none")}
-								/>
-								{exports()}
-							</div>
-							<Show
-								when={
-									filter().length > 0 ||
-									localization.state() ||
-									localization.review()
-								}
-							>
-								<div {...stylex.attrs(styles.bar)}>
-									<FilterPills filter={filter()} onChange={setFilter} />
-									<Show when={localization.state()}>
-										{(state) => (
-											<Chip
-												label={localizationLabels[state()]}
-												selected
-												onClick={() => localization.setState(undefined)}
-											/>
-										)}
-									</Show>
-									<Show when={localization.review()}>
-										{(review) => (
-											<Chip
-												label={reviewLensLabel(review())}
-												selected
-												onClick={() => localization.setReview(undefined)}
-											/>
-										)}
-									</Show>
-								</div>
-							</Show>
-							<div {...stylex.attrs(styles.grid)}>
-								{/* Keep the paged list beside the line detail so selection, groups and pages survive. */}
-								<section
-									aria-label="Results"
-									ref={(element) => {
-										resultsSection = element;
-									}}
-									{...stylex.attrs(styles.pane)}
-								>
-									<GameTextColumns culture={localization.culture()} />
 									<Show
-										when={page()?.groups}
+										when={localization.ready()}
 										fallback={
-											<GameTextResultRows
-												page={page()}
-												culture={localization.culture()}
-												cultures={localization.cultures()}
-												selectedId={selectedId()}
-												selectedLocalizationId={localization.selectedId()}
-												onSelect={(unit, line) => {
-													setSelectedId(unit);
-													localization.setSelectedId(line);
-												}}
-												checked={ticks()?.checked}
-												onCheck={ticks()?.onCheck}
-												checking={ticks()?.checking}
-											/>
+											<p role="status" {...stylex.attrs(styles.empty)}>
+												Loading translations…
+											</p>
 										}
 									>
-										{(groups) => (
-											<GroupedResults
-												by={groups().by}
-												groups={groups().entries}
-												more={groups().more}
-												request={searchRequest()}
-												client={props.client}
-												culture={localization.culture()}
-												cultures={localization.cultures()}
-												selectedId={selectedId()}
-												selectedLocalizationId={localization.selectedId()}
-												onSelect={(unit, line) => {
-													setSelectedId(unit);
-													localization.setSelectedId(line);
-												}}
-												onLoaded={groupLoaded}
-												ticks={ticks()}
-											/>
-										)}
-									</Show>
-									<Show
-										when={
-											localization.ready() &&
-											!searching() &&
-											page()?.total === 0
-										}
-									>
-										<p {...stylex.attrs(styles.empty)}>
-											No text matches these filters.
-										</p>
-									</Show>
-									<Show
-										when={
-											!page()?.groups &&
-											(page()?.localization?.nextCursor ?? page()?.nextCursor)
-										}
-									>
-										<Button disabled={searching()} onClick={moreResults}>
-											Show{" "}
-											{Math.min(
-												50,
-												(page()?.total ?? 0) -
-													(page()?.localization?.lines.length ??
-														page()?.units.length ??
-														0)
-											)}{" "}
-											more
-										</Button>
-									</Show>
-									<BulkBar
-										selection={selection}
-										client={props.client}
-										localization={localization.selection()}
-										cultures={localization.cultures()}
-										nativeCulture={
-											localization.active()?.target.nativeCulture ?? undefined
-										}
-										edits={edits}
-										busy={loading() || operations.busy()}
-										onChanged={() => load(false)}
-									/>
-								</section>
-								<aside aria-label="Text focus" {...stylex.attrs(styles.pane)}>
-									<Show when={lineOpen()}>
-										<LinePageHeader
-											position={linePosition()}
-											onBack={closeLine}
-											onMove={moveLine}
+										<GameTextLocalizationQuality
+											disabled={operations.busy()}
+											client={props.client}
+											localization={localization}
+											summary={qualitySummary()}
+											document={qualityDocument()}
+											editor={editor}
+											setup={rulesSetup()}
+											exports={exports()}
+											filter={qualityFilter()}
+											onFilterChange={setQualityFilter}
+											selectedId={selectedFindingId()}
+											onSelectionChange={setSelectedFindingId}
+											onLoadRules={() => loadRules()}
+											onReloadRules={reloadRules}
+											onShowText={(id) => {
+												localization.setSelectedId(undefined);
+												setSelectedId(id);
+												setMode("corpus");
+											}}
 										/>
 									</Show>
-									<div {...stylex.attrs(lineOpen() && styles.pageBody)}>
-										<div>
-											<Show when={lineOpen()}>
-												<div {...stylex.attrs(styles.calloutBox)}>
-													<LineProblem
-														focus={focus()}
-														detail={localization.detail()}
-													/>
-												</div>
-											</Show>
-											<Show
-												when={focus()}
-												fallback={
-													<Show
-														when={
-															localization.detail()?.origin.kind ===
-															"evidence"
-																? localization.detail()
-																: undefined
-														}
-														fallback={
-															<Show
-																when={!localization.detailLoading()}
-																fallback={
-																	<p
-																		{...stylex.attrs(
-																			styles.empty
-																		)}
-																	>
-																		Loading translations…
-																	</p>
-																}
-															>
-																<FacetsPane
-																	page={page()}
-																	group={groupField()?.group}
-																	filter={filter()}
-																	folder={facetFolder()}
-																	onFolderChange={setFacetFolder}
-																	onFilterChange={setFilter}
-																/>
-															</Show>
-														}
-													>
-														{(gathered) => (
-															<div {...stylex.attrs(styles.detail)}>
-																<GatheredDetail
-																	focus={gathered()}
-																/>
-																<TranslationsDetail
-																	model={localization}
-																	edits={edits}
-																	review={{
-																		client: props.client,
-																		busy:
-																			loading() ||
-																			operations.busy(),
-																		onChanged: () => load(false)
-																	}}
-																/>
-															</div>
-														)}
-													</Show>
+								</Show>
+							}
+						>
+							<div {...stylex.attrs(styles.workspace)}>
+								<div {...stylex.attrs(styles.bar, styles.browseBar)}>
+									<div {...stylex.attrs(styles.search)}>
+										<svg
+											aria-hidden="true"
+											viewBox="0 0 24 24"
+											{...stylex.attrs(styles.searchIcon)}
+										>
+											<circle cx="10" cy="10" r="6" />
+											<path d="M15 15 L21 21" />
+										</svg>
+										<input
+											ref={(element) => {
+												searchInput = element;
+											}}
+											autofocus
+											type="search"
+											aria-label="Search game text"
+											placeholder={
+												localization.cultures().length > 0 &&
+												localization.searchTranslations()
+													? "Search text and translations"
+													: "Search text"
+											}
+											maxlength={512}
+											disabled={loading() && !summary()}
+											value={query()}
+											{...stylex.attrs(styles.input)}
+											onInput={(event) => setQuery(event.currentTarget.value)}
+											onKeyDown={(event) => {
+												if (event.key === "Enter" && localization.ready())
+													requestPage(searchRequest());
+											}}
+										/>
+										<span role="status" {...stylex.attrs(styles.count)}>
+											{searchFailed()
+												? "Search failed"
+												: searching() || !page()
+													? "Searching…"
+													: page()?.total === 1
+														? "1 match"
+														: page()?.total.toLocaleString() +
+															" matches"}
+										</span>
+										{/* An option of the search, so it lives in the field, as in an editor's find. */}
+										<Show
+											when={
+												localization.active() &&
+												localization.cultures().length > 0
+											}
+										>
+											<ToolButton
+												label="Search translations"
+												tooltip={
+													localization.searchTranslations()
+														? "On. Search source text and translations in the picked cultures."
+														: "Off. Search source text only. Turn on to include the picked cultures' translations."
+												}
+												aria-pressed={
+													localization.searchTranslations()
+														? "true"
+														: "false"
+												}
+												onClick={() =>
+													localization.setSearchTranslations(
+														!localization.searchTranslations()
+													)
 												}
 											>
-												{(current) => (
-													<div {...stylex.attrs(styles.detail)}>
-														<div {...stylex.attrs(styles.bar)}>
-															<h2 {...stylex.attrs(styles.title)}>
-																{sourceText(current().unit)}
-															</h2>
-															<CopyButton
-																label="Copy text"
-																value={sourceText(current().unit)}
-															/>
-														</div>
-														<div {...stylex.attrs(styles.bar)}>
-															<code {...stylex.attrs(styles.mono)}>
-																{identityLabel(current().unit)}
-															</code>
-															<Show
-																when={
-																	current().unit.identity
-																		.status !== "unresolved"
-																}
-															>
+												<ToolIcon name="translations" />
+											</ToolButton>
+										</Show>
+										<kbd
+											{...stylex.attrs(
+												browseStyles.keyboard,
+												styles.shortcut
+											)}
+										>
+											{/Mac|iPhone|iPad/.test(navigator.platform)
+												? "⌘ K"
+												: "Ctrl K"}
+										</kbd>
+									</div>
+									<div {...stylex.attrs(styles.browseActions)}>
+										<WhereFilter
+											where={where()}
+											counts={page()?.counts.origins}
+											fileScope={page()?.fileScope}
+											searching={searching()}
+											disabled={loading() && !summary()}
+											filesOnly
+											onChange={setWhere}
+										/>
+										<FilterMenu
+											filter={filter()}
+											counts={filterCounts()}
+											hasTarget={localization.active() !== undefined}
+											disabled={loading() && !summary()}
+											onChange={setFilter}
+											extraFields={extraFields()}
+											folderBrowser={(typed) => (
+												<FolderBrowser
+													menu
+													typed={typed()}
+													list={page()?.facets?.folders}
+													folder={facetFolder()}
+													filter={filter()}
+													onFolderChange={setFacetFolder}
+													onFilterChange={setFilter}
+												/>
+											)}
+										/>
+										<DisplayMenu
+											group={
+												group() === "none" ? undefined : groupField()?.group
+											}
+											disabled={loading() && !summary()}
+											onGroupChange={(next) => setGroup(next ?? "none")}
+										/>
+										{exports()}
+										{/* At the edge above the pane it shows or hides, like an editor's panel toggle. */}
+										<span
+											aria-hidden="true"
+											{...stylex.attrs(styles.divider)}
+										/>
+										<ToolButton
+											label="Side pane"
+											tooltip={
+												paneCollapsed()
+													? "Show line details and where the lines are beside the list."
+													: "Give the list the full width. Your drafts are kept."
+											}
+											aria-pressed={paneCollapsed() ? "false" : "true"}
+											onClick={() => {
+												const hide = !paneCollapsed();
+												setPaneCollapsed(hide);
+												// The toggle keeps focus; only an open line closes.
+												if (hide && lineOpen()) closeLine(false);
+											}}
+										>
+											<ToolIcon name="panel" />
+										</ToolButton>
+									</div>
+								</div>
+								<Show
+									when={
+										filter().length > 0 ||
+										localization.state() ||
+										localization.review()
+									}
+								>
+									<div {...stylex.attrs(styles.bar)}>
+										<FilterPills filter={filter()} onChange={setFilter} />
+										<Show when={localization.state()}>
+											{(state) => (
+												<Chip
+													label={localizationLabels[state()]}
+													selected
+													onClick={() => localization.setState(undefined)}
+												/>
+											)}
+										</Show>
+										<Show when={localization.review()}>
+											{(review) => (
+												<Chip
+													label={reviewLensLabel(review())}
+													selected
+													onClick={() =>
+														localization.setReview(undefined)
+													}
+												/>
+											)}
+										</Show>
+									</div>
+								</Show>
+								<div
+									{...stylex.attrs(
+										styles.grid,
+										collapsed() && styles.gridCollapsed
+									)}
+								>
+									{/* Keep the paged list beside the line detail so selection, groups and pages survive. */}
+									<section
+										aria-label="Results"
+										ref={navigation.setList}
+										{...stylex.attrs(styles.pane)}
+									>
+										<GameTextColumns culture={localization.culture()} />
+										<Show
+											when={page()?.groups}
+											fallback={
+												<GameTextResultRows
+													page={page()}
+													culture={localization.culture()}
+													cultures={localization.cultures()}
+													selectedId={selectedId()}
+													selectedLocalizationId={localization.selectedId()}
+													onSelect={(unit, line) => {
+														selectRow({ unit, line });
+													}}
+													checked={ticks()?.checked}
+													onCheck={ticks()?.onCheck}
+													checking={ticks()?.checking}
+												/>
+											}
+										>
+											{(groups) => (
+												<GroupedResults
+													revision={page()}
+													by={groups().by}
+													groups={groups().entries}
+													more={groups().more}
+													request={committedRequest() ?? searchRequest()}
+													client={props.client}
+													culture={localization.culture()}
+													cultures={localization.cultures()}
+													selectedId={selectedId()}
+													selectedLocalizationId={localization.selectedId()}
+													onSelect={(unit, line) => {
+														selectRow({ unit, line });
+													}}
+													onLoaded={groupLoaded}
+													ticks={ticks()}
+												/>
+											)}
+										</Show>
+										<Show
+											when={
+												localization.ready() &&
+												!searching() &&
+												page()?.total === 0
+											}
+										>
+											<p {...stylex.attrs(styles.empty)}>
+												No text matches {narrowing()}.
+												<Button
+													size="compact"
+													onClick={() => {
+														setQuery("");
+														setFilter([]);
+														setWhere(undefined);
+														setCapability("all");
+														setLens("all");
+														setWithoutNotes(false);
+														localization.setState(undefined);
+														localization.setReview(undefined);
+														localization.setKeyChanged(false);
+														localization.selectCulture("");
+													}}
+												>
+													Clear all
+												</Button>
+											</p>
+										</Show>
+										<Show
+											when={
+												!page()?.groups &&
+												(page()?.localization?.nextCursor ??
+													page()?.nextCursor)
+											}
+										>
+											<Button disabled={searching()} onClick={moreResults}>
+												Show{" "}
+												{Math.min(
+													50,
+													(page()?.total ?? 0) -
+														(page()?.localization?.lines.length ??
+															page()?.units.length ??
+															0)
+												)}{" "}
+												more
+											</Button>
+										</Show>
+										<BulkBar
+											selection={selection}
+											client={props.client}
+											localization={localization.selection()}
+											cultures={localization.cultures()}
+											nativeCulture={
+												localization.active()?.target.nativeCulture ??
+												undefined
+											}
+											edits={edits}
+											busy={loading() || operations.busy()}
+											onChanged={() => load(false)}
+										/>
+									</section>
+									<aside
+										aria-label="Text focus"
+										ref={navigation.setPane}
+										{...stylex.attrs(
+											styles.pane,
+											collapsed() && styles.hiddenPane
+										)}
+									>
+										<Show when={lineOpen()}>
+											<LinePageHeader
+												position={linePosition()}
+												onBack={closeLine}
+												onMove={moveLine}
+											/>
+										</Show>
+										<div {...stylex.attrs(lineOpen() && styles.pageBody)}>
+											<div>
+												<Show when={lineOpen()}>
+													<div {...stylex.attrs(styles.calloutBox)}>
+														<LineProblem
+															focus={focus()}
+															detail={localization.detail()}
+														/>
+													</div>
+												</Show>
+												<Show
+													when={focus()}
+													fallback={
+														<Show
+															when={
+																localization.detail()?.origin
+																	.kind === "evidence"
+																	? localization.detail()
+																	: undefined
+															}
+															fallback={
+																<Show
+																	when={
+																		!localization.detailLoading()
+																	}
+																	fallback={
+																		<p
+																			{...stylex.attrs(
+																				styles.empty
+																			)}
+																		>
+																			Loading translations…
+																		</p>
+																	}
+																>
+																	<FacetsPane
+																		page={page()}
+																		group={groupField()?.group}
+																		filter={filter()}
+																		folder={facetFolder()}
+																		onFolderChange={
+																			setFacetFolder
+																		}
+																		onFilterChange={setFilter}
+																	/>
+																</Show>
+															}
+														>
+															{(gathered) => (
+																<div
+																	{...stylex.attrs(styles.detail)}
+																>
+																	<GatheredDetail
+																		focus={gathered()}
+																	/>
+																	<TranslationsDetail
+																		model={localization}
+																		edits={edits}
+																		review={translationReview()}
+																	/>
+																</div>
+															)}
+														</Show>
+													}
+												>
+													{(current) => (
+														<div {...stylex.attrs(styles.detail)}>
+															<div {...stylex.attrs(styles.bar)}>
+																<h2 {...stylex.attrs(styles.title)}>
+																	{sourceText(current().unit)}
+																</h2>
 																<CopyButton
-																	label="Copy key"
-																	value={identityLabel(
+																	label="Copy text"
+																	value={sourceText(
 																		current().unit
 																	)}
 																/>
-															</Show>
-														</div>
-														<span {...stylex.attrs(styles.muted)}>
-															{focusStats(current())}
-														</span>
-														<Show
-															when={current().unit.reviewSignals.some(
-																(signal) =>
-																	signal !== "evidence_only"
-															)}
-														>
-															<span {...stylex.attrs(styles.warning)}>
-																{current()
-																	.unit.reviewSignals.filter(
-																		(signal) =>
-																			signal !==
-																			"evidence_only"
-																	)
-																	.map(textReviewSignalLabel)
-																	.join(" · ")}
-															</span>
-														</Show>
-														<TranslationsDetail
-															model={localization}
-															edits={edits}
-															review={{
-																client: props.client,
-																busy:
-																	loading() || operations.busy(),
-																onChanged: () => load(false)
-															}}
-														/>
-														<h3 {...stylex.attrs(styles.section)}>
-															Where it appears
-														</h3>
-														<For each={current().occurrences}>
-															{(occurrence) => (
-																<OccurrenceCard
-																	client={props.client}
-																	occurrence={occurrence}
-																	conflicting={
-																		current().unit.source
-																			.status ===
-																		"conflicting"
-																	}
-																	onOpenDataAuthoring={
-																		props.onOpenDataAuthoring
-																	}
-																/>
-															)}
-														</For>
-														<CoverageNotes
-															diagnostics={current().diagnostics}
-														/>
-														<Show when={current().nextOccurrenceCursor}>
-															{(cursor) => (
-																<Button
-																	onClick={() =>
-																		requestFocus(
-																			current().unit.id,
-																			cursor()
-																		)
+															</div>
+															<div {...stylex.attrs(styles.bar)}>
+																<code
+																	{...stylex.attrs(styles.mono)}
+																>
+																	{identityLabel(current().unit)}
+																</code>
+																<Show
+																	when={
+																		current().unit.identity
+																			.status !== "unresolved"
 																	}
 																>
-																	Show{" "}
-																	{textCountLabel(
-																		Math.min(
-																			50,
-																			current()
-																				.totalOccurrences -
+																	<CopyButton
+																		label="Copy key"
+																		value={identityLabel(
+																			current().unit
+																		)}
+																	/>
+																</Show>
+															</div>
+															<span {...stylex.attrs(styles.muted)}>
+																{focusStats(current())}
+															</span>
+															<Show
+																when={current().unit.reviewSignals.some(
+																	(signal) =>
+																		signal !== "evidence_only"
+																)}
+															>
+																<span
+																	{...stylex.attrs(styles.muted)}
+																>
+																	{current()
+																		.unit.reviewSignals.filter(
+																			(signal) =>
+																				signal !==
+																				"evidence_only"
+																		)
+																		.map(textReviewSignalLabel)
+																		.join(" · ")}
+																</span>
+															</Show>
+															<TranslationsDetail
+																model={localization}
+																edits={edits}
+																review={translationReview()}
+															/>
+															<h3 {...stylex.attrs(styles.section)}>
+																Where it appears
+															</h3>
+															<For each={current().occurrences}>
+																{(occurrence) => (
+																	<OccurrenceCard
+																		client={props.client}
+																		occurrence={occurrence}
+																		conflicting={
+																			current().unit.source
+																				.status ===
+																			"conflicting"
+																		}
+																		onOpenDataAuthoring={
+																			props.onOpenDataAuthoring
+																		}
+																	/>
+																)}
+															</For>
+															<CoverageNotes
+																diagnostics={current().diagnostics}
+															/>
+															<Show
+																when={
+																	current().nextOccurrenceCursor
+																}
+															>
+																{(cursor) => (
+																	<Button
+																		onClick={() =>
+																			requestFocus(
+																				current().unit.id,
+																				cursor()
+																			)
+																		}
+																	>
+																		Show{" "}
+																		{textCountLabel(
+																			Math.min(
+																				50,
 																				current()
-																					.occurrences
-																					.length
-																		),
-																		"more location"
-																	)}
-																</Button>
-															)}
-														</Show>
-													</div>
-												)}
+																					.totalOccurrences -
+																					current()
+																						.occurrences
+																						.length
+																			),
+																			"more location"
+																		)}
+																	</Button>
+																)}
+															</Show>
+														</div>
+													)}
+												</Show>
+											</div>
+											<Show when={lineOpen()}>
+												<LineProperties
+													focus={focus()}
+													detail={localization.detail()}
+												/>
 											</Show>
 										</div>
-										<Show when={lineOpen()}>
-											<LineProperties
-												focus={focus()}
-												detail={localization.detail()}
-											/>
-										</Show>
-									</div>
-								</aside>
+									</aside>
+								</div>
 							</div>
-						</div>
+						</Show>
 					</Show>
 				</Show>
-			</Show>
-			<Show when={summary()}>
-				{(current) => (
+			</div>
+			<Show when={mode() === "corpus" ? summary() : undefined}>
+				{(_current) => (
 					<footer {...stylex.attrs(browseStyles.footer)}>
+						<BrowseSummary page={page()} />
+						<span {...stylex.attrs(styles.grow)} />
+						<Show when={!indexBusy() && preparationSeconds() !== undefined}>
+							<span title="Time from opening the project to its first results">
+								Ready in {elapsedTime(preparationSeconds() ?? 0)}
+							</span>
+						</Show>
 						<Show when={queryMs() !== undefined}>
 							<span title="Last successful query round trip, excluding the typing debounce">
 								Last query {Math.round(queryMs() ?? 0)} ms
 							</span>
 						</Show>
-						<span>Matching lines: {page()?.total.toLocaleString() ?? "—"}</span>
-						<span {...stylex.attrs(styles.grow)} />
-						<span>
-							{localization.active()?.target.cultures.length ?? 0} cultures ·{" "}
-							{current().coverage.inspectedPackages.toLocaleString()} assets
-						</span>
+						<Show when={localization.active()}>
+							{(active) => (
+								<span>
+									{localization.cultures().length > 0
+										? `${localization.cultures().length.toLocaleString()} of `
+										: ""}
+									{textCountLabel(active().target.cultures.length, "culture")}
+								</span>
+							)}
+						</Show>
 					</footer>
 				)}
 			</Show>
@@ -1731,9 +1984,9 @@ export function OccurrenceCard(props: {
 }) {
 	return (
 		<article {...stylex.attrs(styles.card)}>
-			<div {...stylex.attrs(styles.toolbar)}>
+			<div {...stylex.attrs(styles.bar)}>
 				<strong>{textLocationLabel(props.occurrence.location)}</strong>
-				<span {...stylex.attrs(styles.coverage)}>
+				<span {...stylex.attrs(styles.muted, styles.exports)}>
 					{props.occurrence.editCapability === "source_editable"
 						? "Editable"
 						: "Read only"}

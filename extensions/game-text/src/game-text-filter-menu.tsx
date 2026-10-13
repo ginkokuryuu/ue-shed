@@ -5,7 +5,7 @@ import type {
 	TextFilterField,
 	TextGroupList
 } from "@ue-shed/game-text/browser";
-import { AnchoredPopover, Button } from "@ue-shed/ui";
+import { AnchoredPopover, Button, ToolButton, ToolIcon } from "@ue-shed/ui";
 import { tokens } from "@ue-shed/ui-theme/tokens.stylex.js";
 import { For, Show, createMemo, createSignal, createUniqueId } from "solid-js";
 import type { JSX } from "@solidjs/web";
@@ -13,6 +13,7 @@ import {
 	CHOICE_FIELDS,
 	FIELD_LABELS,
 	clauseParts,
+	flipClause,
 	hasValue,
 	toggleValue,
 	type ChoiceField
@@ -42,6 +43,8 @@ interface Option {
 	readonly label: string;
 	readonly count: number | undefined;
 	readonly selected: boolean;
+	/** Chosen in an "is not" pill: marked as left out rather than ticked. */
+	readonly excluded?: boolean;
 	readonly select: () => void;
 }
 
@@ -82,12 +85,15 @@ export function FilterMenu(props: {
 	const [active, setActive] = createSignal<string>();
 	const [subTyped, setSubTyped] = createSignal("");
 	const [subTop, setSubTop] = createSignal(0);
+	const [subRight, setSubRight] = createSignal(false);
 	const toggle = (field: TextFilterField, value: string) => {
 		const clause = makeClause(field, value);
 		if (clause !== undefined) props.onChange(toggleValue(props.filter, clause));
 	};
 	const chosen = (field: TextFilterField, value: string) =>
 		hasValue(props.filter, field, value) || hasValue(props.filter, field, value, "is_not");
+	const excluded = (field: TextFilterField, value: string) =>
+		hasValue(props.filter, field, value, "is_not");
 	const choiceField = (field: ChoiceField): Field => ({
 		key: field,
 		label: FIELD_LABELS[field],
@@ -110,6 +116,7 @@ export function FilterMenu(props: {
 						label,
 						count,
 						selected: chosen(field, value),
+						excluded: excluded(field, value),
 						select: () => toggle(field, value)
 					}
 				];
@@ -130,6 +137,7 @@ export function FilterMenu(props: {
 						label: entry.label,
 						count: entry.count,
 						selected: chosen(field, value),
+						excluded: excluded(field, value),
 						select: () => toggle(field, value)
 					};
 				});
@@ -140,9 +148,10 @@ export function FilterMenu(props: {
 						...found,
 						{
 							key: `folder-typed:${needle}`,
-							label: `Starts with ${needle}`,
+							label: `Path starts with ${needle}`,
 							count: undefined,
 							selected: chosen("folder", needle),
+							excluded: excluded("folder", needle),
 							select: () => toggle("folder", needle)
 						}
 					]
@@ -189,10 +198,33 @@ export function FilterMenu(props: {
 					return options.length === 0 ? [] : [{ field, options }];
 				})
 	);
-	const openField = (key: string, row: HTMLElement) => {
+	let activeRow: HTMLElement | undefined;
+	let submenu: HTMLDivElement | undefined;
+	const openField = (key: string, row: HTMLElement, focus = false) => {
+		activeRow = row;
 		if (active() !== key) setSubTyped("");
 		setActive(key);
 		setSubTop(row.offsetTop);
+		queueMicrotask(() => {
+			if (active() !== key || !submenu) return;
+			const panel = row.closest('[role="dialog"]')?.getBoundingClientRect();
+			if (panel) {
+				setSubRight(panel.left < 280);
+				setSubTop(
+					Math.max(
+						8 - panel.top,
+						Math.min(
+							row.offsetTop,
+							window.innerHeight -
+								panel.top -
+								submenu.getBoundingClientRect().height -
+								8
+						)
+					)
+				);
+			}
+			if (focus) submenu.querySelector<HTMLInputElement>("input")?.focus();
+		});
 	};
 	return (
 		<AnchoredPopover
@@ -209,15 +241,16 @@ export function FilterMenu(props: {
 			placement="bottom-end"
 			style={styles.panel}
 			trigger={(trigger) => (
-				<Button
+				<ToolButton
 					{...trigger}
-					type="button"
-					size="compact"
+					label="Filter"
+					showLabel
+					badge={props.filter.length || undefined}
+					badgeLabel={`${props.filter.length.toLocaleString()} active`}
 					disabled={props.disabled}
-					aria-keyshortcuts="F"
 				>
-					Filter
-				</Button>
+					<ToolIcon name="filter" />
+				</ToolButton>
 			)}
 		>
 			<input
@@ -263,17 +296,27 @@ export function FilterMenu(props: {
 												active() === field.key ? "true" : "false"
 											}
 											onPointerEnter={(event) =>
-												openField(field.key, event.currentTarget)
+												openField(
+													field.key,
+													event.currentTarget,
+													event.detail === 0
+												)
 											}
 											onClick={(event) =>
-												openField(field.key, event.currentTarget)
+												openField(
+													field.key,
+													event.currentTarget,
+													event.detail === 0
+												)
 											}
 											onKeyDown={(event) => {
 												if (
 													event.key === "ArrowRight" ||
 													event.key === "Enter"
-												)
-													openField(field.key, event.currentTarget);
+												) {
+													event.preventDefault();
+													openField(field.key, event.currentTarget, true);
+												}
 											}}
 											{...stylex.attrs(
 												styles.field,
@@ -308,14 +351,19 @@ export function FilterMenu(props: {
 				{(field) => (
 					<div
 						role="menu"
+						ref={(element) => {
+							submenu = element;
+						}}
 						aria-label={field().label}
 						onKeyDown={(event) => {
 							if (event.key === "ArrowLeft" || event.key === "Escape") {
+								event.preventDefault();
 								event.stopPropagation();
 								setActive(undefined);
+								queueMicrotask(() => activeRow?.focus());
 							}
 						}}
-						{...stylex.attrs(styles.submenu)}
+						{...stylex.attrs(styles.submenu, subRight() && styles.submenuRight)}
 						style={{ top: `${subTop()}px` }}
 					>
 						<input
@@ -357,9 +405,10 @@ function OptionRows(props: { readonly options: readonly Option[] }) {
 					role="menuitemcheckbox"
 					aria-checked={option.selected ? "true" : "false"}
 					aria-label={
-						option.count === undefined
+						(option.count === undefined
 							? option.label
-							: `${option.label} ${option.count.toLocaleString()}`
+							: `${option.label} ${option.count.toLocaleString()}`) +
+						(option.excluded ? ", left out" : "")
 					}
 					onClick={() => option.select()}
 					{...stylex.attrs(styles.option)}
@@ -368,7 +417,7 @@ function OptionRows(props: { readonly options: readonly Option[] }) {
 						aria-hidden="true"
 						{...stylex.attrs(styles.box, option.selected && styles.boxOn)}
 					>
-						{option.selected ? "✓" : ""}
+						{option.excluded ? "−" : option.selected ? "✓" : ""}
 					</span>
 					<span {...stylex.attrs(styles.label)}>{option.label}</span>
 					<Show when={option.count !== undefined}>
@@ -423,14 +472,7 @@ export function FilterPills(props: {
 	readonly filter: TextFilter;
 	readonly onChange: (filter: TextFilter) => void;
 }) {
-	const flip = (index: number) =>
-		props.onChange(
-			props.filter.map((clause, position) =>
-				position === index
-					? { ...clause, op: clause.op === "is" ? ("is_not" as const) : ("is" as const) }
-					: clause
-			)
-		);
+	const flip = (index: number) => props.onChange(flipClause(props.filter, index));
 	return (
 		<Show when={props.filter.length > 0}>
 			<div role="list" aria-label="Filters" {...stylex.attrs(styles.pills)}>
@@ -448,7 +490,10 @@ export function FilterPills(props: {
 								>
 									{parts().op}
 								</button>
-								<span {...stylex.attrs(styles.pillPart, styles.pillValue)}>
+								<span
+									title={parts().values}
+									{...stylex.attrs(styles.pillPart, styles.pillValue)}
+								>
 									{parts().values}
 								</span>
 								<button
@@ -499,6 +544,7 @@ const styles = stylex.create({
 		padding: 4,
 		zIndex: 20
 	},
+	submenuRight: { left: "calc(100% + 6px)", right: "auto" },
 	submenu: {
 		borderWidth: 1,
 		borderStyle: "solid",
@@ -631,7 +677,13 @@ const styles = stylex.create({
 		cursor: "pointer",
 		backgroundColor: { default: "transparent", ":hover": tokens.colorSurfaceHover }
 	},
-	pillValue: { color: tokens.colorTextStrong },
+	pillValue: {
+		maxWidth: 320,
+		overflow: "hidden",
+		textOverflow: "ellipsis",
+		whiteSpace: "nowrap",
+		color: tokens.colorTextStrong
+	},
 	pillRemove: {
 		backgroundColor: { default: "transparent", ":hover": tokens.colorSurfaceHover },
 		color: tokens.colorTextMuted,

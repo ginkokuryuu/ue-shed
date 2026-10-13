@@ -161,7 +161,8 @@ const approvedRawFetchAdapters = new Set([
 	"packages/unreal-connection/src/remote-control-client.ts"
 ]);
 const approvedResourceAdapters = new Set([
-	// Ctrl+K belongs to the Solid owner and is removed by onSettled cleanup.
+	// Ctrl+K, page-hide and the preference save timer belong to the Solid owner; onSettled cleanup
+	// removes them and flushes the pending save.
 	"extensions/game-text/src/game-text-query-route.tsx",
 	// Search listeners and cancellation flags belong to the pinned reader's worker scope.
 	"packages/game-text/src/search-worker-node.ts",
@@ -179,6 +180,10 @@ const approvedResourceAdapters = new Set([
 	// Popover DOM listeners and animation frames are released by Solid effect/onSettled cleanup;
 	// anchored-popover.component.test.tsx verifies close and unmount teardown.
 	"packages/ui/src/anchored-popover.tsx",
+	// Tooltip timers belong to the Solid owner and are cancelled on cleanup; document/window
+	// listeners and animation frames exist only while a tooltip is open and are released by effect
+	// cleanup. tool-button.component.test.tsx verifies pending/open teardown.
+	"packages/ui/src/tool-button.tsx",
 	// Shared file-drop listeners are limited to the containing viewer and released on teardown.
 	"packages/ui/src/file-drop-zone.tsx",
 	// Native details light-dismiss listeners belong to the Solid owner and are removed on unmount;

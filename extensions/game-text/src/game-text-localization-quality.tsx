@@ -16,7 +16,7 @@ import {
 } from "@ue-shed/game-text/browser";
 import { Button, Chip, createEffectAction } from "@ue-shed/ui";
 import { Effect } from "effect";
-import { For, Show, createEffect, createSignal } from "solid-js";
+import { For, Show, createEffect, createSignal, untrack } from "solid-js";
 import type { JSX } from "@solidjs/web";
 import type { GameTextClientApi } from "./game-text-client.js";
 import type { GameTextLocalizationState } from "./game-text-localization-state.js";
@@ -179,7 +179,7 @@ export function GameTextLocalizationQuality(props: {
 		return target ? { target, ...(culture ? { culture } : undefined) } : undefined;
 	};
 	const load = (offset?: number) => {
-		const selected = selection(),
+		const selected = untrack(selection),
 			operation = props.client.localizationQualitySearch;
 		if (!selected || !operation) return;
 		const version = ++revision;
@@ -215,7 +215,7 @@ export function GameTextLocalizationQuality(props: {
 						setMessage(
 							result.status === "failed"
 								? result.message + " " + result.recovery
-								: "Writing checks are unavailable. Rescan to try again."
+								: "Quality checks are unavailable. Rescan to try again."
 						);
 					}
 				}
@@ -227,7 +227,7 @@ export function GameTextLocalizationQuality(props: {
 		occurrenceOffset?: number,
 		poContextOffset?: number
 	) => {
-		const selected = selection(),
+		const selected = untrack(selection),
 			operation = props.client.localizationQualityFocus;
 		if (!selected || !operation) return;
 		const version = ++focusRevision;
@@ -366,7 +366,7 @@ export function GameTextLocalizationQuality(props: {
 			}
 		);
 	const resolveAll = () => {
-		const selected = selection(),
+		const selected = untrack(selection),
 			operation = props.client.localizationChanges;
 		if (!selected || !operation) return;
 		const version = revision;
@@ -446,7 +446,7 @@ export function GameTextLocalizationQuality(props: {
 					)}
 				</For>
 				<div
-					title="Exports and presets include source writing checks."
+					title="Exports and presets include the matching source and translation findings."
 					{...stylex.attrs(styles.exports)}
 				>
 					{props.exports}
@@ -482,7 +482,7 @@ export function GameTextLocalizationQuality(props: {
 						disabled={props.disabled}
 						onClick={props.onLoadRules}
 					>
-						Load rules
+						Choose another rules file…
 					</Button>
 				</Show>
 			</div>
@@ -492,7 +492,7 @@ export function GameTextLocalizationQuality(props: {
 					((page()?.limits.length ?? 0) > 0 || (page()?.unsupportedRuleCultures ?? 0) > 0)
 				}
 			>
-				<p {...stylex.attrs(styles.muted)}>
+				<p {...stylex.attrs(styles.empty)}>
 					Checks limited:{" "}
 					{(page()?.limits ?? [])
 						.map(
@@ -552,11 +552,11 @@ export function GameTextLocalizationQuality(props: {
 									)}
 								>
 									<span {...stylex.attrs(styles.rowText)}>{finding.source}</span>
-									<span {...stylex.attrs(styles.context, styles.warning)}>
-										{finding.problem}
-									</span>
+									<span {...stylex.attrs(styles.context)}>{finding.problem}</span>
 									<span {...stylex.attrs(styles.context, styles.mono)}>
-										{finding.context}
+										{finding.context.startsWith(finding.problem + " · ")
+											? finding.context.slice(finding.problem.length + 3)
+											: finding.context}
 									</span>
 								</button>
 							)}
@@ -567,7 +567,10 @@ export function GameTextLocalizationQuality(props: {
 							</p>
 						</Show>
 						<Show when={!loading() && page()?.total === 0}>
-							<p {...stylex.attrs(styles.empty)}>No findings match this filter.</p>
+							<p {...stylex.attrs(styles.empty)}>
+								No findings match this filter. Results cover the scanned, readable
+								text; an incomplete scan can miss findings.
+							</p>
 						</Show>
 						<Show when={page()?.nextOffset !== undefined}>
 							<Button disabled={loading()} onClick={() => load(page()?.nextOffset)}>
@@ -601,7 +604,7 @@ export function GameTextLocalizationQuality(props: {
 														role="status"
 														{...stylex.attrs(styles.muted)}
 													>
-														Loading writing checks…
+														Loading quality checks…
 													</p>
 												) : undefined
 											}
@@ -620,7 +623,22 @@ export function GameTextLocalizationQuality(props: {
 													<For each={page()?.rules ?? []}>
 														{(rule) => (
 															<tr>
-																<td>{rule.ruleId}</td>
+																<td title={rule.ruleId}>
+																	{rule.ruleId.startsWith(
+																		"localization."
+																	)
+																		? workspaceQualityLabels[
+																				WorkspaceQualityFilter.literals.find(
+																					(filter) =>
+																						filter ===
+																						rule.ruleId.slice(
+																							"localization."
+																								.length
+																						)
+																				) ?? "all"
+																			]
+																		: rule.ruleId}
+																</td>
 																<td>{rule.findingCount}</td>
 															</tr>
 														)}
@@ -709,7 +727,7 @@ export function GameTextLocalizationQuality(props: {
 														Text preview shortened.
 													</span>
 												</Show>
-												<span {...stylex.attrs(styles.warning)}>
+												<span {...stylex.attrs(styles.findingFacts)}>
 													{finding().problem}
 												</span>
 												<h3 {...stylex.attrs(styles.section)}>
@@ -855,7 +873,7 @@ export function GameTextLocalizationQuality(props: {
 														Text preview shortened.
 													</span>
 												</Show>
-												<span {...stylex.attrs(styles.warning)}>
+												<span {...stylex.attrs(styles.findingFacts)}>
 													{qualityFindingFacts(finding())}
 												</span>
 												<h3 {...stylex.attrs(styles.section)}>
