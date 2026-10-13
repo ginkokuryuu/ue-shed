@@ -58,12 +58,17 @@ pnpm install --frozen-lockfile
 pnpm release:version
 pnpm check
 pnpm check:unreal
+pnpm release:pack:clean-check
 ```
 
 `release:version` updates package manifests, exact internal dependency pins, changelogs, the
 lockfile, Rust/native version metadata, generated artifact metadata, and Unreal plugin descriptors.
 Review those changes and commit them as the release commit. `pnpm check:unreal` is required when the release changes Unreal-facing behavior, native
 saved-asset evidence, or plugin artifacts. For a portable-only release, record why it was omitted.
+
+`release:pack:clean-check` packs the committed release in a temporary worktree with no prior build
+output, which proves the pack step builds packages in workspace dependency order. Commit the release
+before running it.
 
 The normal package gate builds and packs every public package, validates metadata and checksums,
 installs the tarballs into a clean offline consumer, and exercises the saved-project Game Text

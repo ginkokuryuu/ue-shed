@@ -55,6 +55,7 @@
 		"release:version": "changeset version && node scripts/sync-native-versions.ts && pnpm install --lockfile-only",
 		"release": "node scripts/release.ts",
 		"release:pack": "node scripts/pack-public-packages.ts --output out/releases/npm",
+		"release:pack:clean-check": "node scripts/check-clean-release-pack.ts",
 		"sync:native-versions": "node scripts/sync-native-versions.ts",
 		"release:plugins": "node scripts/release-plugin-bundle.ts full",
 		"release:plugins:authoring-automation": "node scripts/release-plugin-bundle.ts authoring-automation",
