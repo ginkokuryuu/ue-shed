@@ -7,6 +7,26 @@ Workbench. Domain storage stays outside the native Catalog. Package, localizatio
 layers are published through `GameTextIndexBuilder`; every host uses the shared refresh service.
 The native Catalog supplies bounded committed signature inventory, as described below.
 
+## Canonical performance policy
+
+[ADR 0010](../decisions/0010-game-text-performance-policy.md) adopts the measured, bounded pipeline.
+These are shared library defaults, not Workbench-only optimizations. Cold parsing starts immediately
+with size-weighted reservations and up to eight workers; one oversized task can run alone. Parser
+workers prepare sorted string runs and hashes. Larger layer conversions use workers while the
+coordinator retains dictionary IDs, leases and publication. Reservations estimate memory use.
+
+Queries warm bounded default pages and load other fields on demand. Review and raw focus use numeric
+identity lookup. Locale sorting decodes stable runs bounded by 8,192 entries and 4 MiB of encoded
+bytes, allowing one oversized identifier alone, then merges one decoded head per run. Optional
+source caching follows the format and overlay bounds below. Numeric sections remain zstd level 1;
+string/import domains retain their measured compression policy.
+
+The accepted generated 1× cache is 81.8 MiB. This fixture result does not impose a global cache quota
+across projects, targets, staging or pinned generations. Full measurements and rejected alternatives
+are in the [consolidated experiment record](../research/game-text-pipeline-performance-2026-10-13.md).
+Backend adoption remains governed by the shared builder contract below. Gather coverage is unchanged;
+see [the comparison with Unreal gather](game-text-gather-coverage.md).
+
 The Node adapter uses built-in zstd and CRC32, verified on Node 24 and 26. Store activation on a
 runtime without zstd fails with typed upgrade guidance. Other package exports remain loadable.
 

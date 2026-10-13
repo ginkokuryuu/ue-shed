@@ -1,130 +1,175 @@
-# Game Text pipeline performance investigation
+# Game Text performance experiments — consolidated 2026-10-13
 
-Measured during a two-hour investigation beginning **2026-10-12 15:45:23 UTC** (the session
-crossed into October 13 in Bangkok). Baseline: `8a45ffaf`, including the Game Text UX changes.
-The [aggregate evidence](game-text-pipeline-performance-2026-10-13.json) retains samples, ranges,
-counts and output hashes. Temporary harnesses, logs and native binaries are under ignored
-`out/game-text-perf-20261012/`.
+[ADR 0010](../decisions/0010-game-text-performance-policy.md) adopts the retained implementation
+at `5332c6e1` in performance PR #67, stacked on UX PR #66. The accepted generated 1× cache is
+**81.8 MiB**. This record consolidates the initial two-hour investigation and both one-hour
+continuations. It records historical measurements; [Game Text snapshots](../engineering/game-text-snapshots.md)
+owns the maintained implementation contract.
 
-## Method and boundaries
+## Results and measurement boundaries
 
-Windows, Node 26.5.0, Rust 1.93.0-nightly; release native builds use the repository's thin LTO
-and one codegen unit. Timed runs were sequential, with alternating before/after order. OS caches
-were warm; a cold application run means a fresh derived cache, not cold disk. Measurements use
-generic committed fixtures or retained generated 1× inputs. No studio project or 10× run was used.
+Windows, Node 26.5.0; initial native builds use Rust 1.93.0-nightly, release thin LTO and one codegen
+unit. Runs alternate revisions in fresh processes with warm OS caches. Cold means a fresh derived
+cache. The generated 1× workload has 16,500 package records, 21 localization files, ten cultures,
+583,507 lines and 1,028,205 saved occurrences. Its retained-record runs exclude native discovery and
+extraction. The separate 12k native workload copies three committed fixture packages and produces
+88,000 occurrences. No studio-project or 10× measurement was used.
 
-- Native extraction: 12,000 physical copies of three committed text packages, 88,000 occurrences,
-  approximately 37 MB of output. A 5 ms sampler observes Windows peak working set. Three paired
-  release runs compare the baseline and final binaries; package-event hashes must match.
-- Complete native/TypeScript pipeline: the same packages through the public refresh service,
-  Project Index, extraction, signature checks, snapshot builder and first query. Three fresh
-  processes per variant; the first bounded page contains all 22 logical units. A 10 ms independent
-  sampler observes Node (including its threads), native children and aggregate RSS.
-- Retained 1×: 583,507 lines, 1,028,205 saved occurrences and ten cultures. Warm refresh uses the
-  existing production index and retained signature inventory; native enumeration/extraction is
-  excluded. Three processes per variant; 50-line page hashes match.
-- Quality evaluation: seven alternating comparisons per shape, with input creation, GC and report
-  hashing outside the timed function. These measure evaluation, not index hydration or UI display.
+Latest cache phase: three alternating processes per revision and mode, baseline `87489f75` versus
+accepted `5332c6e1`. An independent parent samples Node RSS every 10 ms. Reopening uses an existing
+cache in another fresh process. The table contains medians, not an already-open query-only timer.
 
-The public-pipeline timer ends at the returned first page. Electron launch, painting and typing
-debounce are excluded. Checkpoint array-buffer sizes are not sampled peak RSS. The native and
-pipeline RSS numbers use the independent samplers; short-lived allocations can still escape a
-sampling interval. These are local measurements, not performance guarantees.
+| Latest retained 1× measurement                 |      Before |       After |
+| ---------------------------------------------- | ----------: | ----------: |
+| Settled derived cache                          |    79.1 MiB |    81.8 MiB |
+| Cold refresh to query readiness                |     72.55 s |     69.14 s |
+| Serial join                                    |     23.78 s |     21.80 s |
+| Unchanged refresh/reopen to readiness          |     3.347 s |     2.450 s |
+| First empty page after reopening               |    11.66 ms |    11.07 ms |
+| First absent `text` search after reopening     |    39.55 ms |    24.26 ms |
+| First absent `Continue` search after reopening |    26.50 ms |    22.50 ms |
+| First matching `velora` search                 |    67.67 ms |    66.94 ms |
+| First sparse `45678` search, 16 matches        |    50.78 ms |    55.64 ms |
+| Cold peak Node RSS                             | 2,463.2 MiB | 2,372.2 MiB |
+| Reopening peak Node RSS                        |   879.0 MiB |   836.5 MiB |
 
-## Experiments and decisions
+The extra 2.7 MiB improves reopening **26.8%** and cold readiness **4.7%**. Matching searches have
+no general improvement; the sparse first search is about 5 ms slower. Cold RSS ranges overlap:
+2,406.5–2,494.7 MiB before, 2,349.6–2,569.8 MiB after. This is not a hard memory bound.
 
-Times below are medians unless explicitly labelled as a single observation. Each row names its
-workload; timings from different rows must not be added together.
+The 150 MiB allowance covers this fixture's settled derived Game Text cache. Native Catalog,
+retained inputs, staging, other experiment copies and arbitrary extra targets/pinned generations
+are outside that figure. The unused allowance is not a reason to add a second representation.
 
-| Tried                                                                                       |                                                                           Before |                                   After | Decision                                                                                                                                                     |
-| ------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------: | --------------------------------------: | ------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| Bounded, ordered Rust delivery, 12k packages                                                |                                                    1.407 s; 72.4 MiB native peak |                       1.274 s; 15.5 MiB | **Keep.** At most two jobs per worker remain in flight. A slow package cannot grow the reorder buffer indefinitely.                                          |
-| Avoid an unnecessary file-type stat during validated package-path selection                 |                                                                          1.274 s |                                 1.040 s | **Keep.** Canonical containment and invalid-extension checks remain.                                                                                         |
-| Resolve large explicit path lists concurrently within the requested worker limit            |                                                                          1.040 s |                                 0.673 s | **Keep.** Small selections stay serial; failures retain input order.                                                                                         |
-| Final Rust changes together, paired final release binaries                                  |                                          1.414 s; first result 1.235 s; 72.3 MiB | 0.667 s; first result 0.427 s; 16.2 MiB | **Keep.** Identical 12k package/88k occurrence hashes; measured package progress is emitted during inspection.                                               |
-| Verify package/sidecar signatures with 16 bounded fibers, 12k bundles and 96k stats         |                                                                          6.014 s |                                 2.193 s | **Keep.** Both the pre-read and post-read checks remain; changed sidecars abort the read.                                                                    |
-| Remove all query prefetching, older retained 1× projection                                  |                               Initial preparation 2.444 s; 999 MiB array buffers |                        1.829 s; 615 MiB | **Reject the blanket version.** In the fresh host comparison, first-query latency rose from 37.5 to 186.8 ms.                                                |
-| Replace full-column prefetch with bounded default-page warming, same retained 1× cache      |                                    First page 60.3 ms; peak Node RSS 1,064.7 MiB |                      11.6 ms; 869.9 MiB | **Keep.** Unused occurrence, culture and rule fields remain lazy behind pinned readers.                                                                      |
-| Trim excessive backing capacity in the prepared source arena                                |                                                           128 MiB source backing |                                72.5 MiB | **Keep.** A single copy is used only when spare capacity exceeds 25%; original encoded text remains unchanged.                                               |
-| Reject known lowercase ASCII sources for a non-ASCII query, 1× absent `é` search            |                                                                        160.75 ms |                                13.38 ms | **Keep.** Other sources retain locale-sensitive folding and WTF-8 behavior, with cancellation checkpoints.                                                   |
-| Replace repeated occurrence-array copying in quality grouping, 16k / 32k shared occurrences |                                                             637.73 / 2,556.77 ms |                          3.40 / 4.40 ms | **Keep.** Local accumulation preserves sorted output and never mutates corpus inputs.                                                                        |
-| Prepare terminology ordering/regexes once per rule, 50k units × 20 absent terms             |                                                             Approximately 650 ms |                    Approximately 201 ms | **Keep, then refine.** This intermediate comparison is recorded in `quality-results.log`.                                                                    |
-| Add safe literal rejection before regex matching on the same terminology workload           |                                                               648.88 ms original |                       64.52 ms combined | **Keep.** ASCII-only insensitive rejection and sensitive literal rejection are safe; positive matches and Unicode folding still use RegExp.                  |
-| Cache the raw-unit → localization-line reverse index, 60 distributed focus requests         |                                                                        125.88 ms |                                 7.33 ms | **Keep.** Uses a roughly 2.2 MiB numeric array and preserves the prior last-matching-line behavior. Some full-detail hydration requests still exceed 100 ms. |
-| Increase native extraction workers from 4 to 8 / 16                                         |                                                                1.407 s; 72.4 MiB |        1.327 / 1.317 s; 75.4 / 77.6 MiB | **Leave the default at 4.** Modest local benefit, more memory; callers can already configure concurrency.                                                    |
-| Split native extraction into 1,024 / 256-package subprocess requests                        |                                                                1.407 s; 72.4 MiB |         1.624 / 2.270 s; 13.0 / 7.6 MiB | **Reject.** Memory improves, but repeated startup/discovery loses throughput. Native streaming achieves the desired bound inside one process.                |
-| Reduce shared-string frame/decoded cache budgets from 32 to 8 MiB                           | First page 11.55 ms; warm ready 3.322 s; peak Node RSS 995.9 MiB including focus |            33.70 ms; 3.398 s; 982.2 MiB | **Reject as the default.** Only about 14 MiB lower measured peak, worse first-page latency, and no useful focus improvement.                                 |
+Earlier phases use their own alternating comparisons and must not be combined into a single
+same-session speed claim:
 
-The UTF-8/ASCII spelling of a term is not a general substitute for Unicode regex folding. The
-quality fast path deliberately falls back for non-ASCII case-insensitive input. Tests include
-Kelvin sign, long s, dotted/dotless I, Greek sigma, literal regex punctuation and frozen inputs.
-The search oracle also covers combining-dot queries, supplementary characters and lone surrogates.
+| Earlier measured path                                   |                Before |                 After |
+| ------------------------------------------------------- | --------------------: | --------------------: |
+| 12k release extraction, three pairs                     |    1.414 s / 72.3 MiB |    0.667 s / 16.2 MiB |
+| 12k complete public API to first results, three pairs   |              17.888 s |              13.094 s |
+| That pipeline's peak Node RSS                           |             307.3 MiB |             306.0 MiB |
+| Retained 1× first bounded page, three processes         |               60.3 ms |               11.6 ms |
+| Retained 1× warm refresh, three processes               |               3.556 s |               3.331 s |
+| Cold preparation continuation, three pairs              | 83.63 s / 2,610.5 MiB | 71.25 s / 2,416.1 MiB |
+| Its localization preparation/publication                |               25.00 s |               16.47 s |
+| Its localization dictionary sort                        |               13.25 s |                5.88 s |
+| Its localization publication, including sort/conversion |               16.88 s |                7.96 s |
+| Its package preparation/publication                     |               31.72 s |               27.93 s |
+| Its final join                                          |               24.01 s |               23.61 s |
 
-A final repeat on the current ASCII-property spelling confirms identical report hashes: terminology
-**663.46 → 71.23 ms**, shared 16k occurrences **681.32 → 3.88 ms**, shared 32k occurrences
-**2,688.12 → 5.12 ms**. Its seven samples per variant are in `finalQualityRepeat` in the evidence JSON.
+Initial baseline was `8a45ffaf`; the cold continuation compared `a5b2c8c0` with `87489f75`.
+The initial retained-record cold observation was 88.08 → 85.76 seconds, one run per revision,
+not a repeated speed claim. Public readiness includes other boundary work and opening; stage
+medians do not sum exactly. Worker encode/verify counters sum concurrent work, not wall time.
+Electron launch, painting and typing debounce are excluded. Sampled RSS can miss brief allocations;
+post-GC array-buffer checkpoints are a different measure.
 
-## Whole pipeline results
+## Retained experiments
 
-| Same-input operation                   |  Baseline | Native changes only | TypeScript changes only |  Combined |
-| -------------------------------------- | --------: | ------------------: | ----------------------: | --------: |
-| 12k-package cold public API to results |  17.888 s |            17.390 s |                13.641 s |  13.094 s |
-| Node peak RSS for that run             | 307.3 MiB |           315.9 MiB |               306.9 MiB | 306.0 MiB |
+Isolated rows are exploratory single comparisons unless their sampling is stated. The combined
+headline results above provide the repeated whole-path evidence.
 
-The combined result is **26.8% faster**. Native-only savings are much smaller here than in the
-extraction microbenchmark: serial signature verification and TypeScript parsing/indexing dominate
-the complete path. Cold pipeline peak memory does not materially improve in this small-text shape.
+| Change and workload                                                                | Before → after                                     | Reason to keep                                   |
+| ---------------------------------------------------------------------------------- | -------------------------------------------------- | ------------------------------------------------ |
+| Bounded ordered Rust delivery, 12k packages                                        | 1.407 → 1.274 s; 72.4 → 15.5 MiB                   | Bound in-flight work and reorder buffers.        |
+| Avoid redundant path file-type stat                                                | 1.274 → 1.040 s                                    | Preserve containment and extension checks.       |
+| Bounded concurrent explicit-path validation                                        | 1.040 → 0.673 s                                    | Preserve failure/input order.                    |
+| Final release Rust changes, three pairs                                            | 1.414 → 0.667 s; first result 1.235 → 0.427 s      | Identical package/occurrence hashes.             |
+| Signature checks, 12k bundles / 96k stats                                          | 6.014 → 2.193 s                                    | Retain both before/after verification.           |
+| Bounded default-page warming, retained 1×                                          | 60.3 → 11.6 ms; 1,064.7 → 869.9 MiB                | Keep unused fields lazy.                         |
+| Trim spare prepared-source capacity                                                | 128 → 72.5 MiB backing                             | Preserve encoded source bytes.                   |
+| Safe lowercase-ASCII rejection for absent `é`                                      | 160.75 → 13.38 ms                                  | Retain Unicode folding and cancellation.         |
+| Numeric raw-focus reverse index, 60 requests                                       | 125.88 → 7.33 ms                                   | About 2.2 MiB; same selected line.               |
+| Quality grouping, seven final pairs, 16k / 32k shared occurrences                  | 681.32 / 2,688.12 → 3.88 / 5.12 ms                 | Remove quadratic occurrence copying.             |
+| Prepared terminology and safe literal rejection, seven final pairs, 50k × 20 terms | 663.46 → 71.23 ms                                  | Preserve regex/Unicode fallback.                 |
+| Start largest cold file with eligible peers                                        | Localization preparation 8.37 → 6.50 s             | Replace blocking memory probe with reservations. |
+| Prepare string runs/hashes in parser workers                                       | Sort 13.37 → 6.04 s; localization 25.38 → 18.12 s  | Avoid coordinator re-decoding.                   |
+| Convert larger staged layers in workers                                            | Publication 9.54 → 8.00 s                          | Coordinator retains lease/root publication.      |
+| Wire larger cold package batches to workers                                        | Package 32.48 → 27.62 s; sort 6.62 → 3.92 s        | Existing helper becomes active.                  |
+| Two-entry comparator cache and smaller run buffers                                 | Wired join 24.70 → final median 23.61 s            | Bound scratch memory; combined comparison.       |
+| Numeric review lookup / precomputed state codes                                    | Mark pass 866.6 → 120.9 ms                         | Avoid identity strings per line/culture.         |
+| Bounded locale runs, three alternating micro pairs per kind                        | Raw/line sort 1,466.7 / 1,442.3 → 563.4 / 616.5 ms | Stable exact order; bounded decoded runs.        |
+| Verified source bytes, ASCII flags and trigrams                                    | Reopen 3.347 → 2.450 s; cache +2.7 MiB             | Combined repeated result; immutable cache.       |
 
-The retained 1× warm pipeline falls from **3.556 to 3.331 s** in the three-run comparison, with peak
-Node RSS falling **18.3%**. Treat the small startup-time change as local evidence, not a large speed
-claim. All first-page hashes match. The later focus comparison uses the same 20 evenly distributed
-raw units in each of three processes; all focus result hashes match too.
+Cold parser reservations use half the available memory, up to eight workers and 128 MiB plus
+32 times file bytes per task. Oversized tasks run alone. Conversion uses weighted reservations
+and copied maps; small package sets and mappings keep the coordinator path. Locale sorting bounds
+runs by 8,192 entries and 4 MiB encoded bytes. Optional source caching needs at least 8,192 sources,
+caps raw data at 96 MiB and conservatively bounds stored sections at 16 MiB. The canonical format
+document describes overlay/compaction behavior and fallback.
 
-A fresh retained-evidence 1× build took **88.08 s before and 85.76 s after**; peak Node RSS was
-approximately **2,616 / 2,575 MiB**. This is one observation per version, not a significant cold-index
-speed improvement. Both read 16,500 package records and parse 21 localization files. This case
-excludes native discovery and extraction and must not be advertised as an actual Unreal project scan.
+## Rejected experiments
 
-## What still needs work
+| Trial and workload                            | Before → after                                           | Reason to reject                               |
+| --------------------------------------------- | -------------------------------------------------------- | ---------------------------------------------- |
+| Native workers 4 → 8 / 16                     | 1.407 → 1.327 / 1.317 s; 72.4 → 75.4 / 77.6 MiB          | Small gain; keep default 4.                    |
+| Native requests split to 1,024 / 256 packages | 1.407 → 1.624 / 2.270 s; 72.4 → 13.0 / 7.6 MiB           | Repeated startup loses throughput.             |
+| Blanket removal of query prefetch             | Preparation 2.444 → 1.829 s; first query 37.5 → 186.8 ms | Bad first interaction.                         |
+| Decoded cache 32 → 8 MiB                      | First page 11.55 → 33.70 ms; RSS 995.9 → 982.2 MiB       | Small memory saving, worse latency.            |
+| Cache all source visibility/length/word facts | Join 24.70 → 23.10 s; full 71.91 → 70.98 s; RSS +96 MiB  | Extra RAM for a small whole-path gain.         |
+| Flat dictionary mirrors                       | Bulk 1.243 → 0.419 s; full 71.05 s / 102.3 MiB           | Mirror creation offsets read savings.          |
+| All dictionary compression at level 1         | Retained 69.14 s / 81.8 MiB → trial 69.96 s / 82.1 MiB   | No overall benefit.                            |
+| Joined compression −1                         | Write/verify 549/326 → 606/338 ms; 57.0 → 56.8 MiB       | Slower publication.                            |
+| Joined compression −3                         | Write/verify 549/326 → 605/255 ms; 57.0 → 93.1 MiB       | Too many bytes for a small read saving.        |
+| Joined compression −5                         | Write/verify 549/326 → 610/258 ms; 57.0 → 102.4 MiB      | Same tradeoff, more storage.                   |
+| Poorly compressing numeric joined columns raw | Write/verify 549/326 → 491/272 ms; 57.0 → 74.9 MiB       | Small isolated saving, no useful pipeline win. |
+| Entire joined snapshot raw                    | Write/verify 549/326 → 1,083/194 ms; 57.0 → 434.3 MiB    | Exceeds allowance and slows publication.       |
 
-The mechanical cold builder remains the largest opportunity. I inspected the separate
-`feat/game-text-native-index` experiment: its retained implementation writes `UESHT003`, while
-production requires `UESHT004` and WTF-8 fidelity. Its historical timings are not fresh results
-from this session and are not included as a before/after experiment above. Adopting it requires
-codec, publication/locking, invalidation, cancellation and pinned-reader parity before its speed
-can justify replacing the current builder. Keep join/review policy in the shared domain package.
+Compression trials rewrite the same pre-encoded columns, not a complete refresh. All original
+raw cache sections total roughly 695 MiB. The separate unfinished native builder was inspected
+but not adopted; its implementation is changing independently. No historical prototype timing is
+advertised as a fresh native-builder comparison.
 
-Full Quality checks still hydrate legacy corpus, join and localization-evidence objects. The
-evaluation improvements here do not remove that memory and latency risk. A bounded column-driven
-or worker-owned quality pass is a separate project and needs an oracle covering complete reports.
-Search-worker and main-thread readers also retain separate numeric projections; sharing immutable
-buffers is worth a separate measured experiment rather than an unverified transport rewrite.
+## Correctness and verification
 
-## Verification and replay
+Five-page cold/reopen hash: `097f17aa317f8de46a927e1651407d2e0e1bf3f89f8575ba6133ae812fee730a`.
+Positive/sparse/multiterm/uppercase/Unicode-whitespace query hash:
+`7e06ad0a562c94c3ac08eab33f2dbfd3f1c94ab418788bc4548c82c87124ffd8`.
+All paired results match. Native, focus, quality, sorting and bulk hashes remain in the JSON record.
 
-Native Clippy passes with warnings denied; native tests pass **108**, with one intentionally ignored.
-The final focused TypeScript suite passes **68 tests in eight files**, including **1,000 differential
-join/query seeds**, raw focus, Unicode queries, pinned-reader reuse and changed-bundle recovery.
-Precommit and the Effect architecture checker pass. Saved-package extraction on retained **UE 5.7
-and UE 5.8** fixtures matches baseline output: four packages and 22 occurrences for each version.
-These are saved-byte checks, not fresh live editor or codegen runs; those sources are unchanged.
+Latest code verification: `pnpm run check:repository --maxWorkers=4` passes **2,430 tests**,
+94 expected skips and 326 files; precommit and Effect architecture pass. The separate **1,000-seed**
+differential suite passes nine tests. Targeted cache/codec tests pass 12 tests. An initial default
+repository attempt had 13 timeouts and no assertion failures; its affected suites pass 71 tests
+with four workers, followed by the complete bounded-worker pass without increased timeouts.
 
-The final `VITEST_MAX_WORKERS=4 pnpm run check:repository` also passes: **2,414 tests passed**,
-94 expected skips, 322 passing test files. This includes the always-on repository lane; it is
-not a full `pnpm check` or a fresh live Unreal/WASM engine-matrix run.
+Saved **UE 5.7** and **UE 5.8** pipeline comparisons each read 5,165 records, return 61 lines and
+match `540f811ac5a1172e4b31a32e4fbcab748a59dbd8a20d26300b4cd5d6cd6961df`. Initial native changes
+passed Clippy and 108 tests with one intentional ignore; both engines' saved extraction matched
+22 occurrences in four packages. These are saved-byte checks, not fresh live editor/codegen/WASM
+matrix runs. Later continuations do not change the native parser. Their final verification and PR
+recording continued after each one-hour trial window.
 
-The maintained harness uses public libraries and fresh processes, validates replies and compares
-page hashes. Build both revisions, then supply their explicit artifacts:
+## Compact artifacts and replay
+
+[The consolidated JSON](game-text-pipeline-performance-2026-10-13.json) preserves raw timing/RSS
+samples at their original precision, output hashes, exploratory comparisons and per-phase
+verification. Recomputable summary fields, duplicate profiles and non-timing dictionary counters
+are removed. Query milliseconds share each run's query/match arrays.
+
+The original full reports, traces, logs, probes and candidate modules are archived locally in
+`out/game-text-experiments-2026-10-13/evidence.zip`, with checksums in `manifest.json`. One accepted
+cache remains in that directory's `cache`. Dependency junctions were detached without changing
+their targets. Automatic approval review blocked recursive deletion of the three original local
+experiment directories, including a retry with a verified literal path, with only the reason
+`blocked by policy`. Their duplicate caches, copied fixtures and build outputs therefore remain;
+the consolidation has not reclaimed that disk space. The three original JSON files remain
+available in git at `5332c6e1`. Generic generated inputs under `test-results/game-text-scale` are
+retained separately.
+
+The maintained public harness is `scripts/benchmark-game-text-pipeline.ts`. Build each revision
+and provide its explicit module/native artifacts. For retained-record cold replay, pass `--records`
+and omit `--cache`; a supplied cache measures reuse. Its memory fields are post-GC checkpoints,
+not the independent sampled peaks above.
 
 ```powershell
 node --import tsx scripts/benchmark-game-text-pipeline.ts `
-  --project <read-only-project> --reader <after-uasset> `
-  --before-reader <before-uasset> --before-module <before-dist/index.js> `
-  --output test-results/game-text-paired.json --runs 3
+  --project <read-only-project> --target <target> --records <retained-record-directory> `
+  --before-module <baseline-dist/index.js> --reader <after-uasset> `
+  --before-reader <before-uasset> --output test-results/game-text-paired.json --runs 3
 ```
 
-For an existing generated 1× index, add `--target Generated --cache <existing-cache>
---records <retained-package-record-directory>`. The retained adapter fails if packages unexpectedly
-need rereading. That mode measures the TypeScript warm path and excludes native enumeration.
-The maintained harness reports post-GC checkpoint memory, not the independent sampled RSS used
-in this investigation. Its generic fixture smoke test passes page-hash parity in both revisions.
+Remaining opportunities are mechanical Rust-backed construction, fewer serial passes and
+column-driven quality evaluation. They require new benchmarks and parity evidence. Performance
+work does not fix the [saved-scan gaps compared with Unreal gather](../engineering/game-text-gather-coverage.md).

@@ -99,6 +99,14 @@ properties. Unsupported evidence and diagnostics remain visible in search/focus 
 reports. A zero-finding report never implies complete project coverage unless its attached corpus
 coverage does.
 
+Saved-scan completeness is limited to the selected package inventory and supported decoders; it
+does not certify parity with a fresh Unreal gather. New C++/INI and code/CSV String Table text,
+reflected metadata, compiled Blueprint bytecode, custom gather callbacks and content outside the
+default project inventory can be missing even without a reported decoder gap. A readable manifest
+can supply previously gathered evidence from those sources. See
+[coverage compared with Unreal gather](../engineering/game-text-gather-coverage.md) for the precise
+boundary and the explicitly requested Unreal workflow.
+
 The optional `packageCoverage` evidence also accepts `not_gatherable`: excluded because Unreal's
 gather flag, saved gatherable-text summary and external-package relationships do not select the
 package. This status does not prove absence of text. Candidate-layer helpers report the excluded

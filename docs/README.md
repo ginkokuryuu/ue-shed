@@ -84,17 +84,13 @@ should follow [Website and illustrated guides](engineering/website.md).
 | [0007](decisions/0007-separate-uasset-inspection-and-io.md)                  | Separate UAsset parsing, inspection, and IO     |
 | [0008](decisions/0008-editor-world-camera-preview-stream.md)                 | Stream Map Review from the editor world         |
 | [0009](decisions/0009-localization-change-sets-and-review-state.md)          | Localization change sets and review state       |
+| [0010](decisions/0010-game-text-performance-policy.md)                       | Bounded Game Text preparation and query caching |
 
 ## Research
 
-- [Game Text cache allowance experiment (2026-10-13)](research/game-text-cache-budget-performance-2026-10-13.md) —
-  a 150 MiB disk allowance, source projections, cold/reopen measurements and rejected storage policies.
-
-- [Game Text cold index continuation (2026-10-13)](research/game-text-cold-index-performance-2026-10-13.md) —
-  parallel cold preparation, conversion, repeated timings and rejected join-cache experiments.
-
 - [Game Text pipeline performance (2026-10-13)](research/game-text-pipeline-performance-2026-10-13.md) —
-  two-hour Rust/TypeScript investigation, measured keep/reject decisions, memory and query parity.
+  consolidated Rust/TypeScript, cold-index and 150 MiB cache experiments, raw timing samples,
+  retained/rejected decisions and verification. The accepted policy is [ADR 0010](decisions/0010-game-text-performance-policy.md).
 
 - [UAsset source-derived parser model](../crates/uasset-source-gen/README.md) — source-derived class
   metadata, composable native serialization layouts, and Unreal-backed parser conformance.

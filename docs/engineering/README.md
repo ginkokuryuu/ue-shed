@@ -36,6 +36,7 @@ UE Shed code should be functional, typed, observable, and well tested.
 | [Project Index storage report](project-index-storage-comparison.html) | Visual comparison of four measured eras                        |
 | [Binary Project Index](binary-project-index.md)                       | Canonical Catalog storage and lifecycle                        |
 | [Game Text snapshots](game-text-snapshots.md)                         | Compact domain format, bounds and Node store lifecycle         |
+| [Game Text gather coverage](game-text-gather-coverage.md)             | Saved-scan gaps, manifest evidence and Unreal gather authority |
 | [SQLite Project Index](sqlite-project-index.md)                       | Previous Catalog and current test oracle                       |
 | [DuckDB Project Index research](duckdb-project-index-research.md)     | Catalog engine and Adapter evidence                            |
 | [Releases](releases.md)                                               | Local pre-1.0 releases and post-1.0 CI plan                    |
