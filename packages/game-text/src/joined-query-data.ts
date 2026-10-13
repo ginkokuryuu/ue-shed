@@ -1,6 +1,7 @@
 import { SavedAssetPackageTextEvent } from "@ue-shed/unreal-assets";
 import { decodeWtf8, encodeWtf8 } from "./wtf8.js";
-import { relative, resolve } from "node:path";
+import { resolve } from "node:path";
+import { projectRelativePath } from "./project-relative-path.js";
 import { Cache, Effect, Schema } from "effect";
 import { textOccurrenceFromExtraction, textCorpusFromExtractionEvents } from "./corpus.js";
 import { emptyPackageTextRecord } from "./package-text-record.js";
@@ -363,7 +364,7 @@ export class JoinedQueryData {
 		const identity = c("identity"),
 			location = c("location");
 		return textOccurrenceFromExtraction({
-			packageFile: relative(projectRoot, resolve(projectRoot, path)),
+			packageFile: projectRelativePath(projectRoot, path),
 			occurrence: {
 				source: s("source"),
 				dev_notes: s("notes"),
@@ -770,12 +771,9 @@ export class JoinedQueryData {
 				if (reasons[gap] === 0) diagnosticCounts.unsupported_text_history++;
 		}
 		const path = (shard: number, row: number) =>
-			relative(
+			projectRelativePath(
 				this.joined.meta.input.projectRoot,
-				resolve(
-					this.joined.meta.input.projectRoot,
-					this.strings([this.packageColumn(shard, "package.path")[row]!])[0]!
-				)
+				this.strings([this.packageColumn(shard, "package.path")[row]!])[0]!
 			);
 		const packages: TextPackageCoverageSummary["packages"][number][] = [];
 		const diagnostics: TextCorpusDiagnosticSummary["diagnostics"][number][] = [];
@@ -917,7 +915,7 @@ export class JoinedQueryData {
 			metadata,
 			records
 				.filter((record) => record.evidence.event === "not_gatherable")
-				.map((record) => relative(projectRoot, resolve(projectRoot, record.path)))
+				.map((record) => projectRelativePath(projectRoot, record.path))
 		);
 	}
 	/** Diagnostics hydrate only the packages represented by a focused unit. */

@@ -1,6 +1,11 @@
 export * from "./corpus.js";
 export * from "./package-text-record.js";
-export * from "./package-text-candidates.js";
+export {
+	REQUIRES_LOCALIZATION_GATHER,
+	packageTextExternalReferences,
+	isPackageTextCandidate,
+	textCorpusWithExcludedPackages
+} from "./package-text-candidates.js";
 export * from "./snapshot-format.js";
 export * from "./localization-import.js";
 export {
@@ -71,8 +76,16 @@ export * from "./rules-file.js";
 export * from "./operation-query.js";
 export * from "./corpus-summary.js";
 export * from "./package-text-columns.js";
-export * from "./package-text-layer.js";
-export * from "./package-text-cold.js";
+export {
+	PackageTextInventoryEntry,
+	PACKAGE_TEXT_SHARDS,
+	packageTextShard,
+	packageTextSelection,
+	refreshPackageTextLayer,
+	textCorpusFromPackageTextLayer,
+	type PackageTextRefreshInput
+} from "./package-text-layer.js";
+export { importColdPackageTextLayer } from "./package-text-cold.js";
 export { refreshJoinedTarget, type JoinedTargetInput } from "./joined-target.js";
 export * from "./index-builder.js";
 export * from "./index-refresh.js";

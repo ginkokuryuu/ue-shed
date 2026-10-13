@@ -219,9 +219,9 @@ function occurrenceUnitId(
 			: numbers.location === 1
 				? `row:${values.row}:property:${values.property}`
 				: `property:${values.property}`;
-	return `occurrence:${values.object}:${suffix}:${relative(projectRoot, resolve(projectRoot, values.package!))}`;
+	return `occurrence:${values.object}:${suffix}:${projectRelativePath(projectRoot, values.package!)}`;
 }
-import { relative, resolve } from "node:path";
+import { projectRelativePath } from "./project-relative-path.js";
 
 /** Bounded hydration uses input row references, retaining all original metadata and duplicates. */
 export const hydrateJoinedTarget = Effect.fn("JoinedTarget.page")(function* (

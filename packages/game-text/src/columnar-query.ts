@@ -63,6 +63,26 @@ export function columnarTextCorpusQuery(
 	projection?: JoinedQueryProjection,
 	checkInterrupted?: () => void
 ): TextCorpusQuery {
+	return buildColumnarTextCorpusQuery(joined, scannedAt, projection, checkInterrupted, true);
+}
+
+/** Host model when a search worker serves searches. It warms no presentation pages; the first
+ * host search prepares source search state instead. Results equal `columnarTextCorpusQuery`.
+ */
+export function workerBackedColumnarTextCorpusQuery(
+	joined: JoinedTargetReader,
+	projection?: JoinedQueryProjection
+): TextCorpusQuery {
+	return buildColumnarTextCorpusQuery(joined, undefined, projection, undefined, false);
+}
+
+function buildColumnarTextCorpusQuery(
+	joined: JoinedTargetReader,
+	scannedAt: string | undefined,
+	projection: JoinedQueryProjection | undefined,
+	checkInterrupted: (() => void) | undefined,
+	warm: boolean
+): TextCorpusQuery {
 	let visited = 0;
 	const checkpoint = () => {
 		if (checkInterrupted && (++visited & 255) === 0) checkInterrupted();
@@ -1441,7 +1461,12 @@ export function columnarTextCorpusQuery(
 			}
 		)
 	);
+	let sourcesPrepared = warm;
 	const cachedSearch: TextCorpusQuery["search"] = (request) => {
+		if (!sourcesPrepared) {
+			data.prepareSources();
+			sourcesPrepared = true;
+		}
 		const {
 			cursor: _cursor,
 			localizationCursor: _localizationCursor,
@@ -1454,24 +1479,26 @@ export function columnarTextCorpusQuery(
 			runJoinedQuery(Cache.get(pageCounts, JSON.stringify(countsRequest)))
 		);
 	};
-	data.prepareSources();
 	// Warm bounded presentation pages instead of inflating every physical column. Other
 	// cultures, rule fields and package details stay lazy under this generation's pinned handles.
-	if (target.cultures.length) {
-		cachedSearch({
-			query: "",
-			capability: "all",
-			pageSize: 50,
-			localization: { target: target.name }
-		});
-		cachedSearch({
-			query: "",
-			capability: "all",
-			pageSize: 50,
-			localization: { target: target.name, culture: target.cultures[0]! }
-		});
-	} else {
-		cachedSearch({ query: "", capability: "all", pageSize: 50 });
+	// A worker-backed host model skips this: the search worker serves presentation pages, and
+	// the first host search prepares source search state.
+	if (warm) {
+		data.prepareSources();
+		if (target.cultures.length) {
+			cachedSearch({
+				query: "",
+				capability: "all",
+				pageSize: 50,
+				localization: { target: target.name }
+			});
+			cachedSearch({
+				query: "",
+				capability: "all",
+				pageSize: 50,
+				localization: { target: target.name, culture: target.cultures[0]! }
+			});
+		} else cachedSearch({ query: "", capability: "all", pageSize: 50 });
 	}
 	const findRaw = (id: string) => data.findId("raw", id);
 	const findLine = (id: string) => data.findId("line", id);

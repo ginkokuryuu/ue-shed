@@ -927,15 +927,8 @@ export const refreshJoinedTarget = Effect.fn("JoinedTarget.refresh")(function* (
 	queryColumns["query.line.id_utf8"] = lineIdValues;
 	queryColumns["query.line.id_starts"] = Uint32Array.from(packedLineIds.offsets);
 	queryColumns["query.line.order"] = sortPackedStringsByLocale(packedLineIds);
-	queryColumns["query.package.order"] = Uint32Array.from(
-		{ length: packages.paths.length },
-		(_, row) => row
-	).sort((left, right) =>
-		comparePackageTextPathBytes(
-			strings.bytes(packages.paths[left]!),
-			strings.bytes(packages.paths[right]!)
-		)
-	);
+	// The emission order above already sorts package rows by path bytes.
+	queryColumns["query.package.order"] = Uint32Array.from(pathOrder);
 	const sourceColumns: SnapshotSourceColumn[] = [];
 	Object.assign(
 		queryColumns,

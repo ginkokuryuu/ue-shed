@@ -1,5 +1,5 @@
 import { decodeWtf8 } from "./wtf8.js";
-import { relative, resolve } from "node:path";
+import { projectRelativePath } from "./project-relative-path.js";
 import { Effect, Schema } from "effect";
 import type { LocalizationTarget } from "@ue-shed/localization";
 import { localizationGatherCoverage } from "./localization.js";
@@ -173,10 +173,7 @@ export function pathHash(path: string) {
 	return hash >>> 0;
 }
 export function packagePath(packages: JoinPackages, row: number) {
-	return relative(
-		packages.projectRoot,
-		resolve(packages.projectRoot, packages.strings.string(packages.paths[row]!))
-	);
+	return projectRelativePath(packages.projectRoot, packages.strings.string(packages.paths[row]!));
 }
 export function packageStatus(packages: JoinPackages, path: string): number | undefined {
 	const hash = pathHash(path),

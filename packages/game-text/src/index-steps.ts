@@ -42,7 +42,7 @@ import { SnapshotStoreError } from "./snapshot-store.js";
 import { SnapshotFormatError } from "./snapshot-format.js";
 import { reuseJoinedQueryProjection, type JoinedQueryProjection } from "./joined-query-data.js";
 import { instrumentIndexQuery } from "./index-query.js";
-import { columnarTextCorpusQuery } from "./columnar-query.js";
+import { columnarTextCorpusQuery, workerBackedColumnarTextCorpusQuery } from "./columnar-query.js";
 import { makeGameTextSearchWorkerResource } from "./search-worker-node.js";
 import { SearchWorkerInput } from "./search-worker-protocol.js";
 import {
@@ -58,6 +58,7 @@ import type { refreshJoinedTarget, JoinedTargetInput } from "./joined-target.js"
 import type { LocalizationReviewSnapshot } from "@ue-shed/localization";
 import type { GameTextProjectView } from "./project-index-view.js";
 import { encodeWtf8 } from "./wtf8.js";
+import { HostSliceClock } from "./host-slices.js";
 import {
 	observeGameTextImport,
 	checkRetainedImportObservations
@@ -341,7 +342,12 @@ export const makeGameTextIndexSteps = (
 						request.savedPackages === false
 							? []
 							: yield* source.inventory({ ...request, projectRoot });
-					const byPath = new Map(inventory.map((entry) => [entry.path, entry]));
+					const byPath = new Map<string, (typeof inventory)[number]>(),
+						clock = new HostSliceClock();
+					for (const entry of inventory) {
+						byPath.set(entry.path, entry);
+						if (clock.step()) yield* Effect.yieldNow;
+					}
 					const retainedPackages =
 						request.savedPackages === false &&
 						Object.keys((yield* index.inspect()).active).some((name) =>
@@ -607,7 +613,11 @@ export const makeGameTextIndexSteps = (
 			const queryStarted = performance.now();
 			const query = yield* Effect.try({
 				try: () =>
-					instrumentIndexQuery(columnarTextCorpusQuery(joined, undefined, projection)),
+					instrumentIndexQuery(
+						options.searchWorker
+							? workerBackedColumnarTextCorpusQuery(joined, projection)
+							: columnarTextCorpusQuery(joined, undefined, projection)
+					),
 				catch: (cause) =>
 					failure(
 						"query",

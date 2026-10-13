@@ -10,6 +10,7 @@ import { snapshotFailure } from "./snapshot-format.js";
 import {
 	isPackageTextCandidate,
 	packageTextExternalReferences,
+	PackageTextExternalScan,
 	textCorpusWithExcludedPackages
 } from "./package-text-candidates.js";
 import {
@@ -24,7 +25,8 @@ import { encodeWtf8 } from "./wtf8.js";
 import { LocalizationImportSession } from "./localization-import-session.js";
 import { GameTextIndexProgressReporter } from "./index-progress.js";
 import { writeSnapshotFile, openSnapshotFile, type SnapshotFileReader } from "./snapshot-file.js";
-import { importColdPackageTextLayer } from "./package-text-cold.js";
+import { importColdPackageTextShards } from "./package-text-cold.js";
+import { HostSliceClock, sortRowsInSlices } from "./host-slices.js";
 
 /** The caller supplies the Project Index's opaque package-and-sidecar signature, never a layer hash.
  * Header evidence and signatures must come from the same complete inventory generation.
@@ -60,42 +62,82 @@ export function packageTextSelection(
 	retainedEligibility?: ReadonlyMap<string, boolean>
 ) {
 	const external = packageTextExternalReferences(inventory.map((entry) => entry.path));
-	const buckets: { entry: PackageTextInventoryEntry; selected: boolean }[][] = Array.from(
-		{ length: PACKAGE_TEXT_SHARDS },
-		() => []
-	);
-	const hashes = Array.from({ length: PACKAGE_TEXT_SHARDS }, () =>
+	const selection = new PackageTextSelectionBuilder(external, retainedEligibility);
+	for (const entry of inventory) selection.add(entry);
+	return selection.finish();
+}
+
+/** Selection state shared by the synchronous export and the host-sliced refresh. */
+class PackageTextSelectionBuilder {
+	private readonly buckets: { entry: PackageTextInventoryEntry; selected: boolean }[][] =
+		Array.from({ length: PACKAGE_TEXT_SHARDS }, () => []);
+	private readonly hashes = Array.from({ length: PACKAGE_TEXT_SHARDS }, () =>
 		createHash("sha256").update("package-text-v1")
 	);
-	let previous: string | undefined;
-	for (const entry of inventory) {
-		if (
-			previous !== undefined &&
-			Buffer.compare(encodeWtf8(entry.path), encodeWtf8(previous)) <= 0
-		)
+	private previous: Uint8Array | undefined;
+	constructor(
+		private readonly external: ReadonlySet<string>,
+		private readonly retainedEligibility?: ReadonlyMap<string, boolean>
+	) {}
+	add(entry: PackageTextInventoryEntry) {
+		// Each path is encoded once and kept as the next entry's predecessor.
+		const bytes = encodeWtf8(entry.path);
+		if (this.previous !== undefined && Buffer.compare(bytes, this.previous) <= 0)
 			throw snapshotFailure(
 				"package-text.inventory",
 				"Inventory must have unique paths in byte order"
 			);
-		previous = entry.path;
+		this.previous = bytes;
 		if (entry.headerData === undefined)
 			throw snapshotFailure(
 				"package-text.inventory",
 				"Missing header evidence; upgrade the paired reader"
 			);
 		const selected =
-			retainedEligibility?.get(entry.path) ??
-			isPackageTextCandidate(entry.headerData, external.has(entry.path));
+			this.retainedEligibility?.get(entry.path) ??
+			isPackageTextCandidate(entry.headerData, this.external.has(entry.path));
 		const shard = packageTextShard(entry.path);
-		buckets[shard]!.push({ entry, selected });
-		hashes[shard]!.update(JSON.stringify([entry.path, entry.signature, selected]));
+		this.buckets[shard]!.push({ entry, selected });
+		this.hashes[shard]!.update(JSON.stringify([entry.path, entry.signature, selected]));
 	}
-	return buckets.map((entries, shard) => ({
-		name: shardName(shard),
-		entries,
-		key: `package-text-v1:${shard}:${hashes[shard]!.digest("hex")}`
-	}));
+	finish() {
+		return this.buckets.map((entries, shard) => ({
+			name: shardName(shard),
+			entries,
+			key: `package-text-v1:${shard}:${this.hashes[shard]!.digest("hex")}`
+		}));
+	}
 }
+
+/** `packageTextSelection` in bounded host slices, with the refresh's inventory failure. */
+export const packageTextSelectionInSlices = Effect.fn("PackageText.selection")(function* (
+	inventory: readonly PackageTextInventoryEntry[],
+	retainedEligibility?: ReadonlyMap<string, boolean>
+) {
+	const clock = new HostSliceClock();
+	const scan = new PackageTextExternalScan();
+	for (const entry of inventory) {
+		scan.visit(entry.path);
+		if (clock.step()) yield* Effect.yieldNow;
+	}
+	if (scan.hasOuters)
+		for (let index = 0; index < inventory.length; index++) {
+			scan.revisit(index, inventory[index]!.path);
+			if (clock.step()) yield* Effect.yieldNow;
+		}
+	const selection = new PackageTextSelectionBuilder(scan.references, retainedEligibility);
+	for (let next = 0; next < inventory.length; ) {
+		yield* Effect.try({
+			try: () => {
+				do selection.add(inventory[next++]!);
+				while (next < inventory.length && !clock.step());
+			},
+			catch: (cause) => snapshotFailure("package-text.inventory", String(cause))
+		});
+		if (next < inventory.length) yield* Effect.yieldNow;
+	}
+	return selection.finish();
+});
 
 /** Own the writer lock across comparison, selected reads, and atomic multi-shard publication. */
 export const refreshPackageTextLayer = Effect.fn("PackageText.refresh")(function* <E, R>(
@@ -160,14 +202,21 @@ export const refreshPackageTextLayer = Effect.fn("PackageText.refresh")(function
 		}
 		for (const entry of inventory)
 			if (selected.has(entry.path)) retained.set(entry.path, entry);
-		inventory = [...retained.values()].sort((left, right) =>
-			Buffer.compare(encodeWtf8(left.path), encodeWtf8(right.path))
+		const entries = [...retained.values()],
+			clock = new HostSliceClock(),
+			keys: Uint8Array[] = [];
+		for (const entry of entries) {
+			keys.push(encodeWtf8(entry.path));
+			if (clock.step()) yield* Effect.yieldNow;
+		}
+		const rows = yield* sortRowsInSlices(
+			Uint32Array.from(keys, (_, row) => row),
+			(left, right) => Buffer.compare(keys[left]!, keys[right]!),
+			clock
 		);
+		inventory = Array.from(rows, (row) => entries[row]!);
 	}
-	const selection = yield* Effect.try({
-		try: () => packageTextSelection(inventory, retainedEligibility),
-		catch: (cause) => snapshotFailure("package-text.inventory", String(cause))
-	});
+	const selection = yield* packageTextSelectionInSlices(inventory, retainedEligibility);
 	if (!inventory.length && manifest.active[selection[0]!.name] === selection[0]!.key)
 		return {
 			readPackages: 0,
@@ -298,11 +347,10 @@ export const refreshPackageTextLayer = Effect.fn("PackageText.refresh")(function
 			catch: (cause) => snapshotFailure("package-text.stage", String(cause))
 		});
 		reportProgress({ phase: "joining", completed: 0, total: 0 });
-		const result = yield* importColdPackageTextLayer({
-			inventory,
-			recordDirectory: directory,
-			stagingRoot: directory
-		}).pipe(
+		const result = yield* importColdPackageTextShards(
+			{ inventory, recordDirectory: directory, stagingRoot: directory },
+			selection
+		).pipe(
 			Effect.provideService(
 				SharedIndex,
 				SharedIndex.of({

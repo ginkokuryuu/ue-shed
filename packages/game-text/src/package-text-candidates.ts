@@ -7,22 +7,39 @@ export const REQUIRES_LOCALIZATION_GATHER = 0x00040000;
  * Use the complete inventory, including packages outside a caller's changed selection.
  */
 export function packageTextExternalReferences(paths: readonly string[]): ReadonlySet<string> {
-	const normalized = paths.map((path) => path.replaceAll("\\", "/"));
-	const outers = new Set<string>();
-	const references = new Set<string>();
-	for (const [index, path] of normalized.entries()) {
+	const scan = new PackageTextExternalScan();
+	for (const path of paths) scan.visit(path);
+	for (let index = 0; index < paths.length; index++) scan.revisit(index, paths[index]!);
+	return scan.references;
+}
+
+/** The two-pass external-reference scan, advanced one path at a time for bounded host slices. */
+export class PackageTextExternalScan {
+	readonly references = new Set<string>();
+	private readonly normalized: string[] = [];
+	private readonly outers = new Set<string>();
+	/** First pass: records external packages and the outer packages they name. */
+	visit(path: string) {
+		const normalized = path.replaceAll("\\", "/");
+		this.normalized.push(normalized);
 		const match =
 			/^((?:.*\/)?Content\/)__(?:ExternalActors|ExternalObjects)__\/(.+)\/(?:[^/]+\/){2}[^/]+\.(?:uasset|umap)$/u.exec(
-				path
+				normalized
 			);
 		if (match) {
-			references.add(paths[index]!);
-			outers.add(`${match[1]}${match[2]}`);
+			this.references.add(path);
+			this.outers.add(`${match[1]}${match[2]}`);
 		}
 	}
-	for (const [index, path] of normalized.entries())
-		if (outers.has(path.replace(/\.(?:uasset|umap)$/u, ""))) references.add(paths[index]!);
-	return references;
+	/** Without outer packages, the second pass cannot add a reference. */
+	get hasOuters() {
+		return this.outers.size > 0;
+	}
+	/** Second pass, by visit index: outer packages of external packages are references too. */
+	revisit(index: number, path: string) {
+		if (this.outers.has(this.normalized[index]!.replace(/\.(?:uasset|umap)$/u, "")))
+			this.references.add(path);
+	}
 }
 
 /** Header evidence is mandatory: older workers must be upgraded before candidate pruning. */
