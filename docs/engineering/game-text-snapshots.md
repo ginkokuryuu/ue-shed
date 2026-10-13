@@ -125,6 +125,9 @@ keeping their own reader scopes. A model opens its worker before publication; la
 the current manifest after publication would lose its historical generation after compaction.
 Closing one model leaves other pins usable. The last pin awaits worker retirement, and changed
 joins use a different worker. Metrics count starts, stops and retirement duration.
+An unchanged refresh replaces an instance that has failed after readiness. Instance keys differ
+from immutable query identities: old reader pins remain valid, and retiring a failed instance
+cannot remove its healthy replacement from the pool. Concurrent callers share the replacement.
 
 A target model contains the complete raw source projection. Hosts needing both views can import
 the target before refreshing packages and build one join. Workbench uses the selected target for

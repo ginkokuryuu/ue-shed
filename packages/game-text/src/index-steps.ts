@@ -5,12 +5,14 @@ import {
 	Cache,
 	Context,
 	Effect,
+	Exit,
 	Layer,
+	Ref,
 	Schema,
 	Semaphore,
 	RcMap,
 	Struct,
-	type Scope
+	Scope
 } from "effect";
 import {
 	readLocalizationReview,
@@ -41,7 +43,7 @@ import { SnapshotFormatError } from "./snapshot-format.js";
 import { reuseJoinedQueryProjection, type JoinedQueryProjection } from "./joined-query-data.js";
 import { instrumentIndexQuery } from "./index-query.js";
 import { columnarTextCorpusQuery } from "./columnar-query.js";
-import { makeGameTextSearchWorker } from "./search-worker-node.js";
+import { makeGameTextSearchWorkerResource } from "./search-worker-node.js";
 import { SearchWorkerInput } from "./search-worker-protocol.js";
 import {
 	indexedTextCorpus,
@@ -222,16 +224,57 @@ export const makeGameTextIndexSteps = (
 		const workers = yield* RcMap.make({
 			capacity: 8,
 			lookup: (key: string) =>
-				Schema.decodeUnknownEffect(Schema.fromJsonString(SearchWorkerInput))(key).pipe(
+				Schema.decodeUnknownEffect(
+					Schema.fromJsonString(
+						Schema.Struct({ input: SearchWorkerInput, instance: Schema.NonEmptyString })
+					)
+				)(key).pipe(
 					Effect.mapError((cause) =>
 						failure("search-worker", String(cause), "Rescan the project.")
 					),
-					Effect.flatMap((input) =>
-						makeGameTextSearchWorker(input, {
+					Effect.flatMap(({ input }) =>
+						makeGameTextSearchWorkerResource(input, {
 							latestOnly: options.latestSearchOnly ?? false
 						})
 					)
 				)
+		});
+		const workerVersions = yield* RcMap.make({
+			capacity: 8,
+			lookup: (_key: string) => Ref.make(randomUUID())
+		});
+		const acquireWorker = Effect.fn("GameTextIndex.acquireHealthyWorker")(function* (
+			input: SearchWorkerInput
+		) {
+			const version = yield* RcMap.get(workerVersions, JSON.stringify(input));
+			const owner = yield* Effect.scope;
+			const rotate = (instance: string) =>
+				Ref.update(version, (current) => (current === instance ? randomUUID() : current));
+			for (let attempt = 0; attempt < 2; attempt++) {
+				const instance = yield* Ref.get(version);
+				const pin = yield* Scope.fork(owner);
+				const worker = yield* RcMap.get(workers, JSON.stringify({ input, instance })).pipe(
+					Effect.provideService(Scope.Scope, pin),
+					Effect.tapError((cause) =>
+						cause instanceof SnapshotStoreError || cause instanceof SnapshotFormatError
+							? rotate(instance)
+							: Effect.void
+					),
+					Effect.onError(() => Scope.close(pin, Exit.void))
+				);
+				if (worker.healthy()) return worker.search;
+				yield* Scope.close(pin, Exit.void);
+				// Failed instances retain their existing reader pins under a distinct key. Their
+				// eventual cleanup cannot evict the healthy replacement or affect other borrowers.
+				yield* rotate(instance);
+			}
+			return yield* Effect.fail(
+				failure(
+					"search-worker",
+					"The query worker could not stay ready.",
+					"Rescan and retry."
+				)
+			);
 		});
 		const withSession = <A, E, R>(
 			configuration: SharedIndexOptions,
@@ -588,15 +631,15 @@ export const makeGameTextIndexSteps = (
 					failure("evidence", String(cause), "Refresh the Game Text index and retry.")
 				)
 			);
-			const workerKey = JSON.stringify({
+			const workerInput = {
 				configuration,
 				generation: joined.reader.manifest.generation,
 				joinedKey: joined.reader.manifest.active.joined!
-			});
+			};
 			// Acquire the worker's reader before exposing the model: later compaction may unlink
 			// these files. Overlapping models pin one worker for the same immutable joined view.
 			const search = options.searchWorker
-				? yield* RcMap.get(workers, workerKey).pipe(
+				? yield* acquireWorker(workerInput).pipe(
 						Effect.mapError((cause) =>
 							cause instanceof GameTextIndexError ||
 							cause instanceof SnapshotStoreError ||

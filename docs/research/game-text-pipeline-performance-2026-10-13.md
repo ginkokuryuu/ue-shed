@@ -199,7 +199,7 @@ archived locally in `out/game-text-experiments-2026-10-13/host-repair-evidence.z
 
 The later UI check measures real Electron clicks on the screenshot fixture: 5,212 discovered
 packages, 5,165 inspected assets, 47 exclusions and 64 localization lines. Workbench is rebuilt
-from `1f930905`, with its production renderer, Electron 43.5.0 and the default Showcase debug
+from `1f930905`, with its production renderer, Electron 43.7.7 and the default Showcase debug
 native reader. Native discovery/extraction is included. The first scan uses a cold text cache in
 a fresh isolated profile; the shell may already have prepared its Catalog. OS caches are warm.
 This is a different workload from the retained 583,507-line backend benchmark above.
@@ -230,7 +230,8 @@ about 14 ms earlier in the default rescan and 15 ms earlier in the translated-li
 larger retained-record workload into an end-to-end UI result.
 
 Build and interaction checks pass, with no page errors or renderer long tasks; the largest sampled
-animation-frame gap is 17.4 ms. These observations cover this fixture and current Text view, not
+animation-frame gap across all 36 observations is 33.3 ms, including translation setup after
+reopening. These observations cover this fixture and current Text view, not
 every future interaction or a hardware display-latency guarantee. Raw samples and IPC timings
 are under `phases.workbenchUi` in the consolidated JSON; local probes/logs/screenshots are under
 `out/game-text-experiments-2026-10-13/workbench-rescan*`.

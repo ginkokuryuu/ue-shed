@@ -1,6 +1,7 @@
 import { it } from "@effect/vitest";
 import { Deferred, Effect, Exit, Fiber, Layer, Metric, Scope } from "effect";
-import { expect } from "vitest";
+import { expect, vi } from "vitest";
+import { Worker } from "node:worker_threads";
 import { unlink, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { GameTextIndexSteps, gameTextIndexStepsLayer } from "./index-steps.js";
@@ -9,6 +10,65 @@ import { typeScriptIndexBuilderLayer } from "./index-builder.js";
 import { SharedIndex, sharedIndexNodeLayer } from "./shared-index.js";
 import { makeRetainedGameTextIndex } from "./index-retained.js";
 import { makeIndexRegressionFixture } from "./index-refresh-regressions.test-support.js";
+
+it.live(
+	"replaces a dead worker on unchanged rescan without evicting its healthy replacement",
+	() => {
+		const messages = vi.spyOn(Worker.prototype, "postMessage");
+		return Effect.gen(function* () {
+			const fixture = yield* makeIndexRegressionFixture();
+			yield* Effect.gen(function* () {
+				const steps = yield* GameTextIndexSteps;
+				const retained = yield* makeRetainedGameTextIndex();
+				const started = Metric.counter("game_text.index.search_workers_started");
+				const beforeStarted = (yield* Metric.value(started)).count;
+				const prepare = () =>
+					Effect.scoped(
+						Effect.gen(function* () {
+							const model = yield* retained.refresh(fixture.request);
+							yield* model.retain;
+							return model;
+						})
+					);
+				const first = yield* prepare();
+				const request = { query: "Source", capability: "all" as const, pageSize: 10 };
+				const expected = yield* first.search(request);
+				const worker = messages.mock.contexts.at(-1);
+				if (!(worker instanceof Worker))
+					throw new Error("Expected the actual query worker.");
+				const oldPin = yield* Scope.make();
+				yield* Effect.addFinalizer(() => Scope.close(oldPin, Exit.void));
+				yield* first.borrow.pipe(Effect.provideService(Scope.Scope, oldPin));
+				yield* Effect.promise(() => worker.terminate());
+				expect(yield* first.search(request).pipe(Effect.flip)).toMatchObject({
+					_tag: "SnapshotStoreError",
+					code: "unavailable"
+				});
+				const replacement = yield* prepare();
+				expect(replacement.queryRevision).toBe(first.queryRevision);
+				expect(yield* replacement.search(request)).toEqual(expected);
+				expect(first.query.search(request)).toEqual(expected);
+				expect((yield* Metric.value(started)).count - beforeStarted).toBe(2);
+				yield* Scope.close(oldPin, Exit.void);
+				// Retiring the old instance must leave the new entry available to concurrent models.
+				const project = yield* steps.refreshProject(fixture.request);
+				const target = yield* steps.buildTarget(
+					project,
+					yield* steps.importTarget(project, fixture.request)
+				);
+				const overlapping = yield* Effect.all(
+					[steps.openTarget(target), steps.openTarget(target)],
+					{
+						concurrency: 2
+					}
+				);
+				for (const model of overlapping)
+					expect(yield* model.search(request)).toEqual(expected);
+				expect((yield* Metric.value(started)).count - beforeStarted).toBe(2);
+			}).pipe(Effect.provide(fixture.layer(true)));
+		}).pipe(Effect.scoped, Effect.ensuring(Effect.sync(() => messages.mockRestore())));
+	}
+);
 
 it.live(
 	"shares query workers across overlapping unchanged models and pins changed generations",

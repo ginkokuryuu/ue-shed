@@ -9,6 +9,8 @@ retains unchanged workers across rescans. Keep result rows and loaded pages stab
 Expose an optional opaque query identity on validated target handles and their opened models so
 hosts can reuse a model without constructing storage identifiers. Correct Game Text's Node range
 to `^22.15.0 || >=23.8.0`, matching the built-in Zstd APIs required by its Node entry point.
+Replace failed query workers on unchanged refreshes while preserving healthy sharing and existing
+reader pins; retiring a failed worker cannot evict its replacement.
 
 Reduce saved-text extraction working memory with bounded ordered native delivery and concurrent
 path validation. Keep package signature checks before and after reads while running them with
