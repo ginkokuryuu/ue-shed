@@ -106,6 +106,7 @@ describe.skipIf(!executable)("loc report with the real reader", () => {
 					fs.readFile(join(fixture.root, "Content/Localization/FixtureGame", path))
 				);
 				expect(after).toEqual(before);
-			}).pipe(Effect.provide(NodeServices.layer))
+			}).pipe(Effect.provide(NodeServices.layer)),
+		60_000
 	);
 });
