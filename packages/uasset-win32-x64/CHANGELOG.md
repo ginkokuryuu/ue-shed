@@ -1,5 +1,7 @@
 # @ue-shed/uasset-win32-x64
 
+## 0.12.0
+
 ## 0.11.0
 
 ### Minor Changes

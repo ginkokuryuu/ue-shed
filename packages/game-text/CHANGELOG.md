@@ -1,5 +1,62 @@
 # @ue-shed/game-text
 
+## 0.12.0
+
+### Minor Changes
+
+- 183dd2a: Expose optional, operation-scoped progress for saved package inventory, package extraction,
+  localization file preparation, index construction and opening the joined index.
+
+    Share package extraction and strings across a project's source and localization target indexes,
+    retain independent joined target views, and reuse signature inventories within a committed
+    Project Index generation.
+
+    Expose project opening and refresh, localization import, target construction, and query opening
+    as independently composable `GameTextIndexSteps`. Keep the existing refresh service as a
+    compatibility wrapper, provide a retainer for host-owned compositions, and replace encoded
+    target storage keys with explicit project views.
+
+    Reject superseded localization observations, including failed inputs repaired by another target,
+    without replacing the repaired joined view or retiring already pinned readers.
+
+- 2c00f8b: Export localization quality findings with the selected target, culture, and check filter. Reports
+  retain scan coverage, apply the target's review file, and presets replay the same selection
+  through the CLI. A preset's `workspaceFilter` is accepted only in quality mode with a localization
+  target. Completed quality results may report whether a rules file is attached (`ruleFile`) without
+  exposing its path. Localization quality presets and exports use schema version 2, so older readers
+  reject them instead of silently dropping `workspaceFilter`. Existing version-1 corpus and source
+  quality investigations remain readable and retain their format when replayed.
+
+### Patch Changes
+
+- d99dcf6: Share scoped query workers across overlapping immutable index readers. Workbench prepares one
+  target-first model for source and localization browsing, validates inputs before reusing it, and
+  retains unchanged workers across rescans. Keep result rows and loaded pages stable with Solid 2 keys.
+  Expose an optional opaque query identity on validated target handles and their opened models so
+  hosts can reuse a model without constructing storage identifiers. Correct Game Text's Node range
+  to `^22.15.0 || >=23.8.0`, matching the built-in Zstd APIs required by its Node entry point.
+  Replace failed query workers on unchanged refreshes while preserving healthy sharing and existing
+  reader pins; retiring a failed worker cannot evict its replacement.
+
+    Reduce saved-text extraction working memory with bounded ordered native delivery and concurrent
+    path validation. Keep package signature checks before and after reads while running them with
+    bounded concurrency. Warm bounded query pages instead of every column, reduce source-arena
+    retention, and accelerate Unicode search rejection, quality evaluation and raw-unit focus.
+
+    Start cold localization parsing with input-size memory reservations rather than a blocking
+    largest-file probe. Prepare bounded string-sort runs in workers, batch large cold package reads,
+    convert larger staged layers in workers, and retain only two decoded identifiers while sorting
+    joined query IDs. Small package sets and small layer mappings keep their existing preparation path.
+
+    Persist a bounded optional source-query projection so reopened readers can reuse verified source
+    bytes, ASCII flags and trigram membership. Preserve pinned readers and update the projection across
+    source overlays. Match review records by numeric identity and sort joined identifiers in bounded
+    locale runs with a stable merge.
+
+- Updated dependencies [d99dcf6]
+    - @ue-shed/unreal-assets@0.12.0
+    - @ue-shed/localization@0.12.0
+
 ## 0.11.0
 
 ### Minor Changes
