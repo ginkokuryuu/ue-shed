@@ -991,8 +991,8 @@ importers:
         specifier: 'catalog:'
         version: 4.0.0-beta.98
       p4client-ts:
-        specifier: 0.7.1
-        version: 0.7.1
+        specifier: 0.12.0
+        version: 0.12.0
     devDependencies:
       '@effect/vitest':
         specifier: 'catalog:'
@@ -3864,8 +3864,8 @@ packages:
     resolution: {integrity: sha512-I4Prw6ivkd6p8PiYR1tXASOAOBzIJwu0TB7fqaX0c/8c3QAehNYmX57EijyGGGBt3c/BIowGwV03RVBtXvHEVg==}
     engines: {node: '>=18'}
 
-  p4client-ts@0.7.1:
-    resolution: {integrity: sha512-n5S0z5aTGMnD+8s+/nc4vQt2YYxlTKagdIt4TkgD1wvHABrZmo7YmhoTvfo2bVhBibZy2YjzqKf0tkg9Ew1qcw==}
+  p4client-ts@0.12.0:
+    resolution: {integrity: sha512-CMGtU84N8Js1sLDw0XUeFHNwdzWEPc1Fii311mEDEyRIkr4TgYxRDA9jGz7IbpjJxvx7wrIDitZNEr0SVPkHEA==}
     engines: {node: '>=18'}
 
   package-manager-detector@1.8.0:
@@ -6822,7 +6822,7 @@ snapshots:
 
   p-map@7.0.6: {}
 
-  p4client-ts@0.7.1:
+  p4client-ts@0.12.0:
     dependencies:
       effect: 4.0.0-beta.98
 

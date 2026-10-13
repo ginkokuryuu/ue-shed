@@ -18,7 +18,7 @@ identity, diff, or playback primitive gaps should be proposed upstream.
 Install the headless package with its exact compatible release dependencies:
 
 ```powershell
-npm install --save-exact @ue-shed/map-history @ue-shed/protocol @ue-shed/unreal-assets effect@4.0.0-beta.98 p4client-ts@0.7.1
+npm install --save-exact @ue-shed/map-history @ue-shed/protocol @ue-shed/unreal-assets effect@4.0.0-beta.98 p4client-ts@0.12.0
 ```
 
 The root export owns Perforce acquisition and therefore requires a configured `p4` executable and

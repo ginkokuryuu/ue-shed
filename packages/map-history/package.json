@@ -47,7 +47,7 @@
 		"@ue-shed/protocol": "workspace:0.12.0",
 		"@ue-shed/unreal-assets": "workspace:0.12.0",
 		"effect": "catalog:",
-		"p4client-ts": "0.7.1"
+		"p4client-ts": "0.12.0"
 	},
 	"devDependencies": {
 		"@effect/vitest": "catalog:"
