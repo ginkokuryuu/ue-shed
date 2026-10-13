@@ -63,8 +63,18 @@ function problemSentence(
  * The open line's page header: back to the list, where the line sits in it, and the lines before
  * and after it.
  */
+export interface LinePosition {
+	/** The line's place among the lines counted by `total`, from zero. */
+	readonly index: number;
+	readonly total: number;
+	/** The group counted, when grouping can list one line in several groups. */
+	readonly group?: string | undefined;
+	readonly first: boolean;
+	readonly last: boolean;
+}
+
 export function LinePageHeader(props: {
-	readonly position: { readonly index: number; readonly total: number } | undefined;
+	readonly position: LinePosition | undefined;
 	readonly onBack: () => void;
 	readonly onMove: (step: -1 | 1) => void;
 }) {
@@ -74,11 +84,22 @@ export function LinePageHeader(props: {
 				‹ Lines
 			</Button>
 			<span {...stylex.attrs(styles.grow)} />
-			<Show when={props.position}>
+			<Show
+				when={props.position}
+				fallback={
+					<span
+						title="Filters or a rescan removed this line from the list. Go back to the lines to pick another."
+						{...stylex.attrs(styles.position)}
+					>
+						Not in the current list
+					</span>
+				}
+			>
 				{(position) => (
-					<span {...stylex.attrs(styles.position)}>
+					<span title={position().group} {...stylex.attrs(styles.position)}>
 						{(position().index + 1).toLocaleString()} of{" "}
 						{position().total.toLocaleString()}
+						{position().group === undefined ? "" : " in " + position().group}
 					</span>
 				)}
 			</Show>
@@ -89,7 +110,7 @@ export function LinePageHeader(props: {
 				aria-label="Previous line"
 				title="Previous line (Alt ↑)"
 				aria-keyshortcuts="Alt+ArrowUp"
-				disabled={!props.position || props.position.index === 0}
+				disabled={!props.position || props.position.first}
 				onClick={() => props.onMove(-1)}
 			>
 				↑
@@ -101,7 +122,7 @@ export function LinePageHeader(props: {
 				aria-label="Next line"
 				title="Next line (Alt ↓)"
 				aria-keyshortcuts="Alt+ArrowDown"
-				disabled={!props.position || props.position.index + 1 >= props.position.total}
+				disabled={!props.position || props.position.last}
 				onClick={() => props.onMove(1)}
 			>
 				↓
@@ -246,7 +267,7 @@ export function LineProperties(props: {
 						<>
 							<dt {...stylex.attrs(styles.term)}>Namespace</dt>
 							<dd {...stylex.attrs(styles.value, styles.mono)}>
-								{identity().namespace === "" ? "(none)" : identity().namespace}
+								{identity().namespace || "global"}
 							</dd>
 							<dt {...stylex.attrs(styles.term)}>Key</dt>
 							<dd {...stylex.attrs(styles.value, styles.mono)}>{identity().key}</dd>

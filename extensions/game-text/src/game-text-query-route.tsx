@@ -35,6 +35,8 @@ import type { TaskProgress } from "@ue-shed/ui/task-progress";
 import { Effect, Schedule, Stream } from "effect";
 import { For, Show, createEffect, createMemo, createSignal, onSettled, untrack } from "solid-js";
 import type { JSX } from "@solidjs/web";
+import { failureText } from "./game-text-failure.js";
+import { mergePages, nextPageCursor, pageRows } from "./game-text-pages.js";
 import type { GameTextClientApi } from "./game-text-client.js";
 import { GameTextScanProgress } from "./game-text-scan-progress.js";
 import { CopyButton } from "./game-text-copy-button.js";
@@ -48,14 +50,20 @@ import {
 	localizationPreferences,
 	migratePreferences,
 	readGameTextPreferences,
-	saveGameTextPreferences,
+	writeGameTextPreferences,
+	type PreferencesSaveResult,
 	type GameTextPreferences
 } from "./game-text-preferences.js";
 import { clauseParts } from "./game-text-filter-model.js";
 import { DisplayMenu } from "./game-text-display-menu.js";
 import { FacetsPane } from "./game-text-facets.js";
 import { FolderBrowser } from "./game-text-folder-browser.js";
-import { LinePageHeader, LineProblem, LineProperties } from "./game-text-line-page.js";
+import {
+	LinePageHeader,
+	LineProblem,
+	LineProperties,
+	type LinePosition
+} from "./game-text-line-page.js";
 import {
 	FilterMenu,
 	FilterPills,
@@ -166,16 +174,25 @@ export function GameTextRoute(props: {
 	const [preparing, setPreparing] = createSignal(true);
 	const [elapsedSeconds, setElapsedSeconds] = createSignal(0);
 	const [preparationSeconds, setPreparationSeconds] = createSignal<number>();
-	const [persistenceFailed, setPersistenceFailed] = createSignal(false);
+	const [persistenceFailed, setPersistenceFailed] =
+		createSignal<Exclude<PreferencesSaveResult, "saved">>();
 	const [memoryReady, setMemoryReady] = createSignal(false);
 	const [projectKey, setProjectKey] = createSignal(untrack(() => props.projectKey));
 	const [error, setError] = createSignal<string>();
-	const [retryError, setRetryError] = createSignal<() => void>();
+	const [retryError, setRetryError] = createSignal<{
+		readonly label: string;
+		readonly run: () => void;
+	}>();
 	const [searchFailed, setSearchFailed] = createSignal(false);
-	const showError = (message: string, retry: () => void, search = false) => {
+	/** One error at a time, with the action that recovers from it; search errors also end the count. */
+	const showError = (
+		message: string,
+		retry: () => void,
+		options: { readonly search?: boolean; readonly label?: string } = {}
+	) => {
 		setError(message);
-		setRetryError(() => retry);
-		setSearchFailed(search);
+		setRetryError({ label: options.label ?? "Retry", run: retry });
+		setSearchFailed(options.search ?? false);
 	};
 	const [scanNotice, setScanNotice] = createSignal<string>();
 	const [qualityFailure, setQualityFailure] =
@@ -207,7 +224,6 @@ export function GameTextRoute(props: {
 	const refreshAction = createEffectAction();
 	const qualityAction = createEffectAction();
 	const memoryAction = createEffectAction();
-	const persistAction = createEffectAction();
 	const progressSubscription = createEffectSubscription();
 	const elapsedSubscription = createEffectSubscription();
 	let searchGeneration = 0;
@@ -278,6 +294,12 @@ export function GameTextRoute(props: {
 		onWritten: () => load(false),
 		initial: initial?.editSession
 	});
+	// Targets are only listed after a successful load; work kept for a target the project no longer
+	// has could never be shown or written, so it goes.
+	const unloadedTargets = untrack(localization.targets);
+	createEffect(localization.targets, (targets) => {
+		if (targets !== unloadedTargets) edits.prune(targets.map((target) => target.name));
+	});
 	const editor = createGameTextRuleState({
 		client: props.client,
 		initialState:
@@ -292,8 +314,13 @@ export function GameTextRoute(props: {
 			setQualityFailure(undefined);
 			setQualityDocument(result.document);
 			setQualitySummary(result.summary);
+			attachRuleFile(result);
 		}
 	});
+	// The host says whether a rules file is attached; hosts that do not say keep the last answer.
+	function attachRuleFile(result: { readonly ruleFile?: "attached" | "none" | undefined }) {
+		if (result.ruleFile !== undefined) editor.attachFile(result.ruleFile === "attached");
+	}
 
 	const requestFocus = (id: TextUnitId, cursor?: TextCorpusFocus["nextOccurrenceCursor"]) => {
 		const generation = ++focusGeneration;
@@ -309,7 +336,9 @@ export function GameTextRoute(props: {
 			{
 				onFailure: (cause) => {
 					if (generation === focusGeneration)
-						showError(String(cause), () => requestFocus(id, cursor));
+						showError(failureText("Couldn’t open this line.", cause), () =>
+							requestFocus(id, cursor)
+						);
 				},
 				onSuccess: (result) => {
 					if (generation !== focusGeneration) return;
@@ -396,12 +425,33 @@ export function GameTextRoute(props: {
 		}
 		return undefined;
 	};
-	const linePosition = () => {
-		const total = page()?.total;
+	// Folder, asset and origin groups list a line in each place it is used, so counting across them
+	// would overshoot the total; there the place is counted within the line's group.
+	const linePosition = (): LinePosition | undefined => {
+		const current = page();
 		const at = openLineAt();
-		return total === undefined || at === undefined
-			? undefined
-			: { index: at.before + at.index, total };
+		if (current === undefined || at === undefined) return undefined;
+		const groups = current.groups?.entries;
+		const entry = groups?.[at.group];
+		if (groups === undefined || entry === undefined)
+			return {
+				index: at.index,
+				total: current.total,
+				first: at.index === 0,
+				last: at.index + 1 >= current.total
+			};
+		const first = at.group === 0 && at.index === 0;
+		const last = at.group === groups.length - 1 && at.index + 1 >= entry.count;
+		const by = group();
+		return by === "folder" || by === "asset" || by === "origin"
+			? {
+					index: at.index,
+					total: entry.count,
+					group: entry.label || "the project root",
+					first,
+					last
+				}
+			: { index: at.before + at.index, total: current.total, first, last };
 	};
 	// A step that has to open a group or load its next page finishes when that group reports its
 	// rows: the row to pick is the first, the last, or a place in the group. A step lands only while
@@ -557,7 +607,7 @@ export function GameTextRoute(props: {
 				).find((element) =>
 					wanted.line
 						? element.dataset.line === wanted.line
-						: element.dataset.unit === wanted.unit
+						: wanted.unit !== undefined && element.dataset.unit === wanted.unit
 				);
 				if (row) {
 					row.focus({ preventScroll: true });
@@ -566,15 +616,17 @@ export function GameTextRoute(props: {
 			});
 		}
 	);
-	const closeLine = () => {
-		setFocusBack({ unit: selectedId(), line: localization.selectedId() });
+	/** Closes the line's page; focus returns to its row unless the caller keeps it. */
+	const closeLine = (returnFocus = true) => {
 		const row =
 			resultsSection?.querySelector<HTMLElement>('[data-row][aria-current="true"]') ??
 			returnRow;
 		pendingFlat = undefined;
 		pendingStep = undefined;
+		if (returnFocus) setFocusBack({ unit: selectedId(), line: localization.selectedId() });
 		setSelectedId(undefined);
 		localization.setSelectedId(undefined);
+		if (!returnFocus) return;
 		queueMicrotask(() => {
 			if (row?.isConnected) row.focus({ preventScroll: true });
 			else searchInput?.focus();
@@ -710,6 +762,8 @@ export function GameTextRoute(props: {
 			requestPage({ ...request, localizationCursor: current.localization.nextCursor });
 		else if (current?.nextCursor) requestPage({ ...request, cursor: current.nextCursor });
 	};
+	// The last search that showed results: repeating it (after a rescan or write) reloads as many
+	// rows as were loaded, while a new or failed search starts from one page.
 	let previousSearch = "";
 	const requestPage = (request: TextCorpusSearchRequest, debounce = false) => {
 		const generation = ++searchGeneration;
@@ -723,7 +777,6 @@ export function GameTextRoute(props: {
 			signature === previousSearch
 				? untrack(() => page()?.localization?.lines.length ?? page()?.units.length ?? 50)
 				: 50;
-		previousSearch = signature;
 		let started = 0;
 		// A new search replaces the rows a pending step was counting on.
 		if (!request.cursor && !request.localizationCursor) {
@@ -746,35 +799,12 @@ export function GameTextRoute(props: {
 						)
 							return result;
 						let collected = result.page;
-						while (
-							(collected.localization?.lines.length ?? collected.units.length) <
-							desired
-						) {
-							const cursor =
-								collected.localization?.nextCursor ?? collected.nextCursor;
+						while (pageRows(collected) < desired) {
+							const cursor = nextPageCursor(collected);
 							if (!cursor) break;
-							result = yield* props.client.search({
-								...request,
-								...(collected.localization?.nextCursor
-									? { localizationCursor: collected.localization.nextCursor }
-									: { cursor: collected.nextCursor })
-							});
+							result = yield* props.client.search({ ...request, ...cursor });
 							if (result.status !== "ready") return result;
-							collected = {
-								...result.page,
-								units: [...collected.units, ...result.page.units],
-								...(collected.localization && result.page.localization
-									? {
-											localization: {
-												...result.page.localization,
-												lines: [
-													...collected.localization.lines,
-													...result.page.localization.lines
-												]
-											}
-										}
-									: undefined)
-							};
+							collected = mergePages(collected, result.page);
 						}
 						return { status: "ready" as const, page: collected };
 					});
@@ -785,40 +815,31 @@ export function GameTextRoute(props: {
 					if (generation === searchGeneration) {
 						if (!untrack(loading)) setPreparing(false);
 						setSearching(false);
-						showError(String(cause), () => requestPage(request), true);
+						showError(
+							failureText("Search failed.", cause),
+							() => requestPage(request),
+							{ search: true, label: "Retry search" }
+						);
 					}
 				},
 				onSuccess: (result) => {
 					if (generation !== searchGeneration) return;
 					if (!untrack(loading)) setPreparing(false);
+					setSearching(false);
 					if (result.status === "ready") {
+						previousSearch = signature;
 						setCommittedRequest(baseRequest);
 						setQueryMs(performance.now() - started);
 						setPage((previous) =>
 							(request.cursor || request.localizationCursor) && previous
-								? {
-										...result.page,
-										units: [...previous.units, ...result.page.units],
-										...(result.page.localization && previous.localization
-											? {
-													localization: {
-														...result.page.localization,
-														lines: [
-															...previous.localization.lines,
-															...result.page.localization.lines
-														]
-													}
-												}
-											: undefined)
-									}
+								? mergePages(previous, result.page)
 								: result.page
 						);
-						setSearching(false);
 					} else {
-						setSearching(false);
 						showError(
-							"The saved assets changed. Rescan the project to search again.",
-							() => load(true)
+							"The saved assets changed since the last scan. Rescan to search again.",
+							() => load(true),
+							{ search: true, label: "Rescan" }
 						);
 					}
 				}
@@ -832,6 +853,7 @@ export function GameTextRoute(props: {
 			setQualityDocument(result.document);
 			setQualitySummary(result.summary);
 			editor.replace(result.document);
+			attachRuleFile(result);
 		} else if (result.status === "failed") setQualityFailure(result.error);
 	};
 
@@ -846,7 +868,9 @@ export function GameTextRoute(props: {
 			onFailure: (cause) => {
 				setPreparing(false);
 				setLoading(false);
-				showError(String(cause), () => load(refresh));
+				showError(failureText("Couldn’t read the project’s saved text.", cause), () =>
+					load(refresh)
+				);
 			},
 			onSuccess: (result: TextCorpusQueryRunResult) => {
 				setLoading(false);
@@ -935,14 +959,28 @@ export function GameTextRoute(props: {
 					if (reviewed.status === "completed") {
 						setQualityFailure(undefined);
 						setQualitySummary(reviewed.summary);
+						attachRuleFile(reviewed);
 					} else applyQuality(reviewed);
 				},
 				onFailure: (cause) =>
-					showError(String(cause), () => editor.run("preview", document))
+					showError(failureText("Couldn’t check the rules.", cause), () =>
+						editor.run("preview", document)
+					)
 			});
 		}
 	);
 
+	let pendingSave: { key: string; preferences: GameTextPreferences } | undefined;
+	let saveTimer: number | undefined;
+	const flushPreferences = () => {
+		window.clearTimeout(saveTimer);
+		const save = pendingSave;
+		pendingSave = undefined;
+		if (!save) return;
+		// Synchronous storage: this runs during page hide and route disposal too.
+		const result = writeGameTextPreferences(save.key, save.preferences);
+		setPersistenceFailed(result === "saved" ? undefined : result);
+	};
 	createEffect(
 		() => ({
 			ready: memoryReady(),
@@ -977,10 +1015,10 @@ export function GameTextRoute(props: {
 		({ ready, key, preferences }) => {
 			if (!ready) return;
 			props.onPreferencesChange?.(preferences);
-			if (key)
-				persistAction.run(saveGameTextPreferences(key, preferences), {
-					onSuccess: (saved) => setPersistenceFailed(!saved)
-				});
+			pendingSave = key ? { key, preferences } : undefined;
+			// Typing changes drafts on every key, so writes wait for a pause; leaving flushes them.
+			window.clearTimeout(saveTimer);
+			saveTimer = window.setTimeout(flushPreferences, 300);
 		}
 	);
 
@@ -990,9 +1028,12 @@ export function GameTextRoute(props: {
 				mode() === "corpus" &&
 				lineOpen() &&
 				!event.defaultPrevented &&
+				!event.isComposing &&
 				!(
 					event.target instanceof Element &&
-					event.target.closest('[role="dialog"], [role="alertdialog"]')
+					event.target.closest(
+						'[role="dialog"], [role="alertdialog"], input, textarea, select, [contenteditable]'
+					)
 				)
 			) {
 				if (event.key === "Escape") {
@@ -1014,17 +1055,13 @@ export function GameTextRoute(props: {
 				searchInput?.select();
 			}
 		};
-		const beforeUnload = (event: BeforeUnloadEvent) => {
-			if (editor.dirty() || edits.hasDrafts()) {
-				event.preventDefault();
-				event.returnValue = "";
-			}
-		};
-		window.addEventListener("beforeunload", beforeUnload);
+		// Drafts are persisted with the view, so closing the window only needs the last write.
 		window.addEventListener("keydown", shortcut);
+		window.addEventListener("pagehide", flushPreferences);
 		return () => {
 			window.removeEventListener("keydown", shortcut);
-			window.removeEventListener("beforeunload", beforeUnload);
+			window.removeEventListener("pagehide", flushPreferences);
+			flushPreferences();
 		};
 	});
 	onSettled(() => {
@@ -1066,7 +1103,10 @@ export function GameTextRoute(props: {
 			if (!operation) return;
 			qualityAction.run(operation, {
 				onSuccess: applyQuality,
-				onFailure: (cause) => showError(String(cause), () => loadRules(create))
+				onFailure: (cause) =>
+					showError(failureText("Couldn’t open the rules file.", cause), () =>
+						loadRules(create)
+					)
 			});
 		});
 	const reloadRules = () =>
@@ -1076,7 +1116,11 @@ export function GameTextRoute(props: {
 				props.client.reloadQualityRules?.() ?? props.client.chooseQualityRules(),
 				{
 					onSuccess: applyQuality,
-					onFailure: (cause) => showError(String(cause), reloadRules)
+					onFailure: (cause) =>
+						showError(
+							failureText("Couldn’t reload the rules file.", cause),
+							reloadRules
+						)
 				}
 			);
 		});
@@ -1235,10 +1279,13 @@ export function GameTextRoute(props: {
 	return (
 		<main {...stylex.attrs(styles.page)}>
 			<Show when={persistenceFailed()}>
-				<p role="alert">
-					Draft recovery could not be saved locally. Keep this workspace open until you
-					stage or save your changes.
-				</p>
+				{(failure) => (
+					<p role="alert" {...stylex.attrs(styles.muted, styles.warning)}>
+						{failure() === "drafts_not_saved"
+							? "Drafts are too large to keep if Workbench closes. Stage, write or save them before closing."
+							: "This view could not be saved locally. Your drafts last until Workbench closes."}
+					</p>
+				)}
 			</Show>
 			<Show when={replacement()}>
 				<section
@@ -1290,33 +1337,32 @@ export function GameTextRoute(props: {
 				>
 					<ToolButton
 						label="Text"
-						tooltip="Browse source lines and translations."
+						showLabel
 						role="tab"
 						id="game-text-tab-corpus"
 						aria-controls="game-text-panel-corpus"
 						tabindex={mode() === "corpus" ? 0 : -1}
 						aria-selected={mode() === "corpus" ? "true" : "false"}
 						onClick={() => setMode("corpus")}
-					>
-						<ToolIcon name="text" />
-					</ToolButton>
+					></ToolButton>
 					<ToolButton
-						label={
-							"Quality checks" +
-							(editor.dirty() ? " · Unsaved" : "") +
-							(qualityFailure()?.code === "invalid_rules"
-								? " (rules invalid)"
-								: qualityTabCount() !== undefined
-									? " (" + qualityTabCount() + ")"
-									: "")
-						}
-						tooltip="Inspect findings and edit character limits and terminology rules."
+						label="Quality checks"
+						showLabel
 						badge={
 							qualityFailure()?.code === "invalid_rules"
 								? "!"
 								: editor.dirty()
 									? "•"
-									: qualityTabCount() || undefined
+									: qualityTabCount()?.toLocaleString()
+						}
+						badgeLabel={
+							qualityFailure()?.code === "invalid_rules"
+								? "rules invalid"
+								: editor.dirty()
+									? "unsaved rule changes"
+									: qualityTabCount() === undefined
+										? undefined
+										: textCountLabel(qualityTabCount() ?? 0, "finding")
 						}
 						role="tab"
 						id="game-text-tab-quality"
@@ -1324,22 +1370,18 @@ export function GameTextRoute(props: {
 						tabindex={mode() === "quality" ? 0 : -1}
 						aria-selected={mode() === "quality" ? "true" : "false"}
 						onClick={() => setMode("quality")}
-					>
-						<ToolIcon name="checks" />
-					</ToolButton>
+					></ToolButton>
 					<Show when={localization.active()}>
 						<ToolButton
 							label="Reports"
-							tooltip="Inspect localization progress and target reports."
+							showLabel
 							role="tab"
 							id="game-text-tab-reports"
 							aria-controls="game-text-panel-reports"
 							tabindex={mode() === "reports" ? 0 : -1}
 							aria-selected={mode() === "reports" ? "true" : "false"}
 							onClick={() => setMode("reports")}
-						>
-							<ToolIcon name="reports" />
-						</ToolButton>
+						></ToolButton>
 					</Show>
 				</div>
 				<div {...stylex.attrs(styles.headerActions)}>
@@ -1351,6 +1393,7 @@ export function GameTextRoute(props: {
 							<SyncWithUnreal
 								model={operations}
 								pending={localization.active()?.notSynced ?? 0}
+								unwritten={edits.edits().length}
 							/>
 						}
 					/>
@@ -1502,7 +1545,9 @@ export function GameTextRoute(props: {
 				{(message) => (
 					<div role="alert" {...stylex.attrs(styles.card)}>
 						{message()}
-						<Button onClick={() => retryError()?.()}>Retry</Button>
+						<Button onClick={() => retryError()?.run()}>
+							{retryError()?.label ?? "Retry"}
+						</Button>
 					</div>
 				)}
 			</Show>
@@ -1679,16 +1724,14 @@ export function GameTextRoute(props: {
 											}}
 										/>
 										<span role="status" {...stylex.attrs(styles.count)}>
-											{localization.error() && !localization.ready()
-												? "Translations unavailable"
-												: searchFailed()
-													? "Search failed"
-													: searching() || !page()
-														? "Searching…"
-														: page()?.total === 1
-															? "1 match"
-															: page()?.total.toLocaleString() +
-																" matches"}
+											{searchFailed()
+												? "Search failed"
+												: searching() || !page()
+													? "Searching…"
+													: page()?.total === 1
+														? "1 match"
+														: page()?.total.toLocaleString() +
+															" matches"}
 										</span>
 										<kbd {...stylex.attrs(browseStyles.keyboard)}>
 											{/Mac|iPhone|iPad/.test(navigator.platform)
@@ -1752,21 +1795,18 @@ export function GameTextRoute(props: {
 											)}
 										/>
 										<ToolButton
-											label={
-												paneCollapsed()
-													? "Show side pane"
-													: "Hide side pane"
-											}
+											label="Side pane"
 											tooltip={
 												paneCollapsed()
-													? "Restore line details and browse facets beside the list."
-													: "Give the full width to the line list. Your selection and drafts are kept."
+													? "Show line details and where the lines are beside the list."
+													: "Give the list the full width. Your drafts are kept."
 											}
 											aria-pressed={paneCollapsed() ? "false" : "true"}
 											onClick={() => {
 												const hide = !paneCollapsed();
 												setPaneCollapsed(hide);
-												if (hide) closeLine();
+												// The toggle keeps focus; only an open line closes.
+												if (hide && lineOpen()) closeLine(false);
 											}}
 										>
 											<ToolIcon name="panel" />
@@ -2159,12 +2199,16 @@ export function GameTextRoute(props: {
 							</span>
 						</Show>
 						<span {...stylex.attrs(styles.grow)} />
-						<span>
-							{textCountLabel(
-								localization.active()?.target.cultures.length ?? 0,
-								"culture"
+						<Show when={localization.active()}>
+							{(active) => (
+								<span>
+									{localization.cultures().length > 0
+										? `${localization.cultures().length.toLocaleString()} of `
+										: ""}
+									{textCountLabel(active().target.cultures.length, "culture")}
+								</span>
 							)}
-						</span>
+						</Show>
 					</footer>
 				)}
 			</Show>
@@ -2180,9 +2224,9 @@ export function OccurrenceCard(props: {
 }) {
 	return (
 		<article {...stylex.attrs(styles.card)}>
-			<div {...stylex.attrs(styles.toolbar)}>
+			<div {...stylex.attrs(styles.bar)}>
 				<strong>{textLocationLabel(props.occurrence.location)}</strong>
-				<span {...stylex.attrs(styles.coverage)}>
+				<span {...stylex.attrs(styles.muted, styles.exports)}>
 					{props.occurrence.editCapability === "source_editable"
 						? "Editable"
 						: "Read only"}

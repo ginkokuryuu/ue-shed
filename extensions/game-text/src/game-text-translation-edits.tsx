@@ -5,11 +5,12 @@ import {
 	type LocalizationEditResult,
 	type LocalizationFocus,
 	type LocalizationSelection,
-	type LocalizationTranslation
+	type LocalizationTranslation,
+	textCountLabel
 } from "@ue-shed/game-text/browser";
 import { Button, createEffectAction } from "@ue-shed/ui";
 import { Effect, Schema } from "effect";
-import { For, Show, createMemo, createSignal } from "solid-js";
+import { For, Show, createEffect, createMemo, createSignal } from "solid-js";
 import type { GameTextClientApi } from "./game-text-client.js";
 import { tokens } from "@ue-shed/ui-theme/tokens.stylex.js";
 import type { GameTextEditSession } from "./game-text-preferences.js";
@@ -110,6 +111,8 @@ export function createGameTextEdits(input: {
 		setReviewTarget(undefined);
 		setMessage(undefined);
 	};
+	// Undo restores the last removal in the target it happened in; another target retires it.
+	createEffect(input.target, () => setUndo(undefined));
 	const stage = (edit: LocalizationEdit, source: string) => {
 		if (!Schema.is(LocalizationEdit.fields.translation)(edit.translation)) {
 			setMessage(
@@ -136,11 +139,18 @@ export function createGameTextEdits(input: {
 		setStaged(next);
 		resetReview();
 	};
-	const unstage = (edit: Pick<LocalizationEdit, "culture" | "namespace" | "key">) => {
+	/** Removes one or more staged edits; undo brings back all of them. */
+	const unstage = (
+		...removing: readonly Pick<LocalizationEdit, "culture" | "namespace" | "key">[]
+	) => {
 		const next = new Map(staged());
-		const removed = staged().get(keyFor(edit));
-		setUndo(removed ? new Map([[keyFor(edit), removed]]) : undefined);
-		next.delete(keyFor(edit));
+		const removed = new Map<string, StagedEdit>();
+		for (const edit of removing) {
+			const item = staged().get(keyFor(edit));
+			if (item) removed.set(keyFor(edit), item);
+			next.delete(keyFor(edit));
+		}
+		setUndo(removed.size > 0 ? removed : undefined);
 		setStaged(next);
 		resetReview();
 		if (next.size === 0) setOpen(false);
@@ -186,49 +196,47 @@ export function createGameTextEdits(input: {
 					}
 					setReview(result);
 					if (result.status === "written" || result.status === "partially_written") {
-						const written = new Set(
-							result.edits
-								.filter((item) =>
-									result.files.some(
-										(file) => file.written && file.culture === item.culture
-									)
+						// Edits whose culture's file was replaced are done, including those the
+						// file already held; the rest stay staged.
+						const landed = result.edits.filter(
+							(item) =>
+								(item.outcome === "ready" || item.outcome === "unchanged") &&
+								result.files.some(
+									(file) => file.written && file.culture === item.culture
 								)
-								.filter(
-									(item) =>
-										item.outcome === "ready" || item.outcome === "unchanged"
-								)
-								.map((edit) => JSON.stringify([target, editKey(edit)]))
+						);
+						const done = new Set(
+							landed.map((edit) => JSON.stringify([target, editKey(edit)]))
 						);
 						const remaining = new Map(
 							[...staged()].filter(
 								([key, item]) =>
-									!written.has(key) ||
+									!done.has(key) ||
 									JSON.stringify(item.edit) !==
 										JSON.stringify(submitted.get(key)?.edit)
 							)
 						);
 						setStaged(remaining);
-						const remainingCount = [...remaining.values()].filter(
-							(item) => item.target === target
-						).length;
-						const changed = written.size;
-						const files = result.files.filter((file) => file.written).length;
-						setMessage(
-							`Wrote ${changed} ${changed === 1 ? "translation" : "translations"} to ${files} PO ${
-								files === 1 ? "file" : "files"
-							}. They are not synced until you sync with Unreal.`
-						);
-						if (result.status === "partially_written") {
-							setReview(undefined);
-							setMessage(
-								`Partially written: ${changed} translations written; ${remainingCount} edits remain. Check changes again before retrying. ` +
-									result.files
-										.filter((file) => !file.written)
-										.map((file) => file.relativePath)
-										.join(", ")
-							);
-						}
 						setReview(undefined);
+						const changed = landed.filter((item) => item.outcome === "ready").length;
+						const files = result.files.filter((file) => file.written).length;
+						const wrote = `Wrote ${textCountLabel(changed, "translation")} to ${textCountLabel(files, "PO file")}.`;
+						if (result.status === "partially_written") {
+							const left = [...remaining.values()].filter(
+								(item) => item.target === target
+							).length;
+							const failedFiles = result.files
+								.filter((file) => !file.written)
+								.map((file) => file.relativePath);
+							setMessage(
+								`${wrote} ${textCountLabel(left, "edit")} not written, because ${
+									failedFiles.length === 1 ? "this file" : "these files"
+								} could not be replaced: ${failedFiles.join(", ")}. Close any program using ${
+									failedFiles.length === 1 ? "it" : "them"
+								}, then check the changes and write again.`
+							);
+						} else
+							setMessage(`${wrote} They are not synced until you sync with Unreal.`);
 						input.onWritten();
 					} else if (result.status === "rejected") {
 						setMessage("Nothing was written: some staged edits are no longer current.");
@@ -269,6 +277,16 @@ export function createGameTextEdits(input: {
 			setDrafts(fromItems(session.drafts));
 		},
 		hasDrafts: () => staged().size > 0 || drafts().size > 0,
+		/** Drops staged edits and drafts for targets the project no longer has. */
+		prune: (targets: readonly LocalizationSelection["target"][]) => {
+			const known = new Set(targets);
+			const keep = (items: ReadonlyMap<string, StagedEdit>) =>
+				[...items.values()].every((item) => known.has(item.target))
+					? items
+					: new Map([...items].filter(([, item]) => known.has(item.target)));
+			setStaged(keep);
+			setDrafts(keep);
+		},
 		undoAvailable: () => undo() !== undefined,
 		undo: () => {
 			const previous = undo();
@@ -355,6 +373,20 @@ export function StagedEditsPanel(props: { readonly model: GameTextEdits }) {
 		reviewed()?.edits.every(
 			(item) => item.outcome === "ready" || item.outcome === "unchanged"
 		) === true && (reviewed()?.files.length ?? 0) > 0;
+	// Staged edits the last check found unwritable, so they can leave together.
+	const blocked = () =>
+		props.model.edits().filter((item) => {
+			const result = outcome(item)?.outcome;
+			return result !== undefined && result !== "ready" && result !== "unchanged";
+		});
+	const writeReason = () =>
+		canWrite()
+			? undefined
+			: blocked().length > 0
+				? `${textCountLabel(blocked().length, "edit")} can't be written. Unstage ${
+						blocked().length === 1 ? "it" : "them"
+					}, then check again.`
+				: "Check the changes first.";
 	return (
 		<>
 			<Show when={props.model.open() && props.model.edits().length > 0}>
@@ -460,11 +492,23 @@ export function StagedEditsPanel(props: { readonly model: GameTextEdits }) {
 							size="compact"
 							tone="primary"
 							disabled={props.model.busy() || !canWrite()}
-							title={canWrite() ? undefined : "Check the changes first."}
+							title={writeReason()}
 							onClick={() => props.model.write()}
 						>
 							Write to PO
 						</Button>
+						<Show when={blocked().length > 0}>
+							<Button
+								size="compact"
+								tone="quiet"
+								disabled={props.model.busy()}
+								onClick={() =>
+									props.model.unstage(...blocked().map((item) => item.edit))
+								}
+							>
+								Unstage {textCountLabel(blocked().length, "blocked edit")}
+							</Button>
+						</Show>
 						<Button
 							size="compact"
 							tone="quiet"
@@ -507,8 +551,13 @@ export function TranslationEditor(props: {
 	const draft = () => draftItem()?.edit.translation ?? "";
 	const staged = () => props.model.stagedFor(props.translation.culture, props.detail.identity);
 	const current = () => seenTranslation(props.translation);
+	// The field grows with the draft up to a dozen lines, then scrolls.
+	const draftRows = () => Math.min(12, Math.max(3, draft().split("\n").length + 1));
+	// Only an Edit click moves focus into the field; a recovered draft leaves focus alone.
+	let focusOnOpen = false;
 	const begin = () => {
 		const key = identity();
+		focusOnOpen = true;
 		if (key)
 			props.model.setDraft(
 				{
@@ -570,12 +619,29 @@ export function TranslationEditor(props: {
 				}
 			>
 				<textarea
+					ref={(element) => {
+						if (focusOnOpen) queueMicrotask(() => element.focus());
+						focusOnOpen = false;
+					}}
 					dir="auto"
 					lang={props.translation.culture}
 					aria-label={"New " + props.translation.culture + " translation"}
+					aria-keyshortcuts="Control+Enter Meta+Enter Escape"
+					title="Ctrl Enter stages the draft; Escape cancels it."
 					value={draft()}
 					onInput={(event) => updateDraft(event.currentTarget.value)}
-					rows={3}
+					onKeyDown={(event) => {
+						if (event.isComposing) return;
+						if (event.key === "Escape") {
+							event.preventDefault();
+							event.stopPropagation();
+							cancel();
+						} else if (event.key === "Enter" && (event.ctrlKey || event.metaKey)) {
+							event.preventDefault();
+							stage();
+						}
+					}}
+					rows={draftRows()}
 					{...stylex.attrs(styles.textarea)}
 				/>
 				<div {...stylex.attrs(styles.bar)}>

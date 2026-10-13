@@ -11,7 +11,12 @@ import { TextQualityRuleId, textCountLabel } from "@ue-shed/game-text/browser";
 import { tokens } from "@ue-shed/ui-theme/tokens.stylex.js";
 import { For, Match, Show, Switch, createEffect, createMemo, createSignal } from "solid-js";
 import { CultureRuleFields } from "./game-text-culture-rule-fields.js";
-import type { GameTextRuleState, RuleEditorState } from "./game-text-rule-state.js";
+import {
+	shownLimit,
+	typedLimit,
+	type GameTextRuleState,
+	type RuleEditorState
+} from "./game-text-rule-state.js";
 
 type EditableRule = TextQualityRule | LocalizationProjectRule;
 
@@ -191,14 +196,14 @@ export function GameTextRuleEditor(props: {
 							onClick={() => addLocalizationRule("localization_character_budget")}
 							{...stylex.attrs(styles.smallButton)}
 						>
-							Add translation budget
+							Add translation character limit
 						</button>
 						<button
 							type="button"
 							onClick={() => addLocalizationRule("localization_terminology")}
 							{...stylex.attrs(styles.smallButton)}
 						>
-							Add glossary
+							Add translation terminology
 						</button>
 					</div>
 				</Show>
@@ -217,8 +222,8 @@ export function GameTextRuleEditor(props: {
 								<b>
 									{rule.kind === "character_budget" ||
 									rule.kind === "localization_character_budget"
-										? "Character limits"
-										: "Terms"}
+										? "Character limit"
+										: "Terminology"}
 								</b>
 								<em {...stylex.attrs(styles.panelCount)}>
 									{findingCount(rule.id)}
@@ -286,9 +291,9 @@ export function GameTextRuleEditor(props: {
 										}
 										aria-describedby={"rule-errors-" + rule().id}
 										{...stylex.attrs(styles.input)}
-										value={selectedBudgetRule()?.maximumCharacters ?? ""}
+										value={shownLimit(selectedBudgetRule()?.maximumCharacters)}
 										onInput={(event) => {
-											const value = Number(event.currentTarget.value);
+											const value = typedLimit(event.currentTarget.value);
 											changeDraft(
 												replaceRule(draft(), rule().id, (current) =>
 													current.kind === "character_budget"
@@ -568,7 +573,10 @@ export function GameTextRuleEditor(props: {
 							)}
 						</Match>
 						<Match when={true}>
-							<span>Preview uses the saved text already loaded in Workbench.</span>
+							<span>
+								Preview checks the text from the last scan. Nothing is written until
+								you save.
+							</span>
 						</Match>
 					</Switch>
 					<div {...stylex.attrs(styles.actionButtons)}>

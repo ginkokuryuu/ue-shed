@@ -1,3 +1,4 @@
+import * as stylex from "@stylexjs/stylex";
 import { AnchoredPopover, Button, ToolButton, ToolIcon, type ToolIconName } from "@ue-shed/ui";
 import { For, Show, createEffect, createSignal, createUniqueId } from "solid-js";
 import { styles } from "./game-text-styles.js";
@@ -11,6 +12,8 @@ export function LocalizationPicker(props: {
 	readonly reason?: string | undefined;
 	readonly icon?: ToolIconName;
 	readonly tooltip?: string;
+	/** A quiet word before the value, so a choice reads as what it chooses: "Target FixtureGame". */
+	readonly prefix?: string;
 	readonly onSelect: (value: string) => void;
 }) {
 	const id = createUniqueId();
@@ -59,10 +62,15 @@ export function LocalizationPicker(props: {
 								tone="quiet"
 								aria-label={props.label + ": " + props.value}
 								disabled={props.disabled}
-								title={props.reason}
+								title={props.reason ?? props.tooltip}
 								ref={ref}
 								onClick={click}
 							>
+								<Show when={props.prefix}>
+									{(prefix) => (
+										<span {...stylex.attrs(styles.muted)}>{prefix()} </span>
+									)}
+								</Show>
 								{props.value} <span aria-hidden="true">▾</span>
 							</Button>
 						}

@@ -11,6 +11,8 @@ import type {
 import { Button, createEffectAction } from "@ue-shed/ui";
 import { tokens } from "@ue-shed/ui-theme/tokens.stylex.js";
 import { For, Show, createEffect, createSignal, untrack } from "solid-js";
+import { failureText } from "./game-text-failure.js";
+import { mergePages, nextPageCursor } from "./game-text-pages.js";
 import type { GameTextClientApi } from "./game-text-client.js";
 import { GameTextResultRows } from "./game-text-result-rows.js";
 
@@ -158,11 +160,7 @@ function GroupSection(props: {
 		const request: TextCorpusSearchRequest = {
 			...base,
 			openGroup: key,
-			...(after?.localization?.nextCursor
-				? { localizationCursor: after.localization.nextCursor }
-				: after?.nextCursor
-					? { cursor: after.nextCursor }
-					: undefined)
+			...(after ? nextPageCursor(after) : undefined)
 		};
 		setLoading(true);
 		setError(undefined);
@@ -175,25 +173,9 @@ function GroupSection(props: {
 					);
 					return;
 				}
-				const merged = after
-					? {
-							...result.page,
-							units: [...after.units, ...result.page.units],
-							...(result.page.localization && after.localization
-								? {
-										localization: {
-											...result.page.localization,
-											lines: [
-												...after.localization.lines,
-												...result.page.localization.lines
-											]
-										}
-									}
-								: undefined)
-						}
-					: result.page;
+				const merged = after ? mergePages(after, result.page) : result.page;
 				setPage(merged);
-				const next = merged.localization?.nextCursor ?? merged.nextCursor;
+				const next = nextPageCursor(merged);
 				if (next !== undefined && loadedRows(merged).length < desired) {
 					load(merged, base, key);
 					return;
@@ -206,7 +188,7 @@ function GroupSection(props: {
 			},
 			onFailure: (cause) => {
 				setLoading(false);
-				setError(String(cause));
+				setError(failureText("Couldn’t load these lines.", cause));
 			}
 		});
 	};
@@ -251,7 +233,15 @@ function GroupSection(props: {
 			<button
 				type="button"
 				aria-expanded={props.open ? "true" : "false"}
-				aria-label={`${label()} ${props.group.count.toLocaleString()} lines${props.group.needWork ? `, ${props.group.needWork.toLocaleString()} need work` : ""}`}
+				aria-label={
+					`${label()} ${props.group.count.toLocaleString()} lines` +
+					(props.group.needWork
+						? `, ${props.group.needWork.toLocaleString()} need work` +
+							(props.by !== "problem" && SEVERE.has(props.group.worst)
+								? ", including key problems"
+								: "")
+						: "")
+				}
 				onClick={() => props.onToggle()}
 				{...stylex.attrs(styles.header)}
 			>

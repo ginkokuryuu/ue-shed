@@ -13,6 +13,7 @@ import { textCountLabel, textLocationLabel } from "@ue-shed/game-text/browser";
 import { Button, Chip, createEffectAction } from "@ue-shed/ui";
 import { For, Show, createEffect, createSignal, untrack } from "solid-js";
 import type { JSX } from "@solidjs/web";
+import { failureText } from "./game-text-failure.js";
 import type { GameTextClientApi } from "./game-text-client.js";
 import { CopyButton } from "./game-text-copy-button.js";
 import { ShowInUnrealButton } from "./game-text-locate-button.js";
@@ -91,7 +92,7 @@ export function GameTextQualityWorkspace(props: {
 				onFailure: (cause) => {
 					if (generation === focusGeneration)
 						setFailure({
-							cause: "Couldn’t load finding details. " + String(cause),
+							cause: failureText("Couldn’t load finding details.", cause),
 							retry: () => requestFocus(id)
 						});
 				},
@@ -136,7 +137,7 @@ export function GameTextQualityWorkspace(props: {
 						setLoading(false);
 						setPage(undefined);
 						setFailure({
-							cause: "Couldn’t load findings. " + String(cause),
+							cause: failureText("Couldn’t load findings.", cause),
 							retry: () => requestPage()
 						});
 					}
@@ -147,7 +148,7 @@ export function GameTextQualityWorkspace(props: {
 						setLoading(false);
 						setPage(undefined);
 						setFailure({
-							cause: "Writing checks are unavailable. Reload the rules after scanning.",
+							cause: "Quality checks are unavailable. Reload the rules after scanning.",
 							retry: props.onReplaceRules
 						});
 						return;
@@ -249,7 +250,7 @@ export function GameTextQualityWorkspace(props: {
 						disabled={props.disabled}
 						onClick={() => props.onLoadRules?.()}
 					>
-						Load rules
+						Choose another rules file…
 					</Button>
 				</Show>
 			</div>
@@ -430,7 +431,7 @@ export function GameTextQualityWorkspace(props: {
 											Source preview shortened.
 										</span>
 									</Show>
-									<span {...stylex.attrs(styles.warning)}>
+									<span {...stylex.attrs(styles.findingFacts)}>
 										{qualityFindingFacts(finding())}
 									</span>
 									<h3 {...stylex.attrs(styles.section)}>How to fix</h3>

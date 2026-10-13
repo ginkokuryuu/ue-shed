@@ -54,7 +54,7 @@ export const styles = stylex.create({
 		maxWidth: "100%",
 		height: 18,
 		verticalAlign: "top",
-		color: tokens.colorAccent
+		color: tokens.colorTextMuted
 	},
 	scanReadout: {
 		minWidth: 0,
@@ -67,7 +67,8 @@ export const styles = stylex.create({
 		flexWrap: "wrap",
 		alignItems: "center",
 		gap: 8,
-		flexShrink: 0
+		flexShrink: 0,
+		order: 2
 	},
 	browseActions: {
 		display: "flex",
@@ -84,8 +85,12 @@ export const styles = stylex.create({
 		borderBottomStyle: "solid",
 		borderBottomColor: tokens.colorBorder
 	},
+	// Shares the title row while it has room and moves to its own row only on narrow windows; its
+	// fixed basis keeps changing scan text from moving anything else.
 	coverage: {
-		flexBasis: "100%",
+		flexGrow: 1,
+		flexShrink: 1,
+		flexBasis: 240,
 		order: 1,
 		minWidth: 0,
 		height: 18,
@@ -109,6 +114,8 @@ export const styles = stylex.create({
 		fontSize: 12
 	},
 	warning: { color: tokens.colorWarning },
+	/** What a finding observed: plain text, since findings are not severities. */
+	findingFacts: { color: tokens.colorText, fontSize: 12 },
 	accent: { color: tokens.colorAccent },
 	danger: { color: tokens.colorDanger },
 	gridCollapsed: { gridTemplateColumns: "minmax(0, 1fr)" },
@@ -310,8 +317,10 @@ export const styles = stylex.create({
 		zIndex: 20
 	},
 	readProblemsTrigger: {
-		height: 26,
-		padding: "2px 4px",
+		height: 18,
+		padding: "0 4px",
+		lineHeight: "18px",
+		verticalAlign: "top",
 		borderWidth: 0,
 		borderRadius: tokens.radiusControl,
 		backgroundColor: { default: "transparent", ":hover": tokens.colorSurfaceHover },

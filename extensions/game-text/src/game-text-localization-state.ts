@@ -189,7 +189,9 @@ export function createGameTextLocalizationState(props: {
 			onFailure: () => {
 				if (version !== focusGeneration) return;
 				setDetailLoading(false);
-				setError("Translations for this line could not be loaded. Rescan to try again.");
+				setError(
+					"Translations for this line could not be loaded. Retry translations to try again."
+				);
 			},
 			onSuccess: (result) => {
 				if (version !== focusGeneration) return;

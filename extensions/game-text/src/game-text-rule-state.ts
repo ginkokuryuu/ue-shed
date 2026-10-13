@@ -1,6 +1,7 @@
 import type { GameTextRuleDocument, TextQualityRuleUpdateResult } from "@ue-shed/game-text/browser";
 import { createEffectAction } from "@ue-shed/ui";
 import { createMemo, createSignal } from "solid-js";
+import { failureText } from "./game-text-failure.js";
 import type { GameTextClientApi } from "./game-text-client.js";
 
 export interface RuleEditorState {
@@ -68,7 +69,10 @@ export function createGameTextRuleState(options: {
 			{
 				onFailure: (cause) => {
 					setBusy(false);
-					setFeedback({ message: String(cause), status: "failed" });
+					setFeedback({
+						message: failureText("The rules couldn’t be checked.", cause),
+						status: "failed"
+					});
 				},
 				onSuccess: (result) => {
 					setBusy(false);
@@ -99,11 +103,20 @@ export function createGameTextRuleState(options: {
 							status: "failed"
 						});
 					} else {
-						setFeedback({
-							message: "No loaded rule file is available.",
-							recovery: "Load a rule file and retry.",
-							status: "failed"
-						});
+						setFeedback(
+							fileAttached()
+								? {
+										message:
+											"The project changed while the rules were checked.",
+										recovery: "Wait for the scan to finish, then try again.",
+										status: "failed"
+									}
+								: {
+										message: "No rules file is attached.",
+										recovery: "Choose a rules file, then save again.",
+										status: "failed"
+									}
+						);
 					}
 				}
 			}
@@ -116,8 +129,8 @@ export function createGameTextRuleState(options: {
 		changeDraft(upgraded);
 		run("preview", upgraded);
 	};
+	// Whether a rules file is attached is the host's to say; a restored draft keeps that answer.
 	const restore = (saved: RuleEditorState) => {
-		setFileAttached(false);
 		action.cancel();
 		setState(saved);
 		setBusy(false);
@@ -133,6 +146,7 @@ export function createGameTextRuleState(options: {
 	return {
 		state,
 		fileAttached,
+		attachFile: setFileAttached,
 		busy,
 		dirty,
 		problems,
@@ -147,6 +161,20 @@ export function createGameTextRuleState(options: {
 }
 
 export type GameTextRuleState = ReturnType<typeof createGameTextRuleState>;
+
+/**
+ * A typed character limit. An empty or unreadable field is 0, which validation reports, so the
+ * field can be cleared and retyped and the draft always stores a finite number.
+ */
+export function typedLimit(text: string): number {
+	const value = Number(text);
+	return text.trim() === "" || !Number.isFinite(value) ? 0 : value;
+}
+
+/** A limit as its field shows it: blank until a usable number is typed. */
+export function shownLimit(value: number | undefined): number | "" {
+	return value === undefined || value <= 0 ? "" : value;
+}
 
 export interface RuleDraftProblem {
 	readonly ruleId: string;

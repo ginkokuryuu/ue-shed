@@ -233,7 +233,7 @@ export function GameTextReports(props: {
 									read · {report().gatherFilesFailed} unread.
 								</p>
 								<Show when={report().wordCountUnknown > 0}>
-									<p {...stylex.attrs(styles.warning)}>
+									<p {...stylex.attrs(styles.muted)}>
 										Word counts are unavailable for some source languages.
 									</p>
 								</Show>
