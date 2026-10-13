@@ -3,6 +3,7 @@ import { randomUUID } from "node:crypto";
 import { constants, zstdCompressSync, zstdDecompressSync } from "node:zlib";
 import { join } from "node:path";
 import { performance } from "node:perf_hooks";
+import { HostSliceClock, nextMacrotask } from "./host-slices.js";
 import { Schema } from "effect";
 import {
 	encodeStringBlock,
@@ -566,22 +567,27 @@ export class SharedStringFiles {
 		ordered = false
 	) {
 		snapshotCheck(!this.closed, "intern", "Shared string scope is closed");
+		const clock = new HostSliceClock();
 		const output = reuse ?? new Uint32Array(values.offsets.length - 1).fill(absentId);
 		const pending = new Uint32Array(output.length);
 		let pendingCount = 0;
-		for (let id = 0; id < output.length; id++)
+		for (let id = 0; id < output.length; id++) {
 			if (output[id] === absentId) pending[pendingCount++] = id;
+			if (clock.step()) await nextMacrotask();
+		}
 		this.reusedStrings += output.length - pendingCount;
 		if (!pendingCount) return output;
 		const sortStarted = performance.now();
 		const pendingIds = pending.subarray(0, pendingCount);
 		if (ordered)
-			for (let row = 1; row < pendingIds.length; row++)
+			for (let row = 1; row < pendingIds.length; row++) {
 				snapshotCheck(
 					comparePacked(values, pendingIds[row - 1]!, values, pendingIds[row]!) <= 0,
 					"intern",
 					"Ordered input is not byte sorted"
 				);
+				if (clock.step()) await nextMacrotask();
+			}
 		const order = ordered ? pendingIds : sortBytes(values, pendingIds);
 		this.sortMs += performance.now() - sortStarted;
 		const unique = new Uint32Array(order.length);
@@ -592,6 +598,7 @@ export class SharedStringFiles {
 				unique[size++] = id;
 				previousId = id;
 			}
+			if (clock.step()) await nextMacrotask();
 		}
 		const requests = unique.subarray(0, size);
 		const requested = requests.reduce((n, id) => n + Number(output[id] === absentId), 0);
@@ -642,6 +649,7 @@ export class SharedStringFiles {
 				current: Buffer | undefined,
 				rank = 0;
 			for (const id of selected) {
+				if (clock.step()) await nextMacrotask();
 				if (output[id] !== absentId) continue;
 				while (
 					fence + 1 < index.offsets.length &&
@@ -683,6 +691,7 @@ export class SharedStringFiles {
 			)
 				representative++;
 			output[id] = output[requests[representative]!]!;
+			if (clock.step()) await nextMacrotask();
 		}
 		return output;
 	}
@@ -820,7 +829,9 @@ export class SharedStringFiles {
 			mask = 0;
 		};
 		const ownerRanks = domains.length > 1 ? new Uint32Array(count) : undefined;
+		const clock = new HostSliceClock();
 		for await (const key of keys) {
+			if (clock.step()) await nextMacrotask();
 			snapshotCheck(seen < count, "front", "Too many sorted keys");
 			blockKeys.push(Buffer.from(key.bytes));
 			utf8Bytes += key.bytes.length;

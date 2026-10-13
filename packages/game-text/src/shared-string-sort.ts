@@ -6,6 +6,7 @@ import type { SnapshotSource } from "./snapshot-file.js";
 import type { SharedStringFiles } from "./shared-string-file.js";
 import { performance } from "node:perf_hooks";
 import { createHash } from "node:crypto";
+import { HostSliceClock, nextMacrotask } from "./host-slices.js";
 import { Schema } from "effect";
 
 const Natural = Schema.Int.check(Schema.isGreaterThanOrEqualTo(0));
@@ -219,6 +220,8 @@ export async function sortColdStrings(
 	runBytes = 64 * 1024 ** 2
 ) {
 	const started = performance.now();
+	// The run reads and merge are synchronous file I/O; slices keep the host responsive.
+	const clock = new HostSliceClock();
 	const domains: string[] = [];
 	const hashes: (typeof FileReuse.Type)[] = entries.map(() => ({}));
 	const ranges = entries.map((entry) => {
@@ -327,6 +330,7 @@ export async function sortColdStrings(
 				occurrence[rows] = range.start + position++;
 				owners[rows++] = range.owner;
 				bytes += key.length + 12;
+				if (clock.step()) await nextMacrotask();
 			}
 			positions.set(domain, position);
 		}
@@ -437,6 +441,7 @@ export async function sortColdStrings(
 			mapping[head.occurrence] = rank;
 			const following = next(head.reader);
 			if (following) push(following);
+			if (clock.step()) await nextMacrotask();
 		}
 		finishKey();
 	} finally {
@@ -461,7 +466,10 @@ export async function sortColdStrings(
 		}
 		if (existingStore) {
 			const arena = new StringArena(0, counts[owner]!);
-			for await (const key of keys()) arena.add(key.bytes);
+			for await (const key of keys()) {
+				arena.add(key.bytes);
+				if (clock.step()) await nextMacrotask();
+			}
 			resolved[owner] = await files.internPacked(
 				domains[owner]!,
 				arena.finish(),
@@ -477,10 +485,12 @@ export async function sortColdStrings(
 		ranks[chunk]![local] = existingStore
 			? resolved[owner]![ranks[chunk]![local]!]!
 			: ranks[chunk]![local]! + bases[owner]!;
+		if (clock.step()) await nextMacrotask();
 	}
 	for (let id = 0; id < mapping.length; id++) {
 		const rank = mapping[id]!;
 		mapping[id] = ranks[Math.floor(rank / rankChunk)]![rank % rankChunk]!;
+		if (clock.step()) await nextMacrotask();
 	}
 	const maps = ranges.map(
 		(range) =>

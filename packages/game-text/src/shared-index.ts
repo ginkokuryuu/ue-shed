@@ -29,6 +29,7 @@ import {
 import { SharedStringFiles, SharedSegment, maximumSharedSegments } from "./shared-string-file.js";
 import { sortColdStrings, FileReuse, type ColdLayerSource } from "./shared-string-sort.js";
 import { prepareColdLayers, type ColdLayerTask } from "./cold-layer-pool.js";
+import { HostSliceClock, nextMacrotask } from "./host-slices.js";
 import {
 	StringArena,
 	absentId,
@@ -542,6 +543,7 @@ function makeSharedIndexNodeLayer(options: SharedIndexOptions) {
 						const segmentLimit = files.segments.length >= maximumSharedSegments;
 						if (!force && !segmentLimit && (upper < 8 * 1024 ** 2 || upper < total / 4))
 							return { compacted: false, deadBytes: 0, totalBytes: total };
+						const clock = new HostSliceClock();
 						const usage = yield* boundary("compaction.census", () =>
 							liveStrings(directory, manifest, (bytes) => {
 								files.readBytes += bytes;
@@ -565,6 +567,7 @@ function makeSharedIndexNodeLayer(options: SharedIndexOptions) {
 										if (!(usage[id >>> 3]! & (1 << (id & 7))))
 											deadBytes += length;
 									}
+									if (clock.expired()) await nextMacrotask();
 								}
 								return { deadBytes, totalBytes };
 							}
@@ -613,6 +616,7 @@ function makeSharedIndexNodeLayer(options: SharedIndexOptions) {
 												meta.domains[ownership?.[id - meta.start] ?? 0]!
 											);
 										}
+										if (clock.expired()) await nextMacrotask();
 									}
 								}
 								const inverse = await fresh.merged(
