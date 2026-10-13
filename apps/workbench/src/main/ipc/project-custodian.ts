@@ -10,9 +10,6 @@ export const register = Effect.gen(function* () {
 	yield* ipc.register(invokeContracts["project-custodian:configured-scan"], () =>
 		custodian.configuredScan()
 	);
-	yield* ipc.register(invokeContracts["project-custodian:choose-and-scan"], () =>
-		custodian.chooseAndScan()
-	);
 	yield* ipc.register(invokeContracts["project-custodian:prepare"], (...args) => {
 		const [intent] = args;
 		return custodian.prepare(intent);

@@ -3,7 +3,6 @@ import { Context, Effect, Layer } from "effect";
 import { WorkbenchProject } from "./project-workspace.js";
 
 export interface WorkbenchInputAtlasApi {
-	readonly chooseAndScan: () => Effect.Effect<EnhancedInputRunResult>;
 	readonly configuredScan: () => Effect.Effect<EnhancedInputRunResult>;
 }
 
@@ -19,30 +18,15 @@ export const WorkbenchInputAtlasLive = Layer.effect(
 
 		const configuredScan = Effect.fn("Workbench.WorkbenchInputAtlas.configuredScan")(
 			function* () {
+				// Without a selected project the route sends users to the shell's project picker.
+				const current = yield* project.current();
+				if (current.status === "not_configured" || current.status === "cancelled")
+					return { status: "not_configured" as const };
 				return yield* project.inputAtlas();
 			}
 		);
 
-		const chooseAndScan = Effect.fn("Workbench.WorkbenchInputAtlas.chooseAndScan")(
-			function* () {
-				const choice = yield* project.choose();
-				if (choice.status === "cancelled") return { status: "cancelled" as const };
-				if (choice.status === "failed") {
-					return {
-						error: {
-							code: "invalid_project" as const,
-							message: choice.error.message,
-							recovery: choice.error.recovery,
-							retrySafe: true
-						},
-						status: "failed" as const
-					};
-				}
-				return yield* project.inputAtlas();
-			}
-		);
-
-		return WorkbenchInputAtlas.of({ chooseAndScan, configuredScan });
+		return WorkbenchInputAtlas.of({ configuredScan });
 	})
 );
 

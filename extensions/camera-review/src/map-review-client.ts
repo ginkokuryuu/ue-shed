@@ -29,12 +29,7 @@ import type {
 	WorldScoutResult
 } from "@ue-shed/observatory/browser";
 import { EditorWorldOpenResponse, EditorWorldState } from "@ue-shed/protocol";
-import type {
-	SavedWorld,
-	SavedWorldChoice,
-	SavedWorldMap,
-	SavedWorldProgress
-} from "@ue-shed/protocol";
+import type { SavedWorld, SavedWorldMap, SavedWorldProgress } from "@ue-shed/protocol";
 import { Context, type Effect, Schema, type Stream } from "effect";
 
 /** Renderer presentation state plus the sparse IPC batch that produced its latest transform tick. */
@@ -110,8 +105,6 @@ export interface MapReviewClientApi {
 	readonly readSavedWorld?: (mapPath: string) => Effect.Effect<SavedWorld, MapReviewClientError>;
 	readonly savedWorldMaps?: () => Effect.Effect<readonly SavedWorldMap[], MapReviewClientError>;
 	readonly savedWorldProgress?: () => Effect.Effect<SavedWorldProgress, MapReviewClientError>;
-	/** Chooses the app-wide project, then returns its cached saved-map inventory. */
-	readonly chooseProjectAndMaps?: () => Effect.Effect<SavedWorldChoice, MapReviewClientError>;
 	readonly connectWorld: () => Effect.Effect<WorldScoutResult, MapReviewClientError>;
 	readonly focusActor: (
 		actorId: ActorId,

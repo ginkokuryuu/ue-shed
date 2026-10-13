@@ -15,10 +15,6 @@ export interface InputAtlasClientApi {
 		EnhancedInputRunResult,
 		InputAtlasClientError
 	>;
-	readonly chooseProjectAndScan: () => Effect.Effect<
-		EnhancedInputRunResult,
-		InputAtlasClientError
-	>;
 }
 
 export class InputAtlasClient extends Context.Service<InputAtlasClient, InputAtlasClientApi>()(

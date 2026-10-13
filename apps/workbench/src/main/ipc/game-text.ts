@@ -65,14 +65,8 @@ export const register = Effect.gen(function* () {
 	yield* ipc.register(invokeContracts["game-text:configured-scan"], () =>
 		gameText.configuredRefresh(true)
 	);
-	yield* ipc.register(invokeContracts["game-text:choose-and-scan"], () =>
-		gameText.chooseAndRefresh().pipe(Effect.orDie)
-	);
 	yield* ipc.register(invokeContracts["game-text:configured-refresh"], (refresh) =>
 		gameText.configuredRefresh(refresh)
-	);
-	yield* ipc.register(invokeContracts["game-text:choose-and-refresh"], () =>
-		gameText.chooseAndRefresh().pipe(Effect.orDie)
 	);
 	yield* ipc.register(invokeContracts["game-text:progress"], () => gameText.progress());
 	yield* ipc.register(invokeContracts["game-text:investigation-export"], (...args) =>

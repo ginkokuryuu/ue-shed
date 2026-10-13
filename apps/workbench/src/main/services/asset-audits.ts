@@ -39,7 +39,6 @@ import { RemoteControlClient } from "@ue-shed/unreal-connection";
 import type { SavedAssetScan } from "@ue-shed/unreal-assets";
 import { Cache, Context, Data, Duration, Effect, Layer, Ref, Schema } from "effect";
 import { ElectronDialog } from "../adapters/electron-dialog.js";
-import type { WorkbenchWindowError } from "../adapters/electron-window.js";
 import type { WorkbenchTaskProgress } from "../project-workspace-contract.js";
 import { WorkbenchConfiguration } from "../workbench-config.js";
 import { OfflineTexturePreview } from "./offline-texture-preview.js";
@@ -54,11 +53,6 @@ export interface WorkbenchAssetAuditsApi {
 		query: TextureInvestigationQuery
 	) => Effect.Effect<InvestigationFileResult>;
 	readonly investigationOpen: () => Effect.Effect<TextureInvestigationPresetResult>;
-	readonly chooseAndRefresh: () => Effect.Effect<
-		TextureAuditQueryRunResult,
-		WorkbenchWindowError
-	>;
-	readonly chooseAndScan: () => Effect.Effect<TextureAuditRunResult, WorkbenchWindowError>;
 	readonly configuredRefresh: (refresh?: boolean) => Effect.Effect<TextureAuditQueryRunResult>;
 	readonly configuredScan: () => Effect.Effect<TextureAuditRunResult>;
 	readonly progress: () => Effect.Effect<WorkbenchTaskProgress>;
@@ -272,42 +266,6 @@ export const WorkbenchAssetAuditsLive = Layer.effect(
 			}
 		);
 
-		const chooseAndScan = Effect.fn("Workbench.WorkbenchAssetAudits.chooseAndScan")(
-			function* () {
-				const projectChoice = yield* project.choose();
-				if (projectChoice.status === "cancelled") return { status: "cancelled" as const };
-				if (projectChoice.status === "not_configured") {
-					return { status: "not_configured" as const };
-				}
-				if (projectChoice.status === "failed") {
-					return unavailableProject(
-						projectChoice.error.message,
-						projectChoice.error.recovery
-					);
-				}
-				let ruleFile =
-					configuration.textureAuditRules.status === "configured"
-						? configuration.textureAuditRules.path
-						: undefined;
-				if (!ruleFile) {
-					const ruleChoice = yield* dialog.chooseFile({
-						filters: [{ extensions: ["json"], name: "JSON rule set" }],
-						title: "Choose texture audit rules"
-					});
-					if (ruleChoice.status === "cancelled") return { status: "cancelled" as const };
-					ruleFile = ruleChoice.path;
-				}
-				return yield* project.candidates("texture").pipe(
-					Effect.flatMap((index) =>
-						runScan(projectChoice.project.projectRoot, ruleFile, index)
-					),
-					Effect.catch((error) =>
-						Effect.succeed(unavailableProject(error.message, error.recovery))
-					)
-				);
-			}
-		);
-
 		class QueryKey extends Data.Class<{
 			readonly projectRoot: string;
 			readonly generation: number;
@@ -379,42 +337,6 @@ export const WorkbenchAssetAuditsLive = Layer.effect(
 					return { status: "completed" as const, summary: model.summary() };
 				}
 				return yield* Cache.get(refreshes, key);
-			}
-		);
-
-		const chooseAndRefresh = Effect.fn("Workbench.WorkbenchAssetAudits.chooseAndRefresh")(
-			function* () {
-				const projectChoice = yield* project.choose();
-				if (projectChoice.status === "cancelled") return { status: "cancelled" as const };
-				if (projectChoice.status === "not_configured") {
-					return { status: "not_configured" as const };
-				}
-				if (projectChoice.status === "failed") {
-					return unavailableQueryProject(
-						projectChoice.error.message,
-						projectChoice.error.recovery
-					);
-				}
-				let ruleFile =
-					configuration.textureAuditRules.status === "configured"
-						? configuration.textureAuditRules.path
-						: undefined;
-				if (!ruleFile) {
-					const ruleChoice = yield* dialog.chooseFile({
-						filters: [{ extensions: ["json"], name: "JSON rule set" }],
-						title: "Choose texture audit rules"
-					});
-					if (ruleChoice.status === "cancelled") return { status: "cancelled" as const };
-					ruleFile = ruleChoice.path;
-				}
-				return yield* project.candidates("texture").pipe(
-					Effect.flatMap((index) =>
-						runRefresh(projectChoice.project.projectRoot, ruleFile, index)
-					),
-					Effect.catch((error) =>
-						Effect.succeed(unavailableQueryProject(error.message, error.recovery))
-					)
-				);
 			}
 		);
 
@@ -663,8 +585,6 @@ export const WorkbenchAssetAuditsLive = Layer.effect(
 			investigationExport,
 			investigationSave,
 			investigationOpen,
-			chooseAndRefresh,
-			chooseAndScan,
 			configuredRefresh,
 			configuredScan,
 			progress,
@@ -678,8 +598,8 @@ export const WorkbenchAssetAuditsLive = Layer.effect(
 );
 
 export function makeWorkbenchAssetAuditsTestLayer(
-	service: Pick<WorkbenchAssetAuditsApi, "chooseAndScan" | "configuredScan" | "preview"> &
-		Partial<Omit<WorkbenchAssetAuditsApi, "chooseAndScan" | "configuredScan" | "preview">>
+	service: Pick<WorkbenchAssetAuditsApi, "configuredScan" | "preview"> &
+		Partial<Omit<WorkbenchAssetAuditsApi, "configuredScan" | "preview">>
 ): Layer.Layer<WorkbenchAssetAudits> {
 	return Layer.succeed(
 		WorkbenchAssetAudits,
@@ -687,7 +607,6 @@ export function makeWorkbenchAssetAuditsTestLayer(
 			investigationExport: () => Effect.succeed({ status: "cancelled" }),
 			investigationSave: () => Effect.succeed({ status: "cancelled" }),
 			investigationOpen: () => Effect.succeed({ status: "cancelled" }),
-			chooseAndRefresh: () => Effect.succeed({ status: "not_configured" }),
 			configuredRefresh: () => Effect.succeed({ status: "not_configured" }),
 			progress: () =>
 				Effect.succeed({

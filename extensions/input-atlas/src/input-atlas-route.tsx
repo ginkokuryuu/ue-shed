@@ -168,7 +168,7 @@ export function InputAtlasRoute(props: { readonly client: InputAtlasClientApi })
 					error: {
 						code: "invalid_project",
 						message: Cause.pretty(cause),
-						recovery: "Choose an Unreal project directory and scan again.",
+						recovery: "Check the selected project and scan again.",
 						retrySafe: true
 					}
 				})
@@ -234,13 +234,6 @@ export function InputAtlasRoute(props: { readonly client: InputAtlasClientApi })
 					>
 						Rescan
 					</Button>
-					<Button
-						tone="primary"
-						disabled={state().status === "loading"}
-						onClick={() => run(() => props.client.chooseProjectAndScan())}
-					>
-						Choose project…
-					</Button>
 				</div>
 			</header>
 
@@ -270,8 +263,8 @@ export function InputAtlasRoute(props: { readonly client: InputAtlasClientApi })
 				</Match>
 				<Match when={state().status === "not_configured"}>
 					<p {...stylex.attrs(styles.notice)}>
-						No project configured. Choose an Unreal project to scan its mapping
-						contexts.
+						No project selected. Choose a project using the workspace project picker,
+						then return here.
 					</p>
 				</Match>
 				<Match when={state().status === "cancelled"}>

@@ -11,13 +11,12 @@ import {
 	type CustodianProposalId
 } from "@ue-shed/project-custodian";
 import { join } from "node:path";
-import { Context, Effect, Layer, Ref } from "effect";
+import { Context, Effect, Layer } from "effect";
 import { ElectronApp } from "../adapters/electron-app.js";
-import { ElectronDialog } from "../adapters/electron-dialog.js";
 import { WorkbenchConfiguration } from "../workbench-config.js";
+import { WorkbenchProject } from "./project-workspace.js";
 
 export interface WorkbenchCustodianApi {
-	readonly chooseAndScan: () => Effect.Effect<CustodianRunResult>;
 	readonly configuredScan: () => Effect.Effect<CustodianRunResult>;
 	readonly prepare: (intent: CustodianPrepareIntent) => Effect.Effect<CustodianPrepareRunResult>;
 	readonly execute: (
@@ -36,15 +35,8 @@ export const WorkbenchCustodianLive = Layer.effect(
 	Effect.gen(function* () {
 		const configuration = yield* WorkbenchConfiguration;
 		const custodian = yield* Custodian;
-		const dialog = yield* ElectronDialog;
+		const project = yield* WorkbenchProject;
 		const electronApp = yield* ElectronApp;
-		const root = yield* Ref.make<string | undefined>(
-			configuration.custodianRoot?.status === "configured"
-				? configuration.custodianRoot.path
-				: configuration.project.status === "configured"
-					? configuration.project.projectRoot
-					: undefined
-		);
 
 		const scan = Effect.fn("Workbench.ProjectCustodian.scan")(function* (scanRoot: string) {
 			return yield* custodian.scan({ root: scanRoot }).pipe(
@@ -63,32 +55,14 @@ export const WorkbenchCustodianLive = Layer.effect(
 			);
 		});
 
+		// An explicit custodian root may span several projects; otherwise the shell's project is scanned.
 		const configuredScan = Effect.fn("Workbench.ProjectCustodian.configuredScan")(function* () {
-			const configured = yield* Ref.get(root);
-			return configured === undefined
-				? ({ status: "not_configured" } as const)
-				: yield* scan(configured);
-		});
-
-		const chooseAndScan = Effect.fn("Workbench.ProjectCustodian.chooseAndScan")(function* () {
-			const selected = yield* Effect.result(
-				dialog.chooseDirectory({ title: "Choose a Project Custodian scan root" })
-			);
-			if (selected._tag === "Failure") {
-				return {
-					status: "failed" as const,
-					error: {
-						code: "dialog_failed" as const,
-						message: selected.failure.message,
-						recovery: selected.failure.recovery,
-						retrySafe: selected.failure.retrySafe
-					}
-				};
-			}
-			const choice = selected.success;
-			if (choice.status === "cancelled") return { status: "cancelled" as const };
-			yield* Ref.set(root, choice.path);
-			return yield* scan(choice.path);
+			if (configuration.custodianRoot?.status === "configured")
+				return yield* scan(configuration.custodianRoot.path);
+			const current = yield* project.current();
+			return current.status === "ready"
+				? yield* scan(current.project.projectRoot)
+				: ({ status: "not_configured" } as const);
 		});
 
 		const prepare = Effect.fn("Workbench.ProjectCustodian.prepare")(function* (
@@ -154,7 +128,7 @@ export const WorkbenchCustodianLive = Layer.effect(
 			);
 		});
 
-		return WorkbenchCustodian.of({ chooseAndScan, configuredScan, prepare, execute, cancel });
+		return WorkbenchCustodian.of({ configuredScan, prepare, execute, cancel });
 	})
 );
 

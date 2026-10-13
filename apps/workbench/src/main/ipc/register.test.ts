@@ -160,10 +160,6 @@ function buildRegistrationLayer(recorder: Recorder, options: RegistrationOptions
 	});
 
 	const assetAudits = makeWorkbenchAssetAuditsTestLayer({
-		chooseAndScan: () =>
-			recorder
-				.record("assetAudits.chooseAndScan")
-				.pipe(Effect.as({ status: "not_configured" } satisfies TextureAuditRunResult)),
 		configuredScan: () =>
 			recorder
 				.record("assetAudits.configuredScan")
@@ -229,12 +225,7 @@ function buildRegistrationLayer(recorder: Recorder, options: RegistrationOptions
 	});
 
 	const gameText = makeWorkbenchGameTextTestLayer({
-		chooseAndScan: () => Effect.die("Full corpus reads must remain in the host"),
 		configuredScan: () => Effect.die("Full corpus reads must remain in the host"),
-		chooseAndRefresh: () =>
-			recorder
-				.record("gameText.chooseAndRefresh")
-				.pipe(Effect.as({ status: "not_configured" } satisfies TextCorpusQueryRunResult)),
 		configuredRefresh: () =>
 			recorder
 				.record("gameText.configuredRefresh")
@@ -258,10 +249,6 @@ function buildRegistrationLayer(recorder: Recorder, options: RegistrationOptions
 	});
 
 	const inputAtlas = makeWorkbenchInputAtlasTestLayer({
-		chooseAndScan: () =>
-			recorder
-				.record("inputAtlas.chooseAndScan")
-				.pipe(Effect.as({ status: "not_configured" } satisfies EnhancedInputRunResult)),
 		configuredScan: () =>
 			recorder
 				.record("inputAtlas.configuredScan")
@@ -357,10 +344,6 @@ function buildRegistrationLayer(recorder: Recorder, options: RegistrationOptions
 		savedProject: () => Effect.die("not used")
 	});
 	const custodian = makeWorkbenchCustodianTestLayer({
-		chooseAndScan: () =>
-			recorder
-				.record("projectCustodian.chooseAndScan")
-				.pipe(Effect.as({ status: "cancelled" as const })),
 		configuredScan: () =>
 			recorder
 				.record("projectCustodian.configuredScan")
@@ -908,7 +891,6 @@ it.effect("dispatches Project Custodian scans and guarded cleanup through the se
 		const { recorder } = yield* runRegistered((ipc) =>
 			Effect.gen(function* () {
 				yield* ipc.invoke("project-custodian:configured-scan");
-				yield* ipc.invoke("project-custodian:choose-and-scan");
 				yield* ipc.invoke("project-custodian:prepare", {
 					root: "C:/Projects",
 					ignorePressure: false,
@@ -924,7 +906,6 @@ it.effect("dispatches Project Custodian scans and guarded cleanup through the se
 		);
 		expect(yield* recorder.calls()).toEqual([
 			"projectCustodian.configuredScan",
-			"projectCustodian.chooseAndScan",
 			"projectCustodian.prepare:1",
 			"projectCustodian.execute:C:/Records/proposal.json",
 			"projectCustodian.cancel:proposal-1"
@@ -1103,12 +1084,12 @@ it.effect("dispatches game-text channels to WorkbenchGameText", () =>
 		const { recorder } = yield* runRegistered((ipc) =>
 			Effect.gen(function* () {
 				yield* ipc.invoke("game-text:configured-scan");
-				yield* ipc.invoke("game-text:choose-and-scan");
+				yield* ipc.invoke("game-text:configured-refresh", false);
 			})
 		);
 		expect(yield* recorder.calls()).toEqual([
 			"gameText.configuredRefresh",
-			"gameText.chooseAndRefresh"
+			"gameText.configuredRefresh"
 		]);
 	})
 );
@@ -1149,13 +1130,9 @@ it.effect("dispatches input-atlas channels to WorkbenchInputAtlas", () =>
 		const { recorder } = yield* runRegistered((ipc) =>
 			Effect.gen(function* () {
 				yield* ipc.invoke("input-atlas:configured-scan");
-				yield* ipc.invoke("input-atlas:choose-and-scan");
 			})
 		);
-		expect(yield* recorder.calls()).toEqual([
-			"inputAtlas.configuredScan",
-			"inputAtlas.chooseAndScan"
-		]);
+		expect(yield* recorder.calls()).toEqual(["inputAtlas.configuredScan"]);
 	})
 );
 

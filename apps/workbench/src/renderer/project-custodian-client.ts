@@ -43,15 +43,6 @@ export const projectCustodianClient: CustodianClientApi = {
 			decodeCustodianRunResult
 		)
 	),
-	chooseAndScan: Effect.fn("ProjectCustodianClient.chooseAndScan")(() =>
-		request(
-			{
-				invoke: () => window.ueShed.projectCustodian.chooseAndScan(),
-				operation: "projectCustodian.chooseAndScan"
-			},
-			decodeCustodianRunResult
-		)
-	),
 	prepare: Effect.fn("ProjectCustodianClient.prepare")((intent) =>
 		request(
 			{
