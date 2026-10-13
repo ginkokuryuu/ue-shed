@@ -220,6 +220,8 @@ export async function generateGameTextScale(options: {
 	root: string;
 	scale: number;
 	seed: number;
+	/** Omit the saved package event stream when a harness replays packages in memory. */
+	savedText?: boolean;
 }) {
 	const root = repositoryPath(options.root);
 	if (!Number.isSafeInteger(options.seed)) throw new Error("Seed must be a safe integer.");
@@ -291,14 +293,15 @@ export async function generateGameTextScale(options: {
 		JSON.stringify({ schemaVersion: 1, target: "Generated", records, acceptedFindings: [] }) +
 			"\n"
 	);
-	bytes += streamedFile(resolve(root, "saved-text.ndjson"), "utf8", (append) => {
-		for (const event of gameTextScaleEvents(recipe, options.seed))
-			append(
-				JSON.stringify(event)
-					.replaceAll("\u2028", "\\u2028")
-					.replaceAll("\u2029", "\\u2029") + "\n"
-			);
-	});
+	if (options.savedText !== false)
+		bytes += streamedFile(resolve(root, "saved-text.ndjson"), "utf8", (append) => {
+			for (const event of gameTextScaleEvents(recipe, options.seed))
+				append(
+					JSON.stringify(event)
+						.replaceAll("\u2028", "\\u2028")
+						.replaceAll("\u2029", "\\u2029") + "\n"
+				);
+		});
 	const descriptor =
 		JSON.stringify({ schemaVersion: 1, seed: options.seed, recipe }, null, "\t") + "\n";
 	await write("scale.json", descriptor);
