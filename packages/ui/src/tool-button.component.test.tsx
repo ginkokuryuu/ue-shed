@@ -55,18 +55,17 @@ it("keeps a hovered tooltip available while the pointer enters it", async () => 
 it("shows only the most recently hovered or focused tool's tooltip", async () => {
 	render(() => (
 		<>
-			<ToolButton label="Display" tooltip="Change list grouping.">
-				<ToolIcon name="display" />
-			</ToolButton>
 			<ToolButton label="Filter" tooltip="Narrow lines by state.">
 				<ToolIcon name="filter" />
+			</ToolButton>
+			<ToolButton label="Display" tooltip="Change list grouping.">
+				<ToolIcon name="display" />
 			</ToolButton>
 		</>
 	));
 	const user = userEvent.setup();
 	await user.hover(screen.getByRole("button", { name: "Display" }));
 	await screen.findByRole("tooltip");
-	await user.tab();
 	await user.tab();
 	await waitFor(() => expect(screen.getByRole("tooltip").textContent).toContain("Filter"));
 	expect(screen.getAllByRole("tooltip")).toHaveLength(1);
@@ -92,12 +91,14 @@ it("exposes toggle state and changes its tooltip after the tool is used", async 
 			</ToolButton>
 		);
 	});
+	const user = userEvent.setup();
 	const tool = screen.getByRole("button", { name: "Reviewed", pressed: false });
-	await userEvent.setup().click(tool);
+	await user.click(tool);
 	expect(tool.getAttribute("aria-pressed")).toBe("true");
 	// Clicking dismisses the tooltip; leaving and returning reveals the new state.
-	fireEvent.blur(tool);
-	fireEvent.focusIn(tool);
+	expect(screen.queryByRole("tooltip")).toBeNull();
+	await user.unhover(tool);
+	await user.hover(tool);
 	expect((await screen.findByRole("tooltip")).textContent).toContain("On. Remove");
 });
 
@@ -126,6 +127,77 @@ it("forwards a popover's trigger ref and restores keyboard focus when its menu c
 	await waitFor(() =>
 		expect(document.activeElement).toBe(screen.getByRole("button", { name: "Display" }))
 	);
+	// Focus returning from the closed menu is not a fresh visit, so no tooltip reappears.
+	expect(screen.queryByRole("tooltip")).toBeNull();
+});
+
+it("does not open a tooltip when a pointer press focuses the tool", async () => {
+	render(() => (
+		<ToolButton label="Filter" tooltip="Narrow lines.">
+			<ToolIcon name="filter" />
+		</ToolButton>
+	));
+	const user = userEvent.setup();
+	const tool = screen.getByRole("button", { name: "Filter" });
+	await user.pointer({ keys: "[MouseLeft>]", target: tool });
+	expect(document.activeElement).toBe(tool);
+	expect(screen.queryByRole("tooltip")).toBeNull();
+	await user.pointer({ keys: "[/MouseLeft]", target: tool });
+});
+
+it("explains a disabled tool on hover and names its badge", async () => {
+	render(() => (
+		<>
+			<ToolButton
+				label="Export"
+				tooltip="Wait for the search to finish before exporting."
+				disabled
+			>
+				<ToolIcon name="export" />
+			</ToolButton>
+			<ToolButton label="Filter" tooltip="Narrow lines." badge={3} badgeLabel="3 active">
+				<ToolIcon name="filter" />
+			</ToolButton>
+			<ToolButton label="Files" tooltip="Scope by file." badge={2}>
+				<ToolIcon name="files" />
+			</ToolButton>
+			<ToolButton label="Checks (4)" tooltip="Findings." badge={4} badgeLabel="">
+				<ToolIcon name="checks" />
+			</ToolButton>
+		</>
+	));
+	const user = userEvent.setup();
+	const exporter = screen.getByRole("button", { name: "Export" });
+	expect(exporter).toHaveProperty("disabled", true);
+	const anchor = exporter.parentElement;
+	if (!anchor) throw new Error("The disabled tool has no hover anchor.");
+	await user.hover(anchor);
+	expect((await screen.findByRole("tooltip")).textContent).toContain("Wait for the search");
+	expect(screen.getByRole("button", { name: "Filter, 3 active" })).toBeDefined();
+	expect(screen.getByRole("button", { name: "Files, 2" })).toBeDefined();
+	expect(screen.getByRole("button", { name: "Checks (4)" })).toBeDefined();
+});
+
+it("shows a visible label and keeps the tooltip to extra description", async () => {
+	render(() => (
+		<>
+			<ToolButton label="Display" showLabel>
+				<ToolIcon name="display" />
+			</ToolButton>
+			<ToolButton label="Filter" tooltip="Narrow lines by state." badge={2} showLabel>
+				<ToolIcon name="filter" />
+			</ToolButton>
+		</>
+	));
+	const user = userEvent.setup();
+	const display = screen.getByRole("button", { name: "Display" });
+	expect(display.textContent).toBe("Display");
+	await user.tab();
+	expect(document.activeElement).toBe(display);
+	expect(screen.queryByRole("tooltip")).toBeNull();
+	await user.hover(screen.getByRole("button", { name: "Filter, 2" }));
+	const tooltip = await screen.findByRole("tooltip");
+	expect(tooltip.textContent).toBe("Narrow lines by state.");
 });
 
 it("cancels a pending hover delay when the tool unmounts", () => {
@@ -145,7 +217,7 @@ it("cancels a pending hover delay when the tool unmounts", () => {
 	expect(screen.queryByRole("tooltip")).toBeNull();
 });
 
-it("releases open-tooltip listeners and positioning frames when the tool unmounts", async () => {
+it("attaches document listeners only while open and releases them on unmount", async () => {
 	const addDocument = vi.spyOn(document, "addEventListener");
 	const removeDocument = vi.spyOn(document, "removeEventListener");
 	const addWindow = vi.spyOn(window, "addEventListener");
@@ -157,6 +229,7 @@ it("releases open-tooltip listeners and positioning frames when the tool unmount
 			<ToolIcon name="display" />
 		</ToolButton>
 	));
+	expect(addDocument).not.toHaveBeenCalled();
 	await userEvent.setup().tab();
 	await screen.findByRole("tooltip");
 	const escape = addDocument.mock.calls.find(([name]) => name === "keydown")?.[1];
