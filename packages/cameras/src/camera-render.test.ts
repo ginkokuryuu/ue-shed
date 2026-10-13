@@ -364,6 +364,100 @@ describe("shared renderer lifecycle", () => {
 	});
 });
 
+describe("native screenshot warmup", () => {
+	const session: CameraRenderSessionRequest = {
+		...request,
+		policy: {
+			...request.policy,
+			renderer: { ...highResolutionReviewRenderer, screenshotWarmupFrames: 128 }
+		}
+	};
+	it("accepts bounded integers only for the viewport renderer and preserves absence", () => {
+		const decode = Schema.decodeUnknownResult(CameraRendererPolicy);
+		const strict = { onExcessProperty: "error" } as const;
+		const absent = decode(highResolutionReviewRenderer, strict);
+		expect(absent._tag === "Success" && "screenshotWarmupFrames" in absent.success).toBe(false);
+		for (const screenshotWarmupFrames of [1, 32, 128, 256])
+			expect(
+				decode({ ...highResolutionReviewRenderer, screenshotWarmupFrames }, strict)._tag
+			).toBe("Success");
+		for (const screenshotWarmupFrames of [0, 257, 1.5, null, "128"])
+			expect(
+				decode({ ...highResolutionReviewRenderer, screenshotWarmupFrames }, strict)._tag
+			).toBe("Failure");
+		expect(
+			decode({ ...legacyReviewRenderPolicy.renderer, screenshotWarmupFrames: 32 }, strict)
+				._tag
+		).toBe("Failure");
+	});
+	it("rejects missing or insufficient support before native preflight or acquisition", async () => {
+		for (const support of [undefined, { version: 1, maximumWarmupFrames: 32 }]) {
+			const h = harness((name) =>
+				name === "GetCameraRenderCapabilities"
+					? Effect.succeed(
+							support === undefined
+								? capabilities
+								: { ...capabilities, highResolutionScreenshot: support }
+						)
+					: undefined
+			);
+			const opened = await Effect.runPromise(
+				Effect.scoped(h.renderer.open(session)).pipe(Effect.flip)
+			);
+			expect(opened).toMatchObject({ code: "unsupported_capability", operation: "open" });
+			const checked = await Effect.runPromise(
+				h.renderer.preflight(session).pipe(Effect.flip)
+			);
+			expect(checked).toMatchObject({
+				code: "unsupported_capability",
+				operation: "preflight"
+			});
+			expect(h.calls).not.toContain("BeginCameraRender");
+			expect(h.calls).not.toContain("PreflightCameraRender");
+		}
+	});
+	it("round-trips the requested warmup in frame evidence and capture reuse identity", async () => {
+		const h = harness((name) =>
+			name === "GetCameraRenderCapabilities"
+				? Effect.succeed({
+						...capabilities,
+						highResolutionScreenshot: { version: 1, maximumWarmupFrames: 256 }
+					})
+				: name === "BeginCameraRender"
+					? Effect.succeed({
+							status: "opened",
+							sessionId: session.sessionId,
+							resolvedPolicy: session.policy
+						})
+					: name === "StartCameraFrame"
+						? Effect.succeed({
+								...captured,
+								evidence: { ...captured.evidence, policy: session.policy }
+							})
+						: undefined
+		);
+		const result = await Effect.runPromise(
+			renderCamera({ session, frame }).pipe(Effect.provideService(CameraRenderer, h.renderer))
+		);
+		expect(result.evidence.policy).toEqual(session.policy);
+		expect(h.calls.at(-1)).toBe("EndCameraRender");
+		const identity = {
+			frame,
+			policy: session.policy,
+			engineVersion: "engine",
+			pluginVersion: "plugin",
+			sceneRevision: "scene-1",
+			workflow: "map-source"
+		};
+		expect(cameraRenderReuseIdentity(identity)).not.toBe(
+			cameraRenderReuseIdentity({
+				...identity,
+				policy: { ...session.policy, renderer: highResolutionReviewRenderer }
+			})
+		);
+	});
+});
+
 describe("editor preview renderer policy", () => {
 	const viewportPreviews: CameraRenderSessionRequest = {
 		...request,

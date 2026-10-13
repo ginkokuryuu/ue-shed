@@ -122,11 +122,19 @@ six-level timing result alongside shadow-pool overflow and overlap differences. 
 matched three-level comparison failed visual quality acceptance: a 4K source did not reproduce
 sixteen 1K camera views. Neither source dimensions nor fewer capture calls establish equivalent
 quality. Follow-up native run-up/resolution experiments recovered detail, and review preferred a
-128-native-frame source for the tested overview, with 32 also acceptable. Those settings are private
-experimental controls, not new camera-render policy fields. Automatic grouping requires separate
-content-specific qualification; these helpers do not select it. No arbitrary CVar overrides or
+128-native-frame source for the tested overview, with 32 also acceptable. The public viewport renderer
+exposes optional `screenshotWarmupFrames` with capability negotiation and scoped restoration; ordinary
+viewport sizing and screen-percentage probes remain private diagnostic code. Source planning does
+not choose rendering settings. Automatic grouping requires separate content-specific qualification;
+these helpers do not select it. No arbitrary CVar overrides or
 quality fallback are applied by these helpers. Derive zooms from lossless pixels first; delivery
 codecs and any per-zoom quality choices remain host-owned.
+
+For the qualified three-level overview, derive lossless 1K parents from the finest captured pixels
+and encode each level independently. A 4096-logical-pixel source yields sixteen 1K leaves, four 1K
+middle tiles and one 1K root. Downsampling plus uniform WebP Q90 is the tested delivery baseline;
+the helpers select neither that codec nor its quality. Deriving before lossy encoding avoids
+accumulating compression loss. The host's viewer requests individual visible tiles, not the source.
 
 The packed-consumer journey is `examples/map-tile-sources/verify.mjs`, run by
 `pnpm test:release:packages`. It proves both source strategies, crops, parent derivation and public

@@ -3,6 +3,26 @@
 	"$id": "https://ue-shed.dev/contracts/cameras/render/v1/capabilities.schema.json",
 	"type": "object",
 	"properties": {
+		"highResolutionScreenshot": {
+			"type": "object",
+			"properties": {
+				"version": {
+					"type": "number",
+					"enum": [1]
+				},
+				"maximumWarmupFrames": {
+					"type": "integer",
+					"allOf": [
+						{
+							"minimum": 1,
+							"maximum": 256
+						}
+					]
+				}
+			},
+			"required": ["version", "maximumWarmupFrames"],
+			"additionalProperties": false
+		},
 		"authoredVisibility": {
 			"type": "object",
 			"properties": {

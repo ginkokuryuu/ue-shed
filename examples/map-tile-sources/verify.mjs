@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { Result } from "effect";
+import { Result, Schema } from "effect";
 import {
 	createMapTileGrid,
 	planMapTileSources,
@@ -8,7 +8,11 @@ import {
 	mapTileChildren,
 	mapTileKeyId
 } from "@ue-shed/cameras/map-tiles";
-import { planMapTileSources as rootPlanner } from "@ue-shed/cameras";
+import {
+	planMapTileSources as rootPlanner,
+	CameraRendererPolicy,
+	highResolutionReviewRenderer
+} from "@ue-shed/cameras";
 import { planMapTileSources as browserPlanner } from "@ue-shed/cameras/browser";
 
 function value(result) {
@@ -31,6 +35,14 @@ const options = {
 };
 assert.equal(rootPlanner, planMapTileSources);
 assert.equal(browserPlanner, planMapTileSources);
+const rendering = Schema.decodeUnknownSync(CameraRendererPolicy)(
+	{
+		...highResolutionReviewRenderer,
+		screenshotWarmupFrames: 128
+	},
+	{ onExcessProperty: "error" }
+);
+assert.equal(rendering.screenshotWarmupFrames, 128);
 const blocks = value(planMapTileSources({ grid, options }));
 const singles = value(planMapTileSources({ grid, options: { ...options, tilesPerSourceSide: 1 } }));
 assert.equal(blocks.sourceCount, 64);

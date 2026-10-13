@@ -155,6 +155,21 @@ function unsupportedRendererPolicy(
 	operation: "preflight" | "open"
 ): CameraRenderError | undefined {
 	const renderer = request.policy.renderer;
+	if (
+		renderer.kind === "editor_viewport" &&
+		renderer.screenshotWarmupFrames !== undefined &&
+		renderer.screenshotWarmupFrames >
+			(capabilities.highResolutionScreenshot?.maximumWarmupFrames ?? 0)
+	)
+		return new CameraRenderError({
+			code: "unsupported_capability",
+			operation,
+			sessionId: request.sessionId,
+			message:
+				"The connected plugin does not support the requested screenshot warmup frames.",
+			recovery:
+				"Choose a value within highResolutionScreenshot.maximumWarmupFrames, omit the setting, or install matching Cameras plugins."
+		});
 	if (renderer.editorPreviews === undefined) return undefined;
 	const support = capabilities.editorPreviews;
 	if (support?.[renderer.kind === "editor_viewport" ? "viewport" : "sceneCapture"])

@@ -392,10 +392,11 @@ mobile layout and an offline single-HTML artifact passed browser checks. The com
 sessions restored native ownership and console values, source map and plan hashes stayed unchanged,
 and owned editors were stopped. Evidence remains under ignored `out/map-capture-diagnosis-2026-10-13/`.
 
-The native screenshot run-up and viewport resolution were controlled by the private diagnostic
-harness, not new public `CameraRenderPolicy` fields. Caller-selected source geometry and CPU image
-operations are the implemented API surface. A production adopter must separately qualify and own
-the rendering controls; the planner's dimension/memory checks do not select them or certify quality.
+The investigation controlled native run-up and viewport resolution through private diagnostic code.
+Release preparation subsequently exposed optional `renderer.screenshotWarmupFrames` (1–256) on the
+public viewport policy, with capability negotiation and per-frame restoration. Viewport sizing and
+screen-percentage controls remain private probes. A production adopter separately qualifies and owns
+the chosen rendering policy; source dimension/memory checks do not select it or certify quality.
 
 ## Implementation recommendation
 
@@ -412,6 +413,12 @@ A clean packed consumer proved all three public entry points, both source strate
 parent derivation. Replaying the new primitives over the retained six-level experiment reproduced
 all 64 source cameras/sizes and every pixel of all 1024 crops and 341 parents without recapturing.
 This verifies the reusable transformations and native contracts, not renderer quality equivalence.
+
+Release qualification of the optional screenshot warmup setting built all eleven plugins and passed
+35 automation checks on each of UE **5.7.4** and **5.8.3**. The native check covers 32/128-frame
+captures, omitted/default behavior, invalid bounds, cancellation, pending lease expiry and external
+console takeover, including per-frame value/priority restoration and clean map state. The public SDK
+source integration also passed the three sizes above with 32 native frames on both engine lines.
 
 1. Retain individually rendered tiles as the complex-map fidelity baseline. Expose explicit source
    strategies for callers that qualify a larger footprint on their own content. Compose the existing

@@ -65,6 +65,8 @@ export const CameraRendererPolicy = Schema.Union([
 		vignette: Schema.Literals(["project", "disabled"]),
 		fog: Schema.Boolean,
 		volumetricFog: Schema.Boolean,
+		/** Native final-output viewport frames; absence preserves the engine/project setting. */
+		screenshotWarmupFrames: Schema.optionalKey(integer(1, 256)),
 		editorPreviews: EditorPreviews
 	}),
 	Schema.Struct({
@@ -211,6 +213,12 @@ export const CameraRenderPreflight = Schema.Struct({
 });
 export type CameraRenderPreflight = typeof CameraRenderPreflight.Type;
 export const CameraRenderCapabilities = Schema.Struct({
+	highResolutionScreenshot: Schema.optionalKey(
+		Schema.Struct({
+			version: Schema.Literal(1),
+			maximumWarmupFrames: integer(1, 256)
+		})
+	),
 	authoredVisibility: Schema.optionalKey(
 		Schema.Struct({
 			version: Schema.Literal(1),

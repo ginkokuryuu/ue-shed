@@ -41,7 +41,8 @@ describe.skipIf(!endpoint || !projectRoot)("composable map sources in a renderin
 					profile: "lit",
 					vignette: "disabled",
 					fog: false,
-					volumetricFog: false
+					volumetricFog: false,
+					screenshotWarmupFrames: 32
 				},
 				exposure: { mode: "fixed_ev100", ev100: 8, compensation: "project" },
 				settling: { minimumFrames: 4, timeoutMs: 120000 },

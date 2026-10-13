@@ -134,6 +134,25 @@ map overview warmup even with a caller-specified EV. Settling has explicit frame
 Evidence records the frames actually requested and elapsed time, with `convergence: not_assessed`.
 Frame counting does not prove shader, temporal, lighting, or texture convergence.
 
+For editor-viewport captures, optional `renderer.screenshotWarmupFrames` selects **1–256** native
+high-resolution screenshot frames. These run in Unreal's output-sized screenshot viewport and are
+separate from `settling.minimumFrames`, which warms the ordinary editor viewport. Omitting the
+field preserves the engine/project's `r.HighResScreenshotDelay` setting. A larger output image does
+not guarantee full-resolution internal rendering; editor screen-percentage settings still apply.
+
+Discover `capabilities.highResolutionScreenshot.maximumWarmupFrames` before choosing the setting.
+The SDK rejects missing or insufficient support before acquiring the editor, and SceneCapture
+policies reject the field. For example, an adopter may combine `screenshotWarmupFrames: 128` with
+its independently chosen outer settling count for a qualified 4K overview, or use 32 native frames
+after reviewing its content. This is an explicit caller choice rather than a quality preset.
+
+The native override applies only while an owned screenshot is pending. Its original value and
+console priority are restored after every frame and on cancellation, lease expiry or world cleanup.
+If another tool changes the value or priority during that capture, cleanup preserves that tool's
+setting and reports the loss of restoration. Frame policy evidence and capture reuse identity
+include the requested setting. This does not resize the ordinary viewport or control its internal
+rendering percentage.
+
 `freeze_materials_and_ticks` uses the existing owned editor freeze after initial warmup/metering.
 It freezes the supported material clocks and actor/component ticks; it does not initialize a game
 or guarantee that every engine subsystem stops advancing. No arbitrary CVar bag is accepted.

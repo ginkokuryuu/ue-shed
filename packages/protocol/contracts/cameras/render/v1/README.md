@@ -26,6 +26,13 @@ advertise the `editorPreviews` capability, and frame evidence then carries
 `editorPreviews.revealedChildActors`. Earlier plugins reject the field as `invalid_policy`. Review
 capture responses and map-tile evidence embed the same renderer policy and frame evidence.
 
+The viewport renderer additionally accepts optional `screenshotWarmupFrames` (an integer from 1 to
+256). Supporting plugins advertise `highResolutionScreenshot.maximumWarmupFrames`. Omission retains
+the engine/project setting; earlier plugins reject the field. Native screenshot run-up is separate
+from ordinary viewport settling, and its scoped value/priority override is restored per frame and
+on interruption. SceneCapture policies reject the field. Frame policy evidence carries the explicit
+choice. This is a capability-negotiated addition to contract 1.0, like `editorPreviews`.
+
 Request JSON rejects unknown fields. Native semantic validation additionally rejects duplicate Data
 Layer identities, unsupported renderer/exposure combinations, effective layer hierarchy conflicts,
 world/project mismatch, contention, region overrides with preserved loading, exceeded resource
