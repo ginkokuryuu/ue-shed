@@ -1,6 +1,8 @@
 import * as stylex from "@stylexjs/stylex";
 import {
+	explainLocalizationFile,
 	localizationStates,
+	type LocalizationFileProblem,
 	type LocalizationFocus,
 	type LocalizationLinePreview,
 	type LocalizationState,
@@ -34,9 +36,9 @@ export const localizationLabels = {
 	unknown: "Unknown"
 } satisfies Record<LocalizationState, string>;
 export const unknownLabels = {
-	missing_manifest: "The gathered text file could not be read.",
-	missing_archive: "The game's translation file could not be read.",
-	missing_po: "The PO file could not be read.",
+	missing_manifest: "The gathered text file is unavailable.",
+	missing_archive: "The game's translation file is unavailable.",
+	missing_po: "The PO file is unavailable.",
 	duplicate_manifest_identity: "Several gathered entries have this key.",
 	duplicate_archive_identity: "Several game translations have this key.",
 	duplicate_po_identity: "Several PO translations have this key.",
@@ -52,6 +54,31 @@ export const unknownLabels = {
 	path_not_project_relative: "The asset could not be placed inside the project.",
 	ambiguous_po_identity: "The PO entry could not be matched to a single key."
 } satisfies Record<LocalizationUnknownReason, string>;
+
+function reasonFileKind(
+	reason: LocalizationUnknownReason
+): LocalizationFileProblem["kind"] | undefined {
+	if (reason === "missing_manifest") return "manifest";
+	if (reason === "missing_archive") return "archive";
+	return reason === "missing_po" ? "po" : undefined;
+}
+
+/** Names the missing or unreadable file behind a reason when the host reported the target's files. */
+export function unknownReasonText(
+	reason: LocalizationUnknownReason,
+	culture: string,
+	problems: readonly LocalizationFileProblem[] | undefined
+): { readonly message: string; readonly recovery?: string } {
+	const kind = reasonFileKind(reason);
+	const file =
+		kind === undefined
+			? undefined
+			: problems?.find(
+					(item) =>
+						item.kind === kind && (kind === "manifest" || item.culture === culture)
+				);
+	return file ? explainLocalizationFile(file) : { message: unknownLabels[reason] };
+}
 
 const sourceStates: ReadonlySet<LocalizationState> = new Set([
 	"not_gathered",
@@ -471,11 +498,21 @@ export function TranslationsDetail(props: {
 												</Button>
 											</Show>
 											<For each={translation().unknownReasons}>
-												{(reason) => (
-													<span {...stylex.attrs(styles.muted)}>
-														{unknownLabels[reason]}
-													</span>
-												)}
+												{(reason) => {
+													const text = unknownReasonText(
+														reason,
+														translation().culture,
+														props.model.active()?.fileProblems
+													);
+													return (
+														<span {...stylex.attrs(styles.muted)}>
+															{text.message}
+															{text.recovery
+																? ` ${text.recovery}`
+																: ""}
+														</span>
+													);
+												}}
 											</For>
 											<Show when={translation().reducedSourceChecking}>
 												<span {...stylex.attrs(styles.muted)}>

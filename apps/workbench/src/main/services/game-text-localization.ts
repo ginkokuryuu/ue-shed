@@ -34,6 +34,8 @@ import {
 	type LocalizationReviewRequest,
 	type LocalizationReviewResult,
 	localizationEditOutcomes,
+	localizationEvidenceFileStatuses,
+	localizationTargetFiles,
 	type LocalizationEditRequest,
 	type LocalizationEditResult,
 	type LocalizationFocusRequest,
@@ -322,7 +324,8 @@ export const makeGameTextLocalization = Effect.fn("Workbench.GameText.localizati
 				cultures: target.cultures
 			},
 			lines: textCounts.total,
-			notSynced: textCounts.localization?.notSynced ?? 0
+			notSynced: textCounts.localization?.notSynced ?? 0,
+			...localizationTargetFiles(localizationEvidenceFileStatuses(evidence))
 		};
 		return yield* Effect.uninterruptible(
 			Effect.gen(function* () {

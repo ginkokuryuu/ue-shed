@@ -23,7 +23,8 @@ import {
 	type LocalizationLinePreview,
 	type LocalizationFocusResult,
 	type LocalizationTranslation,
-	type LocalizationTargetResult
+	type LocalizationTargetResult,
+	type LocalizationFileProblem
 } from "@ue-shed/game-text/browser";
 import {
 	corpus,
@@ -370,13 +371,23 @@ describe("Game Text localization", () => {
 		expect(screen.getByRole("tablist", { name: "Where the lines are" })).toBeDefined();
 	});
 
-	it("explains unavailable translation evidence in plain words", async () => {
-		const user = userEvent.setup();
-		const api = client();
-		if (!api.localizationFocus) throw new Error("Missing focus capability");
+	function withUnknownArchive(
+		api: GameTextClientApi,
+		problems?: readonly LocalizationFileProblem[]
+	): GameTextClientApi {
 		const focus = api.localizationFocus;
-		mount({
+		const target = api.localizationTarget;
+		if (!focus || !target) throw new Error("Missing localization capability");
+		return {
 			...api,
+			localizationTarget: (name) =>
+				target(name).pipe(
+					Effect.map((result) =>
+						result.status === "ready" && problems
+							? { ...result, fileProblems: problems }
+							: result
+					)
+				),
 			localizationFocus: (request) =>
 				focus(request).pipe(
 					Effect.map(
@@ -406,17 +417,67 @@ describe("Game Text localization", () => {
 								: result
 					)
 				)
-		});
+		};
+	}
+
+	async function openWelcome() {
+		const user = userEvent.setup();
 		await screen.findByText("3 matches");
 		await user.click(
 			within(screen.getByRole("region", { name: "Results" })).getByRole("button", {
 				name: /^Welcome/u
 			})
 		);
-		await screen.findByText("The game's translation file could not be read.");
+	}
+
+	it("explains unavailable translation evidence in plain words", async () => {
+		mount(withUnknownArchive(client()));
+		await openWelcome();
+		await screen.findByText("The game's translation file is unavailable.");
 		expect(
 			within(screen.getByRole("article", { name: "Translation de" })).getByText("Unknown")
 		).toBeDefined();
+	});
+
+	it("names a translation file the working copy does not have", async () => {
+		mount(
+			withUnknownArchive(client(), [
+				{
+					kind: "archive",
+					culture: cultureCode("de"),
+					path: "Content/Localization/Game/de/Game.archive",
+					state: "missing",
+					code: "file_missing",
+					recovery: "Restore the expected file."
+				}
+			])
+		);
+		await openWelcome();
+		const text = await screen.findByText(
+			/^Not in this working copy: Content\/Localization\/Game\/de\/Game\.archive/u
+		);
+		expect(text.textContent).toContain("Run the target's Gather step");
+		expect(screen.queryByText(/could not be read/u)).toBeNull();
+	});
+
+	it("keeps read failures distinct from missing files and names the error code", async () => {
+		mount(
+			withUnknownArchive(client(), [
+				{
+					kind: "archive",
+					culture: cultureCode("de"),
+					path: "Content/Localization/Game/de/Game.archive",
+					state: "unreadable",
+					code: "malformed_archive",
+					recovery: "Repair or regenerate the archive."
+				}
+			])
+		);
+		await openWelcome();
+		const text = await screen.findByText(
+			/^The translation archive \(de\) could not be read \(malformed_archive\)/u
+		);
+		expect(text.textContent).toContain("Repair or regenerate the archive.");
 	});
 	it("adds target/culture pickers, query counts and a persistent pending-translation warning", async () => {
 		const user = userEvent.setup();

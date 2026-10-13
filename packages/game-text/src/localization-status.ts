@@ -93,3 +93,116 @@ export function localizationStatusReport(
 		});
 	return report;
 }
+
+const localizationFileNames = {
+	manifest: "gathered text file",
+	archive: "translation archive",
+	po: "PO file",
+	locmeta: "localization metadata file",
+	word_count: "word count report"
+} satisfies Record<LocalizationFileStatus["kind"], string>;
+
+/**
+ * A target evidence file that failed, for presentation: the project-relative path and the error
+ * code, without provenance. `missing` means the working copy does not have the file.
+ */
+export const LocalizationFileProblem = Schema.Struct({
+	kind: LocalizationFileStatus.fields.kind,
+	culture: Schema.optionalKey(CultureCode),
+	path: Schema.NullOr(Schema.String),
+	state: Schema.Literals(["missing", "unreadable"]),
+	code: Schema.String,
+	recovery: Schema.String
+});
+export type LocalizationFileProblem = typeof LocalizationFileProblem.Type;
+
+/** The failed evidence files, separating absent files from files that exist but failed to read. */
+export function localizationFileProblems(
+	files: readonly LocalizationFileStatus[]
+): readonly LocalizationFileProblem[] {
+	return files.flatMap((file) => {
+		if (file.status !== "failed") return [];
+		const code = file.error?.code ?? "unknown";
+		return [
+			{
+				kind: file.kind,
+				...(file.culture === undefined ? undefined : { culture: file.culture }),
+				path: file.relativePath,
+				state:
+					file.relativePath === null || code === "file_missing"
+						? "missing"
+						: "unreadable",
+				code,
+				recovery: file.error?.recovery ?? ""
+			}
+		];
+	});
+}
+
+/** What a reader is told about one failed evidence file and how to recover. */
+export interface LocalizationFileExplanation {
+	readonly message: string;
+	readonly recovery: string;
+}
+
+/** Reader-facing wording: absent from the working copy, or unreadable with its error code. */
+export function explainLocalizationFile(
+	problem: LocalizationFileProblem
+): LocalizationFileExplanation {
+	const name = localizationFileNames[problem.kind];
+	const culture = problem.culture === undefined ? "" : ` (${problem.culture})`;
+	if (problem.state === "unreadable")
+		return {
+			message: `The ${name}${culture} could not be read (${problem.code}): ${problem.path}`,
+			recovery: problem.recovery
+		};
+	if (problem.path === null)
+		return {
+			message: `This target has no ${name}${culture} configured.`,
+			recovery: "Check the target's localization settings in Unreal."
+		};
+	return {
+		message: `Not in this working copy: ${problem.path}`,
+		recovery:
+			problem.kind === "po"
+				? "Run the target's Export step, or get the localization folder from source control."
+				: "Run the target's Gather step, or get the localization folder from source control."
+	};
+}
+
+/** The deepest folder holding every configured evidence file, where Game Text looked for them. */
+export function localizationEvidenceFolder(
+	files: readonly LocalizationFileStatus[]
+): string | undefined {
+	const folders = files.flatMap((file) =>
+		file.relativePath === null
+			? []
+			: [file.relativePath.replaceAll("\\", "/").split("/").slice(0, -1)]
+	);
+	const [first, ...rest] = folders;
+	if (first === undefined) return undefined;
+	let length = first.length;
+	for (const folder of rest) {
+		let shared = 0;
+		while (shared < length && folder[shared] === first[shared]) shared++;
+		length = shared;
+	}
+	return length === 0 ? undefined : first.slice(0, length).join("/");
+}
+
+/** The bounded file fields a host adds to a ready localization target result. */
+export interface LocalizationTargetFiles {
+	readonly fileProblems?: readonly LocalizationFileProblem[];
+	readonly localizationFolder?: string;
+}
+
+export function localizationTargetFiles(
+	files: readonly LocalizationFileStatus[]
+): LocalizationTargetFiles {
+	const problems = localizationFileProblems(files);
+	const folder = localizationEvidenceFolder(files);
+	return {
+		...(problems.length > 0 ? { fileProblems: problems } : undefined),
+		...(folder === undefined ? undefined : { localizationFolder: folder })
+	};
+}

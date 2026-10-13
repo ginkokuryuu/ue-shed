@@ -44,7 +44,11 @@ describe("localization progress and manifest baselines", () => {
 				expect.objectContaining({
 					code: code === "file_missing" ? "missing_manifest" : "unreadable_manifest",
 					...(code === "file_missing"
-						? { recovery: expect.stringContaining("gather") }
+						? {
+								message:
+									"Not in this working copy: Content/Localization/Game/Game.manifest",
+								recovery: expect.stringContaining("Gather step")
+							}
 						: {
 								message: expect.stringContaining(code),
 								recovery: "Resolve the reader cause."

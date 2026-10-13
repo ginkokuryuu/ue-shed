@@ -225,14 +225,19 @@ export class GameTextLocalizationError extends Schema.TaggedErrorClass<GameTextL
 ) {}
 
 /** Only a missing manifest needs a gather; other failures keep the reader's cause and recovery. */
-export function localizationManifestFailure(error: LocalizationError): GameTextLocalizationError {
+export function localizationManifestFailure(
+	error: LocalizationError,
+	relativePath?: string | null
+): GameTextLocalizationError {
 	return new GameTextLocalizationError(
 		error.code === "file_missing"
 			? {
 					code: "missing_manifest",
-					message: "The target manifest could not be read.",
+					message: relativePath
+						? `Not in this working copy: ${relativePath}`
+						: "The target has no gathered text file (manifest) in this working copy.",
 					recovery:
-						"Run the target's Unreal gather configuration, or repair the manifest file."
+						"Run the target's Gather step, or get the localization folder from source control."
 				}
 			: {
 					code: "unreadable_manifest",

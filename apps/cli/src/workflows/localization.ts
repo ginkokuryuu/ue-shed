@@ -93,7 +93,7 @@ export const loadLocalizationContext = Effect.fn("Cli.localization.load_context"
 	).pipe(
 		Effect.mapError((cause) =>
 			"localizationError" in cause && cause.localizationError
-				? localizationManifestFailure(cause.localizationError)
+				? localizationManifestFailure(cause.localizationError, target.outputPaths.manifest)
 				: new GameTextLocalizationError({
 						code: "reader_failure",
 						message: cause.message,
@@ -106,7 +106,12 @@ export const loadLocalizationContext = Effect.fn("Cli.localization.load_context"
 		)
 	);
 	if (indexed.evidence.manifest.status === "failed")
-		return yield* Effect.fail(localizationManifestFailure(indexed.evidence.manifest.error));
+		return yield* Effect.fail(
+			localizationManifestFailure(
+				indexed.evidence.manifest.error,
+				indexed.evidence.manifest.relativePath
+			)
+		);
 	return {
 		joined: indexed.joined,
 		corpus: indexed.corpus,
@@ -141,7 +146,12 @@ export const loadTargetQuery = Effect.fn("Cli.localization.target_query")(functi
 		undefined
 	);
 	if (indexed.evidence.manifest.status === "failed")
-		return yield* Effect.fail(localizationManifestFailure(indexed.evidence.manifest.error));
+		return yield* Effect.fail(
+			localizationManifestFailure(
+				indexed.evidence.manifest.error,
+				indexed.evidence.manifest.relativePath
+			)
+		);
 	return indexed.query;
 }, Effect.provide(LocalizationEvidenceNodeLive));
 

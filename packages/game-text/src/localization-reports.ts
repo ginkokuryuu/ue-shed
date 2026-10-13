@@ -110,7 +110,10 @@ export function decodeLocalizationBaselineJson(
 /** Deduplicate locations, exclude optional contexts, and reject conflicting sources per identity. */
 function manifestEntries(evidence: LocalizationTargetEvidence): readonly ManifestEntry[] {
 	if (evidence.manifest.status === "failed") {
-		const error = localizationManifestFailure(evidence.manifest.error);
+		const error = localizationManifestFailure(
+			evidence.manifest.error,
+			evidence.manifest.relativePath
+		);
 		throw new LocalizationReportError({
 			code: error.code === "missing_manifest" ? "missing_manifest" : "unreadable_manifest",
 			message: error.message,
