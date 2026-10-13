@@ -16,4 +16,5 @@ Shared SolidJS primitives for maintained UE Shed interfaces. Components use sema
   caret keys; a search field hands Up/Down to the list.
 - `InvestigationActions` reports results in one reserved slot (floating under compact tools), so
   results never move neighbouring controls. Failures use `role="alert"`; compact disabled reasons
-  belong in the export tool's tooltip.
+  belong in the export tool's tooltip. `showLabels` names compact Export and Presets beside their
+  icons, for toolbars whose other commands are named.

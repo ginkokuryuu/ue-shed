@@ -13,8 +13,8 @@ export interface ViewTab<Id extends string> {
 }
 
 /**
- * The workspace's views as underlined tabs sitting on the header's bottom edge. Arrow keys, Home
- * and End move between them and select, as in a tab list.
+ * The workspace's views as a segmented switch: one track, with the chosen view filled in. Arrow
+ * keys, Home and End move between them and select, as in a tab list.
  */
 export function ViewTabs<Id extends string>(props: {
 	readonly label: string;
@@ -72,6 +72,7 @@ export function ViewTabs<Id extends string>(props: {
 										aria-hidden="true"
 										{...stylex.attrs(
 											styles.badge,
+											selected() && styles.selectedBadge,
 											tab().badgeTone === "danger" && styles.danger,
 											tab().badgeTone === "accent" && styles.accent
 										)}
@@ -89,47 +90,56 @@ export function ViewTabs<Id extends string>(props: {
 }
 
 const styles = stylex.create({
+	// An inset track holding the views, so it reads as one switch with one choice made.
 	list: {
-		display: "flex",
-		alignItems: "stretch",
-		alignSelf: "stretch",
-		gap: 4,
-		// The selected tab's underline replaces the header's bottom border beneath it.
-		marginBottom: -1
+		display: "inline-flex",
+		alignItems: "center",
+		flexShrink: 0,
+		gap: 2,
+		padding: 2,
+		borderWidth: 1,
+		borderStyle: "solid",
+		borderColor: tokens.colorBorder,
+		borderRadius: tokens.radiusControl,
+		backgroundColor: tokens.colorSurfaceInset
 	},
 	tab: {
 		display: "inline-flex",
 		alignItems: "center",
 		gap: 6,
-		paddingInline: 8,
+		height: 24,
+		paddingInline: 10,
 		borderWidth: 0,
-		borderBottomWidth: 2,
-		borderBottomStyle: "solid",
-		borderBottomColor: "transparent",
-		backgroundColor: "transparent",
+		borderRadius: 4,
+		backgroundColor: { default: "transparent", ":hover": tokens.colorSurfaceHover },
 		color: { default: tokens.colorTextMuted, ":hover": tokens.colorText },
 		fontFamily: tokens.fontBody,
-		fontSize: 13,
+		fontSize: 12,
+		fontWeight: 500,
 		whiteSpace: "nowrap",
 		cursor: "pointer",
-		outline: { default: "none", ":focus-visible": `1px solid ${tokens.colorAccent}` },
-		outlineOffset: -3
+		outline: { default: "none", ":focus-visible": `2px solid ${tokens.colorAccent}` },
+		outlineOffset: 1
 	},
 	selected: {
-		borderBottomColor: tokens.colorAccent,
-		color: { default: tokens.colorTextStrong, ":hover": tokens.colorTextStrong }
+		backgroundColor: { default: tokens.colorBorder, ":hover": tokens.colorBorder },
+		boxShadow: `inset 0 0 0 1px ${tokens.colorBorderStrong}`,
+		color: { default: tokens.colorTextStrong, ":hover": tokens.colorTextStrong },
+		cursor: "default"
 	},
 	badge: {
 		minWidth: 16,
 		paddingInline: 5,
 		borderRadius: tokens.radiusBadge,
-		backgroundColor: tokens.colorSurfaceRaised,
-		color: tokens.colorTextMuted,
+		backgroundColor: tokens.colorBorder,
+		color: tokens.colorText,
 		fontSize: 11,
+		fontWeight: 400,
 		lineHeight: "16px",
 		textAlign: "center",
 		fontVariantNumeric: "tabular-nums"
 	},
+	selectedBadge: { backgroundColor: tokens.colorBorderStrong },
 	danger: { color: tokens.colorDanger },
 	accent: { color: tokens.colorAccent }
 });

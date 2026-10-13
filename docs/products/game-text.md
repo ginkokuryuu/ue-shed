@@ -132,7 +132,7 @@ Translation values read **Not translated**, **Needs update** and **Not synced**;
 **Outside this target**. **Ctrl K** (or **Cmd K**) focuses search.
 
 The header has two rows. The title row holds the **Text**, **Quality checks** and **Reports**
-views as tabs, the project's scan state (lines, inspected assets and any read problems) and
+views as one segmented switch, the project's scan state (lines, inspected assets and any read problems) and
 **Rescan**. Under it, the translations row says which translations are shown, **Target** and the
 picked cultures, and on its right what Unreal still has to take in: the not-synced count,
 **Sync with Unreal**, staged edits and **Unreal steps**. **Target** names the localization target
@@ -155,11 +155,13 @@ selected project. Search retains at least 150 px of input space. At 1024 px, bot
 one line, columns fit the available list width and the **Side pane** toggle can hide the side
 pane, keeping focus on the toggle.
 
-The primary controls are labelled: the **Text**, **Quality checks** and **Reports** views,
-**Changed files**, **Filter**, **Display**, **Target** and **Sync with Unreal**. Secondary toggles
-(search translations, side pane, rescan, export, presets and per-culture review flags) are compact
-stroke icons whose tooltip appears on hover or keyboard focus and lets the pointer pass through to
-the controls beneath it. Badges show applied filters, quality finding counts and unsaved rules, and
+Every command in the header and toolbar is named: **Rescan**, **Changed files**, **Filter**,
+**Display**, **Export**, **Presets**, **Target** and **Sync with Unreal**. Two toggles are icons,
+each where its kind of toggle usually sits: **Search translations** inside the search field, as a
+find option, and **Side pane** at the toolbar's right edge, above the pane it shows or hides. A
+line's per-culture review flags are icons too. Icon tooltips appear on hover or keyboard focus and
+let the pointer pass through to the controls beneath them. Below 1280 px the Ctrl K hint in the
+search field gives way so the toolbar keeps one row. Badges show applied filters, quality finding counts and unsaved rules, and
 are part of each control's accessible name ("Filter, 2 active"). When a target is unavailable,
 only localization-dependent filter values are paused. Source predicates and their inclusion or
 exclusion operator still apply to the list, exports and saved presets.

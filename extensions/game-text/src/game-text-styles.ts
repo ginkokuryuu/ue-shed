@@ -42,7 +42,8 @@ export const styles = stylex.create({
 		gap: 16,
 		flexShrink: 0,
 		height: 40,
-		paddingInline: 16,
+		// Lines up with the toolbar's search field below.
+		paddingInline: 12,
 		borderBottomWidth: 1,
 		borderBottomStyle: "solid",
 		borderBottomColor: tokens.colorBorder
@@ -96,13 +97,13 @@ export const styles = stylex.create({
 		display: "flex",
 		flexWrap: "wrap",
 		alignItems: "center",
-		gap: 6,
+		gap: 4,
 		minWidth: 0,
 		flexGrow: 1,
 		flexBasis: "auto"
 	},
 	browseBar: {
-		padding: "10px 16px",
+		padding: "8px 12px",
 		borderBottomWidth: 1,
 		borderBottomStyle: "solid",
 		borderBottomColor: tokens.colorBorder
@@ -159,15 +160,19 @@ export const styles = stylex.create({
 		strokeWidth: 1.5,
 		flexShrink: 0
 	},
+	// Starts from its contents (the 150 px input, count and option), so the toolbar wraps only when
+	// even those and the named tools cannot share a row; spare room then goes mostly to the search.
 	search: {
 		display: "flex",
 		alignItems: "center",
-		gap: tokens.space2,
-		flex: 1,
-		minWidth: 340,
-		flexBasis: 340,
-		flexShrink: 0,
-		padding: "6px 10px",
+		gap: 6,
+		flexGrow: 2,
+		flexShrink: 1,
+		flexBasis: 0,
+		boxSizing: "border-box",
+		height: 36,
+		paddingBlock: 0,
+		paddingInline: 8,
 		borderWidth: 1,
 		borderStyle: "solid",
 		borderColor: tokens.colorBorderInteractive,
@@ -200,6 +205,16 @@ export const styles = stylex.create({
 		fontSize: 13,
 		outlineWidth: 0,
 		"::placeholder": { color: tokens.colorTextMuted }
+	},
+	// The shortcut hint gives way first on narrow windows; the shortcut itself still works.
+	shortcut: {
+		display: { default: "inline", "@media (max-width: 1279px)": "none" }
+	},
+	divider: {
+		alignSelf: "stretch",
+		width: 1,
+		marginBlock: 6,
+		backgroundColor: tokens.colorBorder
 	},
 	count: {
 		color: tokens.colorTextMuted,

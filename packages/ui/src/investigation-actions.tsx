@@ -41,6 +41,8 @@ export function InvestigationActions<Query, Preset, Error>(props: {
 	readonly onRequestOpen?: (open: () => void) => void;
 	readonly disabledReason?: string | undefined;
 	readonly compact?: boolean;
+	/** Compact tools show "Export" and "Presets" beside their icons, for toolbars whose commands are all named. */
+	readonly showLabels?: boolean;
 	/** A host-specific export offered beside CSV and JSON, such as one file for every language. */
 	readonly extraExport?:
 		| {
@@ -194,6 +196,7 @@ export function InvestigationActions<Query, Preset, Error>(props: {
 							<ToolButton
 								{...triggerProps}
 								label="Export"
+								showLabel={props.showLabels}
 								tooltip={
 									props.disabled && props.disabledReason
 										? props.disabledReason
@@ -248,6 +251,7 @@ export function InvestigationActions<Query, Preset, Error>(props: {
 							<ToolButton
 								{...triggerProps}
 								label="Presets"
+								showLabel={props.showLabels}
 								tooltip="Save this view's filters and rules, or open a saved view."
 								disabled={pending() || props.blocked}
 							>

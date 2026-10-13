@@ -1016,6 +1016,7 @@ export function GameTextRoute(props: {
 				<div {...stylex.attrs(styles.exports)}>
 					<InvestigationActions
 						compact
+						showLabels
 						blocked={operations.busy()}
 						client={client()}
 						disabled={
@@ -1223,6 +1224,7 @@ export function GameTextRoute(props: {
 				<Show when={summary()}>
 					<ToolButton
 						label="Rescan"
+						showLabel
 						tooltip={
 							operations.reason() ??
 							"Refresh saved text and translations from the project. Keeps your current list and drafts."
@@ -1490,38 +1492,45 @@ export function GameTextRoute(props: {
 														: page()?.total.toLocaleString() +
 															" matches"}
 										</span>
-										<kbd {...stylex.attrs(browseStyles.keyboard)}>
+										{/* An option of the search, so it lives in the field, as in an editor's find. */}
+										<Show
+											when={
+												localization.active() &&
+												localization.cultures().length > 0
+											}
+										>
+											<ToolButton
+												label="Search translations"
+												tooltip={
+													localization.searchTranslations()
+														? "On. Search source text and translations in the picked cultures."
+														: "Off. Search source text only. Turn on to include the picked cultures' translations."
+												}
+												aria-pressed={
+													localization.searchTranslations()
+														? "true"
+														: "false"
+												}
+												onClick={() =>
+													localization.setSearchTranslations(
+														!localization.searchTranslations()
+													)
+												}
+											>
+												<ToolIcon name="translations" />
+											</ToolButton>
+										</Show>
+										<kbd
+											{...stylex.attrs(
+												browseStyles.keyboard,
+												styles.shortcut
+											)}
+										>
 											{/Mac|iPhone|iPad/.test(navigator.platform)
 												? "⌘ K"
 												: "Ctrl K"}
 										</kbd>
 									</div>
-
-									<Show
-										when={
-											localization.active() &&
-											localization.cultures().length > 0
-										}
-									>
-										<ToolButton
-											label="Search translations"
-											tooltip={
-												localization.searchTranslations()
-													? "On. Search source text and translations in the picked cultures."
-													: "Off. Search source text only. Turn on to include the picked cultures' translations."
-											}
-											aria-pressed={
-												localization.searchTranslations() ? "true" : "false"
-											}
-											onClick={() =>
-												localization.setSearchTranslations(
-													!localization.searchTranslations()
-												)
-											}
-										>
-											<ToolIcon name="translations" />
-										</ToolButton>
-									</Show>
 									<div {...stylex.attrs(styles.browseActions)}>
 										<WhereFilter
 											where={where()}
@@ -1551,6 +1560,19 @@ export function GameTextRoute(props: {
 												/>
 											)}
 										/>
+										<DisplayMenu
+											group={
+												group() === "none" ? undefined : groupField()?.group
+											}
+											disabled={loading() && !summary()}
+											onGroupChange={(next) => setGroup(next ?? "none")}
+										/>
+										{exports()}
+										{/* At the edge above the pane it shows or hides, like an editor's panel toggle. */}
+										<span
+											aria-hidden="true"
+											{...stylex.attrs(styles.divider)}
+										/>
 										<ToolButton
 											label="Side pane"
 											tooltip={
@@ -1568,14 +1590,6 @@ export function GameTextRoute(props: {
 										>
 											<ToolIcon name="panel" />
 										</ToolButton>
-										<DisplayMenu
-											group={
-												group() === "none" ? undefined : groupField()?.group
-											}
-											disabled={loading() && !summary()}
-											onGroupChange={(next) => setGroup(next ?? "none")}
-										/>
-										{exports()}
 									</div>
 								</div>
 								<Show

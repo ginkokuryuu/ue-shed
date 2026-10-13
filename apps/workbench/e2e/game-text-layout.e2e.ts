@@ -193,6 +193,23 @@ test("Game Text browses indexed translations with the list beside the selected l
 		.getByRole("button", { name: "Filter", exact: true })
 		.boundingBox();
 	expect(Math.abs((displayBounds?.y ?? 0) - (filterBounds?.y ?? -1))).toBeLessThanOrEqual(0.5);
+	// The named tools and the side pane toggle share the search's row, and the toggle sits at the
+	// right edge, above the pane it controls.
+	const searchField = await search.locator("..").boundingBox();
+	const presetsBounds = await page
+		.getByRole("button", { name: "Presets", exact: true })
+		.boundingBox();
+	const paneToggle = await page
+		.getByRole("button", { name: "Side pane", exact: true })
+		.boundingBox();
+	const pane = await detail.boundingBox();
+	if (!searchField || !presetsBounds || !paneToggle || !filterBounds || !pane)
+		throw new Error("The toolbar has no bounds.");
+	const middle = (box: { y: number; height: number }) => box.y + box.height / 2;
+	for (const box of [filterBounds, presetsBounds, paneToggle])
+		expect(Math.abs(middle(box) - middle(searchField))).toBeLessThanOrEqual(1);
+	expect(paneToggle.x).toBeGreaterThan(presetsBounds.x + presetsBounds.width);
+	expect(paneToggle.x + paneToggle.width).toBeGreaterThanOrEqual(pane.x + pane.width - 24);
 
 	expect(
 		await results.evaluate((element) => element.scrollWidth <= element.clientWidth + 1)
