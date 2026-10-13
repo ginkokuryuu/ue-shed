@@ -8,13 +8,15 @@ camera moves, a fixed 128-frame warmup per tile, separately rendered zoom levels
 and post-process choices, and repeated PNG processing. Replacing SceneCapture with a custom renderer
 is not required to investigate a faster default.
 
-The strongest next implementation is a bounded master/block capture through the existing public
-`CameraRenderer`, followed by CPU slicing and a pyramid derived from the finest captured pixels.
-Retain independently rendered tiles/levels when callers need their rendering policy or the source
-cannot fit a declared texture and memory budget. Do not lower the default warmup merely because a
-simple scene tolerates fewer frames.
+Larger source captures reduce repeated rendering, but the subsequent matched three-level comparison
+on a complex map **failed visual quality acceptance**. One 4K source did not reproduce sixteen 1K
+camera views, despite matching logical pixel density and using the same native screenshot path.
+Lossless slicing cannot recover detail or lighting that the larger view did not render. Keep source
+grouping an explicit, unqualified caller choice; do not select it automatically from dimensions,
+memory or timings. Preserve individual captures as the fidelity baseline while profiling their cost.
+Do not lower the default warmup merely because a simple scene tolerates fewer frames.
 
-This investigation adds a repeatable headless benchmark and a local source-block experiment. It does
+This investigation adds a repeatable headless benchmark and local source-block comparisons. It does
 not change existing capture defaults or claim that the adopter's reported hour-long run was reproduced.
 
 ## Source comparison
@@ -267,6 +269,49 @@ or matched repeat was established. A successful lossless crop cannot eliminate t
 differences. Capture-budget and complex-world quality qualification are required before enabling the
 strategy by default; the existing settings were retained for this timing experiment.
 
+## Three-level quality comparison: failed
+
+A requested comparison used the same saved overview bounds and capture height, with a three-level
+copy of the plan. One 4128-square source (4096 logical pixels plus gutters) was sliced into sixteen
+1K leaves; the other approach captured sixteen 1056-square sources. Each approach derived five
+parents. Both used one scoped editor-viewport render session, shared metered exposure and scene
+freeze, and 128 outer settling frames per source. The second trial reversed capture order. The
+engine was the adopter's matching **UE 5.8.2**; this complex-project comparison was not run on 5.7.
+The existing five-level workflow was not run.
+
+| Capture order | 4K source, slicing and derivation | Sixteen 1K sources and derivation |
+| ------------- | --------------------------------: | --------------------------------: |
+| 4K first      |                           7.955 s |                          61.838 s |
+| 1K first      |                           7.853 s |                          62.525 s |
+
+Shared metering, settling and one seed screenshot took 20.712 s, excluded from both columns. Engine
+startup and verification are also excluded. All 64 leaf crops and 20 parent reductions passed pixel
+verification across the four cases; all 84 PNG/WebP tile pairs passed dimensions, hashes and coverage.
+Source map and saved-plan hashes stayed unchanged, and native restoration succeeded.
+
+Visual review of the zoomable comparison rejected the 4K result: lighting, shadow readability and
+detail differ substantially from the individual captures. Reversing order did not remove the
+difference. The approximately eightfold timing ratio therefore describes a **failed quality
+candidate**, not a usable equivalent replacement. The renderer logged 19 shadow-page pool overflow
+warnings. Successful image processing and artifact checks are separate from quality acceptance.
+Private identities and images remain under ignored `out/map-capture-comparison-2026-10-13/`.
+
+Source inspection found a concrete difference beyond output resolution. In UE **5.7.4**, **5.8.3**
+and the adopter's **5.8.2**, `Runtime/Renderer/Private/VirtualShadowMaps/VirtualShadowMapClipmap.cpp`
+estimates the first orthographic directional-shadow clipmap level from half the camera's world
+width when `r.Ortho.VSM.EstimateClipmapLevels` is enabled. It takes the floor of the base-two
+logarithm. A roughly fourfold wider source can therefore omit two finer clipmap levels even when
+its output has four times as many pixels per side. Clipmap origin also follows the camera/view
+target. Epic documents these controls in its
+[orthographic camera guide](https://dev.epicgames.com/documentation/en-us/unreal-engine/orthographic-camera-in-unreal-engine).
+
+This is a source-derived mechanism to investigate, not a demonstrated sole cause of the observed
+mismatch. Actual per-frame clipmap values and the contribution of pool overflow, Lumen, streaming
+and temporal history were not isolated. Outer settling still uses the ordinary viewport rather
+than the final 4K dummy viewport. No renderer setting was changed to claim a fix, and no quality
+equivalence was established. Further experiments must pass image review before timing is used to
+recommend adoption.
+
 ## Implementation recommendation
 
 The caller-managed primitives now ship in `@ue-shed/cameras`; see the
@@ -283,10 +328,10 @@ parent derivation. Replaying the new primitives over the retained six-level expe
 all 64 source cameras/sizes and every pixel of all 1024 crops and 341 parents without recapturing.
 This verifies the reusable transformations and native contracts, not renderer quality equivalence.
 
-1. Use an explicit source strategy in the headless library: bounded master where affordable,
-   otherwise bounded blocks. Compose the existing `CameraRenderer`; no engine fork or replacement
-   SceneCapture renderer is needed. Check advertised dimensions and a conservative memory budget
-   before requesting the source.
+1. Retain individually rendered tiles as the complex-map fidelity baseline. Expose explicit source
+   strategies for callers that qualify a larger footprint on their own content. Compose the existing
+   `CameraRenderer`; check advertised dimensions and a conservative memory budget before requesting
+   a larger source. Passing those limits is not quality acceptance.
 2. Capture finest-detail pixels once and derive lower levels. Preserve the existing independent
    path for per-level LOD policies or callers who intentionally want different renders per zoom.
    Record derivation/source hashes truthfully; do not attach a copied leaf camera's evidence to a
@@ -297,9 +342,9 @@ This verifies the reusable transformations and native contracts, not renderer qu
 4. Qualify reduced or adaptive outer warmup on representative complex worlds. Instrument residency,
    viewport warmup, native screenshot/readback, encode and ingest separately. Retain an explicit
    conservative mode until images, order sensitivity and loading behavior justify a shorter wait.
-5. Remove redundant native PNG work after profiling it: the shared renderer decodes to validate;
-   the Lit adapter decodes again, crops and encodes again. Bounded background encode/write is a
-   secondary improvement once repeated rendering has been removed.
+5. Profile redundant native PNG work without changing camera image formation: the shared renderer
+   decodes to validate; the Lit adapter decodes again, crops and encodes again. Bounded background
+   encode/write is a possible secondary improvement, with its contribution measured separately.
 
 A 16,384-square BGRA8 image alone occupies 1 GiB; scene color, depth, G-buffers, post processing,
 readback and decoded CPU copies add substantially more. A nominal 16K texture limit is not a safe

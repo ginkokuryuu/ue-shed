@@ -118,8 +118,11 @@ captured pixels; they do not guarantee identical lighting, shadow residency, wat
 history between sources. Frame counts do not certify convergence. Retain the existing independent
 tile path when that rendering behavior is required. The
 [source-block experiment](../research/map-capture-screenshot-pipeline-2026-10-13.md) records a
-six-level timing result alongside shadow-pool overflow and overlap differences, not a quality
-equivalence guarantee. No arbitrary CVar overrides or quality fallback are applied by these helpers.
+six-level timing result alongside shadow-pool overflow and overlap differences. Its subsequent
+matched three-level comparison failed visual quality acceptance: a 4K source did not reproduce
+sixteen 1K camera views. Neither source dimensions nor fewer capture calls establish equivalent
+quality. Automatic grouping requires separate content-specific qualification; these helpers do not
+select it. No arbitrary CVar overrides or quality fallback are applied by these helpers.
 
 The packed-consumer journey is `examples/map-tile-sources/verify.mjs`, run by
 `pnpm test:release:packages`. It proves both source strategies, crops, parent derivation and public
