@@ -6097,6 +6097,1469 @@
 				"rendererLongTasks": 0,
 				"build": "pnpm showcase --build-only passed"
 			}
+		},
+		"workbenchRetainedUi": {
+			"date": "2026-10-13",
+			"runtimeRevision": "6311a105 plus the missing Workbench cold-layer worker build entry",
+			"environment": {
+				"backendNode": "26.5.0",
+				"workbenchNode": "24.21.0",
+				"electron": "43.7.7",
+				"rendererBuild": "production",
+				"os": "Windows"
+			},
+			"dataset": {
+				"project": "test-results/game-text-scale/project-1x",
+				"records": "test-results/game-text-scale/phase4-records-1x",
+				"lines": 583507,
+				"occurrences": 1028205,
+				"packages": 16500,
+				"inventoryPackages": 166518,
+				"localizationFiles": 21,
+				"cultures": 10
+			},
+			"method": [
+				"Same unchanged retained records and localization files as the earlier 1x benchmark; no smaller project.",
+				"Three independent cold UI caches and three independent cold backend caches, then fresh-process reuse.",
+				"Backend target-first workflow; Workbench's normal source-first then target workflow, with real IPC and renderer.",
+				"Only source providers are replaced in the isolated Workbench build: retained-record GameTextIndexSource and seeded ProjectIndexMemory.",
+				"Native enumeration/extraction excluded in both paths, as in the original retained-record benchmark. Startup excluded; OS caches warm.",
+				"One unchanged Rescan after each cold scan; three repeated Rescans in each reopened profile after restoring empty query and one open problem group.",
+				"18 UI observations: 3 cold, 3 immediate rescans, 3 fresh-process cached scans, 9 subsequent rescans.",
+				"Workbench endpoint is actual click to enabled controls, loaded visible groups, no observed blocking requests and two animation frames.",
+				"Backend comparison includes refresh and first bounded empty page; historical 69.14/2.45s were refresh-only timers.",
+				"Cold round 0 completed timing and search/focus before a post-timing selector encoding error; it was retained. Cached checks and exact-query proof were repeated after fixing that harness error.",
+				"One repeated-scan observation lost the Playwright Electron inspection context after the UI became ready; it was excluded and replaced in another fresh process using renderer-side pending-request observation. Startup and shutdown failures are outside the timed click boundary.",
+				"Property order differs after IPC schema serialization; recursively compared JSON values must match exactly, including positive and sparse searches."
+			],
+			"summary": {
+				"backendCold": {
+					"samples": 3,
+					"medianMs": 74387.2872,
+					"minMs": 69878.5947,
+					"maxMs": 88193.8962
+				},
+				"backendReopen": {
+					"samples": 3,
+					"medianMs": 2501.4099000000006,
+					"minMs": 2468.4932999999996,
+					"maxMs": 2761.4027
+				},
+				"workbenchCold": {
+					"samples": 3,
+					"medianMs": 185181.5,
+					"minMs": 184173.90014648438,
+					"maxMs": 222037.39990234375
+				},
+				"workbenchRescanAfterCold": {
+					"samples": 3,
+					"medianMs": 12327,
+					"minMs": 11173.2001953125,
+					"maxMs": 12951.900146484375
+				},
+				"workbenchReopen": {
+					"samples": 3,
+					"medianMs": 6435.800048828125,
+					"minMs": 6178,
+					"maxMs": 6491.5
+				},
+				"workbenchSteadyRescan": {
+					"samples": 9,
+					"medianMs": 13316.199951171875,
+					"minMs": 9812.400146484375,
+					"maxMs": 17699.5
+				}
+			},
+			"backend": [
+				{
+					"round": 0,
+					"mode": "full",
+					"readyMs": 88172.5463,
+					"firstPageMs": 21.34990000000107,
+					"total": 583507,
+					"hash": "097f17aa317f8de46a927e1651407d2e0e1bf3f89f8575ba6133ae812fee730a",
+					"readPackages": 16500,
+					"parsedFiles": 21,
+					"stages": [
+						{
+							"name": "localization",
+							"ms": 24353.9189
+						},
+						{
+							"name": "packages",
+							"ms": 35727.7184
+						},
+						{
+							"name": "join",
+							"ms": 25014.8359
+						}
+					]
+				},
+				{
+					"round": 0,
+					"mode": "warm",
+					"readyMs": 2481.9247000000005,
+					"firstPageMs": 19.485200000000077,
+					"total": 583507,
+					"hash": "097f17aa317f8de46a927e1651407d2e0e1bf3f89f8575ba6133ae812fee730a",
+					"readPackages": 0,
+					"parsedFiles": 0,
+					"stages": [
+						{
+							"name": "localization",
+							"ms": 129.60630000000003
+						},
+						{
+							"name": "packages",
+							"ms": 323.1585
+						},
+						{
+							"name": "join",
+							"ms": 5.48739999999998
+						}
+					]
+				},
+				{
+					"round": 1,
+					"mode": "full",
+					"readyMs": 74371.3524,
+					"firstPageMs": 15.934800000002724,
+					"total": 583507,
+					"hash": "097f17aa317f8de46a927e1651407d2e0e1bf3f89f8575ba6133ae812fee730a",
+					"readPackages": 16500,
+					"parsedFiles": 21,
+					"stages": [
+						{
+							"name": "localization",
+							"ms": 17562.2565
+						},
+						{
+							"name": "packages",
+							"ms": 32547.507100000003
+						},
+						{
+							"name": "join",
+							"ms": 21849.16049999999
+						}
+					]
+				},
+				{
+					"round": 1,
+					"mode": "warm",
+					"readyMs": 2457.3655999999996,
+					"firstPageMs": 11.127700000000004,
+					"total": 583507,
+					"hash": "097f17aa317f8de46a927e1651407d2e0e1bf3f89f8575ba6133ae812fee730a",
+					"readPackages": 0,
+					"parsedFiles": 0,
+					"stages": [
+						{
+							"name": "localization",
+							"ms": 133.01390000000004
+						},
+						{
+							"name": "packages",
+							"ms": 321.58630000000016
+						},
+						{
+							"name": "join",
+							"ms": 5.789700000000039
+						}
+					]
+				},
+				{
+					"round": 2,
+					"mode": "full",
+					"readyMs": 69868.5704,
+					"firstPageMs": 10.024300000004587,
+					"total": 583507,
+					"hash": "097f17aa317f8de46a927e1651407d2e0e1bf3f89f8575ba6133ae812fee730a",
+					"readPackages": 16500,
+					"parsedFiles": 21,
+					"stages": [
+						{
+							"name": "localization",
+							"ms": 16590.121600000002
+						},
+						{
+							"name": "packages",
+							"ms": 28968.026400000002
+						},
+						{
+							"name": "join",
+							"ms": 21928.1026
+						}
+					]
+				},
+				{
+					"round": 2,
+					"mode": "warm",
+					"readyMs": 2726.0788,
+					"firstPageMs": 35.32390000000032,
+					"total": 583507,
+					"hash": "097f17aa317f8de46a927e1651407d2e0e1bf3f89f8575ba6133ae812fee730a",
+					"readPackages": 0,
+					"parsedFiles": 0,
+					"stages": [
+						{
+							"name": "localization",
+							"ms": 140.8591
+						},
+						{
+							"name": "packages",
+							"ms": 338.92650000000003
+						},
+						{
+							"name": "join",
+							"ms": 14.504100000000108
+						}
+					]
+				}
+			],
+			"ui": [
+				{
+					"label": "cold-first-scan-0",
+					"startEpochMs": 1791856354905,
+					"statusReadyMs": 183289.10009765625,
+					"strictReadyMs": 184173.90014648438,
+					"visibleReadyMs": 184200.90014648438,
+					"frameMaxGapMs": 33.60000000000582,
+					"longTasks": [],
+					"visibleRows": 50,
+					"focusOpen": false,
+					"indexStatus": "583,507 lines · 16,500 assets · 15,400 assets not fully read · ready in 3:03",
+					"ipc": [
+						{
+							"channel": "game-text:configured-refresh",
+							"ms": 85980.220703125,
+							"status": "completed"
+						},
+						{
+							"channel": "game-text:localization:targets",
+							"ms": 7.292724609375,
+							"status": "ready"
+						},
+						{
+							"channel": "game-text:localization:target",
+							"ms": 97060.1201171875,
+							"status": "ready"
+						},
+						{
+							"channel": "game-text:search",
+							"query": "",
+							"ms": 76.114990234375,
+							"total": 583507,
+							"status": "ready"
+						},
+						{
+							"channel": "game-text:search",
+							"query": "",
+							"openGroup": "not_gathered",
+							"ms": 844.63525390625,
+							"total": 583507,
+							"status": "ready"
+						}
+					],
+					"stages": [
+						{
+							"name": "packages",
+							"ms": 51848.96044921875,
+							"readPackages": 16500
+						},
+						{
+							"name": "join",
+							"ms": 27469.477783203125
+						},
+						{
+							"name": "localization",
+							"ms": 36499.5634765625,
+							"parsedFiles": 21
+						},
+						{
+							"name": "join",
+							"ms": 42174.0146484375
+						}
+					]
+				},
+				{
+					"label": "warm-in-process-rescan-0",
+					"startEpochMs": 1791856539176.1,
+					"statusReadyMs": 11413,
+					"strictReadyMs": 12327,
+					"visibleReadyMs": 12362.800048828125,
+					"frameMaxGapMs": 17.300000000017462,
+					"longTasks": [],
+					"visibleRows": 50,
+					"focusOpen": false,
+					"indexStatus": "583,507 lines · 16,500 assets · 15,400 assets not fully read · ready in 0:11",
+					"ipc": [
+						{
+							"channel": "game-text:configured-refresh",
+							"ms": 8489.421875,
+							"status": "completed"
+						},
+						{
+							"channel": "game-text:localization:targets",
+							"ms": 6.725341796875,
+							"status": "ready"
+						},
+						{
+							"channel": "game-text:localization:target",
+							"ms": 2681.98583984375,
+							"status": "ready"
+						},
+						{
+							"channel": "game-text:search",
+							"query": "",
+							"ms": 84.346435546875,
+							"total": 583507,
+							"status": "ready"
+						},
+						{
+							"channel": "game-text:search",
+							"query": "",
+							"openGroup": "not_gathered",
+							"ms": 882.6845703125,
+							"total": 583507,
+							"status": "ready"
+						}
+					],
+					"stages": [
+						{
+							"name": "packages",
+							"ms": 340.241943359375,
+							"readPackages": 0
+						},
+						{
+							"name": "join",
+							"ms": 3.750244140625
+						},
+						{
+							"name": "localization",
+							"ms": 94.744384765625,
+							"parsedFiles": 0
+						},
+						{
+							"name": "join",
+							"ms": 3.728271484375
+						}
+					]
+				},
+				{
+					"label": "warm-fresh-empty-0",
+					"startEpochMs": 1791857822238.5999,
+					"statusReadyMs": 5684.800048828125,
+					"strictReadyMs": 6491.5,
+					"visibleReadyMs": 6551.10009765625,
+					"frameMaxGapMs": 33.399999999999636,
+					"longTasks": [],
+					"visibleRows": 50,
+					"focusOpen": false,
+					"indexStatus": "583,507 lines · 16,500 assets · 15,400 assets not fully read · ready in 0:05",
+					"ipc": [
+						{
+							"channel": "game-text:configured-refresh",
+							"ms": 2678.8388671875,
+							"status": "completed"
+						},
+						{
+							"channel": "game-text:localization:targets",
+							"ms": 8.428955078125,
+							"status": "ready"
+						},
+						{
+							"channel": "game-text:localization:target",
+							"ms": 2736.0185546875,
+							"status": "ready"
+						},
+						{
+							"channel": "game-text:search",
+							"query": "",
+							"ms": 86.81103515625,
+							"total": 583507,
+							"status": "ready"
+						},
+						{
+							"channel": "game-text:search",
+							"query": "",
+							"openGroup": "not_gathered",
+							"ms": 769.083740234375,
+							"total": 583507,
+							"status": "ready"
+						}
+					],
+					"stages": [
+						{
+							"name": "packages",
+							"ms": 369.045166015625,
+							"readPackages": 0
+						},
+						{
+							"name": "join",
+							"ms": 5.811767578125
+						},
+						{
+							"name": "localization",
+							"ms": 120.859130859375,
+							"parsedFiles": 0
+						},
+						{
+							"name": "join",
+							"ms": 5.823486328125
+						}
+					]
+				},
+				{
+					"label": "steady-rescan-0-0",
+					"startEpochMs": 1791857828843.5,
+					"statusReadyMs": 16638.699951171875,
+					"strictReadyMs": 17699.5,
+					"visibleReadyMs": 17728.599853515625,
+					"frameMaxGapMs": 17.200000000000728,
+					"longTasks": [],
+					"visibleRows": 50,
+					"focusOpen": false,
+					"indexStatus": "583,507 lines · 16,500 assets · 15,400 assets not fully read · ready in 0:16",
+					"ipc": [
+						{
+							"channel": "game-text:configured-refresh",
+							"ms": 13616.115478515625,
+							"status": "completed"
+						},
+						{
+							"channel": "game-text:localization:targets",
+							"ms": 4.439453125,
+							"status": "ready"
+						},
+						{
+							"channel": "game-text:localization:target",
+							"ms": 2780.71435546875,
+							"status": "ready"
+						},
+						{
+							"channel": "game-text:search",
+							"query": "",
+							"ms": 82.244873046875,
+							"total": 583507,
+							"status": "ready"
+						},
+						{
+							"channel": "game-text:search",
+							"query": "",
+							"openGroup": "not_gathered",
+							"ms": 1031.338134765625,
+							"total": 583507,
+							"status": "ready"
+						}
+					],
+					"stages": [
+						{
+							"name": "packages",
+							"ms": 337.8115234375,
+							"readPackages": 0
+						},
+						{
+							"name": "join",
+							"ms": 3.97900390625
+						},
+						{
+							"name": "localization",
+							"ms": 379.0849609375,
+							"parsedFiles": 0
+						},
+						{
+							"name": "join",
+							"ms": 6.163818359375
+						}
+					]
+				},
+				{
+					"label": "steady-rescan-0-1",
+					"startEpochMs": 1791857846624.7,
+					"statusReadyMs": 10200.800048828125,
+					"strictReadyMs": 11036.699951171875,
+					"visibleReadyMs": 11064.699951171875,
+					"frameMaxGapMs": 17.200000000000728,
+					"longTasks": [],
+					"visibleRows": 50,
+					"focusOpen": false,
+					"indexStatus": "583,507 lines · 16,500 assets · 15,400 assets not fully read · ready in 0:10",
+					"ipc": [
+						{
+							"channel": "game-text:configured-refresh",
+							"ms": 7521.73291015625,
+							"status": "completed"
+						},
+						{
+							"channel": "game-text:localization:targets",
+							"ms": 5.793701171875,
+							"status": "ready"
+						},
+						{
+							"channel": "game-text:localization:target",
+							"ms": 2448.265625,
+							"status": "ready"
+						},
+						{
+							"channel": "game-text:search",
+							"query": "",
+							"ms": 79.016357421875,
+							"total": 583507,
+							"status": "ready"
+						},
+						{
+							"channel": "game-text:search",
+							"query": "",
+							"openGroup": "not_gathered",
+							"ms": 809.396484375,
+							"total": 583507,
+							"status": "ready"
+						}
+					],
+					"stages": [
+						{
+							"name": "packages",
+							"ms": 390.090087890625,
+							"readPackages": 0
+						},
+						{
+							"name": "join",
+							"ms": 3.61767578125
+						},
+						{
+							"name": "localization",
+							"ms": 120.7763671875,
+							"parsedFiles": 0
+						},
+						{
+							"name": "join",
+							"ms": 3.574462890625
+						}
+					]
+				},
+				{
+					"label": "steady-rescan-0-2",
+					"startEpochMs": 1791857857725.0999,
+					"statusReadyMs": 9008.400146484375,
+					"strictReadyMs": 9812.400146484375,
+					"visibleReadyMs": 9846.900146484375,
+					"frameMaxGapMs": 17.200000000004366,
+					"longTasks": [],
+					"visibleRows": 50,
+					"focusOpen": false,
+					"indexStatus": "583,507 lines · 16,500 assets · 15,400 assets not fully read · ready in 0:09",
+					"ipc": [
+						{
+							"channel": "game-text:configured-refresh",
+							"ms": 6377.918701171875,
+							"status": "completed"
+						},
+						{
+							"channel": "game-text:localization:targets",
+							"ms": 6.114013671875,
+							"status": "ready"
+						},
+						{
+							"channel": "game-text:localization:target",
+							"ms": 2388.6396484375,
+							"status": "ready"
+						},
+						{
+							"channel": "game-text:search",
+							"query": "",
+							"ms": 80.79931640625,
+							"total": 583507,
+							"status": "ready"
+						},
+						{
+							"channel": "game-text:search",
+							"query": "",
+							"openGroup": "not_gathered",
+							"ms": 776.318359375,
+							"total": 583507,
+							"status": "ready"
+						}
+					],
+					"stages": [
+						{
+							"name": "packages",
+							"ms": 355.501953125,
+							"readPackages": 0
+						},
+						{
+							"name": "join",
+							"ms": 3.593994140625
+						},
+						{
+							"name": "localization",
+							"ms": 93.21435546875,
+							"parsedFiles": 0
+						},
+						{
+							"name": "join",
+							"ms": 3.787353515625
+						}
+					]
+				},
+				{
+					"label": "cold-first-scan-1",
+					"startEpochMs": 1791857011422.4001,
+					"statusReadyMs": 221005.69995117188,
+					"strictReadyMs": 222037.39990234375,
+					"visibleReadyMs": 222384.19995117188,
+					"frameMaxGapMs": 33.599999999998545,
+					"longTasks": [],
+					"visibleRows": 50,
+					"focusOpen": false,
+					"indexStatus": "583,507 lines · 16,500 assets · 15,400 assets not fully read · ready in 3:40",
+					"ipc": [
+						{
+							"channel": "game-text:configured-refresh",
+							"ms": 105314.75708007812,
+							"status": "completed"
+						},
+						{
+							"channel": "game-text:localization:targets",
+							"ms": 7.2939453125,
+							"status": "ready"
+						},
+						{
+							"channel": "game-text:localization:target",
+							"ms": 115436.68310546875,
+							"status": "ready"
+						},
+						{
+							"channel": "game-text:search",
+							"query": "",
+							"ms": 79.315185546875,
+							"total": 583507,
+							"status": "ready"
+						},
+						{
+							"channel": "game-text:search",
+							"query": "",
+							"openGroup": "not_gathered",
+							"ms": 989.006591796875,
+							"total": 583507,
+							"status": "ready"
+						}
+					],
+					"stages": [
+						{
+							"name": "packages",
+							"ms": 62677.737060546875,
+							"readPackages": 16500
+						},
+						{
+							"name": "join",
+							"ms": 30831.654296875
+						},
+						{
+							"name": "localization",
+							"ms": 43715.786376953125,
+							"parsedFiles": 21
+						},
+						{
+							"name": "join",
+							"ms": 55604.275390625
+						}
+					]
+				},
+				{
+					"label": "warm-in-process-rescan-1",
+					"startEpochMs": 1791857233896.5,
+					"statusReadyMs": 10306.60009765625,
+					"strictReadyMs": 11173.2001953125,
+					"visibleReadyMs": 11208.900146484375,
+					"frameMaxGapMs": 17.20000000001164,
+					"longTasks": [],
+					"visibleRows": 50,
+					"focusOpen": false,
+					"indexStatus": "583,507 lines · 16,500 assets · 15,400 assets not fully read · ready in 0:10",
+					"ipc": [
+						{
+							"channel": "game-text:configured-refresh",
+							"ms": 7294.96923828125,
+							"status": "completed"
+						},
+						{
+							"channel": "game-text:localization:targets",
+							"ms": 3.9931640625,
+							"status": "ready"
+						},
+						{
+							"channel": "game-text:localization:target",
+							"ms": 2779.28125,
+							"status": "ready"
+						},
+						{
+							"channel": "game-text:search",
+							"query": "",
+							"ms": 78.88134765625,
+							"total": 583507,
+							"status": "ready"
+						},
+						{
+							"channel": "game-text:search",
+							"query": "",
+							"openGroup": "not_gathered",
+							"ms": 834.32177734375,
+							"total": 583507,
+							"status": "ready"
+						}
+					],
+					"stages": [
+						{
+							"name": "packages",
+							"ms": 370.629150390625,
+							"readPackages": 0
+						},
+						{
+							"name": "join",
+							"ms": 3.815185546875
+						},
+						{
+							"name": "localization",
+							"ms": 245.35986328125,
+							"parsedFiles": 0
+						},
+						{
+							"name": "join",
+							"ms": 3.6953125
+						}
+					]
+				},
+				{
+					"label": "warm-fresh-empty-1",
+					"startEpochMs": 1791857908371.6,
+					"statusReadyMs": 5611.89990234375,
+					"strictReadyMs": 6435.800048828125,
+					"visibleReadyMs": 6484.800048828125,
+					"frameMaxGapMs": 33.5,
+					"longTasks": [],
+					"visibleRows": 50,
+					"focusOpen": false,
+					"indexStatus": "583,507 lines · 16,500 assets · 15,400 assets not fully read · ready in 0:05",
+					"ipc": [
+						{
+							"channel": "game-text:configured-refresh",
+							"ms": 2555.058349609375,
+							"status": "completed"
+						},
+						{
+							"channel": "game-text:localization:targets",
+							"ms": 7.094970703125,
+							"status": "ready"
+						},
+						{
+							"channel": "game-text:localization:target",
+							"ms": 2782.315673828125,
+							"status": "ready"
+						},
+						{
+							"channel": "game-text:search",
+							"query": "",
+							"ms": 95.159423828125,
+							"total": 583507,
+							"status": "ready"
+						},
+						{
+							"channel": "game-text:search",
+							"query": "",
+							"openGroup": "not_gathered",
+							"ms": 786.615234375,
+							"total": 583507,
+							"status": "ready"
+						}
+					],
+					"stages": [
+						{
+							"name": "packages",
+							"ms": 343.16455078125,
+							"readPackages": 0
+						},
+						{
+							"name": "join",
+							"ms": 5.786376953125
+						},
+						{
+							"name": "localization",
+							"ms": 100.4072265625,
+							"parsedFiles": 0
+						},
+						{
+							"name": "join",
+							"ms": 5.056640625
+						}
+					]
+				},
+				{
+					"label": "steady-rescan-1-0",
+					"startEpochMs": 1791857914895.1,
+					"statusReadyMs": 14835.800048828125,
+					"strictReadyMs": 15975.800048828125,
+					"visibleReadyMs": 16010.199951171875,
+					"frameMaxGapMs": 33.30000000000109,
+					"longTasks": [],
+					"visibleRows": 50,
+					"focusOpen": false,
+					"indexStatus": "583,507 lines · 16,500 assets · 15,400 assets not fully read · ready in 0:14",
+					"ipc": [
+						{
+							"channel": "game-text:configured-refresh",
+							"ms": 11821.310546875,
+							"status": "completed"
+						},
+						{
+							"channel": "game-text:localization:targets",
+							"ms": 4.177734375,
+							"status": "ready"
+						},
+						{
+							"channel": "game-text:localization:target",
+							"ms": 2786.038818359375,
+							"status": "ready"
+						},
+						{
+							"channel": "game-text:search",
+							"query": "",
+							"ms": 73.67822265625,
+							"total": 583507,
+							"status": "ready"
+						},
+						{
+							"channel": "game-text:search",
+							"query": "",
+							"openGroup": "not_gathered",
+							"ms": 1110.129638671875,
+							"total": 583507,
+							"status": "ready"
+						}
+					],
+					"stages": [
+						{
+							"name": "packages",
+							"ms": 333.1376953125,
+							"readPackages": 0
+						},
+						{
+							"name": "join",
+							"ms": 3.741943359375
+						},
+						{
+							"name": "localization",
+							"ms": 366.806884765625,
+							"parsedFiles": 0
+						},
+						{
+							"name": "join",
+							"ms": 3.870849609375
+						}
+					]
+				},
+				{
+					"label": "steady-rescan-1-1",
+					"startEpochMs": 1791857930940.4001,
+					"statusReadyMs": 11108.7998046875,
+					"strictReadyMs": 11900.099853515625,
+					"visibleReadyMs": 11931.599853515625,
+					"frameMaxGapMs": 17.200000000000728,
+					"longTasks": [],
+					"visibleRows": 50,
+					"focusOpen": false,
+					"indexStatus": "583,507 lines · 16,500 assets · 15,400 assets not fully read · ready in 0:11",
+					"ipc": [
+						{
+							"channel": "game-text:configured-refresh",
+							"ms": 8522.369873046875,
+							"status": "completed"
+						},
+						{
+							"channel": "game-text:localization:targets",
+							"ms": 3.8046875,
+							"status": "ready"
+						},
+						{
+							"channel": "game-text:localization:target",
+							"ms": 2351.09521484375,
+							"status": "ready"
+						},
+						{
+							"channel": "game-text:search",
+							"query": "",
+							"ms": 78.260498046875,
+							"total": 583507,
+							"status": "ready"
+						},
+						{
+							"channel": "game-text:search",
+							"query": "",
+							"openGroup": "not_gathered",
+							"ms": 764.56298828125,
+							"total": 583507,
+							"status": "ready"
+						}
+					],
+					"stages": [
+						{
+							"name": "packages",
+							"ms": 344.748291015625,
+							"readPackages": 0
+						},
+						{
+							"name": "join",
+							"ms": 3.514404296875
+						},
+						{
+							"name": "localization",
+							"ms": 107.380615234375,
+							"parsedFiles": 0
+						},
+						{
+							"name": "join",
+							"ms": 3.793701171875
+						}
+					]
+				},
+				{
+					"label": "steady-rescan-1-2",
+					"startEpochMs": 1791857942907.4001,
+					"statusReadyMs": 12417.7998046875,
+					"strictReadyMs": 13316.199951171875,
+					"visibleReadyMs": 13347.89990234375,
+					"frameMaxGapMs": 17.19999999999709,
+					"longTasks": [],
+					"visibleRows": 50,
+					"focusOpen": false,
+					"indexStatus": "583,507 lines · 16,500 assets · 15,400 assets not fully read · ready in 0:12",
+					"ipc": [
+						{
+							"channel": "game-text:configured-refresh",
+							"ms": 9122.989013671875,
+							"status": "completed"
+						},
+						{
+							"channel": "game-text:localization:targets",
+							"ms": 31.093505859375,
+							"status": "ready"
+						},
+						{
+							"channel": "game-text:localization:target",
+							"ms": 3038.098388671875,
+							"status": "ready"
+						},
+						{
+							"channel": "game-text:search",
+							"query": "",
+							"ms": 78.847900390625,
+							"total": 583507,
+							"status": "ready"
+						},
+						{
+							"channel": "game-text:search",
+							"query": "",
+							"openGroup": "not_gathered",
+							"ms": 870.978759765625,
+							"total": 583507,
+							"status": "ready"
+						}
+					],
+					"stages": [
+						{
+							"name": "packages",
+							"ms": 342.9716796875,
+							"readPackages": 0
+						},
+						{
+							"name": "join",
+							"ms": 3.38037109375
+						},
+						{
+							"name": "localization",
+							"ms": 759.18701171875,
+							"parsedFiles": 0
+						},
+						{
+							"name": "join",
+							"ms": 3.873291015625
+						}
+					]
+				},
+				{
+					"label": "cold-first-scan-2",
+					"startEpochMs": 1791857362221.4001,
+					"statusReadyMs": 184209.19995117188,
+					"strictReadyMs": 185181.5,
+					"visibleReadyMs": 185585,
+					"frameMaxGapMs": 33.39999999999418,
+					"longTasks": [],
+					"visibleRows": 50,
+					"focusOpen": false,
+					"indexStatus": "583,507 lines · 16,500 assets · 15,400 assets not fully read · ready in 3:04",
+					"ipc": [
+						{
+							"channel": "game-text:configured-refresh",
+							"ms": 97113.99609375,
+							"status": "completed"
+						},
+						{
+							"channel": "game-text:localization:targets",
+							"ms": 7.21435546875,
+							"status": "ready"
+						},
+						{
+							"channel": "game-text:localization:target",
+							"ms": 86838.14892578125,
+							"status": "ready"
+						},
+						{
+							"channel": "game-text:search",
+							"query": "",
+							"ms": 83.643798828125,
+							"total": 583507,
+							"status": "ready"
+						},
+						{
+							"channel": "game-text:search",
+							"query": "",
+							"openGroup": "not_gathered",
+							"ms": 934.43115234375,
+							"total": 583507,
+							"status": "ready"
+						}
+					],
+					"stages": [
+						{
+							"name": "packages",
+							"ms": 58166.713623046875,
+							"readPackages": 16500
+						},
+						{
+							"name": "join",
+							"ms": 27791.00244140625
+						},
+						{
+							"name": "localization",
+							"ms": 38244.523193359375,
+							"parsedFiles": 21
+						},
+						{
+							"name": "join",
+							"ms": 31837.229736328125
+						}
+					]
+				},
+				{
+					"label": "warm-in-process-rescan-2",
+					"startEpochMs": 1791857547876.2,
+					"statusReadyMs": 12093,
+					"strictReadyMs": 12951.900146484375,
+					"visibleReadyMs": 12979.10009765625,
+					"frameMaxGapMs": 17.20000000001164,
+					"longTasks": [],
+					"visibleRows": 50,
+					"focusOpen": false,
+					"indexStatus": "583,507 lines · 16,500 assets · 15,400 assets not fully read · ready in 0:12",
+					"ipc": [
+						{
+							"channel": "game-text:configured-refresh",
+							"ms": 8825.010498046875,
+							"status": "completed"
+						},
+						{
+							"channel": "game-text:localization:targets",
+							"ms": 4.113525390625,
+							"status": "ready"
+						},
+						{
+							"channel": "game-text:localization:target",
+							"ms": 3033.380126953125,
+							"status": "ready"
+						},
+						{
+							"channel": "game-text:search",
+							"query": "",
+							"ms": 79.019287109375,
+							"total": 583507,
+							"status": "ready"
+						},
+						{
+							"channel": "game-text:search",
+							"query": "",
+							"openGroup": "not_gathered",
+							"ms": 829.87548828125,
+							"total": 583507,
+							"status": "ready"
+						}
+					],
+					"stages": [
+						{
+							"name": "packages",
+							"ms": 340.654296875,
+							"readPackages": 0
+						},
+						{
+							"name": "join",
+							"ms": 3.89892578125
+						},
+						{
+							"name": "localization",
+							"ms": 542.603271484375,
+							"parsedFiles": 0
+						},
+						{
+							"name": "join",
+							"ms": 4.05810546875
+						}
+					]
+				},
+				{
+					"label": "warm-fresh-empty-2",
+					"startEpochMs": 1791857994621.5,
+					"statusReadyMs": 5384.199951171875,
+					"strictReadyMs": 6178,
+					"visibleReadyMs": 6250.800048828125,
+					"frameMaxGapMs": 33.09999999999991,
+					"longTasks": [],
+					"visibleRows": 50,
+					"focusOpen": false,
+					"indexStatus": "583,507 lines · 16,500 assets · 15,400 assets not fully read · ready in 0:05",
+					"ipc": [
+						{
+							"channel": "game-text:configured-refresh",
+							"ms": 2482.93310546875,
+							"status": "completed"
+						},
+						{
+							"channel": "game-text:localization:targets",
+							"ms": 6.89599609375,
+							"status": "ready"
+						},
+						{
+							"channel": "game-text:localization:target",
+							"ms": 2644.387451171875,
+							"status": "ready"
+						},
+						{
+							"channel": "game-text:search",
+							"query": "",
+							"ms": 85.773193359375,
+							"total": 583507,
+							"status": "ready"
+						},
+						{
+							"channel": "game-text:search",
+							"query": "",
+							"openGroup": "not_gathered",
+							"ms": 758.44189453125,
+							"total": 583507,
+							"status": "ready"
+						}
+					],
+					"stages": [
+						{
+							"name": "packages",
+							"ms": 337.267822265625,
+							"readPackages": 0
+						},
+						{
+							"name": "join",
+							"ms": 6.719482421875
+						},
+						{
+							"name": "localization",
+							"ms": 99.98583984375,
+							"parsedFiles": 0
+						},
+						{
+							"name": "join",
+							"ms": 4.812255859375
+						}
+					]
+				},
+				{
+					"label": "steady-rescan-2-0",
+					"startEpochMs": 1791858000910.5,
+					"statusReadyMs": 12725.300048828125,
+					"strictReadyMs": 13834.5,
+					"visibleReadyMs": 13861.699951171875,
+					"frameMaxGapMs": 17.200000000000728,
+					"longTasks": [],
+					"visibleRows": 50,
+					"focusOpen": false,
+					"indexStatus": "583,507 lines · 16,500 assets · 15,400 assets not fully read · ready in 0:12",
+					"ipc": [
+						{
+							"channel": "game-text:configured-refresh",
+							"ms": 9708.245849609375,
+							"status": "completed"
+						},
+						{
+							"channel": "game-text:localization:targets",
+							"ms": 4.216796875,
+							"status": "ready"
+						},
+						{
+							"channel": "game-text:localization:target",
+							"ms": 2782.571044921875,
+							"status": "ready"
+						},
+						{
+							"channel": "game-text:search",
+							"query": "",
+							"ms": 78.406005859375,
+							"total": 583507,
+							"status": "ready"
+						},
+						{
+							"channel": "game-text:search",
+							"query": "",
+							"openGroup": "not_gathered",
+							"ms": 1082.039794921875,
+							"total": 583507,
+							"status": "ready"
+						}
+					],
+					"stages": [
+						{
+							"name": "packages",
+							"ms": 331.90771484375,
+							"readPackages": 0
+						},
+						{
+							"name": "join",
+							"ms": 4.081787109375
+						},
+						{
+							"name": "localization",
+							"ms": 399.13232421875,
+							"parsedFiles": 0
+						},
+						{
+							"name": "join",
+							"ms": 4.171875
+						}
+					]
+				},
+				{
+					"label": "steady-rescan-2-1",
+					"startEpochMs": 1791858014808.6,
+					"statusReadyMs": 10325.099853515625,
+					"strictReadyMs": 11152.7998046875,
+					"visibleReadyMs": 11180.199951171875,
+					"frameMaxGapMs": 17.299999999999272,
+					"longTasks": [],
+					"visibleRows": 50,
+					"focusOpen": false,
+					"indexStatus": "583,507 lines · 16,500 assets · 15,400 assets not fully read · ready in 0:10",
+					"ipc": [
+						{
+							"channel": "game-text:configured-refresh",
+							"ms": 7789.068115234375,
+							"status": "completed"
+						},
+						{
+							"channel": "game-text:localization:targets",
+							"ms": 4.143798828125,
+							"status": "ready"
+						},
+						{
+							"channel": "game-text:localization:target",
+							"ms": 2307.6767578125,
+							"status": "ready"
+						},
+						{
+							"channel": "game-text:search",
+							"query": "",
+							"ms": 78.094970703125,
+							"total": 583507,
+							"status": "ready"
+						},
+						{
+							"channel": "game-text:search",
+							"query": "",
+							"openGroup": "not_gathered",
+							"ms": 802.19580078125,
+							"total": 583507,
+							"status": "ready"
+						}
+					],
+					"stages": [
+						{
+							"name": "packages",
+							"ms": 341.981689453125,
+							"readPackages": 0
+						},
+						{
+							"name": "join",
+							"ms": 3.4697265625
+						},
+						{
+							"name": "localization",
+							"ms": 93.853515625,
+							"parsedFiles": 0
+						},
+						{
+							"name": "join",
+							"ms": 3.542724609375
+						}
+					]
+				},
+				{
+					"label": "steady-rescan-2-2",
+					"startEpochMs": 1791858236044.9001,
+					"statusReadyMs": 13340.099853515625,
+					"strictReadyMs": 14412.89990234375,
+					"visibleReadyMs": 14444.199951171875,
+					"frameMaxGapMs": 17.300000000000182,
+					"longTasks": [],
+					"visibleRows": 50,
+					"focusOpen": false,
+					"indexStatus": "583,507 lines · 16,500 assets · 15,400 assets not fully read · ready in 0:13",
+					"ipc": [
+						{
+							"channel": "game-text:configured-refresh",
+							"ms": 10357.162353515625,
+							"status": "completed"
+						},
+						{
+							"channel": "game-text:localization:targets",
+							"ms": 7.26806640625,
+							"status": "ready"
+						},
+						{
+							"channel": "game-text:localization:target",
+							"ms": 2742.31787109375,
+							"status": "ready"
+						},
+						{
+							"channel": "game-text:search",
+							"query": "",
+							"ms": 79.524658203125,
+							"total": 583507,
+							"status": "ready"
+						},
+						{
+							"channel": "game-text:search",
+							"query": "",
+							"openGroup": "not_gathered",
+							"ms": 1045.416259765625,
+							"total": 583507,
+							"status": "ready"
+						}
+					],
+					"stages": [
+						{
+							"name": "packages",
+							"ms": 330.45703125,
+							"readPackages": 0
+						},
+						{
+							"name": "join",
+							"ms": 3.736328125
+						},
+						{
+							"name": "localization",
+							"ms": 363.949462890625,
+							"parsedFiles": 0
+						},
+						{
+							"name": "join",
+							"ms": 3.722412109375
+						}
+					]
+				}
+			],
+			"cacheBytes": [
+				{
+					"round": 0,
+					"workbenchBytes": 147670362,
+					"backendBytes": 85754738
+				},
+				{
+					"round": 1,
+					"workbenchBytes": 147670374,
+					"backendBytes": 85754126
+				},
+				{
+					"round": 2,
+					"workbenchBytes": 147670206,
+					"backendBytes": 85754690
+				}
+			],
+			"verification": {
+				"backendRawSha256": "097f17aa317f8de46a927e1651407d2e0e1bf3f89f8575ba6133ae812fee730a",
+				"canonicalPageSha256": "3ad81d5367bf11afce07efd33aee97bdecab90bca8effbf63135780a1ec05d9a",
+				"canonicalPositivePageSha256": "e723c7451c4d1b68df2083c306a1027d46dc7ed8c7bf35a203bd4ccf343eb4b2",
+				"queries": ["", "é", "Package0", "text", "Continue"],
+				"positiveQueries": ["", "velora", "45678", "TALUMA NIMBLET", "oriven", " "],
+				"exactJsonValuesEqual": true,
+				"zeroRendererLongTasks": true,
+				"zeroPageErrors": true,
+				"translationEditorFocusProfiles": 3,
+				"interactions": [
+					{
+						"label": "steady-0",
+						"total": 583507,
+						"hash": "84b8fba388f93e136caef1ccd667715a7befe9ac750ab2dab72fda6a65abc407",
+						"searchMs": 585.9119999999966,
+						"focusMs": 99.01430000000983,
+						"translationEditorFocused": true,
+						"status": "passed"
+					},
+					{
+						"label": "steady-1",
+						"total": 583507,
+						"hash": "84b8fba388f93e136caef1ccd667715a7befe9ac750ab2dab72fda6a65abc407",
+						"searchMs": 478.83600000001024,
+						"focusMs": 91.00090000001364,
+						"translationEditorFocused": true,
+						"status": "passed"
+					},
+					{
+						"label": "cold-1",
+						"total": 583507,
+						"hash": "84b8fba388f93e136caef1ccd667715a7befe9ac750ab2dab72fda6a65abc407",
+						"searchMs": 591.5658999999869,
+						"focusMs": 104.96400000000722,
+						"status": "passed"
+					},
+					{
+						"label": "warm-1",
+						"total": 583507,
+						"hash": "84b8fba388f93e136caef1ccd667715a7befe9ac750ab2dab72fda6a65abc407",
+						"searchMs": 475.0444000000134,
+						"focusMs": 69.04510000001756,
+						"status": "passed"
+					},
+					{
+						"label": "steady-2",
+						"total": 583507,
+						"hash": "84b8fba388f93e136caef1ccd667715a7befe9ac750ab2dab72fda6a65abc407",
+						"searchMs": 1089.7442999999985,
+						"focusMs": 106.11929999999847,
+						"translationEditorFocused": true,
+						"status": "passed"
+					},
+					{
+						"label": "cold-2",
+						"total": 583507,
+						"hash": "84b8fba388f93e136caef1ccd667715a7befe9ac750ab2dab72fda6a65abc407",
+						"searchMs": 1086.1425000000163,
+						"focusMs": 131.91670000000158,
+						"status": "passed"
+					},
+					{
+						"label": "warm-2",
+						"total": 583507,
+						"hash": "84b8fba388f93e136caef1ccd667715a7befe9ac750ab2dab72fda6a65abc407",
+						"searchMs": 467.6701999999932,
+						"focusMs": 59.19850000002771,
+						"status": "passed"
+					}
+				],
+				"packagedColdLayerWorker": "passed on all three cold caches"
+			}
 		}
 	}
 }

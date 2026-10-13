@@ -1,7 +1,7 @@
 # Game Text performance experiments — consolidated 2026-10-13
 
 [ADR 0010](../decisions/0010-game-text-performance-policy.md) adopts the retained implementation
-at `5332c6e1` in performance PR #67, stacked on UX PR #66. The accepted generated 1× cache is
+at `5332c6e1` in performance PR #67, stacked on UX PR #66. The accepted target-only generated 1× cache is
 **81.8 MiB**. This record consolidates the initial two-hour investigation and both one-hour
 continuations. It records historical measurements; [Game Text snapshots](../engineering/game-text-snapshots.md)
 owns the maintained implementation contract.
@@ -62,10 +62,79 @@ Initial baseline was `8a45ffaf`; the cold continuation compared `a5b2c8c0` with 
 The initial retained-record cold observation was 88.08 → 85.76 seconds, one run per revision,
 not a repeated speed claim. Public readiness includes other boundary work and opening; stage
 medians do not sum exactly. Worker encode/verify counters sum concurrent work, not wall time.
-Electron launch, painting and typing debounce are excluded. Sampled RSS can miss brief allocations;
+Those backend timers exclude Electron launch, painting and typing debounce. Sampled RSS can miss brief allocations;
 post-GC array-buffer checkpoints are a different measure.
 
-## Actual Workbench click to usable results
+## Same 583,507-line workload: backend versus Workbench
+
+The follow-up uses the **exact retained 1× project, package records and localization files** from
+above. It supersedes the smaller screenshot-fixture comparison for this question. Three fresh
+backend caches and three fresh Workbench profiles supply cold runs; existing caches are reopened
+in fresh processes. The query is empty, all ten cultures are selected, and the first problem group
+shows 50 rows. Native discovery/extraction and application startup are excluded on both paths,
+as in the original retained-record experiment. OS caches are warm.
+
+| Same-input path and endpoint                               | Samples |    Median |             Range |
+| ---------------------------------------------------------- | ------: | --------: | ----------------: |
+| Backend target-first refresh plus first bounded page, cold |       3 |  74.387 s |   69.879–88.194 s |
+| Workbench **Scan project** click to usable results, cold   |       3 | 185.182 s | 184.174–222.037 s |
+| Backend refresh/reopen plus first bounded page, cached     |       3 |   2.501 s |     2.468–2.761 s |
+| Workbench **Rescan** immediately after its cold scan       |       3 |  12.327 s |   11.173–12.952 s |
+| Workbench **Scan project**, existing cache, fresh process  |       3 |   6.436 s |     6.178–6.492 s |
+| Subsequent Workbench **Rescan**, existing cache, open app  |       9 |  13.316 s |    9.812–17.700 s |
+
+These are current observations, not another before/after optimization claim. The historical
+69.14/2.45-second medians remain valid backend-only results from the earlier three-pair comparison.
+The current cold backend range is wide; its current median is 74.39 seconds including the first
+page. The 1.26-second small-fixture rescan cannot stand in for this larger workload.
+
+Workbench runs its normal source-first preparation, constructs a separate localization view,
+materializes full source/localization models, and loads the visible group through its worker-backed
+query and IPC. The backend benchmark prepares only the selected target and uses bounded direct
+queries. Workbench runs Electron 43.7.7 / Node 24.21.0 with its production renderer; the backend
+runs Node 26.5.0. These differences are part of the measured desktop path. The timings do not
+isolate a runtime-version effect or attribute every additional second to rendering.
+
+Cached rescans reread **zero packages** and reparse **zero localization files**. In the nine repeated
+rescans, the source-refresh IPC has a 9.123-second median and target preparation a 2.742-second
+median. The host eagerly accesses `indexed.corpus` in `services/game-text.ts`, followed by
+`localizationJoin`, `review` and `evidence` in `services/game-text-localization.ts`. That object
+materialization remains on the refresh path even when the numeric index is reused. The source
+and target IPC medians describe separate work; their medians need not add to the end-to-end median.
+
+Timing starts at the actual renderer click. The endpoint requires enabled Rescan, no scan activity,
+loaded visible rows, no open-group loading, completed observed blocking requests, and two animation
+frames. Workbench's rounded **ready in** ends before the final group is loaded: the median gap is
+0.898 seconds for repeated rescans, rather than the roughly one-frame gap on the small fixture.
+Search and line focus work afterward; German translation-editor focus succeeds in all three profiles.
+Future pages and other views retain their normal on-demand loading.
+
+The isolated benchmark build replaces only the native input providers: `GameTextIndexSource` reads
+the exact retained records, and `ProjectIndexMemory` supplies their retained shell inventory. The
+production refresh, target preparation, IPC results, query worker and renderer are used without
+mocking replies. The first build exposed a real missing `cold-layer-worker.js` entry in Workbench's
+bundle; that entry is now emitted and exercised by all three successful large cold scans. The
+adoption guide documents all required worker entries.
+
+A post-timing selector encoding error in the first round was fixed before later interaction checks.
+One repeated-scan probe lost its Electron inspection context after visible readiness; that incomplete
+observation is excluded and replaced after relaunch, using the renderer's mirrored pending-request
+counter. Startup/shutdown are outside the click boundary. All 18 retained UI observations have no
+page errors or renderer long tasks; the largest observed animation-frame gap is 33.6 ms.
+
+Backend pages have the original raw SHA-256
+`097f17aa317f8de46a927e1651407d2e0e1bf3f89f8575ba6133ae812fee730a`. IPC serialization changes object
+property order, so full JSON values are compared recursively. Empty, absent, matching and sparse
+query pages match exactly, including line order and culture marks. The Workbench source-plus-target
+cache settles at **140.8 MiB**, versus **81.8 MiB** for the backend target-only cache. Both exclude
+retained inputs, native Catalog and experimental copies, and fit the experimental 150 MiB allowance.
+
+Raw precision, stage/IPC timings, comparisons and per-profile cache bytes are in
+`phases.workbenchRetainedUi` of the consolidated JSON. The probes and original evidence are preserved
+in `out/game-text-experiments-2026-10-13/same-workload-evidence.zip`; build, search, line-focus and
+translation-editor checks are successful. This follow-up does not change the indexing algorithm.
+
+## Small screenshot fixture: supplementary UI check
 
 The later UI check measures real Electron clicks on the screenshot fixture: 5,212 discovered
 packages, 5,165 inspected assets, 47 exclusions and 64 localization lines. Workbench is rebuilt

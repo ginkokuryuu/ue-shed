@@ -20,7 +20,7 @@ Preserve exact query order, Unicode/WTF-8 fidelity, typed recovery and pinned-re
 Full joins may persist the verified source projection, lowercase-ASCII flags and trigram membership
 in their existing immutable snapshot. Use the thresholds, storage bounds and overlay policy in
 [Game Text snapshots](../engineering/game-text-snapshots.md). Optional-cache absence falls back to
-the dictionary path. The measured 81.8 MiB cache is the accepted choice for the retained 1× fixture;
+the dictionary path. The measured 81.8 MiB target-only cache is the accepted choice for the retained 1× fixture;
 150 MiB is this experiment's allowance, not a new product quota or a target to fill.
 
 Keep the current compression policy. Do not retain flat dictionary mirrors, blanket raw storage,
@@ -37,7 +37,10 @@ The [consolidated experiment record](../research/game-text-pipeline-performance-
 retains the before/after measurements and rejected trials. The latest repeated comparison improves
 cold readiness from 72.55 to 69.14 seconds and reopening from 3.347 to 2.450 seconds for about
 2.7 MiB more persisted data. Matching searches have no general improvement; one sparse search is
-about 5 ms slower. Cold RSS ranges overlap.
+about 5 ms slower. Cold RSS ranges overlap. These are backend-only timings. The later same-input
+Workbench check in that record measures 185.18 seconds cold and 13.32 seconds for repeated rescans,
+with a 140.8 MiB source-plus-target cache. Host preparation and model materialization remain
+additional costs; the earlier small screenshot fixture cannot substitute for that comparison.
 
 Future changes should measure the complete affected path, cache bytes and sampled process memory
 alongside isolated stages. Compare the same inputs in alternating fresh processes and verify

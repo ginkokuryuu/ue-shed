@@ -53,7 +53,10 @@ and its pinned reader. `latestSearchOnly` fits a single search view and preserve
 pages while cancelling replaced pages and older filter selections; leave it false for independent
 concurrent callers. Worker startup and searches have 30-second bounds. Bundled hosts must emit
 `dist/search-worker.js` from the installed package beside the bundle that resolves it through
-`import.meta.url`. Verify the packaged worker through the host transport. The synchronous
+`import.meta.url`. Cold preparation also resolves `localization-import-worker.js`,
+`package-text-worker.js` and `cold-layer-worker.js` beside that bundle. Emit those worker entries
+with their dependencies, or leave the installed package unbundled. Verify a cold preparation that
+uses multiple layers through the packaged host, as well as worker-backed search. The synchronous
 `query.search` remains available for headless batch use and bounded direct queries.
 
 Use `makeRetainedGameTextIndexWith(prepare)` when a host publishes models from its own step

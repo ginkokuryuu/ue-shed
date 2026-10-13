@@ -21,7 +21,14 @@ bytes, allowing one oversized identifier alone, then merges one decoded head per
 source caching follows the format and overlay bounds below. Numeric sections remain zstd level 1;
 string/import domains retain their measured compression policy.
 
-The accepted generated 1× cache is 81.8 MiB. This fixture result does not impose a global cache quota
+Bundled Node hosts must emit `localization-import-worker.js`, `package-text-worker.js`,
+`cold-layer-worker.js` and, when enabled, `search-worker.js`, with their dependencies beside the
+bundle that resolves them through `import.meta.url`.
+Leaving the installed package unbundled also preserves these paths. Verify a cold refresh that
+uses multiple layers in the packaged host; a small warm fixture can miss an absent cold worker.
+
+The accepted target-only generated 1× cache is 81.8 MiB; Workbench's source-plus-target path
+measures 140.8 MiB on the same inputs. This fixture result does not impose a global cache quota
 across projects, targets, staging or pinned generations. Full measurements and rejected alternatives
 are in the [consolidated experiment record](../research/game-text-pipeline-performance-2026-10-13.md).
 Backend adoption remains governed by the shared builder contract below. Gather coverage is unchanged;
