@@ -65,6 +65,46 @@ medians do not sum exactly. Worker encode/verify counters sum concurrent work, n
 Electron launch, painting and typing debounce are excluded. Sampled RSS can miss brief allocations;
 post-GC array-buffer checkpoints are a different measure.
 
+## Actual Workbench click to usable results
+
+The later UI check measures real Electron clicks on the screenshot fixture: 5,212 discovered
+packages, 5,165 inspected assets, 47 exclusions and 64 localization lines. Workbench is rebuilt
+from `1f930905`, with its production renderer, Electron 43.5.0 and the default Showcase debug
+native reader. Native discovery/extraction is included. The first scan uses a cold text cache in
+a fresh isolated profile; the shell may already have prepared its Catalog. OS caches are warm.
+This is a different workload from the retained 583,507-line backend benchmark above.
+
+| Current Text view, click to usable results                                     | Samples |  Median |          Range |
+| ------------------------------------------------------------------------------ | ------: | ------: | -------------: |
+| First **Scan project**, cold text cache                                        |       3 | 9.879 s | 9.843–10.213 s |
+| Unchanged **Rescan**, default list                                             |       9 | 1.264 s |  1.211–1.313 s |
+| Unchanged **Rescan**, translated line open, German selected, two folder groups |       9 | 1.296 s |  1.197–1.547 s |
+| **Scan project** after restarting Electron with its existing cache             |       3 | 1.347 s |  1.330–1.480 s |
+
+Timing starts in the renderer's capture-phase click listener. Readiness requires Rescan enabled,
+scan activity gone, rows present, open-group loading gone and the observed blocking Game Text
+requests complete, followed by two animation-frame observations. The translated-line case also
+checks its German translation after each rescan. Search, line selection and translation-editor
+focus work afterward. Closed groups, future pages and other tabs remain loaded on demand.
+
+Temporary observation wrappers return the original IPC results; no corpus reply is mocked and no
+runtime source is changed. Three fresh profiles each supply three repeated rescans; translated
+focus checks reuse those profiles in fresh Electron processes. The first source-refresh reply in
+the default rescan has a 699 ms median, while target preparation has a 390 ms median. Target
+discovery, query delay, grouped requests and rendering complete the 1.264-second result.
+
+Workbench's displayed **ready in** already includes translation preparation and the first query.
+It rounds down to whole seconds and stops before the final open-group/frame readiness milestone:
+about 14 ms earlier in the default rescan and 15 ms earlier in the translated-line case. The older
+69.14/2.45-second figures remain backend-only measurements; this fixture check cannot convert the
+larger retained-record workload into an end-to-end UI result.
+
+Build and interaction checks pass, with no page errors or renderer long tasks; the largest sampled
+animation-frame gap is 17.4 ms. These observations cover this fixture and current Text view, not
+every future interaction or a hardware display-latency guarantee. Raw samples and IPC timings
+are under `phases.workbenchUi` in the consolidated JSON; local probes/logs/screenshots are under
+`out/game-text-experiments-2026-10-13/workbench-rescan*`.
+
 ## Retained experiments
 
 Isolated rows are exploratory single comparisons unless their sampling is stated. The combined

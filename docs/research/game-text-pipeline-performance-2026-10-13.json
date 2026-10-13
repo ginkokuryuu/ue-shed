@@ -5094,6 +5094,1009 @@
 				"liveEditorMatrixRun": false,
 				"effectArchitecture": "passed"
 			}
+		},
+		"workbenchUi": {
+			"date": "2026-10-13",
+			"runtimeRevision": "1f93090523cf2cc0699ae68cb972bab1576dcaa1",
+			"environment": {
+				"electron": "43.7.7",
+				"nodeHarness": "26.5.0",
+				"rendererBuild": "production",
+				"nativeBuild": "debug",
+				"nativeReader": "target/debug/uasset.exe",
+				"viewport": [1440, 900]
+			},
+			"dataset": {
+				"project": "fixtures/unreal-project",
+				"localizationTarget": "FixtureGame",
+				"localizationLines": 64,
+				"sourceSearchableLines": 61,
+				"coverage": {
+					"discoveredPackages": 5212,
+					"inspectedPackages": 5165,
+					"partialPackages": 0,
+					"failedPackages": 0,
+					"textUnits": 62,
+					"textOccurrences": 71,
+					"resolvedOccurrences": 71,
+					"unresolvedOccurrences": 0,
+					"unsupportedTextProperties": 0
+				}
+			},
+			"method": "Real Electron/Playwright clicks. Three fresh isolated profiles; three repeated unchanged rescans per profile for each selected state. The same profiles are reopened in fresh Electron processes for cached scan checks. Shell initialization/navigation and builds precede each click and are excluded. OS caches are warm. First Scan project has a cold text cache; the shell may already have prepared the Catalog. This uses real native discovery/extraction, without mocked corpus replies.",
+			"endpoint": "Renderer capture-phase button click to Rescan enabled, scan activity gone, result rows present, open-group loading gone and all observed blocking Game Text IPC complete, followed by two animation-frame observations. This covers the current Text view; closed groups and other tabs remain demand-loaded. Post-readiness search, line selection and German translation-editor focus checks pass. No authored translation is written.",
+			"instrumentation": "Temporary handler wrappers await and return the original Electron IPC results. Blocking-request counts are mirrored to the renderer for its animation-frame readiness observer; progress polling and operation-state queries are excluded from that count. No runtime source is changed. Strict renderer milestones, not the later Playwright assertion-completion timestamp, supply the headline. Raw logs/probe/screenshots are retained in out/game-text-experiments-2026-10-13/workbench-rescan*.",
+			"ipcColumns": ["channel", "milliseconds", "status", "openGroup"],
+			"summary": {
+				"cold-first-scan": {
+					"count": 3,
+					"medianMs": 9878.7001953125,
+					"minMs": 9843.10009765625,
+					"maxMs": 10212.5,
+					"sourceRefreshReplyMedianMs": 8362.842529296875,
+					"localizationTargetReplyMedianMs": 1339.00244140625,
+					"afterHeaderReadyMedianMs": 30.5
+				},
+				"warm-rescan": {
+					"count": 9,
+					"medianMs": 1263.900146484375,
+					"minMs": 1211.199951171875,
+					"maxMs": 1312.699951171875,
+					"sourceRefreshReplyMedianMs": 699.21484375,
+					"localizationTargetReplyMedianMs": 390.12060546875,
+					"afterHeaderReadyMedianMs": 14.0
+				},
+				"focused-rescan": {
+					"count": 9,
+					"medianMs": 1229.7001953125,
+					"minMs": 1181.300048828125,
+					"maxMs": 1246.699951171875,
+					"sourceRefreshReplyMedianMs": 696.67626953125,
+					"localizationTargetReplyMedianMs": 363.45458984375,
+					"afterHeaderReadyMedianMs": 15.599853515625
+				},
+				"warm-reopen-scan": {
+					"count": 3,
+					"medianMs": 1346.699951171875,
+					"minMs": 1329.89990234375,
+					"maxMs": 1479.5,
+					"sourceRefreshReplyMedianMs": 721.256591796875,
+					"localizationTargetReplyMedianMs": 441.91748046875,
+					"afterHeaderReadyMedianMs": 1.5
+				},
+				"translated-rescan": {
+					"count": 9,
+					"medianMs": 1295.900146484375,
+					"minMs": 1197.10009765625,
+					"maxMs": 1546.699951171875,
+					"sourceRefreshReplyMedianMs": 711.412353515625,
+					"localizationTargetReplyMedianMs": 401.270751953125,
+					"afterHeaderReadyMedianMs": 15.10009765625
+				},
+				"translation-setup-reopen": {
+					"count": 3,
+					"medianMs": 1313.400146484375,
+					"minMs": 1313.199951171875,
+					"maxMs": 1463,
+					"sourceRefreshReplyMedianMs": 708.343994140625,
+					"localizationTargetReplyMedianMs": 418.5966796875,
+					"afterHeaderReadyMedianMs": 24.300048828125
+				}
+			},
+			"samples": [
+				{
+					"label": "cold-first-scan-0",
+					"statusReadyMs": 9845.300048828125,
+					"strictReadyMs": 9878.7001953125,
+					"frameMaxGapMs": 17.399999999999636,
+					"visibleRows": 1,
+					"indexStatus": "64 lines · 5,165 assets · 47 assets excluded from gather · ready in 0:09",
+					"longTasks": [],
+					"ipc": [
+						["game-text:configured-refresh", 8362.842529296875, "completed", null],
+						["game-text:localization:targets", 13.04052734375, "ready", null],
+						["game-text:localization:target", 1311.95947265625, "ready", null],
+						["game-text:localization:operation-state", 2.390869140625, null, null],
+						["game-text:localization:operation-state", 0.54443359375, null, null],
+						["game-text:localization:operation-state", 0.385986328125, null, null],
+						["game-text:search", 13.12060546875, "ready", null],
+						["game-text:search", 2.587646484375, "ready", "not_gathered"],
+						["game-text:localization:operation-state", 0.4892578125, null, null]
+					]
+				},
+				{
+					"label": "warm-rescan-0-0",
+					"statusReadyMs": 1212.800048828125,
+					"strictReadyMs": 1228.699951171875,
+					"frameMaxGapMs": 17,
+					"visibleRows": 1,
+					"indexStatus": "64 lines · 5,165 assets · 47 assets excluded from gather · ready in 0:01",
+					"longTasks": [],
+					"ipc": [
+						["game-text:configured-refresh", 694.423583984375, "completed", null],
+						["game-text:localization:targets", 8.32666015625, "ready", null],
+						["game-text:localization:operation-state", 12.75634765625, null, null],
+						["game-text:localization:target", 357.977294921875, "ready", null],
+						["game-text:search", 11.994873046875, "ready", null],
+						["game-text:search", 2.43017578125, "ready", "not_gathered"],
+						["game-text:localization:operation-state", 1.404541015625, null, null]
+					]
+				},
+				{
+					"label": "warm-rescan-0-1",
+					"statusReadyMs": 1249.900146484375,
+					"strictReadyMs": 1263.900146484375,
+					"frameMaxGapMs": 17.100000000000364,
+					"visibleRows": 1,
+					"indexStatus": "64 lines · 5,165 assets · 47 assets excluded from gather · ready in 0:01",
+					"longTasks": [],
+					"ipc": [
+						["game-text:configured-refresh", 702.768798828125, "completed", null],
+						["game-text:localization:targets", 7.542236328125, "ready", null],
+						["game-text:localization:operation-state", 10.803955078125, null, null],
+						["game-text:localization:target", 393.2880859375, "ready", null],
+						["game-text:localization:operation-state", 0.4794921875, null, null],
+						["game-text:search", 12.200439453125, "ready", null],
+						["game-text:search", 3.0302734375, "ready", "not_gathered"]
+					]
+				},
+				{
+					"label": "warm-rescan-0-2",
+					"statusReadyMs": 1268.300048828125,
+					"strictReadyMs": 1280.5,
+					"frameMaxGapMs": 17.200000000000728,
+					"visibleRows": 1,
+					"indexStatus": "64 lines · 5,165 assets · 47 assets excluded from gather · ready in 0:01",
+					"longTasks": [],
+					"ipc": [
+						["game-text:configured-refresh", 705.950927734375, "completed", null],
+						["game-text:localization:targets", 12.515625, "ready", null],
+						["game-text:localization:operation-state", 8.5380859375, null, null],
+						["game-text:localization:target", 399.890380859375, "ready", null],
+						["game-text:localization:operation-state", 1.655517578125, null, null],
+						["game-text:search", 12.373291015625, "ready", null],
+						["game-text:search", 2.767578125, "ready", "not_gathered"]
+					]
+				},
+				{
+					"label": "focused-rescan-0-0",
+					"statusReadyMs": 1230.199951171875,
+					"strictReadyMs": 1245.7998046875,
+					"frameMaxGapMs": 17.200000000000728,
+					"visibleRows": 2,
+					"indexStatus": "64 lines · 5,165 assets · 47 assets excluded from gather · ready in 0:01",
+					"focusHeading": "Continue",
+					"longTasks": [],
+					"ipc": [
+						["game-text:configured-refresh", 718.302490234375, "completed", null],
+						["game-text:search", 3.34716796875, "ready", null],
+						["game-text:search", 2.15966796875, "ready", "content/fixture/text"],
+						["game-text:search", 2.783203125, "ready", "content/fixture/localization"],
+						["game-text:localization:targets", 11.993408203125, "ready", null],
+						["game-text:localization:operation-state", 8.946044921875, null, null],
+						["game-text:focus", 0.10986328125, "not_ready", null],
+						["game-text:localization:target", 364.311279296875, "ready", null],
+						["game-text:localization:focus", 2.4716796875, "found", null],
+						["game-text:focus", 0.40087890625, "found", null],
+						["game-text:search", 3.65087890625, "ready", null],
+						["game-text:search", 1.694580078125, "ready", "content/fixture/text"],
+						[
+							"game-text:search",
+							2.176025390625,
+							"ready",
+							"content/fixture/localization"
+						],
+						["game-text:localization:operation-state", 1.427978515625, null, null]
+					]
+				},
+				{
+					"label": "focused-rescan-0-1",
+					"statusReadyMs": 1198.699951171875,
+					"strictReadyMs": 1213.5,
+					"frameMaxGapMs": 17.200000000000728,
+					"visibleRows": 2,
+					"indexStatus": "64 lines · 5,165 assets · 47 assets excluded from gather · ready in 0:01",
+					"focusHeading": "Continue",
+					"longTasks": [],
+					"ipc": [
+						["game-text:configured-refresh", 685.531005859375, "completed", null],
+						["game-text:localization:targets", 7.505859375, "ready", null],
+						["game-text:localization:operation-state", 10.77685546875, null, null],
+						["game-text:focus", 0.106689453125, "not_ready", null],
+						["game-text:localization:target", 359.544189453125, "ready", null],
+						["game-text:localization:focus", 2.536865234375, "found", null],
+						["game-text:focus", 0.378662109375, "found", null],
+						["game-text:search", 3.740966796875, "ready", null],
+						["game-text:search", 1.645751953125, "ready", "content/fixture/text"],
+						[
+							"game-text:search",
+							2.23779296875,
+							"ready",
+							"content/fixture/localization"
+						],
+						["game-text:localization:operation-state", 0.37451171875, null, null]
+					]
+				},
+				{
+					"label": "focused-rescan-0-2",
+					"statusReadyMs": 1180.7001953125,
+					"strictReadyMs": 1195.7001953125,
+					"frameMaxGapMs": 17.099999999998545,
+					"visibleRows": 2,
+					"indexStatus": "64 lines · 5,165 assets · 47 assets excluded from gather · ready in 0:01",
+					"focusHeading": "Continue",
+					"longTasks": [],
+					"ipc": [
+						["game-text:configured-refresh", 676.850341796875, "completed", null],
+						["game-text:localization:targets", 12.802001953125, "ready", null],
+						["game-text:localization:operation-state", 8.54150390625, null, null],
+						["game-text:focus", 0.11181640625, "not_ready", null],
+						["game-text:localization:target", 347.421142578125, "ready", null],
+						["game-text:localization:focus", 2.514892578125, "found", null],
+						["game-text:focus", 0.390380859375, "found", null],
+						["game-text:search", 3.8427734375, "ready", null],
+						["game-text:search", 1.87060546875, "ready", "content/fixture/text"],
+						[
+							"game-text:search",
+							2.41943359375,
+							"ready",
+							"content/fixture/localization"
+						],
+						["game-text:localization:operation-state", 1.576416015625, null, null]
+					]
+				},
+				{
+					"label": "warm-reopen-scan-0",
+					"statusReadyMs": 1455.60009765625,
+					"strictReadyMs": 1479.5,
+					"frameMaxGapMs": 17.200000000000273,
+					"visibleRows": 2,
+					"indexStatus": "64 lines · 5,165 assets · 47 assets excluded from gather · ready in 0:01",
+					"focusHeading": "Continue",
+					"longTasks": [],
+					"ipc": [
+						["game-text:configured-refresh", 780.595458984375, "completed", null],
+						["game-text:localization:targets", 19.60791015625, "ready", null],
+						["game-text:localization:operation-state", 26.309814453125, null, null],
+						["game-text:focus", 0.416748046875, "not_ready", null],
+						["game-text:localization:target", 496.441162109375, "ready", null],
+						["game-text:localization:focus", 3.428466796875, "found", null],
+						["game-text:focus", 1.09521484375, "found", null],
+						["game-text:localization:operation-state", 0.3095703125, null, null],
+						["game-text:search", 4.728515625, "ready", null],
+						["game-text:search", 2.49609375, "ready", "content/fixture/text"],
+						[
+							"game-text:search",
+							2.822021484375,
+							"ready",
+							"content/fixture/localization"
+						],
+						["game-text:localization:operation-state", 0.516357421875, null, null]
+					]
+				},
+				{
+					"label": "cold-first-scan-1",
+					"statusReadyMs": 10194.599853515625,
+					"strictReadyMs": 10212.5,
+					"frameMaxGapMs": 17.399999999999636,
+					"visibleRows": 1,
+					"indexStatus": "64 lines · 5,165 assets · 47 assets excluded from gather · ready in 0:10",
+					"longTasks": [],
+					"ipc": [
+						["game-text:configured-refresh", 8669.4541015625, "completed", null],
+						["game-text:localization:targets", 13.855712890625, "ready", null],
+						["game-text:localization:target", 1339.00244140625, "ready", null],
+						["game-text:localization:operation-state", 2.94287109375, null, null],
+						["game-text:localization:operation-state", 0.643798828125, null, null],
+						["game-text:localization:operation-state", 0.3330078125, null, null],
+						["game-text:search", 12.800537109375, "ready", null],
+						["game-text:search", 2.626953125, "ready", "not_gathered"],
+						["game-text:localization:operation-state", 0.419189453125, null, null]
+					]
+				},
+				{
+					"label": "warm-rescan-1-0",
+					"statusReadyMs": 1231.89990234375,
+					"strictReadyMs": 1245.39990234375,
+					"frameMaxGapMs": 17.100000000000364,
+					"visibleRows": 1,
+					"indexStatus": "64 lines · 5,165 assets · 47 assets excluded from gather · ready in 0:01",
+					"longTasks": [],
+					"ipc": [
+						["game-text:configured-refresh", 699.21484375, "completed", null],
+						["game-text:localization:targets", 9.102783203125, "ready", null],
+						["game-text:localization:operation-state", 12.67529296875, null, null],
+						["game-text:localization:target", 371.01220703125, "ready", null],
+						["game-text:search", 13.043701171875, "ready", null],
+						["game-text:localization:operation-state", 0.291259765625, null, null],
+						["game-text:search", 2.726318359375, "ready", "not_gathered"]
+					]
+				},
+				{
+					"label": "warm-rescan-1-1",
+					"statusReadyMs": 1247.60009765625,
+					"strictReadyMs": 1279.60009765625,
+					"frameMaxGapMs": 17.200000000000728,
+					"visibleRows": 1,
+					"indexStatus": "64 lines · 5,165 assets · 47 assets excluded from gather · ready in 0:01",
+					"longTasks": [],
+					"ipc": [
+						["game-text:configured-refresh", 698.441650390625, "completed", null],
+						["game-text:localization:targets", 7.4833984375, "ready", null],
+						["game-text:localization:operation-state", 11.8095703125, null, null],
+						["game-text:localization:target", 390.12060546875, "ready", null],
+						["game-text:localization:operation-state", 0.489501953125, null, null],
+						["game-text:search", 13.110107421875, "ready", null],
+						["game-text:search", 2.882080078125, "ready", "not_gathered"]
+					]
+				},
+				{
+					"label": "warm-rescan-1-2",
+					"statusReadyMs": 1297.5,
+					"strictReadyMs": 1312.699951171875,
+					"frameMaxGapMs": 17.200000000000728,
+					"visibleRows": 1,
+					"indexStatus": "64 lines · 5,165 assets · 47 assets excluded from gather · ready in 0:01",
+					"longTasks": [],
+					"ipc": [
+						["game-text:configured-refresh", 725.77099609375, "completed", null],
+						["game-text:localization:targets", 8.53466796875, "ready", null],
+						["game-text:localization:operation-state", 12.60107421875, null, null],
+						["game-text:localization:target", 407.012939453125, "ready", null],
+						["game-text:localization:operation-state", 0.523681640625, null, null],
+						["game-text:search", 12.9287109375, "ready", null],
+						["game-text:search", 2.661376953125, "ready", "not_gathered"]
+					]
+				},
+				{
+					"label": "focused-rescan-1-0",
+					"statusReadyMs": 1214.300048828125,
+					"strictReadyMs": 1229.7001953125,
+					"frameMaxGapMs": 17,
+					"visibleRows": 2,
+					"indexStatus": "64 lines · 5,165 assets · 47 assets excluded from gather · ready in 0:01",
+					"focusHeading": "Continue",
+					"longTasks": [],
+					"ipc": [
+						["game-text:configured-refresh", 698.70947265625, "completed", null],
+						["game-text:search", 5.60107421875, "ready", null],
+						["game-text:search", 3.183837890625, "ready", "content/fixture/text"],
+						[
+							"game-text:search",
+							3.72705078125,
+							"ready",
+							"content/fixture/localization"
+						],
+						["game-text:localization:targets", 8.1669921875, "ready", null],
+						["game-text:localization:operation-state", 11.88623046875, null, null],
+						["game-text:focus", 0.127197265625, "not_ready", null],
+						["game-text:localization:target", 363.45458984375, "ready", null],
+						["game-text:localization:focus", 2.48486328125, "found", null],
+						["game-text:focus", 0.397705078125, "found", null],
+						["game-text:search", 3.782958984375, "ready", null],
+						["game-text:search", 1.58984375, "ready", "content/fixture/text"],
+						[
+							"game-text:search",
+							2.037841796875,
+							"ready",
+							"content/fixture/localization"
+						],
+						["game-text:localization:operation-state", 0.27880859375, null, null]
+					]
+				},
+				{
+					"label": "focused-rescan-1-1",
+					"statusReadyMs": 1230.699951171875,
+					"strictReadyMs": 1246.5,
+					"frameMaxGapMs": 17.200000000000728,
+					"visibleRows": 2,
+					"indexStatus": "64 lines · 5,165 assets · 47 assets excluded from gather · ready in 0:01",
+					"focusHeading": "Continue",
+					"longTasks": [],
+					"ipc": [
+						["game-text:configured-refresh", 708.872314453125, "completed", null],
+						["game-text:localization:targets", 7.932861328125, "ready", null],
+						["game-text:localization:operation-state", 11.635009765625, null, null],
+						["game-text:focus", 0.1142578125, "not_ready", null],
+						["game-text:localization:target", 372.501708984375, "ready", null],
+						["game-text:localization:focus", 2.6044921875, "found", null],
+						["game-text:focus", 0.440185546875, "found", null],
+						["game-text:search", 3.7177734375, "ready", null],
+						["game-text:search", 1.721923828125, "ready", "content/fixture/text"],
+						[
+							"game-text:search",
+							2.14892578125,
+							"ready",
+							"content/fixture/localization"
+						],
+						["game-text:localization:operation-state", 0.2470703125, null, null]
+					]
+				},
+				{
+					"label": "focused-rescan-1-2",
+					"statusReadyMs": 1231.5,
+					"strictReadyMs": 1246.699951171875,
+					"frameMaxGapMs": 17.100000000002183,
+					"visibleRows": 2,
+					"indexStatus": "64 lines · 5,165 assets · 47 assets excluded from gather · ready in 0:01",
+					"focusHeading": "Continue",
+					"longTasks": [],
+					"ipc": [
+						["game-text:configured-refresh", 699.209716796875, "completed", null],
+						["game-text:localization:targets", 8.230712890625, "ready", null],
+						["game-text:localization:operation-state", 12.398193359375, null, null],
+						["game-text:focus", 0.128662109375, "not_ready", null],
+						["game-text:localization:target", 387.014404296875, "ready", null],
+						["game-text:localization:focus", 3.049072265625, "found", null],
+						["game-text:focus", 0.534423828125, "found", null],
+						["game-text:localization:operation-state", 1.458251953125, null, null],
+						["game-text:search", 3.716552734375, "ready", null],
+						["game-text:search", 1.98193359375, "ready", "content/fixture/text"],
+						["game-text:search", 2.298828125, "ready", "content/fixture/localization"]
+					]
+				},
+				{
+					"label": "warm-reopen-scan-1",
+					"statusReadyMs": 1345.60009765625,
+					"strictReadyMs": 1346.699951171875,
+					"frameMaxGapMs": 17.199999999999818,
+					"visibleRows": 2,
+					"indexStatus": "64 lines · 5,165 assets · 47 assets excluded from gather · ready in 0:01",
+					"focusHeading": "Continue",
+					"longTasks": [],
+					"ipc": [
+						["game-text:configured-refresh", 721.256591796875, "completed", null],
+						["game-text:localization:targets", 15.086669921875, "ready", null],
+						["game-text:localization:operation-state", 2.59716796875, null, null],
+						["game-text:focus", 0.355712890625, "not_ready", null],
+						["game-text:localization:target", 441.91748046875, "ready", null],
+						["game-text:localization:focus", 3.30517578125, "found", null],
+						["game-text:focus", 1.049072265625, "found", null],
+						["game-text:localization:operation-state", 0.499755859375, null, null],
+						["game-text:search", 4.043212890625, "ready", null],
+						["game-text:search", 1.99853515625, "ready", "content/fixture/text"],
+						["game-text:search", 2.46728515625, "ready", "content/fixture/localization"]
+					]
+				},
+				{
+					"label": "cold-first-scan-2",
+					"statusReadyMs": 9812.60009765625,
+					"strictReadyMs": 9843.10009765625,
+					"frameMaxGapMs": 17.300000000000182,
+					"visibleRows": 1,
+					"indexStatus": "64 lines · 5,165 assets · 47 assets excluded from gather · ready in 0:09",
+					"longTasks": [],
+					"ipc": [
+						["game-text:configured-refresh", 8167.805419921875, "completed", null],
+						["game-text:localization:targets", 12.983642578125, "ready", null],
+						["game-text:localization:target", 1458.2451171875, "ready", null],
+						["game-text:localization:operation-state", 2.95263671875, null, null],
+						["game-text:localization:operation-state", 0.498779296875, null, null],
+						["game-text:localization:operation-state", 0.357421875, null, null],
+						["game-text:localization:operation-state", 0.502197265625, null, null],
+						["game-text:search", 15.301513671875, "ready", null],
+						["game-text:search", 3.12158203125, "ready", "not_gathered"]
+					]
+				},
+				{
+					"label": "warm-rescan-2-0",
+					"statusReadyMs": 1198.699951171875,
+					"strictReadyMs": 1211.199951171875,
+					"frameMaxGapMs": 17,
+					"visibleRows": 1,
+					"indexStatus": "64 lines · 5,165 assets · 47 assets excluded from gather · ready in 0:01",
+					"longTasks": [],
+					"ipc": [
+						["game-text:configured-refresh", 681.7041015625, "completed", null],
+						["game-text:localization:targets", 8.191162109375, "ready", null],
+						["game-text:localization:operation-state", 12.369384765625, null, null],
+						["game-text:localization:target", 354.578125, "ready", null],
+						["game-text:search", 12.7783203125, "ready", null],
+						["game-text:search", 3.3837890625, "ready", "not_gathered"],
+						["game-text:localization:operation-state", 0.365234375, null, null]
+					]
+				},
+				{
+					"label": "warm-rescan-2-1",
+					"statusReadyMs": 1231.300048828125,
+					"strictReadyMs": 1263.300048828125,
+					"frameMaxGapMs": 17.19999999999891,
+					"visibleRows": 1,
+					"indexStatus": "64 lines · 5,165 assets · 47 assets excluded from gather · ready in 0:01",
+					"longTasks": [],
+					"ipc": [
+						["game-text:configured-refresh", 686.831787109375, "completed", null],
+						["game-text:localization:targets", 7.566650390625, "ready", null],
+						["game-text:localization:operation-state", 11.114013671875, null, null],
+						["game-text:localization:target", 379.66552734375, "ready", null],
+						["game-text:localization:operation-state", 0.430908203125, null, null],
+						["game-text:search", 13.15576171875, "ready", null],
+						["game-text:search", 3.907470703125, "ready", "not_gathered"]
+					]
+				},
+				{
+					"label": "warm-rescan-2-2",
+					"statusReadyMs": 1284.5,
+					"strictReadyMs": 1297,
+					"frameMaxGapMs": 17.100000000000364,
+					"visibleRows": 1,
+					"indexStatus": "64 lines · 5,165 assets · 47 assets excluded from gather · ready in 0:01",
+					"longTasks": [],
+					"ipc": [
+						["game-text:configured-refresh", 732.328857421875, "completed", null],
+						["game-text:localization:targets", 8.023681640625, "ready", null],
+						["game-text:localization:operation-state", 11.3193359375, null, null],
+						["game-text:localization:target", 393.2890625, "ready", null],
+						["game-text:localization:operation-state", 0.50439453125, null, null],
+						["game-text:search", 12.98388671875, "ready", null],
+						["game-text:search", 3.104736328125, "ready", "not_gathered"]
+					]
+				},
+				{
+					"label": "focused-rescan-2-0",
+					"statusReadyMs": 1214.10009765625,
+					"strictReadyMs": 1245.699951171875,
+					"frameMaxGapMs": 17.100000000002183,
+					"visibleRows": 2,
+					"indexStatus": "64 lines · 5,165 assets · 47 assets excluded from gather · ready in 0:01",
+					"focusHeading": "Continue",
+					"longTasks": [],
+					"ipc": [
+						["game-text:configured-refresh", 696.67626953125, "completed", null],
+						["game-text:search", 2.656005859375, "ready", null],
+						["game-text:search", 1.982421875, "ready", "content/fixture/text"],
+						[
+							"game-text:search",
+							2.67236328125,
+							"ready",
+							"content/fixture/localization"
+						],
+						["game-text:localization:targets", 7.71875, "ready", null],
+						["game-text:localization:operation-state", 11.753173828125, null, null],
+						["game-text:focus", 0.123291015625, "not_ready", null],
+						["game-text:localization:target", 366.851318359375, "ready", null],
+						["game-text:localization:focus", 2.51123046875, "found", null],
+						["game-text:focus", 0.4384765625, "found", null],
+						["game-text:search", 3.99560546875, "ready", null],
+						["game-text:search", 2.348876953125, "ready", "content/fixture/text"],
+						[
+							"game-text:search",
+							3.076416015625,
+							"ready",
+							"content/fixture/localization"
+						],
+						["game-text:localization:operation-state", 0.372314453125, null, null]
+					]
+				},
+				{
+					"label": "focused-rescan-2-1",
+					"statusReadyMs": 1197.800048828125,
+					"strictReadyMs": 1213.39990234375,
+					"frameMaxGapMs": 17.200000000000728,
+					"visibleRows": 2,
+					"indexStatus": "64 lines · 5,165 assets · 47 assets excluded from gather · ready in 0:01",
+					"focusHeading": "Continue",
+					"longTasks": [],
+					"ipc": [
+						["game-text:configured-refresh", 679.548095703125, "completed", null],
+						["game-text:localization:targets", 11.728515625, "ready", null],
+						["game-text:localization:operation-state", 8.5419921875, null, null],
+						["game-text:focus", 0.1044921875, "not_ready", null],
+						["game-text:localization:target", 362.573486328125, "ready", null],
+						["game-text:localization:focus", 2.667236328125, "found", null],
+						["game-text:focus", 0.423583984375, "found", null],
+						["game-text:search", 3.923828125, "ready", null],
+						["game-text:search", 1.800537109375, "ready", "content/fixture/text"],
+						[
+							"game-text:search",
+							2.21826171875,
+							"ready",
+							"content/fixture/localization"
+						],
+						["game-text:localization:operation-state", 1.463623046875, null, null]
+					]
+				},
+				{
+					"label": "focused-rescan-2-2",
+					"statusReadyMs": 1165.400146484375,
+					"strictReadyMs": 1181.300048828125,
+					"frameMaxGapMs": 17.399999999997817,
+					"visibleRows": 2,
+					"indexStatus": "64 lines · 5,165 assets · 47 assets excluded from gather · ready in 0:01",
+					"focusHeading": "Continue",
+					"longTasks": [],
+					"ipc": [
+						["game-text:configured-refresh", 672.8212890625, "completed", null],
+						["game-text:localization:targets", 7.81005859375, "ready", null],
+						["game-text:localization:operation-state", 12.56005859375, null, null],
+						["game-text:focus", 0.109375, "not_ready", null],
+						["game-text:localization:target", 340.29150390625, "ready", null],
+						["game-text:localization:focus", 2.4296875, "found", null],
+						["game-text:focus", 0.390380859375, "found", null],
+						["game-text:search", 3.867431640625, "ready", null],
+						["game-text:search", 1.765625, "ready", "content/fixture/text"],
+						["game-text:search", 2.3720703125, "ready", "content/fixture/localization"],
+						["game-text:localization:operation-state", 0.407470703125, null, null]
+					]
+				},
+				{
+					"label": "warm-reopen-scan-2",
+					"statusReadyMs": 1328.39990234375,
+					"strictReadyMs": 1329.89990234375,
+					"frameMaxGapMs": 17.299999999999955,
+					"visibleRows": 2,
+					"indexStatus": "64 lines · 5,165 assets · 47 assets excluded from gather · ready in 0:01",
+					"focusHeading": "Continue",
+					"longTasks": [],
+					"ipc": [
+						["game-text:configured-refresh", 719.916748046875, "completed", null],
+						["game-text:localization:targets", 14.239013671875, "ready", null],
+						["game-text:localization:operation-state", 2.570556640625, null, null],
+						["game-text:focus", 0.344482421875, "not_ready", null],
+						["game-text:localization:target", 416.71875, "ready", null],
+						["game-text:localization:focus", 3.279052734375, "found", null],
+						["game-text:focus", 1.04443359375, "found", null],
+						["game-text:localization:operation-state", 0.6083984375, null, null],
+						["game-text:search", 4.63720703125, "ready", null],
+						["game-text:search", 2.6962890625, "ready", "content/fixture/text"],
+						[
+							"game-text:search",
+							2.602294921875,
+							"ready",
+							"content/fixture/localization"
+						]
+					]
+				},
+				{
+					"label": "translation-setup-reopen-0",
+					"statusReadyMs": 1289.10009765625,
+					"strictReadyMs": 1313.400146484375,
+					"frameMaxGapMs": 17.09999999999991,
+					"visibleRows": 2,
+					"indexStatus": "64 lines · 5,165 assets · 47 assets excluded from gather · ready in 0:01",
+					"focusHeading": "Continue",
+					"longTasks": [],
+					"ipc": [
+						["game-text:configured-refresh", 708.343994140625, "completed", null],
+						["game-text:localization:targets", 14.57568359375, "ready", null],
+						["game-text:localization:operation-state", 2.57861328125, null, null],
+						["game-text:focus", 0.328125, "not_ready", null],
+						["game-text:localization:target", 418.5966796875, "ready", null],
+						["game-text:localization:focus", 3.320556640625, "found", null],
+						["game-text:focus", 1.09375, "found", null],
+						["game-text:localization:operation-state", 0.612060546875, null, null],
+						["game-text:search", 4.448486328125, "ready", null],
+						["game-text:search", 2.624755859375, "ready", "content/fixture/text"],
+						["game-text:search", 2.84033203125, "ready", "content/fixture/localization"]
+					]
+				},
+				{
+					"label": "translated-rescan-0-0",
+					"statusReadyMs": 1247.300048828125,
+					"strictReadyMs": 1262.800048828125,
+					"frameMaxGapMs": 17.199999999999818,
+					"visibleRows": 2,
+					"indexStatus": "64 lines · 5,165 assets · 47 assets excluded from gather · ready in 0:01",
+					"focusHeading": "<Em>Continue</>",
+					"longTasks": [],
+					"ipc": [
+						["game-text:configured-refresh", 711.412353515625, "completed", null],
+						["game-text:localization:targets", 9.2119140625, "ready", null],
+						["game-text:localization:operation-state", 13.28271484375, null, null],
+						["game-text:focus", 0.156005859375, "not_ready", null],
+						["game-text:localization:target", 376.968505859375, "ready", null],
+						["game-text:localization:focus", 5.529052734375, "found", null],
+						["game-text:focus", 0.550048828125, "found", null],
+						["game-text:search", 4.19482421875, "ready", null],
+						["game-text:localization:operation-state", 0.3369140625, null, null],
+						["game-text:search", 1.91455078125, "ready", "content/fixture/text"],
+						["game-text:search", 2.27783203125, "ready", "content/fixture/localization"]
+					]
+				},
+				{
+					"label": "translated-rescan-0-1",
+					"statusReadyMs": 1246,
+					"strictReadyMs": 1260.89990234375,
+					"frameMaxGapMs": 17.100000000000364,
+					"visibleRows": 2,
+					"indexStatus": "64 lines · 5,165 assets · 47 assets excluded from gather · ready in 0:01",
+					"focusHeading": "<Em>Continue</>",
+					"longTasks": [],
+					"ipc": [
+						["game-text:configured-refresh", 690.489013671875, "completed", null],
+						["game-text:localization:targets", 8.066162109375, "ready", null],
+						["game-text:localization:operation-state", 12.031982421875, null, null],
+						["game-text:focus", 0.119140625, "not_ready", null],
+						["game-text:localization:target", 401.270751953125, "ready", null],
+						["game-text:localization:focus", 4.863525390625, "found", null],
+						["game-text:focus", 0.457275390625, "found", null],
+						["game-text:localization:operation-state", 0.4501953125, null, null],
+						["game-text:search", 4.1962890625, "ready", null],
+						["game-text:search", 1.940673828125, "ready", "content/fixture/text"],
+						["game-text:search", 2.44140625, "ready", "content/fixture/localization"]
+					]
+				},
+				{
+					"label": "translated-rescan-0-2",
+					"statusReadyMs": 1281,
+					"strictReadyMs": 1296,
+					"frameMaxGapMs": 17.100000000000364,
+					"visibleRows": 2,
+					"indexStatus": "64 lines · 5,165 assets · 47 assets excluded from gather · ready in 0:01",
+					"focusHeading": "<Em>Continue</>",
+					"longTasks": [],
+					"ipc": [
+						["game-text:configured-refresh", 717.276611328125, "completed", null],
+						["game-text:localization:targets", 8.048095703125, "ready", null],
+						["game-text:localization:operation-state", 13.5546875, null, null],
+						["game-text:focus", 0.11767578125, "not_ready", null],
+						["game-text:localization:target", 405.228759765625, "ready", null],
+						["game-text:localization:focus", 4.81494140625, "found", null],
+						["game-text:focus", 0.455810546875, "found", null],
+						["game-text:localization:operation-state", 1.60205078125, null, null],
+						["game-text:search", 3.807861328125, "ready", null],
+						["game-text:search", 1.9560546875, "ready", "content/fixture/text"],
+						["game-text:search", 2.5556640625, "ready", "content/fixture/localization"]
+					]
+				},
+				{
+					"label": "translation-setup-reopen-1",
+					"statusReadyMs": 1437.199951171875,
+					"strictReadyMs": 1463,
+					"frameMaxGapMs": 33.299999999999955,
+					"visibleRows": 2,
+					"indexStatus": "64 lines · 5,165 assets · 47 assets excluded from gather · ready in 0:01",
+					"focusHeading": "Continue",
+					"longTasks": [],
+					"ipc": [
+						["game-text:configured-refresh", 805.3173828125, "completed", null],
+						["game-text:localization:targets", 16.677734375, "ready", null],
+						["game-text:localization:operation-state", 2.678955078125, null, null],
+						["game-text:focus", 0.40771484375, "not_ready", null],
+						["game-text:localization:target", 465.34619140625, "ready", null],
+						["game-text:localization:focus", 3.420166015625, "found", null],
+						["game-text:focus", 1.12841796875, "found", null],
+						["game-text:localization:operation-state", 0.4228515625, null, null],
+						["game-text:search", 4.2158203125, "ready", null],
+						["game-text:search", 2.098876953125, "ready", "content/fixture/text"],
+						[
+							"game-text:search",
+							2.43798828125,
+							"ready",
+							"content/fixture/localization"
+						],
+						["game-text:localization:operation-state", 0.5537109375, null, null]
+					]
+				},
+				{
+					"label": "translated-rescan-1-0",
+					"statusReadyMs": 1314.800048828125,
+					"strictReadyMs": 1329.89990234375,
+					"frameMaxGapMs": 17.199999999999818,
+					"visibleRows": 2,
+					"indexStatus": "64 lines · 5,165 assets · 47 assets excluded from gather · ready in 0:01",
+					"focusHeading": "<Em>Continue</>",
+					"longTasks": [],
+					"ipc": [
+						["game-text:configured-refresh", 698.1396484375, "completed", null],
+						["game-text:localization:targets", 8.669189453125, "ready", null],
+						["game-text:localization:operation-state", 12.3828125, null, null],
+						["game-text:focus", 0.1162109375, "not_ready", null],
+						["game-text:localization:target", 450.231201171875, "ready", null],
+						["game-text:localization:focus", 5.09033203125, "found", null],
+						["game-text:focus", 0.64990234375, "found", null],
+						["game-text:localization:operation-state", 0.476318359375, null, null],
+						["game-text:search", 3.893310546875, "ready", null],
+						["game-text:search", 2.463623046875, "ready", "content/fixture/text"],
+						[
+							"game-text:search",
+							2.930908203125,
+							"ready",
+							"content/fixture/localization"
+						]
+					]
+				},
+				{
+					"label": "translated-rescan-1-1",
+					"statusReadyMs": 1212.39990234375,
+					"strictReadyMs": 1227.699951171875,
+					"frameMaxGapMs": 17,
+					"visibleRows": 2,
+					"indexStatus": "64 lines · 5,165 assets · 47 assets excluded from gather · ready in 0:01",
+					"focusHeading": "<Em>Continue</>",
+					"longTasks": [],
+					"ipc": [
+						["game-text:configured-refresh", 690.484130859375, "completed", null],
+						["game-text:localization:targets", 8.022705078125, "ready", null],
+						["game-text:localization:operation-state", 11.721435546875, null, null],
+						["game-text:focus", 0.124267578125, "not_ready", null],
+						["game-text:localization:target", 373.40185546875, "ready", null],
+						["game-text:localization:focus", 4.61181640625, "found", null],
+						["game-text:focus", 0.445068359375, "found", null],
+						["game-text:search", 3.757080078125, "ready", null],
+						["game-text:search", 1.882568359375, "ready", "content/fixture/text"],
+						["game-text:search", 2.3935546875, "ready", "content/fixture/localization"],
+						["game-text:localization:operation-state", 1.289306640625, null, null]
+					]
+				},
+				{
+					"label": "translated-rescan-1-2",
+					"statusReadyMs": 1181.7001953125,
+					"strictReadyMs": 1197.10009765625,
+					"frameMaxGapMs": 17.5,
+					"visibleRows": 2,
+					"indexStatus": "64 lines · 5,165 assets · 47 assets excluded from gather · ready in 0:01",
+					"focusHeading": "<Em>Continue</>",
+					"longTasks": [],
+					"ipc": [
+						["game-text:configured-refresh", 679.11474609375, "completed", null],
+						["game-text:localization:targets", 7.943115234375, "ready", null],
+						["game-text:localization:operation-state", 11.1396484375, null, null],
+						["game-text:focus", 0.149169921875, "not_ready", null],
+						["game-text:localization:target", 355.70068359375, "ready", null],
+						["game-text:localization:focus", 4.626220703125, "found", null],
+						["game-text:focus", 0.521728515625, "found", null],
+						["game-text:search", 3.880126953125, "ready", null],
+						["game-text:search", 1.876953125, "ready", "content/fixture/text"],
+						["game-text:search", 2.32421875, "ready", "content/fixture/localization"],
+						["game-text:localization:operation-state", 1.412353515625, null, null]
+					]
+				},
+				{
+					"label": "translation-setup-reopen-2",
+					"statusReadyMs": 1289.5,
+					"strictReadyMs": 1313.199951171875,
+					"frameMaxGapMs": 17,
+					"visibleRows": 2,
+					"indexStatus": "64 lines · 5,165 assets · 47 assets excluded from gather · ready in 0:01",
+					"focusHeading": "Continue",
+					"longTasks": [],
+					"ipc": [
+						["game-text:configured-refresh", 706.927734375, "completed", null],
+						["game-text:localization:targets", 14.535888671875, "ready", null],
+						["game-text:localization:operation-state", 2.573974609375, null, null],
+						["game-text:focus", 0.32958984375, "not_ready", null],
+						["game-text:localization:target", 414.3134765625, "ready", null],
+						["game-text:localization:focus", 3.165283203125, "found", null],
+						["game-text:focus", 1.138916015625, "found", null],
+						["game-text:localization:operation-state", 0.6181640625, null, null],
+						["game-text:search", 4.206298828125, "ready", null],
+						["game-text:search", 2.063232421875, "ready", "content/fixture/text"],
+						[
+							"game-text:search",
+							2.307373046875,
+							"ready",
+							"content/fixture/localization"
+						]
+					]
+				},
+				{
+					"label": "translated-rescan-2-0",
+					"statusReadyMs": 1280.900146484375,
+					"strictReadyMs": 1295.900146484375,
+					"frameMaxGapMs": 17.09999999999991,
+					"visibleRows": 2,
+					"indexStatus": "64 lines · 5,165 assets · 47 assets excluded from gather · ready in 0:01",
+					"focusHeading": "<Em>Continue</>",
+					"longTasks": [],
+					"ipc": [
+						["game-text:configured-refresh", 741.079345703125, "completed", null],
+						["game-text:localization:targets", 9.231689453125, "ready", null],
+						["game-text:localization:operation-state", 13.243896484375, null, null],
+						["game-text:focus", 0.127197265625, "not_ready", null],
+						["game-text:localization:target", 385.932861328125, "ready", null],
+						["game-text:localization:focus", 5.478271484375, "found", null],
+						["game-text:focus", 0.595947265625, "found", null],
+						["game-text:localization:operation-state", 0.507080078125, null, null],
+						["game-text:search", 4.652587890625, "ready", null],
+						["game-text:search", 2.114501953125, "ready", "content/fixture/text"],
+						["game-text:search", 2.46142578125, "ready", "content/fixture/localization"]
+					]
+				},
+				{
+					"label": "translated-rescan-2-1",
+					"statusReadyMs": 1531.599853515625,
+					"strictReadyMs": 1546.699951171875,
+					"frameMaxGapMs": 33.19999999999982,
+					"visibleRows": 2,
+					"indexStatus": "64 lines · 5,165 assets · 47 assets excluded from gather · ready in 0:01",
+					"focusHeading": "<Em>Continue</>",
+					"longTasks": [],
+					"ipc": [
+						["game-text:configured-refresh", 869.538818359375, "completed", null],
+						["game-text:localization:targets", 13.45166015625, "ready", null],
+						["game-text:localization:operation-state", 19.039794921875, null, null],
+						["game-text:focus", 0.266845703125, "not_ready", null],
+						["game-text:localization:target", 495.787109375, "ready", null],
+						["game-text:localization:focus", 5.44189453125, "found", null],
+						["game-text:focus", 0.62451171875, "found", null],
+						["game-text:localization:operation-state", 0.326171875, null, null],
+						["game-text:search", 4.625244140625, "ready", null],
+						["game-text:search", 3.56494140625, "ready", "content/fixture/text"],
+						[
+							"game-text:search",
+							4.031494140625,
+							"ready",
+							"content/fixture/localization"
+						],
+						["game-text:localization:operation-state", 0.75341796875, null, null]
+					]
+				},
+				{
+					"label": "translated-rescan-2-2",
+					"statusReadyMs": 1512.699951171875,
+					"strictReadyMs": 1544.89990234375,
+					"frameMaxGapMs": 17.100000000000364,
+					"visibleRows": 2,
+					"indexStatus": "64 lines · 5,165 assets · 47 assets excluded from gather · ready in 0:01",
+					"focusHeading": "<Em>Continue</>",
+					"longTasks": [],
+					"ipc": [
+						["game-text:configured-refresh", 875.90966796875, "completed", null],
+						["game-text:localization:targets", 12.924560546875, "ready", null],
+						["game-text:localization:operation-state", 17.20361328125, null, null],
+						["game-text:focus", 0.148193359375, "not_ready", null],
+						["game-text:localization:target", 489.392333984375, "ready", null],
+						["game-text:localization:focus", 5.102294921875, "found", null],
+						["game-text:focus", 0.559326171875, "found", null],
+						["game-text:localization:operation-state", 1.611328125, null, null],
+						["game-text:search", 4.095947265625, "ready", null],
+						["game-text:search", 2.252197265625, "ready", "content/fixture/text"],
+						[
+							"game-text:search",
+							2.731201171875,
+							"ready",
+							"content/fixture/localization"
+						]
+					]
+				}
+			],
+			"verification": {
+				"pageErrors": 0,
+				"searchAndSelectionChecks": [
+					{
+						"label": "reopened-0",
+						"searchMs": 8.005099999998492,
+						"detailMs": 30.92069999999876,
+						"status": "passed"
+					},
+					{
+						"label": "reopened-1",
+						"searchMs": 9.021399999997811,
+						"detailMs": 45.862600000000384,
+						"status": "passed"
+					},
+					{
+						"label": "reopened-2",
+						"searchMs": 6.249099999986356,
+						"detailMs": 32.56549999999697,
+						"status": "passed"
+					},
+					{
+						"label": "round-0",
+						"searchMs": 8.185300000000097,
+						"detailMs": 41.902700000000095,
+						"status": "passed"
+					},
+					{
+						"label": "round-1",
+						"searchMs": 6.699199999999109,
+						"detailMs": 44.48940000000039,
+						"status": "passed"
+					},
+					{
+						"label": "round-2",
+						"searchMs": 7.311600000000908,
+						"detailMs": 45.565599999998085,
+						"status": "passed"
+					}
+				],
+				"germanEditorFocusChecks": 3,
+				"translatedFocusRescanChecks": 9,
+				"maxObservedRendererFrameGapMs": 33.299999999999955,
+				"rendererLongTasks": 0,
+				"build": "pnpm showcase --build-only passed"
+			}
 		}
 	}
 }
