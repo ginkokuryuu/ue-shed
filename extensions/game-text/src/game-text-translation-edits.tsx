@@ -573,8 +573,13 @@ export function TranslationEditor(props: {
 		const item = draftItem();
 		if (item) props.model.setDraft({ ...item.edit, translation }, item.source);
 	};
+	// Leaving the editor from inside it returns focus to its Edit button, not the page.
+	let field: HTMLTextAreaElement | undefined;
+	let focusOnClose = false;
 	const cancel = () => {
 		const item = draftItem();
+		const container = field?.parentElement;
+		focusOnClose = !!container?.contains(document.activeElement);
 		if (item) props.model.clearDraft(item.edit);
 	};
 	const stage = () => {
@@ -596,6 +601,10 @@ export function TranslationEditor(props: {
 							)}
 						</Show>
 						<Button
+							ref={(element: HTMLButtonElement) => {
+								if (focusOnClose) queueMicrotask(() => element.focus());
+								focusOnClose = false;
+							}}
 							size="compact"
 							tone="quiet"
 							disabled={props.model.busy()}
@@ -620,6 +629,7 @@ export function TranslationEditor(props: {
 			>
 				<textarea
 					ref={(element) => {
+						field = element;
 						if (focusOnOpen) queueMicrotask(() => element.focus());
 						focusOnOpen = false;
 					}}

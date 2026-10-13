@@ -29,7 +29,11 @@ export type ToolButtonProps = Omit<
 	readonly showLabel?: boolean | undefined;
 };
 
-/** Tool with a hoverable, keyboard-accessible tooltip and persistent selected state. */
+/**
+ * Tool with a keyboard-accessible tooltip and persistent selected state. The tooltip lets the
+ * pointer pass through, so it never stands between the pointer and a neighbouring control; its
+ * text is also the tool's description for assistive technology.
+ */
 export function ToolButton(props: ToolButtonProps) {
 	const buttonProps = omit(
 		props,
@@ -203,8 +207,6 @@ export function ToolButton(props: ToolButtonProps) {
 							tooltip = element;
 						}}
 						{...stylex.attrs(styles.tooltip(position().left, position().top))}
-						onPointerEnter={() => show()}
-						onPointerLeave={leave}
 					>
 						<Show when={!props.showLabel}>
 							<strong>{props.label}</strong>
@@ -289,6 +291,7 @@ const styles = stylex.create({
 		left,
 		top,
 		zIndex: 100,
+		pointerEvents: "none",
 		display: "grid",
 		gap: 4,
 		maxWidth: "min(280px, calc(100vw - 16px))",

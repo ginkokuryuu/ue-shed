@@ -37,18 +37,21 @@ it("labels an icon tool and shows a dismissible tooltip on keyboard focus", asyn
 	expect(document.activeElement).toBe(screen.getByRole("button", { name: "Next" }));
 });
 
-it("keeps a hovered tooltip available while the pointer enters it", async () => {
+it("lets the pointer through a hovered tooltip and closes it when the pointer leaves", async () => {
 	render(() => (
-		<ToolButton label="Display" tooltip="Change list grouping.">
-			<ToolIcon name="display" />
-		</ToolButton>
+		<>
+			<ToolButton label="Display" tooltip="Change list grouping.">
+				<ToolIcon name="display" />
+			</ToolButton>
+			<button type="button">Neighbour</button>
+		</>
 	));
 	const user = userEvent.setup();
 	await user.hover(screen.getByRole("button", { name: "Display" }));
-	const tooltip = await screen.findByRole("tooltip");
-	await user.hover(tooltip);
-	expect(screen.getByRole("tooltip")).toBe(tooltip);
-	await user.unhover(tooltip);
+	await screen.findByRole("tooltip");
+	// The tooltip takes no pointer events (Workbench's layout e2e clicks through one), so moving
+	// toward a neighbouring control closes it.
+	await user.hover(screen.getByRole("button", { name: "Neighbour" }));
 	await waitFor(() => expect(screen.queryByRole("tooltip")).toBeNull());
 });
 
