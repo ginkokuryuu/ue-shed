@@ -99,8 +99,12 @@ void UUEShedCoreLibrary::GetCapabilityManifest(FString& ResultJson)
 			TEXT("/Script/UEShedCamerasEditor.UEShedCameraRenderingLibrary"));
 		if (RenderLibrary && RenderLibrary->FindFunctionByName(TEXT("BeginCameraRender")))
 			Capabilities.Add(MakeShared<FJsonValueString>(TEXT("cameras.render-session.v1")));
- Capabilities.Add(MakeShared<FJsonValueString>(TEXT("cameras.capture-selection.v1")));
- Capabilities.Add(MakeShared<FJsonValueString>(TEXT("cameras.capture-readiness.v1")));
+		if (RenderLibrary &&
+		    RenderLibrary->FindFunctionByName(TEXT("GetCameraRenderCapabilitiesV2")))
+			Capabilities.Add(
+			    MakeShared<FJsonValueString>(TEXT("cameras.render-session.capabilities.v2")));
+		Capabilities.Add(MakeShared<FJsonValueString>(TEXT("cameras.capture-selection.v1")));
+		Capabilities.Add(MakeShared<FJsonValueString>(TEXT("cameras.capture-readiness.v1")));
 	}
 	if (FModuleManager::Get().IsModuleLoaded(TEXT("UEShedCameraAuthoringBridge")))
 	{

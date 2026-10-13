@@ -53,6 +53,9 @@ should follow [Website and illustrated guides](engineering/website.md).
 - [Shared camera rendering](products/camera-rendering.md) — public editor-world rendering lifecycle,
   backend policies, compatibility and downstream adoption.
 
+- [Composable map tile sources](products/map-tile-sources.md) — caller-selected source footprints,
+  dimension/memory limits, lossless crops and optional parent derivation.
+
 - [Camera arrangement authoring](products/camera-authoring.md) — actor-scoped drafts, optional native
   editing, Unreal RC synchronization, and recoverable approval.
 
@@ -88,6 +91,8 @@ should follow [Website and illustrated guides](engineering/website.md).
 
 ## Research
 
+- [Map screenshot pipeline revisited (2026-10-13)](research/map-capture-screenshot-pipeline-2026-10-13.md) —
+  UE 5.7/5.8 internals, adopter timings, warmup and master/block benchmarks, and derived-pyramid costs.
 - [Game Text pipeline performance (2026-10-13)](research/game-text-pipeline-performance-2026-10-13.md) —
   consolidated Rust/TypeScript, cold-index and 150 MiB cache experiments, raw timing samples,
   retained/rejected decisions and verification. The accepted policy is [ADR 0010](decisions/0010-game-text-performance-policy.md).

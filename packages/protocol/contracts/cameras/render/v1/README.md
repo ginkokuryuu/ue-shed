@@ -7,14 +7,15 @@ authorities. `UEShed.Cameras.Rendering.WireConformance` checks the same request 
 The separately enabled UEShedCore capability is `cameras.render-session.v1`. The public Remote
 Control library is `/Script/UEShedCamerasEditor.Default__UEShedCameraRenderingLibrary`.
 
-| Method                      | Parameters                   | Result schema |
-| --------------------------- | ---------------------------- | ------------- |
-| GetCameraRenderCapabilities | None                         | capabilities  |
-| PreflightCameraRender       | RequestJson: session-request | preflight     |
-| BeginCameraRender           | RequestJson: session-request | begin-result  |
-| StartCameraFrame            | RequestJson: frame-request   | frame-status  |
-| PollCameraFrame             | SessionId, OperationId       | frame-status  |
-| EndCameraRender             | SessionId                    | end-result    |
+| Method                        | Parameters                   | Result schema   |
+| ----------------------------- | ---------------------------- | --------------- |
+| GetCameraRenderCapabilities   | None                         | capabilities    |
+| GetCameraRenderCapabilitiesV2 | None                         | capabilities-v2 |
+| PreflightCameraRender         | RequestJson: session-request | preflight       |
+| BeginCameraRender             | RequestJson: session-request | begin-result    |
+| StartCameraFrame              | RequestJson: frame-request   | frame-status    |
+| PollCameraFrame               | SessionId, OperationId       | frame-status    |
+| EndCameraRender               | SessionId                    | end-result      |
 
 Review's separately versioned `ue-shed-review-render-stages/1.0` uses
 `ResolveReviewViewpoint(RequestJson)` and
@@ -25,6 +26,16 @@ shows child actors that ChildActorComponents spawn for editor-only owners. Plugi
 advertise the `editorPreviews` capability, and frame evidence then carries
 `editorPreviews.revealedChildActors`. Earlier plugins reject the field as `invalid_policy`. Review
 capture responses and map-tile evidence embed the same renderer policy and frame evidence.
+
+The viewport renderer additionally accepts optional `screenshotWarmupFrames` (an integer from 1 to
+256). Supporting Core manifests advertise `cameras.render-session.capabilities.v2`; the SDK then
+calls `GetCameraRenderCapabilitiesV2` to discover `highResolutionScreenshot.maximumWarmupFrames`.
+The original getter and its `capabilities` schema remain unchanged for previously shipped strict
+clients. `capabilities-v2` extends discovery while render requests retain contract 1.0. Omission retains
+the engine/project setting; earlier plugins reject the field. Native screenshot run-up is separate
+from ordinary viewport settling, and its scoped value/priority override is restored per frame and
+on interruption. SceneCapture policies reject the field. Frame policy evidence carries the explicit
+choice. Clients must negotiate the extended discovery method before requesting the new control.
 
 Request JSON rejects unknown fields. Native semantic validation additionally rejects duplicate Data
 Layer identities, unsupported renderer/exposure combinations, effective layer hierarchy conflicts,

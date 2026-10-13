@@ -25,7 +25,8 @@ deepStrictEqual(
 const contracts = {
 	"session-request": Render.CameraRenderSessionRequest,
 	"frame-request": Render.CameraFrameRequest,
-	capabilities: Render.CameraRenderCapabilities,
+	capabilities: Render.CameraRenderCapabilitiesV1,
+	"capabilities-v2": Render.CameraRenderCapabilities,
 	preflight: Render.CameraRenderPreflight,
 	"begin-result": Render.CameraRenderBeginResult,
 	"end-result": Render.CameraRenderEndResult,

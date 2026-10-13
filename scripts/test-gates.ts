@@ -63,6 +63,14 @@ const gates: readonly TestGate[] = [
 				: "set UE_SHED_REMOTE_CONTROL_ENDPOINT with the fixture map open"
 	},
 	{
+		file: "packages/cameras/src/map-tile-source-unreal.integration.test.ts",
+		name: "real Unreal caller-selected map tile sources",
+		missing: (environment) =>
+			environment.UE_SHED_REMOTE_CONTROL_ENDPOINT && environment.UE_SHED_RENDER_FIXTURE_ROOT
+				? undefined
+				: "set UE_SHED_REMOTE_CONTROL_ENDPOINT and UE_SHED_RENDER_FIXTURE_ROOT with a rendering fixture map open"
+	},
+	{
 		file: "packages/observatory/src/real-unreal.integration.test.ts",
 		name: "real Unreal Observatory actor observation stream",
 		missing: (environment) =>

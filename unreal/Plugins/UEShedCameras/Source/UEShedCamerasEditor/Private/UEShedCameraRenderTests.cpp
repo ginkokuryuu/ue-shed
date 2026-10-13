@@ -3,15 +3,16 @@
 #include "Components/ChildActorComponent.h"
 #include "Components/SceneCaptureComponent2D.h"
 #include "Components/StaticMeshComponent.h"
+#include "DataLayer/DataLayerEditorSubsystem.h"
+#include "Editor.h"
 #include "Engine/StaticMesh.h"
 #include "Engine/StaticMeshActor.h"
 #include "Engine/TextureRenderTarget2D.h"
 #include "EngineUtils.h"
-#include "DataLayer/DataLayerEditorSubsystem.h"
-#include "Editor.h"
 #include "FileHelpers.h"
 #include "Framework/Application/SlateApplication.h"
 #include "HAL/FileManager.h"
+#include "HAL/IConsoleManager.h"
 #include "HAL/PlatformProcess.h"
 #include "HighResScreenshot.h"
 #include "ImageUtils.h"
@@ -24,8 +25,9 @@
 #include "StaticMeshCompiler.h"
 #include "TextureResource.h"
 #include "UEShedCameraEditorOwnership.h"
-#include "UEShedCameraRenderSession.h"
 #include "UEShedCameraLibrary.h"
+#include "UEShedCameraRenderSession.h"
+#include "UEShedCameraRenderingLibrary.h"
 #include "UEShedCameraReviewLibrary.h"
 #include "UEShedCameraSource.h"
 #include "UEShedCameraSubsystem.h"
@@ -293,10 +295,158 @@ bool FUEShedCameraRenderLifecycleTest::RunTest(const FString &Parameters)
 	return true;
 }
 
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FUEShedCameraScreenshotWarmupTest,
+                                 "UEShed.Cameras.Rendering.ScreenshotWarmup",
+                                 EAutomationTestFlags::EditorContext |
+                                     EAutomationTestFlags::EngineFilter)
+
+bool FUEShedCameraScreenshotWarmupTest::RunTest(const FString &Parameters)
+{
+	auto *World = GEditor ? GEditor->GetEditorWorldContext().World() : nullptr;
+	auto *Client = GCurrentLevelEditingViewportClient;
+	auto *Variable = IConsoleManager::Get().FindConsoleVariable(TEXT("r.HighResScreenshotDelay"));
+	if (!World || !Client || !Client->Viewport || !Variable)
+		return false;
+	const int32 Before = Variable->GetInt();
+	const auto BeforeFlags = Variable->GetFlags();
+	const bool BeforeDirty = World->GetOutermost()->IsDirty();
+	const auto Pose = UEShedCameraPose(FVector(1000, 1000, 900), FRotator(-30, -135, 0), 60, false);
+	const auto Capabilities = FUEShedCameraRenderSession::Capabilities();
+	FString LegacyJson, ExtendedJson;
+	UUEShedCameraRenderingLibrary::GetCameraRenderCapabilities(LegacyJson);
+	UUEShedCameraRenderingLibrary::GetCameraRenderCapabilitiesV2(ExtendedJson);
+	TestFalse(TEXT("Legacy discovery preserves the previous strict client shape"),
+	          UEShedCameraJson(LegacyJson)->HasField(TEXT("highResolutionScreenshot")));
+	TestTrue(TEXT("Extended discovery includes native warmup controls"),
+	         UEShedCameraJson(ExtendedJson)->HasField(TEXT("highResolutionScreenshot")));
+	TestEqual(TEXT("Advertised native warmup limit"),
+	          Capabilities->GetObjectField(TEXT("highResolutionScreenshot"))
+	              ->GetIntegerField(TEXT("maximumWarmupFrames")),
+	          256);
+	for (double Invalid : {0.0, 257.0, 1.5})
+	{
+		auto Request =
+		    UEShedLegacyRenderRequest(FGuid::NewGuid().ToString(EGuidFormats::Digits), World, true);
+		Request->GetObjectField(TEXT("policy"))
+		    ->GetObjectField(TEXT("renderer"))
+		    ->SetNumberField(TEXT("screenshotWarmupFrames"), Invalid);
+		TestEqual(TEXT("Invalid native warmup rejected before ownership"),
+		          FUEShedCameraRenderSession::Preflight(Request)
+		              ->GetArrayField(TEXT("issues"))[0]
+		              ->AsObject()
+		              ->GetStringField(TEXT("code")),
+		          FString(TEXT("invalid_policy")));
+	}
+	const TArray<TSharedPtr<FJsonValue>> InvalidTypes{MakeShared<FJsonValueString>(TEXT("128")),
+	                                                  MakeShared<FJsonValueBoolean>(true),
+	                                                  MakeShared<FJsonValueNull>()};
+	for (const auto &Invalid : InvalidTypes)
+	{
+		auto Request =
+		    UEShedLegacyRenderRequest(FGuid::NewGuid().ToString(EGuidFormats::Digits), World, true);
+		Request->GetObjectField(TEXT("policy"))
+		    ->GetObjectField(TEXT("renderer"))
+		    ->SetField(TEXT("screenshotWarmupFrames"), Invalid);
+		TestEqual(TEXT("Invalid native warmup type rejected before ownership"),
+		          FUEShedCameraRenderSession::Preflight(Request)
+		              ->GetArrayField(TEXT("issues"))[0]
+		              ->AsObject()
+		              ->GetStringField(TEXT("code")),
+		          FString(TEXT("invalid_policy")));
+	}
+	for (const FString Mode : {TEXT("32"), TEXT("128"), TEXT("cancel"), TEXT("lease"),
+	                           TEXT("takeover"), TEXT("same-value"), TEXT("omit")})
+	{
+		auto Request =
+		    UEShedLegacyRenderRequest(FGuid::NewGuid().ToString(EGuidFormats::Digits), World, true);
+		const int32 Frames = Mode == TEXT("128") ? 128 : 32;
+		if (Mode != TEXT("omit"))
+			Request->GetObjectField(TEXT("policy"))
+			    ->GetObjectField(TEXT("renderer"))
+			    ->SetNumberField(TEXT("screenshotWarmupFrames"), Frames);
+		if (Mode == TEXT("lease"))
+			Request->SetNumberField(TEXT("leaseMs"), 1000);
+		TSharedPtr<FJsonObject> Error;
+		auto Session = FUEShedCameraRenderSession::Open(Request, Error);
+		if (!Session)
+		{
+			AddError(UEShedCameraJsonText(Error));
+			return false;
+		}
+		ON_SCOPE_EXIT
+		{
+			Session->Close();
+		};
+		TestEqual(TEXT("Begin does not change global warmup"), Variable->GetInt(), Before);
+		auto Frame = UEShedRenderFrame(Session->Id(), TEXT("warmup"), Pose, 640, 360);
+		Session->Start(Frame);
+		Session->Tick(true);
+		TestTrue(TEXT("Native screenshot is pending"), GIsHighResScreenshot);
+		TestEqual(TEXT("Requested warmup is applied at native capture"), Variable->GetInt(),
+		          Mode == TEXT("omit") ? Before : Frames);
+		TestEqual(TEXT("Console priority is preserved"), Variable->GetFlags(), BeforeFlags);
+		if (Mode == TEXT("cancel"))
+			Session->Close();
+		else if (Mode == TEXT("lease"))
+		{
+			FPlatformProcess::Sleep(1.05f);
+			Session->Tick();
+			TestEqual(TEXT("Pending lease expiry is reported"),
+			          Session->Poll(TEXT("warmup"))->GetStringField(TEXT("code")),
+			          FString(TEXT("lease_expired")));
+		}
+		else if (Mode == TEXT("takeover") || Mode == TEXT("same-value"))
+		{
+			const int32 ExternalValue = Mode == TEXT("same-value") ? Frames : 64;
+			Variable->Set(ExternalValue,
+			              static_cast<EConsoleVariableFlags>(BeforeFlags & ECVF_SetByMask));
+			Session->Tick();
+			TestEqual(TEXT("External warmup takeover is reported"),
+			          Session->Poll(TEXT("warmup"))->GetStringField(TEXT("code")),
+			          FString(TEXT("editor_busy")));
+			TestEqual(TEXT("External console value is preserved"), Variable->GetInt(),
+			          ExternalValue);
+			TestEqual(TEXT("Loss of restoration is explicit"),
+			          Session->Close()->GetStringField(TEXT("restoration")),
+			          FString(TEXT("failed")));
+			Variable->Set(Before, static_cast<EConsoleVariableFlags>(BeforeFlags & ECVF_SetByMask));
+		}
+		else
+		{
+			const auto Result = Session->RenderBlocking(Frame);
+			if (!TestEqual(TEXT("Configured native capture completes"),
+			               Result->GetStringField(TEXT("status")), FString(TEXT("captured"))))
+			{
+				AddError(UEShedCameraJsonText(Result));
+				return false;
+			}
+			const auto Renderer = Result->GetObjectField(TEXT("evidence"))
+			                          ->GetObjectField(TEXT("policy"))
+			                          ->GetObjectField(TEXT("renderer"));
+			TestEqual(TEXT("Warmup omission is preserved in evidence"),
+			          Renderer->HasField(TEXT("screenshotWarmupFrames")), Mode != TEXT("omit"));
+			if (Mode != TEXT("omit"))
+				TestEqual(TEXT("Requested warmup is recorded"),
+				          Renderer->GetIntegerField(TEXT("screenshotWarmupFrames")), Frames);
+			TestEqual(TEXT("Warmup restored after each frame, before close"), Variable->GetInt(),
+			          Before);
+			TestEqual(TEXT("Clean capture session closes"),
+			          Session->Close()->GetStringField(TEXT("status")), FString(TEXT("closed")));
+		}
+		TestEqual(TEXT("Original warmup value restored"), Variable->GetInt(), Before);
+		TestEqual(TEXT("Original console priority restored"), Variable->GetFlags(), BeforeFlags);
+		TestEqual(TEXT("Map dirty state preserved"), World->GetOutermost()->IsDirty(), BeforeDirty);
+		// Drain a cancelled viewport request in the disposable fixture before starting the next
+		// case.
+		Client->Viewport->Draw(false);
+	}
+	return true;
+}
+
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FUEShedCameraScreenshotOwnershipTest,
-								 "UEShed.Cameras.Rendering.ScreenshotOwnership",
-								 EAutomationTestFlags::EditorContext |
-									 EAutomationTestFlags::EngineFilter)
+                                 "UEShed.Cameras.Rendering.ScreenshotOwnership",
+                                 EAutomationTestFlags::EditorContext |
+                                     EAutomationTestFlags::EngineFilter)
 
 bool FUEShedCameraScreenshotOwnershipTest::RunTest(const FString &Parameters)
 {

@@ -35,3 +35,18 @@ disabled. The example deliberately delegates all domain behavior to the bridge a
 
 Record the exact package version, plugin digest, engine version, and your host's own transport
 journey before claiming downstream compatibility. Review previews are not final-capture evidence.
+
+For caller-managed map captures, use `planMapTileSources` or `createMapTileSource` with the public
+`CameraRenderer` session. Choose one tile or a larger block explicitly per zoom, declare dimension
+and decoded-source memory limits, and consume the returned crop rectangles. Optional
+`cropMapTileImage` and `deriveMapTileParent` work on decoded RGBA8 sRGB pixels; keep codecs, source
+receipts, derivation provenance, scheduling, output and publication owned by your host. See
+[map tile sources](../../docs/products/map-tile-sources.md) for the contract and
+`examples/map-tile-sources/verify.mjs` for the packed-consumer journey.
+
+For larger viewport sources, inspect `capabilities.highResolutionScreenshot.maximumWarmupFrames`
+and explicitly choose `renderer.screenshotWarmupFrames` when native screenshot run-up is needed.
+It is separate from ordinary viewport settling. Omission preserves the engine/project setting;
+older plugins are rejected before acquisition if the field is requested. Derive zooms from lossless
+pixels before your chosen delivery encoding; uniform WebP Q90 is a tested overview baseline, not
+a package-owned codec policy. Qualify your actual content and record that render policy in receipts.

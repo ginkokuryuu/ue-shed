@@ -11,6 +11,10 @@ default backend moves one transient CameraActor through the Lit editor viewport,
 with Unreal's screenshot pipeline, and restores the editor afterward. The implementation lives in
 UEShedCameras; it requires no game-code changes. The perspective review contract is unchanged.
 
+Hosts that own their capture flow can compose [map tile source helpers](map-tile-sources.md) with
+the shared renderer. Individual tiles, larger blocks and optional parent derivation are separate
+caller choices. The complete Map Capture workflow retains its existing defaults.
+
 All three map modes now use the [shared camera rendering lifecycle](camera-rendering.md). Lit
 retains ownership and exposure across batches; the whole-level experiment retains capture-and-slice;
 SceneCapture retains profiles and LOD controls. Manifest 1.1 records the complete source render

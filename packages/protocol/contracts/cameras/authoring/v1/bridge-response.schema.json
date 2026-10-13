@@ -3364,6 +3364,15 @@
 																				},
 																				"editorPreviews": {
 																					"type": "boolean"
+																				},
+																				"screenshotWarmupFrames": {
+																					"type": "integer",
+																					"allOf": [
+																						{
+																							"minimum": 1,
+																							"maximum": 256
+																						}
+																					]
 																				}
 																			},
 																			"required": [
@@ -6802,6 +6811,15 @@
 												},
 												"editorPreviews": {
 													"type": "boolean"
+												},
+												"screenshotWarmupFrames": {
+													"type": "integer",
+													"allOf": [
+														{
+															"minimum": 1,
+															"maximum": 256
+														}
+													]
 												}
 											},
 											"required": [
@@ -8672,6 +8690,15 @@
 														},
 														"editorPreviews": {
 															"type": "boolean"
+														},
+														"screenshotWarmupFrames": {
+															"type": "integer",
+															"allOf": [
+																{
+																	"minimum": 1,
+																	"maximum": 256
+																}
+															]
 														}
 													},
 													"required": [

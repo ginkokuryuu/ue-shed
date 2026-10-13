@@ -89,11 +89,19 @@ FString String(const TSharedPtr<FJsonObject> &Value, const TCHAR *Key)
 	return Out;
 }
 bool Number(const TSharedPtr<FJsonObject> &Value, const TCHAR *Key, double Minimum, double Maximum,
-			bool Integer = false)
+            bool Integer = false)
 {
 	double N;
 	return Value && Value->TryGetNumberField(Key, N) && FMath::IsFinite(N) && N >= Minimum && N <= Maximum &&
 		   (!Integer || N == FMath::FloorToDouble(N));
+}
+void SetScreenshotWarmupValue(IConsoleVariable *Variable, int32 Value)
+{
+	// ReplaceCurrent refuses constructor values. Preserve the priority/tag for configured values.
+	if ((Variable->GetFlags() & ECVF_SetByMask) == ECVF_SetByConstructor)
+		Variable->Set(Value, ECVF_SetByConstructor);
+	else
+		Variable->ReplaceCurrentPriorityAndTag(Value);
 }
 bool Boolean(const TSharedPtr<FJsonObject> &Value, const TCHAR *Key)
 {
@@ -202,14 +210,18 @@ bool ValidPolicy(const TSharedPtr<FJsonObject> &P)
 	const FString Kind = String(R, TEXT("kind")), Mode = String(E, TEXT("mode"));
 	if (Kind == TEXT("editor_viewport"))
 	{
-		if (!Fields(R, {TEXT("kind"), TEXT("strategy"), TEXT("profile"), TEXT("vignette"), TEXT("fog"),
-						TEXT("volumetricFog")},
-					{TEXT("editorPreviews")}) ||
-			String(R, TEXT("strategy")) != TEXT("high_resolution_screenshot") ||
-			(String(R, TEXT("profile")) != TEXT("lit") &&
-			 String(R, TEXT("profile")) != TEXT("observation")) ||
-			(String(R, TEXT("vignette")) != TEXT("project") &&
-			 String(R, TEXT("vignette")) != TEXT("disabled")))
+		if (!Fields(R,
+		            {TEXT("kind"), TEXT("strategy"), TEXT("profile"), TEXT("vignette"), TEXT("fog"),
+		             TEXT("volumetricFog")},
+		            {TEXT("editorPreviews"), TEXT("screenshotWarmupFrames")}) ||
+		    String(R, TEXT("strategy")) != TEXT("high_resolution_screenshot") ||
+		    (String(R, TEXT("profile")) != TEXT("lit") &&
+		     String(R, TEXT("profile")) != TEXT("observation")) ||
+		    (String(R, TEXT("vignette")) != TEXT("project") &&
+		     String(R, TEXT("vignette")) != TEXT("disabled")) ||
+		    (R->HasField(TEXT("screenshotWarmupFrames")) &&
+		     (R->TryGetField(TEXT("screenshotWarmupFrames"))->Type != EJson::Number ||
+		      !Number(R, TEXT("screenshotWarmupFrames"), 1, 256, true))))
 			return false;
 	}
 	else if (Kind == TEXT("scene_capture"))
@@ -410,6 +422,12 @@ struct FUEShedCameraRenderSession::FState
 	uint32 ResolutionX = 0, ResolutionY = 0;
 	uint32 AppliedResolutionX = 0, AppliedResolutionY = 0;
 	bool ScreenshotApplied = false;
+	bool ScreenshotWarmupApplied = false;
+	bool ScreenshotWarmupChanged = false;
+	IConsoleVariable *ScreenshotWarmupVariable = nullptr;
+	FDelegateHandle ScreenshotWarmupChangeHandle;
+	int32 SavedScreenshotWarmup = 0, AppliedScreenshotWarmup = 0;
+	uint32 SavedScreenshotWarmupFlags = 0;
 	bool GameView = false, LockedCamera = false, DisableInput = false, EnableFading = false, DrawAxes = false,
 		 DrawAxesGame = false;
 	bool Closed = false, Restored = true, Pending = false, Frozen = false, Metering = false,
@@ -500,8 +518,63 @@ struct FUEShedCameraRenderSession::FState
 			   (!FScreenshotRequest::IsScreenshotRequested() ||
 				FScreenshotRequest::GetFilename() == C.FilenameOverride);
 	}
+	bool OwnsScreenshotWarmup() const
+	{
+		if (!ScreenshotWarmupApplied)
+			return true;
+		const auto *Variable =
+		    IConsoleManager::Get().FindConsoleVariable(TEXT("r.HighResScreenshotDelay"));
+		return !ScreenshotWarmupChanged && Variable &&
+		       Variable->GetInt() == AppliedScreenshotWarmup &&
+		       Variable->GetFlags() == SavedScreenshotWarmupFlags;
+	}
+	bool ApplyScreenshotWarmup()
+	{
+		const auto Renderer = Child(Policy(), TEXT("renderer"));
+		if (!Renderer->HasField(TEXT("screenshotWarmupFrames")))
+			return true;
+		auto *Variable =
+		    IConsoleManager::Get().FindConsoleVariable(TEXT("r.HighResScreenshotDelay"));
+		if (!Variable)
+			return false;
+		SavedScreenshotWarmup = Variable->GetInt();
+		SavedScreenshotWarmupFlags = Variable->GetFlags();
+		AppliedScreenshotWarmup = Renderer->GetIntegerField(TEXT("screenshotWarmupFrames"));
+		ScreenshotWarmupChanged = false;
+		ScreenshotWarmupApplied = true;
+		SetScreenshotWarmupValue(Variable, AppliedScreenshotWarmup);
+		if (!OwnsScreenshotWarmup())
+			return false;
+		ScreenshotWarmupVariable = Variable;
+		ScreenshotWarmupChangeHandle = Variable->OnChangedDelegate().AddLambda(
+		    [this](IConsoleVariable *) { ScreenshotWarmupChanged = true; });
+		return true;
+	}
+	void RestoreScreenshotWarmup()
+	{
+		if (!ScreenshotWarmupApplied)
+			return;
+		const bool Owned = OwnsScreenshotWarmup();
+		auto *Variable =
+		    IConsoleManager::Get().FindConsoleVariable(TEXT("r.HighResScreenshotDelay"));
+		if (Variable && Variable == ScreenshotWarmupVariable)
+			Variable->OnChangedDelegate().Remove(ScreenshotWarmupChangeHandle);
+		ScreenshotWarmupVariable = nullptr;
+		ScreenshotWarmupChangeHandle.Reset();
+		if (Owned)
+		{
+			SetScreenshotWarmupValue(Variable, SavedScreenshotWarmup);
+			if (Variable->GetInt() != SavedScreenshotWarmup ||
+			    Variable->GetFlags() != SavedScreenshotWarmupFlags)
+				Restored = false;
+		}
+		else
+			Restored = false;
+		ScreenshotWarmupApplied = false;
+	}
 	void RestoreScreenshot()
 	{
+		RestoreScreenshotWarmup();
 		if (!ScreenshotApplied)
 			return;
 		if (OwnsScreenshot())
@@ -770,7 +843,11 @@ TSharedPtr<FJsonObject> FUEShedCameraRenderSession::Preflight(const TSharedPtr<F
 			Issue(Issues, TEXT("authoring_open"), TEXT("sessionId"), TEXT("A camera set is open in the editor."),
 				  TEXT("Close the camera set, then retry."));
 		const bool Viewport =
-			String(Child(Policy, TEXT("renderer")), TEXT("kind")) == TEXT("editor_viewport");
+		    String(Child(Policy, TEXT("renderer")), TEXT("kind")) == TEXT("editor_viewport");
+		if (Viewport && Child(Policy, TEXT("renderer"))->HasField(TEXT("screenshotWarmupFrames")) &&
+		    !IConsoleManager::Get().FindConsoleVariable(TEXT("r.HighResScreenshotDelay")))
+			Issue(Issues, TEXT("unsupported_policy"), TEXT("renderer.screenshotWarmupFrames"),
+			      TEXT("This engine does not provide native screenshot warmup control."));
 		auto *Client = GCurrentLevelEditingViewportClient;
 		if (Viewport && (!Client || !Client->Viewport))
 			Issue(Issues, TEXT("viewport_unavailable"), TEXT("renderer"),
@@ -1101,8 +1178,8 @@ void FUEShedCameraRenderSession::Tick(bool bDrawViewport)
 	if (!S.Frame || S.Result)
 		return;
 	if (S.Viewport() &&
-		((S.Pending && !S.OwnsScreenshot()) ||
-		 (!S.Pending && (GIsHighResScreenshot || FScreenshotRequest::IsScreenshotRequested()))))
+	    ((S.Pending && (!S.OwnsScreenshot() || !S.OwnsScreenshotWarmup())) ||
+	     (!S.Pending && (GIsHighResScreenshot || FScreenshotRequest::IsScreenshotRequested()))))
 	{
 		S.Fail(TEXT("editor_busy"), TEXT("Another operation owns the screenshot state."));
 		return;
@@ -1213,6 +1290,12 @@ void FUEShedCameraRenderSession::Tick(bool bDrawViewport)
 			S.AppliedResolutionX = GScreenshotResolutionX;
 			S.AppliedResolutionY = GScreenshotResolutionY;
 			S.ScreenshotApplied = true;
+			if (!S.ApplyScreenshotWarmup())
+			{
+				S.Fail(TEXT("unsupported_policy"),
+				       TEXT("Could not apply the requested native screenshot warmup."));
+				return;
+			}
 			S.Pending = true;
 			if (!S.Client->Viewport->TakeHighResScreenShot())
 			{
@@ -1397,6 +1480,9 @@ TSharedPtr<FJsonObject> FUEShedCameraRenderSession::Capabilities()
 		"materials_"
 		"and_ticks\"],\"maximumRetainedOperations\":64,\"retentionMs\":120000}"));
 	Out->SetNumberField(TEXT("maximumRetainedSessions"), 9);
+	if (IConsoleManager::Get().FindConsoleVariable(TEXT("r.HighResScreenshotDelay")))
+		Out->SetObjectField(TEXT("highResolutionScreenshot"),
+		                    UEShedCameraJson(TEXT("{\"version\":1,\"maximumWarmupFrames\":256}")));
 	Out->SetObjectField(TEXT("authoredVisibility"), UEShedCameraVisibilityCapabilities());
 	Out->SetObjectField(TEXT("editorPreviews"),
 						UEShedCameraJson(TEXT("{\"version\":1,\"subjects\":\"child_actors_of_editor_only_"
@@ -1433,6 +1519,12 @@ TSharedPtr<FJsonObject> FUEShedCameraRenderSession::Capabilities()
 	return Out;
 }
 void UUEShedCameraRenderingLibrary::GetCameraRenderCapabilities(FString &ResultJson)
+{
+	auto Capabilities = FUEShedCameraRenderSession::Capabilities();
+	Capabilities->RemoveField(TEXT("highResolutionScreenshot"));
+	ResultJson = UEShedCameraJsonText(Capabilities);
+}
+void UUEShedCameraRenderingLibrary::GetCameraRenderCapabilitiesV2(FString &ResultJson)
 {
 	ResultJson = UEShedCameraJsonText(FUEShedCameraRenderSession::Capabilities());
 }
