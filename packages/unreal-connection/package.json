@@ -39,8 +39,13 @@
 	},
 	"dependencies": {
 		"@ue-shed/protocol": "workspace:0.13.0",
-		"effect": "catalog:",
 		"unreal-rc": "0.5.3"
+	},
+	"devDependencies": {
+		"effect": "catalog:"
+	},
+	"peerDependencies": {
+		"effect": "^4.0.0"
 	},
 	"engines": {
 		"node": ">=22.14.0"

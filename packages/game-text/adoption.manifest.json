@@ -21,7 +21,7 @@
 			"@ue-shed/unreal-assets": "package.json#dependencies"
 		},
 		"peerDependencies": {
-			"effect": "4.0.4"
+			"effect": "^4.0.0"
 		},
 		"runtimeProviders": [
 			{

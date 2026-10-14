@@ -138,6 +138,9 @@ importers:
 
   apps/cli:
     dependencies:
+      '@effect/opentelemetry':
+        specifier: 'catalog:'
+        version: 4.0.4(@opentelemetry/api-logs@0.205.0)(@opentelemetry/api@1.9.1)(@opentelemetry/resources@2.9.0(@opentelemetry/api@1.9.1))(@opentelemetry/sdk-logs@0.205.0(@opentelemetry/api@1.9.1))(@opentelemetry/sdk-metrics@2.9.0(@opentelemetry/api@1.9.1))(@opentelemetry/sdk-trace-base@2.9.0(@opentelemetry/api@1.9.1))(@opentelemetry/sdk-trace-node@2.9.0(@opentelemetry/api@1.9.1))(@opentelemetry/sdk-trace-web@2.9.0(@opentelemetry/api@1.9.1))(@opentelemetry/semantic-conventions@1.43.0)(effect@4.0.4)
       '@effect/platform-node':
         specifier: 'catalog:'
         version: 4.0.4(effect@4.0.4)(redis@6.3.0(@opentelemetry/api@1.9.1))
@@ -260,6 +263,9 @@ importers:
 
   apps/workbench:
     dependencies:
+      '@effect/opentelemetry':
+        specifier: 'catalog:'
+        version: 4.0.4(@opentelemetry/api-logs@0.205.0)(@opentelemetry/api@1.9.1)(@opentelemetry/resources@2.9.0(@opentelemetry/api@1.9.1))(@opentelemetry/sdk-logs@0.205.0(@opentelemetry/api@1.9.1))(@opentelemetry/sdk-metrics@2.9.0(@opentelemetry/api@1.9.1))(@opentelemetry/sdk-trace-base@2.9.0(@opentelemetry/api@1.9.1))(@opentelemetry/sdk-trace-node@2.9.0(@opentelemetry/api@1.9.1))(@opentelemetry/sdk-trace-web@2.9.0(@opentelemetry/api@1.9.1))(@opentelemetry/semantic-conventions@1.43.0)(effect@4.0.4)
       '@solidjs/web':
         specifier: 'catalog:'
         version: 2.0.0-rc.13(solid-js@2.0.0-rc.13)
@@ -871,6 +877,7 @@ importers:
       '@ue-shed/world':
         specifier: workspace:0.13.0
         version: link:../world
+    devDependencies:
       effect:
         specifier: 'catalog:'
         version: 4.0.4
@@ -880,13 +887,13 @@ importers:
       '@ue-shed/engine':
         specifier: workspace:0.13.0
         version: link:../engine
-      effect:
-        specifier: 'catalog:'
-        version: 4.0.4
     devDependencies:
       '@effect/vitest':
         specifier: 'catalog:'
         version: 4.0.4(effect@4.0.4)(vitest@5.0.4)
+      effect:
+        specifier: 'catalog:'
+        version: 4.0.4
 
   packages/engine:
     dependencies:
@@ -896,13 +903,13 @@ importers:
       '@ue-shed/unreal-connection':
         specifier: workspace:0.13.0
         version: link:../unreal-connection
-      effect:
-        specifier: 'catalog:'
-        version: 4.0.4
     devDependencies:
       '@effect/vitest':
         specifier: 'catalog:'
         version: 4.0.4(effect@4.0.4)(vitest@5.0.4)
+      effect:
+        specifier: 'catalog:'
+        version: 4.0.4
     optionalDependencies:
       '@ue-shed/engine-win32-x64':
         specifier: workspace:0.13.0
@@ -971,13 +978,13 @@ importers:
       '@ue-shed/engine':
         specifier: workspace:0.13.0
         version: link:../engine
-      effect:
-        specifier: 'catalog:'
-        version: 4.0.4
     devDependencies:
       '@effect/vitest':
         specifier: 'catalog:'
         version: 4.0.4(effect@4.0.4)(vitest@5.0.4)
+      effect:
+        specifier: 'catalog:'
+        version: 4.0.4
 
   packages/map-history:
     dependencies:
@@ -987,9 +994,6 @@ importers:
       '@ue-shed/unreal-assets':
         specifier: workspace:0.13.0
         version: link:../unreal-assets
-      effect:
-        specifier: 'catalog:'
-        version: 4.0.4
       p4client-ts:
         specifier: 0.12.1
         version: 0.12.1
@@ -997,25 +1001,25 @@ importers:
       '@effect/vitest':
         specifier: 'catalog:'
         version: 4.0.4(effect@4.0.4)(vitest@5.0.4)
+      effect:
+        specifier: 'catalog:'
+        version: 4.0.4
 
   packages/niagara:
     dependencies:
       '@ue-shed/engine':
         specifier: workspace:0.13.0
         version: link:../engine
-      effect:
-        specifier: 'catalog:'
-        version: 4.0.4
     devDependencies:
       '@effect/vitest':
         specifier: 'catalog:'
         version: 4.0.4(effect@4.0.4)(vitest@5.0.4)
+      effect:
+        specifier: 'catalog:'
+        version: 4.0.4
 
   packages/observability:
     dependencies:
-      '@effect/opentelemetry':
-        specifier: 'catalog:'
-        version: 4.0.4(@opentelemetry/api-logs@0.205.0)(@opentelemetry/api@1.9.1)(@opentelemetry/resources@2.9.0(@opentelemetry/api@1.9.1))(@opentelemetry/sdk-logs@0.205.0(@opentelemetry/api@1.9.1))(@opentelemetry/sdk-metrics@2.9.0(@opentelemetry/api@1.9.1))(@opentelemetry/sdk-trace-base@2.9.0(@opentelemetry/api@1.9.1))(@opentelemetry/sdk-trace-node@2.9.0(@opentelemetry/api@1.9.1))(@opentelemetry/sdk-trace-web@2.9.0(@opentelemetry/api@1.9.1))(@opentelemetry/semantic-conventions@1.43.0)(effect@4.0.4)
       '@opentelemetry/api':
         specifier: 'catalog:'
         version: 1.9.1
@@ -1043,13 +1047,16 @@ importers:
       '@opentelemetry/semantic-conventions':
         specifier: 'catalog:'
         version: 1.43.0
-      effect:
-        specifier: 'catalog:'
-        version: 4.0.4
     devDependencies:
+      '@effect/opentelemetry':
+        specifier: 'catalog:'
+        version: 4.0.4(@opentelemetry/api-logs@0.205.0)(@opentelemetry/api@1.9.1)(@opentelemetry/resources@2.9.0(@opentelemetry/api@1.9.1))(@opentelemetry/sdk-logs@0.205.0(@opentelemetry/api@1.9.1))(@opentelemetry/sdk-metrics@2.9.0(@opentelemetry/api@1.9.1))(@opentelemetry/sdk-trace-base@2.9.0(@opentelemetry/api@1.9.1))(@opentelemetry/sdk-trace-node@2.9.0(@opentelemetry/api@1.9.1))(@opentelemetry/sdk-trace-web@2.9.0(@opentelemetry/api@1.9.1))(@opentelemetry/semantic-conventions@1.43.0)(effect@4.0.4)
       '@effect/vitest':
         specifier: 'catalog:'
         version: 4.0.4(effect@4.0.4)(vitest@5.0.4)
+      effect:
+        specifier: 'catalog:'
+        version: 4.0.4
 
   packages/observatory:
     dependencies:
@@ -1065,6 +1072,7 @@ importers:
       '@ue-shed/unreal-connection':
         specifier: workspace:0.13.0
         version: link:../unreal-connection
+    devDependencies:
       effect:
         specifier: 'catalog:'
         version: 4.0.4
@@ -1084,9 +1092,6 @@ importers:
 
   packages/project-custodian:
     dependencies:
-      effect:
-        specifier: 'catalog:'
-        version: 4.0.4
       trash:
         specifier: 10.1.1
         version: 10.1.1
@@ -1094,9 +1099,12 @@ importers:
       '@effect/vitest':
         specifier: 'catalog:'
         version: 4.0.4(effect@4.0.4)(vitest@5.0.4)
+      effect:
+        specifier: 'catalog:'
+        version: 4.0.4
 
   packages/protocol:
-    dependencies:
+    devDependencies:
       effect:
         specifier: 'catalog:'
         version: 4.0.4
@@ -1168,25 +1176,26 @@ importers:
       '@ue-shed/protocol':
         specifier: workspace:0.13.0
         version: link:../protocol
-      effect:
-        specifier: 'catalog:'
-        version: 4.0.4
     devDependencies:
       '@ue-shed/authoring':
         specifier: workspace:0.0.0
         version: link:../authoring
+      effect:
+        specifier: 'catalog:'
+        version: 4.0.4
 
   packages/unreal-connection:
     dependencies:
       '@ue-shed/protocol':
         specifier: workspace:0.13.0
         version: link:../protocol
-      effect:
-        specifier: 'catalog:'
-        version: 4.0.4
       unreal-rc:
         specifier: 0.5.3
         version: 0.5.3(effect@4.0.4)
+    devDependencies:
+      effect:
+        specifier: 'catalog:'
+        version: 4.0.4
 
   packages/world:
     dependencies:
@@ -1196,6 +1205,7 @@ importers:
       '@ue-shed/unreal-connection':
         specifier: workspace:0.13.0
         version: link:../unreal-connection
+    devDependencies:
       effect:
         specifier: 'catalog:'
         version: 4.0.4

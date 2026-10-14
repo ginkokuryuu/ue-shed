@@ -164,6 +164,10 @@ try {
 	assert.equal(gameTextAdoption.release.versionSource, "package.json");
 	assert.equal(gameTextAdoption.release.nativeBinaryBundled, false);
 	assert.equal(gameTextAdoption.release.uiBundled, false);
+	assert.deepEqual(
+		gameTextAdoption.packageGraph.peerDependencies,
+		gameTextEntry.manifest.peerDependencies
+	);
 	assert.equal(
 		gameTextAdoption.packageGraph.dependencies["@ue-shed/unreal-assets"],
 		"package.json#dependencies"
@@ -198,8 +202,11 @@ try {
 		Object.keys(connectionAdoption.packageGraph.dependencies).sort(),
 		Object.keys(connectionEntry.manifest.dependencies ?? {}).sort()
 	);
-	assert.deepEqual(connectionAdoption.packageGraph.peerDependencies, {});
-	assert.deepEqual(connectionEntry.manifest.peerDependencies ?? {}, {});
+	assert.deepEqual(connectionAdoption.packageGraph.peerDependencies, { effect: "^4.0.0" });
+	assert.deepEqual(
+		connectionEntry.manifest.peerDependencies,
+		connectionAdoption.packageGraph.peerDependencies
+	);
 	assert.equal(
 		connectionEntry.manifest.dependencies?.["@ue-shed/protocol"],
 		connectionEntry.manifest.version
@@ -234,6 +241,10 @@ try {
 	assert.equal(
 		pluginDistributionAdoption.packageGraph.dependencies["@ue-shed/engine"],
 		"package.json#dependencies"
+	);
+	assert.deepEqual(
+		pluginDistributionAdoption.packageGraph.peerDependencies,
+		pluginDistributionEntry.manifest.peerDependencies
 	);
 	assert.equal(
 		pluginDistributionEntry.manifest.dependencies?.["@ue-shed/engine"],
@@ -296,7 +307,8 @@ try {
 				type: "module",
 				dependencies: {
 					...dependencyEntries,
-					effect: "4.0.4"
+					effect: "4.0.0",
+					"@effect/opentelemetry": "4.0.0"
 				}
 			},
 			null,
@@ -321,6 +333,31 @@ try {
 		["install", "--offline", "--ignore-scripts", "--frozen-lockfile"],
 		consumerDirectory
 	);
+	const peerConsumer = join(consumerDirectory, "verify-effect-peers.mjs");
+	await writeFile(
+		peerConsumer,
+		[
+			'import assert from "node:assert/strict";',
+			'import { createRequire } from "node:module";',
+			"const app = createRequire(import.meta.url);",
+			'const effect = app.resolve("effect");',
+			'assert.equal(app("effect/package.json").version, "4.0.0");',
+			`const packages = ${JSON.stringify(
+				packed
+					.filter((entry) => entry.manifest.peerDependencies?.effect)
+					.map((entry) => entry.name)
+			)};`,
+			'for (const name of [...packages, "@effect/opentelemetry"]) {',
+			"  const library = createRequire(import.meta.resolve(name));",
+			'  assert.equal(library.resolve("effect"), effect, `${name} must share the app Effect`);',
+			"}",
+			'const observability = createRequire(import.meta.resolve("@ue-shed/observability"));',
+			'assert.equal(observability.resolve("@effect/opentelemetry"), app.resolve("@effect/opentelemetry"));',
+			'console.log("effect-peers-ok");',
+			""
+		].join("\n")
+	);
+	assert.equal(run(process.execPath, [peerConsumer], consumerDirectory), "effect-peers-ok");
 	const consumerEnvironment = { ...process.env };
 	delete consumerEnvironment.UE_SHED_UASSET_EXECUTABLE;
 	const configFixture = join(consumerDirectory, "config-source");

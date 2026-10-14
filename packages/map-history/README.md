@@ -1,5 +1,8 @@
 # `@ue-shed/map-history`
 
+The application must provide `effect@^4.0.0` as a peer dependency. Reuse one compatible
+Effect installation across the application and UE Shed libraries.
+
 The optional, Perforce-backed UE Shed workflow for reconstructing and explaining the saved actor
 history of one Unreal map.
 
@@ -18,7 +21,7 @@ identity, diff, or playback primitive gaps should be proposed upstream.
 Install the headless package with its exact compatible release dependencies:
 
 ```powershell
-npm install --save-exact @ue-shed/map-history @ue-shed/protocol @ue-shed/unreal-assets effect@4.0.4 p4client-ts@0.12.1
+npm install --save-exact @ue-shed/map-history @ue-shed/protocol @ue-shed/unreal-assets "effect@^4.0.0" p4client-ts@0.12.1
 ```
 
 The root export owns Perforce acquisition and therefore requires a configured `p4` executable and

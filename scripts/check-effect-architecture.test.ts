@@ -209,10 +209,38 @@ test("requires catalog-owned dependencies to use catalog protocol", async () => 
 	await writeFile(join(root, "pnpm-lock.yaml"), "effect@4.0.4:\n");
 	await writeFile(
 		join(root, "package.json"),
-		JSON.stringify({ dependencies: { effect: "^3.22.0" } })
+		JSON.stringify({ private: true, dependencies: { effect: "^3.22.0" } })
 	);
 	const failures = await checkCatalogUsage(root);
 	assert.deepEqual(failures, ["package.json: dependencies.effect must use catalog:"]);
+	const publicManifest = {
+		peerDependencies: { effect: "^4.0.0", "@effect/opentelemetry": "^4.0.0" },
+		devDependencies: { effect: "catalog:", "@effect/opentelemetry": "catalog:" }
+	};
+	await writeFile(join(root, "package.json"), JSON.stringify(publicManifest));
+	assert.deepEqual(await checkCatalogUsage(root), []);
+	await writeFile(
+		join(root, "package.json"),
+		JSON.stringify({ ...publicManifest, peerDependencies: { effect: "catalog:" } })
+	);
+	assert.deepEqual(await checkCatalogUsage(root), [
+		"package.json: effect must be a ^4.0.0 peer dependency"
+	]);
+	await writeFile(
+		join(root, "package.json"),
+		JSON.stringify({ ...publicManifest, devDependencies: {} })
+	);
+	assert.deepEqual(await checkCatalogUsage(root), [
+		"package.json: devDependencies.effect must use catalog:",
+		"package.json: devDependencies.@effect/opentelemetry must use catalog:"
+	]);
+	await writeFile(
+		join(root, "package.json"),
+		JSON.stringify({ ...publicManifest, dependencies: { effect: "catalog:" } })
+	);
+	assert.deepEqual(await checkCatalogUsage(root), [
+		"package.json: effect must be a ^4.0.0 peer dependency"
+	]);
 });
 
 async function withWorkbenchFixture(

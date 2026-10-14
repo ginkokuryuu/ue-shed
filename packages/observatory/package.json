@@ -47,8 +47,13 @@
 		"@ue-shed/engine": "workspace:0.13.0",
 		"@ue-shed/observability": "workspace:0.13.0",
 		"@ue-shed/protocol": "workspace:0.13.0",
-		"@ue-shed/unreal-connection": "workspace:0.13.0",
+		"@ue-shed/unreal-connection": "workspace:0.13.0"
+	},
+	"devDependencies": {
 		"effect": "catalog:"
+	},
+	"peerDependencies": {
+		"effect": "^4.0.0"
 	},
 	"engines": {
 		"node": ">=22.14.0"

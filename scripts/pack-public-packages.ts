@@ -27,6 +27,7 @@ export interface PackageManifest {
 	readonly dependencies?: Readonly<Record<string, string>>;
 	readonly optionalDependencies?: Readonly<Record<string, string>>;
 	readonly peerDependencies?: Readonly<Record<string, string>>;
+	readonly peerDependenciesMeta?: Readonly<Record<string, { readonly optional?: boolean }>>;
 	readonly os?: readonly string[];
 	readonly cpu?: readonly string[];
 }
@@ -94,7 +95,7 @@ const versionManifest = JSON.parse(
 export const PUBLIC_VERSION = versionManifest.version;
 const localProtocolPattern = /(?:workspace|catalog|file|link|portal):/;
 const canonicalRepository = "git+https://github.com/ue-shed/ue-shed.git";
-const exactEffectVersion = "4.0.4";
+const effectPeerRange = "^4.0.0";
 const exactUnrealRcVersion = "0.5.3";
 const exactTrashVersion = "10.1.1";
 const WINDOWS_GNU_TARGET = "x86_64-pc-windows-gnu";
@@ -352,6 +353,7 @@ export function validatePackedManifest({
 	if (localProtocolPattern.test(manifestRaw)) {
 		failures.push("packed manifest contains a local workspace/catalog/file/link protocol");
 	}
+	failures.push(...validateEffectPeers(manifest));
 	for (const field of ["main", "types"] as const) {
 		if (manifest[field] !== undefined && !files.includes(packedPath(manifest[field]))) {
 			failures.push(`${field} points to missing packed file ${manifest[field]}`);
@@ -396,6 +398,26 @@ export function validatePackedManifest({
 	return failures;
 }
 
+export function validateEffectPeers(manifest: PackageManifest) {
+	const failures: string[] = [];
+	for (const field of ["dependencies", "optionalDependencies", "peerDependencies"] as const) {
+		for (const [name, range] of Object.entries(manifest[field] ?? {})) {
+			if (name !== "effect" && !name.startsWith("@effect/")) continue;
+			if (field !== "peerDependencies") {
+				failures.push(`${manifest.name} must declare ${name} as a peer dependency`);
+			} else if (
+				range !== effectPeerRange ||
+				manifest.peerDependenciesMeta?.[name]?.optional === true
+			) {
+				failures.push(
+					`${manifest.name} must declare required peer ${name} ${effectPeerRange}`
+				);
+			}
+		}
+	}
+	return failures;
+}
+
 function requireExactDependency(
 	manifest: PackageManifest | undefined,
 	name: string,
@@ -408,7 +430,7 @@ function requireExactDependency(
 	}
 }
 
-function requireExactPeerDependency(
+function requirePeerDependency(
 	manifest: PackageManifest | undefined,
 	name: string,
 	expected: string,
@@ -416,7 +438,7 @@ function requireExactPeerDependency(
 ) {
 	const actual = manifest?.peerDependencies?.[name];
 	if (actual !== expected) {
-		failures.push(`${manifest?.name ?? "package"} must peer-pin ${name} ${expected}`);
+		failures.push(`${manifest?.name ?? "package"} must declare peer ${name} ${expected}`);
 	}
 }
 
@@ -464,16 +486,18 @@ function validateExactPackageGraph(manifests: readonly PackedPackage[]) {
 			);
 		}
 	}
-	requireExactDependency(protocol, "effect", exactEffectVersion, failures);
-	requireExactDependency(observability, "effect", exactEffectVersion, failures);
-	requireExactDependency(observability, "@effect/opentelemetry", exactEffectVersion, failures);
+	requirePeerDependency(byName.get("@ue-shed/blueprints"), "effect", effectPeerRange, failures);
+	requirePeerDependency(byName.get("@ue-shed/world"), "effect", effectPeerRange, failures);
+	requirePeerDependency(protocol, "effect", effectPeerRange, failures);
+	requirePeerDependency(observability, "effect", effectPeerRange, failures);
+	requirePeerDependency(observability, "@effect/opentelemetry", effectPeerRange, failures);
 	requireExactInternalDependency(unrealConnection, "@ue-shed/protocol", byName, failures);
-	requireExactDependency(unrealConnection, "effect", exactEffectVersion, failures);
+	requirePeerDependency(unrealConnection, "effect", effectPeerRange, failures);
 	requireExactDependency(unrealConnection, "unreal-rc", exactUnrealRcVersion, failures);
-	requireExactPeerDependency(pluginDistribution, "effect", exactEffectVersion, failures);
+	requirePeerDependency(pluginDistribution, "effect", effectPeerRange, failures);
 	requireExactInternalDependency(engine, "@ue-shed/protocol", byName, failures);
 	requireExactInternalDependency(engine, "@ue-shed/unreal-connection", byName, failures);
-	requireExactDependency(engine, "effect", exactEffectVersion, failures);
+	requirePeerDependency(engine, "effect", effectPeerRange, failures);
 	const enginePlatformVersion =
 		engine?.optionalDependencies?.[ENGINE_WINDOWS_PACKAGE_NAME] ??
 		engine?.dependencies?.[ENGINE_WINDOWS_PACKAGE_NAME];
@@ -491,23 +515,23 @@ function validateExactPackageGraph(manifests: readonly PackedPackage[]) {
 	requireExactInternalDependency(cameras, "@ue-shed/observability", byName, failures);
 	requireExactInternalDependency(cameras, "@ue-shed/protocol", byName, failures);
 	requireExactInternalDependency(cameras, "@ue-shed/unreal-connection", byName, failures);
-	requireExactDependency(cameras, "effect", exactEffectVersion, failures);
+	requirePeerDependency(cameras, "effect", effectPeerRange, failures);
 	requireExactInternalDependency(observatory, "@ue-shed/observability", byName, failures);
 	requireExactInternalDependency(observatory, "@ue-shed/unreal-connection", byName, failures);
-	requireExactDependency(observatory, "effect", exactEffectVersion, failures);
+	requirePeerDependency(observatory, "effect", effectPeerRange, failures);
 	requireExactInternalDependency(unrealAssets, "@ue-shed/protocol", byName, failures);
-	requireExactDependency(unrealAssets, "effect", exactEffectVersion, failures);
+	requirePeerDependency(unrealAssets, "effect", effectPeerRange, failures);
 	requireExactInternalDependency(gameText, "@ue-shed/unreal-assets", byName, failures);
 	requireExactInternalDependency(gameText, LOCALIZATION_PACKAGE_NAME, byName, failures);
-	requireExactPeerDependency(gameText, "effect", exactEffectVersion, failures);
+	requirePeerDependency(gameText, "effect", effectPeerRange, failures);
 	requireExactInternalDependency(mapHistory, "@ue-shed/protocol", byName, failures);
 	requireExactInternalDependency(mapHistory, "@ue-shed/unreal-assets", byName, failures);
-	requireExactDependency(mapHistory, "effect", exactEffectVersion, failures);
+	requirePeerDependency(mapHistory, "effect", effectPeerRange, failures);
 	requireExactDependency(mapHistory, "p4client-ts", "0.12.1", failures);
 	requireExactInternalDependency(configExplorer, ENGINE_PACKAGE_NAME, byName, failures);
-	requireExactDependency(configExplorer, "effect", exactEffectVersion, failures);
+	requirePeerDependency(configExplorer, "effect", effectPeerRange, failures);
 	requireExactInternalDependency(localization, CONFIG_EXPLORER_PACKAGE_NAME, byName, failures);
-	requireExactDependency(localization, "effect", exactEffectVersion, failures);
+	requirePeerDependency(localization, "effect", effectPeerRange, failures);
 	if (localization?.exports?.["./browser"] === undefined) {
 		failures.push(`${LOCALIZATION_PACKAGE_NAME} must export ./browser`);
 	}
@@ -518,10 +542,10 @@ function validateExactPackageGraph(manifests: readonly PackedPackage[]) {
 			);
 		}
 	}
-	requireExactDependency(projectCustodian, "effect", exactEffectVersion, failures);
+	requirePeerDependency(projectCustodian, "effect", effectPeerRange, failures);
 	requireExactDependency(projectCustodian, "trash", exactTrashVersion, failures);
 	requireExactInternalDependency(niagara, ENGINE_PACKAGE_NAME, byName, failures);
-	requireExactDependency(niagara, "effect", exactEffectVersion, failures);
+	requirePeerDependency(niagara, "effect", effectPeerRange, failures);
 	for (const dependencyField of [
 		"dependencies",
 		"optionalDependencies",

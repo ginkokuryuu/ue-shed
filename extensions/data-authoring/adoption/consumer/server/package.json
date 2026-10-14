@@ -7,6 +7,7 @@
 		"typecheck": "tsc --noEmit"
 	},
 	"dependencies": {
+		"@effect/opentelemetry": "catalog:",
 		"@ue-shed/authoring-sdk": "workspace:*",
 		"@ue-shed/host": "workspace:*",
 		"effect": "catalog:"
