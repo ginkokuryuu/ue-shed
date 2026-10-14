@@ -316,7 +316,8 @@ export const SavedAssetInspection = Schema.Struct({
 					Schema.Struct({
 						name: Schema.String,
 						value: Schema.Int,
-						display_name: Schema.optional(Schema.String)
+						// The saved inspection writes null; generic inspection omits the key.
+						display_name: Schema.optional(Schema.NullOr(Schema.String))
 					})
 				),
 				row_count: NonNegativeInt
@@ -330,8 +331,8 @@ export const SavedAssetInspection = Schema.Struct({
 					Schema.Struct({
 						name: Schema.String,
 						type: Schema.String,
-						referenced_path: Schema.optional(Schema.String),
-						display_name: Schema.optional(Schema.String)
+						referenced_path: Schema.optional(Schema.NullOr(Schema.String)),
+						display_name: Schema.optional(Schema.NullOr(Schema.String))
 					})
 				),
 				properties: Schema.Array(SavedProperty).pipe(

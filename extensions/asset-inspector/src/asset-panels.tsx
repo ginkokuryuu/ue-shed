@@ -74,7 +74,7 @@ export function inspectionClassPath(asset: InspectedAsset | undefined): string {
 	}
 }
 
-function matches(query: string, ...values: readonly (string | undefined)[]): boolean {
+function matches(query: string, ...values: readonly (string | null | undefined)[]): boolean {
 	return values.some((value) => value?.toLowerCase().includes(query));
 }
 
