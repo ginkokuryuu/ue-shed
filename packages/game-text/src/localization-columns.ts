@@ -47,7 +47,24 @@ const ArchiveChild = Schema.Struct({
 });
 const decodeManifestChild = Schema.decodeUnknownResult(ManifestChild);
 const decodeArchiveChild = Schema.decodeUnknownResult(ArchiveChild);
-const decodePOComments = Schema.decodeUnknownSync(Schema.Array(Schema.String));
+/** PO fields without a column, which the importer stores as JSON (see `poBlock`). */
+type StoredPOFields = Partial<
+	Pick<
+		POEntry,
+		| "msgctxt"
+		| "msgidPlural"
+		| "msgstr"
+		| "translatorComments"
+		| "extractedComments"
+		| "referenceComments"
+		| "flags"
+		| "previousMsgidLines"
+	>
+>;
+/** JSON the importer stored from values it had validated; an empty string stores nothing. */
+function stored<A>(text: string, empty: A): A {
+	return text === "" ? empty : JSON.parse(text);
+}
 const Meta = Schema.Struct({
 	format: Schema.Literals(["manifest", "archive", "po"]),
 	count: Schema.Int,
@@ -547,65 +564,66 @@ export const decodeLocalizationSnapshot = Effect.fn("LocalizationSnapshot.decode
 		if (field !== "options" && field !== "ordinal")
 			decoded[field] = yield* reader.strings(domains[field], values[field]!);
 	}
+	// The importer validated the external files against these schemas when it wrote the index,
+	// and section checksums guard its bytes, so entries are rebuilt without decoding each again;
+	// that decode took a quarter of a full quality scan.
 	const entries: (ManifestEntry | ArchiveEntry | POEntry)[] = [];
 	for (let index = 0; index < end - start; index++) {
 		const string = (field: Field) => decoded[field]![index]!;
-		const json = (field: Field) =>
-			Schema.decodeUnknownSync(OpaqueRecord)(JSON.parse(string(field) || "{}"));
+		const json = (field: Field) => stored<typeof OpaqueRecord.Type>(string(field), {});
 		const flags = values.options![index]!;
 		const path = (flags & 1024 ? (meta.pathPrefix ?? "") : "") + string("path");
 		const identity = {
 			namespace: TextNamespace.make(string("namespace")),
 			key: TextKey.make(string("key"))
 		};
-		const sourceExtra = Schema.decodeUnknownSync(OpaqueRecord)(json("source-extra"));
-		const source = { Text: string("source"), ...sourceExtra };
+		const source = { Text: string("source"), ...json("source-extra") };
+		const shared = {
+			...(flags & 1 ? { optional: Boolean(flags & 2) } : undefined),
+			...(flags & 8 ? { metadata: json("metadata") } : undefined)
+		};
 		if (meta.format === "po") {
-			const extras = json("po-extra");
-			const msgstr = {
-				...Schema.decodeUnknownSync(Schema.Record(Schema.String, Schema.String))(
-					extras.msgstr ?? {}
-				)
-			};
+			const extras = stored<StoredPOFields>(string("po-extra"), {});
+			const msgstr = { ...extras.msgstr };
 			if (flags & 64) msgstr["0"] = flags & 128 ? string("source") : string("translation");
-			const entry = {
-				...extras,
-				translatorComments: decodePOComments(extras.translatorComments ?? []),
-				extractedComments: decodePOComments(extras.extractedComments ?? []),
-				referenceComments: decodePOComments(extras.referenceComments ?? []),
-				flags: decodePOComments(extras.flags ?? []),
-				previousMsgidLines: decodePOComments(extras.previousMsgidLines ?? []),
-				msgstr,
+			const extracted = extras.extractedComments ?? [],
+				references = extras.referenceComments ?? [];
+			const msgctxt =
+				flags & 32
+					? `${identity.namespace.replaceAll(",", "\\,")},${identity.key.replaceAll(",", "\\,")}`
+					: extras.msgctxt;
+			entries.push({
+				...(msgctxt === undefined ? undefined : { msgctxt }),
 				msgid: string("source"),
+				...(extras.msgidPlural === undefined
+					? undefined
+					: { msgidPlural: extras.msgidPlural }),
+				msgstr,
+				translatorComments: extras.translatorComments ?? [],
+				extractedComments: flags & 256 ? [`Key: ${identity.key}`, ...extracted] : extracted,
+				referenceComments: flags & 512 ? [path, ...references] : references,
+				flags: extras.flags ?? [],
+				previousMsgidLines: extras.previousMsgidLines ?? [],
 				identity: flags & 16 ? null : identity
-			};
-			if (flags & 256)
-				entry.extractedComments = [`Key: ${identity.key}`, ...entry.extractedComments];
-			if (flags & 512) entry.referenceComments = [path, ...entry.referenceComments];
-			if (flags & 32)
-				Object.assign(entry, {
-					msgctxt: `${identity.namespace.replaceAll(",", "\\,")},${identity.key.replaceAll(",", "\\,")}`
-				});
-			entries.push(Schema.decodeUnknownSync(POEntry)(entry));
-		} else {
-			const entry = { ...identity, source };
-			if (flags & 1) Object.assign(entry, { optional: Boolean(flags & 2) });
-			if (flags & 8) Object.assign(entry, { metadata: json("metadata") });
-			if (meta.format === "manifest") {
-				const manifest = { ...entry, path };
-				if (flags & 4) Object.assign(manifest, { devNotes: string("notes") });
-				entries.push(Schema.decodeUnknownSync(ManifestEntry)(manifest));
-			} else
-				entries.push(
-					Schema.decodeUnknownSync(ArchiveEntry)({
-						...entry,
-						translation: {
-							Text: flags & 128 ? string("source") : string("translation"),
-							...json("translation-extra")
-						}
-					})
-				);
-		}
+			});
+		} else if (meta.format === "manifest")
+			entries.push({
+				...identity,
+				source,
+				path,
+				...shared,
+				...(flags & 4 ? { devNotes: string("notes") } : undefined)
+			});
+		else
+			entries.push({
+				...identity,
+				source,
+				translation: {
+					Text: flags & 128 ? string("source") : string("translation"),
+					...json("translation-extra")
+				},
+				...shared
+			});
 	}
 	return { ...meta, entries, ordinals: values.ordinal! };
 });

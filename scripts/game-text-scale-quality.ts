@@ -1,0 +1,149 @@
+import { join } from "node:path";
+import { performance } from "node:perf_hooks";
+import { Context, Effect, Exit, Layer, Schema, Scope, Stream } from "effect";
+import {
+	GameTextIndexError,
+	GameTextIndexRefresh,
+	GameTextIndexSource,
+	PackageTextStored,
+	gameTextIndexRefreshLayer,
+	packageTextShard,
+	typeScriptIndexBuilderLayer,
+	type GameTextIndexRefreshResult
+} from "../packages/game-text/dist/index.js";
+import { LocalizationEvidenceNodeLive } from "../packages/localization/dist/index.js";
+import { packageTextJsonLines } from "../packages/game-text/src/package-text-ndjson.ts";
+import { readGeneratedPackageInventory } from "./package-text-generated.ts";
+
+/** Interval of the stall probe. A gap well above it means the event loop was blocked. */
+export const stallIntervalMs = 10;
+
+/** Retained package records stand in for the native reader; refresh and queries are production. */
+function retainedPackageSource(records: string) {
+	const readFailure = (cause: unknown) =>
+		new GameTextIndexError({
+			operation: "read",
+			message: String(cause),
+			recovery: "Convert the generated project's package records again."
+		});
+	return Layer.succeed(
+		GameTextIndexSource,
+		GameTextIndexSource.of({
+			inventory: () =>
+				Effect.tryPromise({
+					try: () => readGeneratedPackageInventory(records),
+					catch: readFailure
+				}),
+			read: (_root, entries) =>
+				Stream.fromAsyncIterable(
+					(async function* () {
+						const wanted = new Set(entries.map((entry) => entry.path));
+						const decode = Schema.decodeUnknownSync(
+							Schema.fromJsonString(PackageTextStored)
+						);
+						for (const shard of new Set(
+							entries.map((entry) => packageTextShard(entry.path))
+						))
+							for await (const line of packageTextJsonLines(
+								join(records, `package-text.${shard}.ndjson`)
+							)) {
+								const record = decode(line);
+								if (!wanted.has(record.path)) continue;
+								if (record.evidence.event === "not_gatherable")
+									throw new Error("The index requested an excluded package.");
+								yield record.evidence;
+							}
+					})(),
+					readFailure
+				)
+		})
+	);
+}
+
+/** Opens (or builds, in an empty cache) the generated target's index the way hosts do. */
+export async function openScaleIndex(project: string, cache: string, records: string) {
+	const scope = await Effect.runPromise(Scope.make());
+	try {
+		const context = await Effect.runPromise(
+			Layer.buildWithScope(
+				gameTextIndexRefreshLayer(cache).pipe(
+					Layer.provide(retainedPackageSource(records)),
+					Layer.provide(typeScriptIndexBuilderLayer),
+					Layer.provide(LocalizationEvidenceNodeLive)
+				),
+				scope
+			)
+		);
+		const result = await Effect.runPromise(
+			Context.get(context, GameTextIndexRefresh)
+				.refresh({ projectRoot: project, targetName: "Generated" })
+				.pipe(Effect.provideService(Scope.Scope, scope))
+		);
+		return {
+			result,
+			lines: result.joined.meta.count,
+			close: () => Effect.runPromise(Scope.close(scope, Exit.void))
+		};
+	} catch (cause) {
+		await Effect.runPromise(Scope.close(scope, Exit.void));
+		throw cause;
+	}
+}
+
+/** Gaps between ticks of a short interval timer while work runs on the same event loop. */
+export function eventLoopGaps(intervalMs = stallIntervalMs) {
+	const gaps: number[] = [],
+		ends: number[] = [];
+	const started = performance.now();
+	let last = started;
+	const tick = () => {
+		const now = performance.now();
+		gaps.push(now - last);
+		ends.push(now - started);
+		last = now;
+	};
+	const timer = setInterval(tick, intervalMs);
+	return () => {
+		clearInterval(timer);
+		// The work can end inside a stall; its open gap counts too.
+		tick();
+		const sorted = Float64Array.from(gaps).sort();
+		const at = (quantile: number) =>
+			sorted[Math.min(sorted.length - 1, Math.floor(quantile * sorted.length))]!;
+		// The three longest gaps and when they ended tell setup stalls from page stalls.
+		const longest = Object.fromEntries(
+			Array.from(gaps.keys())
+				.sort((a, b) => gaps[b]! - gaps[a]!)
+				.slice(0, 3)
+				.flatMap((index, rank) => [
+					[`stallTop${rank + 1}Ms`, gaps[index]!],
+					[`stallTop${rank + 1}EndSeconds`, ends[index]! / 1000]
+				])
+		);
+		return {
+			stallIntervalMs: intervalMs,
+			stallSamples: sorted.length,
+			stallP50Ms: at(0.5),
+			stallP95Ms: at(0.95),
+			stallMaxMs: sorted.at(-1)!,
+			stallsOver100Ms: sorted.filter((gap) => gap > 100).length,
+			...longest
+		};
+	};
+}
+
+/** Runs the opened index's localization quality scan with Workbench's options. */
+export async function scaleQuality(result: GameTextIndexRefreshResult) {
+	if (!result.localizationQuality)
+		throw new Error("The opened index does not offer localization quality.");
+	const stalls = eventLoopGaps();
+	try {
+		const quality = await Effect.runPromise(
+			result.localizationQuality({ review: result.review.file })
+		);
+		return { quality, findings: quality.findings.length, ...stalls() };
+	} catch (cause) {
+		stalls();
+		throw cause;
+	}
+}

@@ -118,15 +118,23 @@ export function withoutAcceptedFindings<F extends AcceptableFinding>(
 	findings: readonly F[],
 	file: LocalizationReviewFile | undefined
 ) {
-	if (file === undefined || file.acceptedFindings.length === 0) return { findings, accepted: 0 };
+	const keep = acceptedFindingFilter(file);
+	if (keep === undefined) return { findings, accepted: 0 };
+	const lines = new Map(join.lines.map((line) => [line.id, line]));
+	const kept = findings.filter((finding) => keep(lines.get(finding.lineId), finding));
+	return { findings: kept, accepted: findings.length - kept.length };
+}
+
+/** The per-line form, for scans that never hold the whole join. Undefined when nothing is accepted. */
+export function acceptedFindingFilter(file: LocalizationReviewFile | undefined) {
+	if (file === undefined || file.acceptedFindings.length === 0) return undefined;
 	const accepted = new Map(
 		file.acceptedFindings.map((finding) => [
 			JSON.stringify([finding.check, finding.culture ?? "", finding.namespace, finding.key]),
 			finding.fingerprint
 		])
 	);
-	const lines = new Map(join.lines.map((line) => [line.id, line]));
-	const kept = findings.filter((finding) => {
+	return (line: LocalizationLine | undefined, finding: AcceptableFinding) => {
 		const fingerprint = accepted.get(
 			JSON.stringify([
 				finding.ruleId,
@@ -136,15 +144,13 @@ export function withoutAcceptedFindings<F extends AcceptableFinding>(
 			])
 		);
 		if (fingerprint === undefined) return true;
-		const line = lines.get(finding.lineId);
 		const culture = line?.cultures.find((item) => item.culture === finding.culture);
 		return (
 			line === undefined ||
 			culture === undefined ||
 			localizationLineFingerprint(line, culture) !== fingerprint
 		);
-	});
-	return { findings: kept, accepted: findings.length - kept.length };
+	};
 }
 
 /** A host's review change; main supplies fingerprints from the evidence it holds. */
