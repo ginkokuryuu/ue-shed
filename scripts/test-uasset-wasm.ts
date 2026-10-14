@@ -101,6 +101,7 @@ const projectionFixtures: ReadonlyArray<{
 }> = [
 	...legacyFixtures.map((fixture) => ({ ...fixture, kind: "text" as const })),
 	{ path: join(fixtureRoot, "Content/Fixture/Text/DA_TextOccurrences.uasset"), kind: "text" },
+	{ path: join(fixtureRoot, "Content/Fixture/Text/E_TextDisplayNames.uasset"), kind: "text" },
 	{
 		path: join(
 			fixtureRoot,

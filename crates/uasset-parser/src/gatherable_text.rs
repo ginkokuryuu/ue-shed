@@ -334,6 +334,28 @@ mod tests {
         );
     }
 
+    /// The display names are saved as `Fixture.Enum [<package id>]`; Unreal stripped the marker
+    /// once when it wrote the table, so the table namespace is read as saved.
+    #[test]
+    fn reads_the_gather_table_saved_for_enum_display_names() {
+        let sites = sites("unreal-project/Content/Fixture/Text/E_TextDisplayNames.uasset");
+        let entry = |key: &str, source: &str| {
+            (
+                "Fixture.Enum".to_owned(),
+                key.to_owned(),
+                source.to_owned(),
+                false,
+            )
+        };
+        assert_eq!(
+            sites,
+            [
+                entry("CommonItem", "Common Item"),
+                entry("RareItem", "Rare Item")
+            ]
+        );
+    }
+
     #[test]
     fn reads_gather_tables_saved_by_legacy_engines() {
         for engine in ["4.27", "5.3"] {

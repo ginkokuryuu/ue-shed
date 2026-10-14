@@ -50,6 +50,8 @@
 #include "Internationalization/StringTable.h"
 #include "Internationalization/StringTableCore.h"
 #include "Internationalization/Text.h"
+#include "Internationalization/TextNamespaceUtil.h"
+#include "Internationalization/TextPackageNamespaceUtil.h"
 #include "LevelSequence.h"
 #include "MovieScene.h"
 #include "MovieSceneBinding.h"
@@ -1172,8 +1174,17 @@ bool GenerateGameTextCorpus()
 		if (Enum == nullptr) return false;
 	}
 	while (Enum->NumEnums() - 1 < 2) FEnumEditorUtils::AddNewEnumeratorForUserDefinedEnum(Enum);
-	if (!FEnumEditorUtils::SetEnumeratorDisplayName(Enum, 0, FText::FromString(TEXT("Common Item")))
-		|| !FEnumEditorUtils::SetEnumeratorDisplayName(Enum, 1, FText::FromString(TEXT("Rare Item"))))
+	// Key the names as the enum editor's text box does: the package namespace applied to the
+	// text namespace. FText::FromString alone is never gathered, so it would not be game text.
+	const FString PackageNamespace = TextNamespaceUtil::EnsurePackageNamespace(Enum);
+	const FString DisplayNamespace = TextNamespaceUtil::BuildFullNamespace(
+		TEXT("Fixture.Enum"), PackageNamespace, /*bAlwaysApplyPackageNamespace*/ true);
+	const auto DisplayName = [&DisplayNamespace](const TCHAR* Key, const TCHAR* Source)
+	{
+		return FText::ChangeKey(FTextKey(DisplayNamespace), FTextKey(Key), FText::FromString(Source));
+	};
+	if (!FEnumEditorUtils::SetEnumeratorDisplayName(Enum, 0, DisplayName(TEXT("CommonItem"), TEXT("Common Item")))
+		|| !FEnumEditorUtils::SetEnumeratorDisplayName(Enum, 1, DisplayName(TEXT("RareItem"), TEXT("Rare Item"))))
 		return false;
 	if (bEnumCreated) FAssetRegistryModule::AssetCreated(Enum);
 	EnumPackage->MarkPackageDirty();
@@ -1184,9 +1195,21 @@ bool VerifyTextDisplayNameEnum()
 {
 	const UUserDefinedEnum* Enum = LoadObject<UUserDefinedEnum>(
 		nullptr, TEXT("/Game/Fixture/Text/E_TextDisplayNames.E_TextDisplayNames"));
-	return Enum != nullptr && Enum->NumEnums() - 1 == 2
-		&& Enum->GetDisplayNameTextByIndex(0).ToString() == TEXT("Common Item")
-		&& Enum->GetDisplayNameTextByIndex(1).ToString() == TEXT("Rare Item");
+	if (Enum == nullptr || Enum->NumEnums() - 1 != 2) return false;
+	const FString PackageNamespace = TextNamespaceUtil::GetPackageNamespace(Enum);
+	const auto IsDisplayName = [Enum, &PackageNamespace](int32 Index, const TCHAR* Key, const TCHAR* Source)
+	{
+		const FText Name = Enum->GetDisplayNameTextByIndex(Index);
+		const FString Namespace = FTextInspector::GetNamespace(Name).Get(FString());
+		// Saved with the package marker, which gather strips once to `Fixture.Enum`.
+		return Name.ToString() == Source && FTextInspector::GetKey(Name).Get(FString()) == Key
+			&& !PackageNamespace.IsEmpty()
+			&& TextNamespaceUtil::ExtractPackageNamespace(Namespace) == PackageNamespace
+			&& TextNamespaceUtil::StripPackageNamespace(Namespace) == TEXT("Fixture.Enum")
+			&& Name.ShouldGatherForLocalization();
+	};
+	return IsDisplayName(0, TEXT("CommonItem"), TEXT("Common Item"))
+		&& IsDisplayName(1, TEXT("RareItem"), TEXT("Rare Item"));
 }
 
 bool VerifyGameTextCorpus()

@@ -83,6 +83,8 @@
 		},
 		"displayNameEnum": {
 			"assetPath": "/Game/Fixture/Text/E_TextDisplayNames.E_TextDisplayNames",
+			"namespace": "Fixture.Enum",
+			"keys": ["CommonItem", "RareItem"],
 			"displayNames": ["Common Item", "Rare Item"]
 		}
 	},

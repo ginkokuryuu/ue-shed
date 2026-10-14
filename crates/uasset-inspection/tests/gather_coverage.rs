@@ -17,6 +17,12 @@ fn fixture(path: &str) -> (Vec<u8>, Package) {
 
 /// Decodes every export and returns the decoded keys plus the number of coverage gaps.
 fn decode(bytes: &[u8], package: &Package) -> (DecodedTextKeys, usize) {
+    let (keys, gaps, _) = decode_with_sources(bytes, package);
+    (keys, gaps)
+}
+
+/// [`decode`], plus the source string of every projected occurrence in order.
+fn decode_with_sources(bytes: &[u8], package: &Package) -> (DecodedTextKeys, usize, Vec<String>) {
     let context = AssetDecodeContext {
         source: bytes,
         package,
@@ -24,14 +30,16 @@ fn decode(bytes: &[u8], package: &Package) -> (DecodedTextKeys, usize) {
     };
     let mut keys = DecodedTextKeys::default();
     let mut gaps = 0;
+    let mut sources = Vec::new();
     for export in &package.exports {
         if let Ok(Some(asset)) = decode_export(export, &context) {
             let projection = project_text_asset(package, &asset);
             keys.record(&projection.occurrences);
             gaps += projection.coverage_gaps.len();
+            sources.extend(projection.occurrences.into_iter().map(|text| text.source));
         }
     }
-    (keys, gaps)
+    (keys, gaps, sources)
 }
 
 #[test]
@@ -50,6 +58,36 @@ fn a_non_text_decoder_gap_leaves_gatherable_text_complete() {
         assert_eq!(
             coverage.missing, 0,
             "{engine}: {:?}",
+            coverage.missing_samples
+        );
+    }
+}
+
+/// The saved enum's display names keep their `[PACKAGE_ID]` marker, while Unreal saved the gather
+/// table with it stripped once. The String Table's authored namespace is compared verbatim.
+#[test]
+fn saved_enum_display_names_and_string_table_rows_cover_their_gather_tables() {
+    for (path, expected) in [
+        (
+            "unreal-project/Content/Fixture/Text/E_TextDisplayNames.uasset",
+            &["Common Item", "Rare Item"][..],
+        ),
+        (
+            "unreal-project/Content/Fixture/Text/ST_Game.uasset",
+            &["Continue", "Saving progress…", "Hold to skip"][..],
+        ),
+    ] {
+        let (bytes, package) = fixture(path);
+        let (keys, gaps, sources) = decode_with_sources(&bytes, &package);
+        assert_eq!(sources, expected, "{path}");
+        assert_eq!(gaps, 0, "{path}");
+        let coverage = gather_coverage(&bytes, &package, "Fixture.uasset", &keys)
+            .expect("gather table reads")
+            .expect("package has a gather table");
+        assert_eq!(coverage.runtime_sites, expected.len() as u64, "{path}");
+        assert_eq!(
+            coverage.missing, 0,
+            "{path}: {:?}",
             coverage.missing_samples
         );
     }
