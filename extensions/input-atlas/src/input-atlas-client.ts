@@ -1,7 +1,7 @@
 import type { EnhancedInputRunResult } from "@ue-shed/enhanced-input/browser";
 import { Context, type Effect, Schema } from "effect";
 
-export class InputAtlasClientError extends Schema.TaggedErrorClass<InputAtlasClientError>()(
+export class InputAtlasClientError extends Schema.TaggedError<InputAtlasClientError>()(
 	"InputAtlasClientError",
 	{
 		cause: Schema.Defect(),

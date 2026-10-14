@@ -9,53 +9,33 @@
 		},
 		"name": {
 			"type": "string",
-			"allOf": [
-				{
-					"minLength": 1
-				}
-			]
+			"minLength": 1
 		},
 		"settings": {
 			"type": "object",
 			"properties": {
 				"fieldOfViewDegrees": {
 					"type": "number",
-					"allOf": [
-						{
-							"minimum": 5,
-							"maximum": 170
-						}
-					]
+					"minimum": 5,
+					"maximum": 170
 				},
 				"distanceScale": {
 					"type": "number",
-					"allOf": [
-						{
-							"minimum": 0.01,
-							"maximum": 100
-						}
-					]
+					"minimum": 0.01,
+					"maximum": 100
 				},
 				"heightOffset": {
 					"type": "number"
 				},
 				"margin": {
 					"type": "number",
-					"allOf": [
-						{
-							"minimum": 0,
-							"maximum": 0.45
-						}
-					]
+					"minimum": 0,
+					"maximum": 0.45
 				},
 				"elevationDegrees": {
 					"type": "number",
-					"allOf": [
-						{
-							"minimum": -89,
-							"maximum": 89
-						}
-					]
+					"minimum": -89,
+					"maximum": 89
 				},
 				"yawOffset": {
 					"type": "number"
@@ -87,61 +67,37 @@
 				"properties": {
 					"id": {
 						"type": "string",
-						"allOf": [
-							{
-								"pattern": "^[a-zA-Z0-9][a-zA-Z0-9._-]{0,127}$"
-							}
-						]
+						"pattern": "^[a-zA-Z0-9][a-zA-Z0-9._-]{0,127}$"
 					},
 					"name": {
 						"type": "string",
-						"allOf": [
-							{
-								"minLength": 1
-							}
-						]
+						"minLength": 1
 					},
 					"overrides": {
 						"type": "object",
 						"properties": {
 							"fieldOfViewDegrees": {
 								"type": "number",
-								"allOf": [
-									{
-										"minimum": 5,
-										"maximum": 170
-									}
-								]
+								"minimum": 5,
+								"maximum": 170
 							},
 							"distanceScale": {
 								"type": "number",
-								"allOf": [
-									{
-										"minimum": 0.01,
-										"maximum": 100
-									}
-								]
+								"minimum": 0.01,
+								"maximum": 100
 							},
 							"heightOffset": {
 								"type": "number"
 							},
 							"margin": {
 								"type": "number",
-								"allOf": [
-									{
-										"minimum": 0,
-										"maximum": 0.45
-									}
-								]
+								"minimum": 0,
+								"maximum": 0.45
 							},
 							"elevationDegrees": {
 								"type": "number",
-								"allOf": [
-									{
-										"minimum": -89,
-										"maximum": 89
-									}
-								]
+								"minimum": -89,
+								"maximum": 89
 							},
 							"yawOffset": {
 								"type": "number"
@@ -177,11 +133,7 @@
 				"properties": {
 					"displayName": {
 						"type": "string",
-						"allOf": [
-							{
-								"minLength": 1
-							}
-						]
+						"minLength": 1
 					},
 					"yawDegrees": {
 						"type": "number"
@@ -191,42 +143,26 @@
 						"properties": {
 							"fieldOfViewDegrees": {
 								"type": "number",
-								"allOf": [
-									{
-										"minimum": 5,
-										"maximum": 170
-									}
-								]
+								"minimum": 5,
+								"maximum": 170
 							},
 							"distanceScale": {
 								"type": "number",
-								"allOf": [
-									{
-										"minimum": 0.01,
-										"maximum": 100
-									}
-								]
+								"minimum": 0.01,
+								"maximum": 100
 							},
 							"heightOffset": {
 								"type": "number"
 							},
 							"margin": {
 								"type": "number",
-								"allOf": [
-									{
-										"minimum": 0,
-										"maximum": 0.45
-									}
-								]
+								"minimum": 0,
+								"maximum": 0.45
 							},
 							"elevationDegrees": {
 								"type": "number",
-								"allOf": [
-									{
-										"minimum": -89,
-										"maximum": 89
-									}
-								]
+								"minimum": -89,
+								"maximum": 89
 							},
 							"yawOffset": {
 								"type": "number"
@@ -252,11 +188,7 @@
 					},
 					"groupId": {
 						"type": "string",
-						"allOf": [
-							{
-								"pattern": "^[a-zA-Z0-9][a-zA-Z0-9._-]{0,127}$"
-							}
-						]
+						"pattern": "^[a-zA-Z0-9][a-zA-Z0-9._-]{0,127}$"
 					},
 					"relativePose": {
 						"type": "object",
@@ -267,12 +199,8 @@
 							},
 							"fieldOfViewDegrees": {
 								"type": "number",
-								"allOf": [
-									{
-										"minimum": 5,
-										"maximum": 170
-									}
-								]
+								"minimum": 5,
+								"maximum": 170
 							},
 							"location": {
 								"type": "object",
@@ -324,14 +252,8 @@
 				"required": ["displayName", "yawDegrees", "overrides"],
 				"additionalProperties": false
 			},
-			"allOf": [
-				{
-					"minItems": 1
-				},
-				{
-					"maxItems": 256
-				}
-			]
+			"minItems": 1,
+			"maxItems": 256
 		}
 	},
 	"required": ["version", "name", "settings", "groups", "cameras"],

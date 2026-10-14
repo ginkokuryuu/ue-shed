@@ -83,10 +83,10 @@ const neutralSchema: JsonSchema.JsonSchema = JSON.parse(
 	readFileSync(fileURLToPath(new URL("./evidence.schema.json", import.meta.url)), "utf8")
 );
 const decodeNeutralEvidence = Schema.decodeUnknownSync(
-	SchemaRepresentation.toSchema<Schema.Codec<unknown>>(
+	Schema.make<Schema.Codec<unknown>>(
 		SchemaRepresentation.fromJsonSchemaDocument(
 			JsonSchema.fromSchemaDraft2020_12(neutralSchema)
-		)
+		).ast
 	),
 	{ onExcessProperty: "error" }
 );

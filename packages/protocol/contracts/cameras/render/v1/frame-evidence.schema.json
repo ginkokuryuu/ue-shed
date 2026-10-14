@@ -19,14 +19,8 @@
 									},
 									"actorPath": {
 										"type": "string",
-										"allOf": [
-											{
-												"pattern": "^\\/Game\\/"
-											},
-											{
-												"maxLength": 4096
-											}
-										]
+										"pattern": "^\\/Game\\/",
+										"maxLength": 4096
 									}
 								},
 								"required": ["kind", "actorPath"],
@@ -40,20 +34,11 @@
 										"enum": ["actor_guid"]
 									},
 									"actorGuid": {
-										"type": "string",
-										"allOf": [
-											{
-												"pattern": "^(?!00000000-00000000-00000000-00000000$)[0-9a-fA-F]{8}(?:-[0-9a-fA-F]{8}){3}$"
-											}
-										]
+										"type": "string"
 									},
 									"lastKnownActorPath": {
 										"type": "string",
-										"allOf": [
-											{
-												"maxLength": 4096
-											}
-										]
+										"maxLength": 4096
 									}
 								},
 								"required": ["kind", "actorGuid", "lastKnownActorPath"],
@@ -81,12 +66,8 @@
 			"properties": {
 				"revealedChildActors": {
 					"type": "integer",
-					"allOf": [
-						{
-							"minimum": 0,
-							"maximum": 1000000
-						}
-					]
+					"minimum": 0,
+					"maximum": 1000000
 				}
 			},
 			"required": ["revealedChildActors"],
@@ -151,12 +132,8 @@
 								},
 								"horizontalFieldOfView": {
 									"type": "number",
-									"allOf": [
-										{
-											"minimum": 5,
-											"maximum": 170
-										}
-									]
+									"minimum": 5,
+									"maximum": 170
 								}
 							},
 							"required": ["kind", "horizontalFieldOfView"],
@@ -171,14 +148,8 @@
 								},
 								"width": {
 									"type": "number",
-									"allOf": [
-										{
-											"exclusiveMinimum": 0
-										},
-										{
-											"maximum": 1000000000
-										}
-									]
+									"exclusiveMinimum": 0,
+									"maximum": 1000000000
 								}
 							},
 							"required": ["kind", "width"],
@@ -195,21 +166,13 @@
 			"properties": {
 				"width": {
 					"type": "integer",
-					"allOf": [
-						{
-							"minimum": 16,
-							"maximum": 16384
-						}
-					]
+					"minimum": 16,
+					"maximum": 16384
 				},
 				"height": {
 					"type": "integer",
-					"allOf": [
-						{
-							"minimum": 16,
-							"maximum": 16384
-						}
-					]
+					"minimum": 16,
+					"maximum": 16384
 				}
 			},
 			"required": ["width", "height"],
@@ -237,14 +200,8 @@
 													},
 													"actorPath": {
 														"type": "string",
-														"allOf": [
-															{
-																"pattern": "^\\/Game\\/"
-															},
-															{
-																"maxLength": 4096
-															}
-														]
+														"pattern": "^\\/Game\\/",
+														"maxLength": 4096
 													}
 												},
 												"required": ["kind", "actorPath"],
@@ -258,20 +215,11 @@
 														"enum": ["actor_guid"]
 													},
 													"actorGuid": {
-														"type": "string",
-														"allOf": [
-															{
-																"pattern": "^(?!00000000-00000000-00000000-00000000$)[0-9a-fA-F]{8}(?:-[0-9a-fA-F]{8}){3}$"
-															}
-														]
+														"type": "string"
 													},
 													"lastKnownActorPath": {
 														"type": "string",
-														"allOf": [
-															{
-																"maxLength": 4096
-															}
-														]
+														"maxLength": 4096
 													}
 												},
 												"required": [
@@ -285,21 +233,13 @@
 									},
 									"label": {
 										"type": "string",
-										"allOf": [
-											{
-												"maxLength": 256
-											}
-										]
+										"maxLength": 256
 									}
 								},
 								"required": ["locator", "label"],
 								"additionalProperties": false
 							},
-							"allOf": [
-								{
-									"maxItems": 256
-								}
-							]
+							"maxItems": 256
 						},
 						"protect": {
 							"type": "array",
@@ -317,14 +257,8 @@
 													},
 													"actorPath": {
 														"type": "string",
-														"allOf": [
-															{
-																"pattern": "^\\/Game\\/"
-															},
-															{
-																"maxLength": 4096
-															}
-														]
+														"pattern": "^\\/Game\\/",
+														"maxLength": 4096
 													}
 												},
 												"required": ["kind", "actorPath"],
@@ -338,20 +272,11 @@
 														"enum": ["actor_guid"]
 													},
 													"actorGuid": {
-														"type": "string",
-														"allOf": [
-															{
-																"pattern": "^(?!00000000-00000000-00000000-00000000$)[0-9a-fA-F]{8}(?:-[0-9a-fA-F]{8}){3}$"
-															}
-														]
+														"type": "string"
 													},
 													"lastKnownActorPath": {
 														"type": "string",
-														"allOf": [
-															{
-																"maxLength": 4096
-															}
-														]
+														"maxLength": 4096
 													}
 												},
 												"required": [
@@ -365,21 +290,13 @@
 									},
 									"label": {
 										"type": "string",
-										"allOf": [
-											{
-												"maxLength": 256
-											}
-										]
+										"maxLength": 256
 									}
 								},
 								"required": ["locator", "label"],
 								"additionalProperties": false
 							},
-							"allOf": [
-								{
-									"maxItems": 256
-								}
-							]
+							"maxItems": 256
 						}
 					},
 					"required": ["hide", "protect"],
@@ -417,12 +334,8 @@
 								},
 								"screenshotWarmupFrames": {
 									"type": "integer",
-									"allOf": [
-										{
-											"minimum": 1,
-											"maximum": 256
-										}
-									]
+									"minimum": 1,
+									"maximum": 256
 								}
 							},
 							"required": [
@@ -453,12 +366,8 @@
 								},
 								"lodDistanceScale": {
 									"type": "number",
-									"allOf": [
-										{
-											"minimum": 0.1,
-											"maximum": 100
-										}
-									]
+									"minimum": 0.1,
+									"maximum": 100
 								},
 								"fog": {
 									"type": "boolean"
@@ -503,12 +412,8 @@
 								},
 								"ev100": {
 									"type": "number",
-									"allOf": [
-										{
-											"minimum": -20,
-											"maximum": 30
-										}
-									]
+									"minimum": -20,
+									"maximum": 30
 								},
 								"compensation": {
 									"type": "string",
@@ -571,12 +476,8 @@
 														},
 														"horizontalFieldOfView": {
 															"type": "number",
-															"allOf": [
-																{
-																	"minimum": 5,
-																	"maximum": 170
-																}
-															]
+															"minimum": 5,
+															"maximum": 170
 														}
 													},
 													"required": ["kind", "horizontalFieldOfView"],
@@ -591,14 +492,8 @@
 														},
 														"width": {
 															"type": "number",
-															"allOf": [
-																{
-																	"exclusiveMinimum": 0
-																},
-																{
-																	"maximum": 1000000000
-																}
-															]
+															"exclusiveMinimum": 0,
+															"maximum": 1000000000
 														}
 													},
 													"required": ["kind", "width"],
@@ -615,21 +510,13 @@
 									"properties": {
 										"width": {
 											"type": "integer",
-											"allOf": [
-												{
-													"minimum": 16,
-													"maximum": 16384
-												}
-											]
+											"minimum": 16,
+											"maximum": 16384
 										},
 										"height": {
 											"type": "integer",
-											"allOf": [
-												{
-													"minimum": 16,
-													"maximum": 16384
-												}
-											]
+											"minimum": 16,
+											"maximum": 16384
 										}
 									},
 									"required": ["width", "height"],
@@ -637,12 +524,8 @@
 								},
 								"minimumFrames": {
 									"type": "integer",
-									"allOf": [
-										{
-											"minimum": 1,
-											"maximum": 4096
-										}
-									]
+									"minimum": 1,
+									"maximum": 4096
 								}
 							},
 							"required": [
@@ -660,21 +543,13 @@
 					"properties": {
 						"minimumFrames": {
 							"type": "integer",
-							"allOf": [
-								{
-									"minimum": 1,
-									"maximum": 4096
-								}
-							]
+							"minimum": 1,
+							"maximum": 4096
 						},
 						"timeoutMs": {
 							"type": "integer",
-							"allOf": [
-								{
-									"minimum": 1000,
-									"maximum": 900000
-								}
-							]
+							"minimum": 1000,
+							"maximum": 900000
 						},
 						"initialView": {
 							"type": "object",
@@ -725,12 +600,8 @@
 														},
 														"horizontalFieldOfView": {
 															"type": "number",
-															"allOf": [
-																{
-																	"minimum": 5,
-																	"maximum": 170
-																}
-															]
+															"minimum": 5,
+															"maximum": 170
 														}
 													},
 													"required": ["kind", "horizontalFieldOfView"],
@@ -745,14 +616,8 @@
 														},
 														"width": {
 															"type": "number",
-															"allOf": [
-																{
-																	"exclusiveMinimum": 0
-																},
-																{
-																	"maximum": 1000000000
-																}
-															]
+															"exclusiveMinimum": 0,
+															"maximum": 1000000000
 														}
 													},
 													"required": ["kind", "width"],
@@ -769,21 +634,13 @@
 									"properties": {
 										"width": {
 											"type": "integer",
-											"allOf": [
-												{
-													"minimum": 16,
-													"maximum": 16384
-												}
-											]
+											"minimum": 16,
+											"maximum": 16384
 										},
 										"height": {
 											"type": "integer",
-											"allOf": [
-												{
-													"minimum": 16,
-													"maximum": 16384
-												}
-											]
+											"minimum": 16,
+											"maximum": 16384
 										}
 									},
 									"required": ["width", "height"],
@@ -791,12 +648,8 @@
 								},
 								"minimumFrames": {
 									"type": "integer",
-									"allOf": [
-										{
-											"minimum": 1,
-											"maximum": 4096
-										}
-									]
+									"minimum": 1,
+									"maximum": 4096
 								}
 							},
 							"required": ["camera", "size", "minimumFrames"],
@@ -835,42 +688,26 @@
 										},
 										"maximumRegions": {
 											"type": "integer",
-											"allOf": [
-												{
-													"minimum": 1,
-													"maximum": 64
-												}
-											]
+											"minimum": 1,
+											"maximum": 64
 										},
 										"extent": {
 											"type": "object",
 											"properties": {
 												"x": {
 													"type": "number",
-													"allOf": [
-														{
-															"minimum": 0,
-															"maximum": 10000000
-														}
-													]
+													"minimum": 0,
+													"maximum": 10000000
 												},
 												"y": {
 													"type": "number",
-													"allOf": [
-														{
-															"minimum": 0,
-															"maximum": 10000000
-														}
-													]
+													"minimum": 0,
+													"maximum": 10000000
 												},
 												"z": {
 													"type": "number",
-													"allOf": [
-														{
-															"minimum": 0,
-															"maximum": 10000000
-														}
-													]
+													"minimum": 0,
+													"maximum": 10000000
 												}
 											},
 											"required": ["x", "y", "z"],
@@ -889,14 +726,7 @@
 								"properties": {
 									"assetPath": {
 										"type": "string",
-										"allOf": [
-											{
-												"pattern": "^\\/[A-Za-z0-9_./-]+$"
-											},
-											{
-												"maxLength": 1024
-											}
-										]
+										"maxLength": 1024
 									},
 									"loaded": {
 										"type": "boolean"
@@ -908,11 +738,7 @@
 								"required": ["assetPath", "loaded", "visible"],
 								"additionalProperties": false
 							},
-							"allOf": [
-								{
-									"maxItems": 64
-								}
-							]
+							"maxItems": 64
 						}
 					},
 					"required": ["geometry", "dataLayers"],
@@ -941,34 +767,20 @@
 				},
 				"regionsHeld": {
 					"type": "integer",
-					"allOf": [
-						{
-							"minimum": 0,
-							"maximum": 64
-						}
-					]
+					"minimum": 0,
+					"maximum": 64
 				},
 				"dataLayersApplied": {
 					"type": "integer",
-					"allOf": [
-						{
-							"minimum": 0,
-							"maximum": 64
-						}
-					]
+					"minimum": 0,
+					"maximum": 64
 				},
 				"limitations": {
 					"type": "array",
 					"items": {
 						"type": "string",
-						"allOf": [
-							{
-								"minLength": 1
-							},
-							{
-								"maxLength": 1024
-							}
-						]
+						"minLength": 1,
+						"maxLength": 1024
 					}
 				}
 			},
@@ -980,20 +792,12 @@
 			"properties": {
 				"renderedFrames": {
 					"type": "integer",
-					"allOf": [
-						{
-							"minimum": 0,
-							"maximum": 1000000
-						}
-					]
+					"minimum": 0,
+					"maximum": 1000000
 				},
 				"elapsedMs": {
 					"type": "number",
-					"allOf": [
-						{
-							"minimum": 0
-						}
-					]
+					"minimum": 0
 				},
 				"convergence": {
 					"type": "string",
@@ -1005,25 +809,13 @@
 		},
 		"engineVersion": {
 			"type": "string",
-			"allOf": [
-				{
-					"minLength": 1
-				},
-				{
-					"maxLength": 1024
-				}
-			]
+			"minLength": 1,
+			"maxLength": 1024
 		},
 		"pluginVersion": {
 			"type": "string",
-			"allOf": [
-				{
-					"minLength": 1
-				},
-				{
-					"maxLength": 1024
-				}
-			]
+			"minLength": 1,
+			"maxLength": 1024
 		}
 	},
 	"required": [

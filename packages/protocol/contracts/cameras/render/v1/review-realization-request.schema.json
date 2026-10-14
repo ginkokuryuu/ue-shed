@@ -43,12 +43,8 @@
 								},
 								"fieldOfViewDegrees": {
 									"type": "number",
-									"allOf": [
-										{
-											"minimum": 5,
-											"maximum": 170
-										}
-									]
+									"minimum": 5,
+									"maximum": 170
 								},
 								"location": {
 									"type": "object",
@@ -120,12 +116,8 @@
 								},
 								"fieldOfViewDegrees": {
 									"type": "number",
-									"allOf": [
-										{
-											"minimum": 5,
-											"maximum": 170
-										}
-									]
+									"minimum": 5,
+									"maximum": 170
 								},
 								"location": {
 									"type": "object",
@@ -226,22 +218,13 @@
 							"type": "object",
 							"properties": {
 								"actorGuid": {
-									"type": "string",
-									"allOf": [
-										{
-											"pattern": "^(?!00000000-00000000-00000000-00000000$)[0-9a-fA-F]{8}(?:-[0-9a-fA-F]{8}){3}$"
-										}
-									]
+									"type": "string"
 								},
 								"diagnosticLabel": {
 									"anyOf": [
 										{
 											"type": "string",
-											"allOf": [
-												{
-													"minLength": 1
-												}
-											]
+											"minLength": 1
 										},
 										{
 											"type": "null"
@@ -256,17 +239,9 @@
 									"anyOf": [
 										{
 											"type": "string",
-											"allOf": [
-												{
-													"minLength": 7
-												},
-												{
-													"maxLength": 4096
-												},
-												{
-													"pattern": "^\\/Game\\/"
-												}
-											]
+											"minLength": 4,
+											"maxLength": 4096,
+											"pattern": "^\\/Game\\/"
 										},
 										{
 											"type": "null"
@@ -282,27 +257,15 @@
 							"properties": {
 								"actorPath": {
 									"type": "string",
-									"allOf": [
-										{
-											"minLength": 7
-										},
-										{
-											"maxLength": 4096
-										},
-										{
-											"pattern": "^\\/Game\\/"
-										}
-									]
+									"minLength": 4,
+									"maxLength": 4096,
+									"pattern": "^\\/Game\\/"
 								},
 								"diagnosticLabel": {
 									"anyOf": [
 										{
 											"type": "string",
-											"allOf": [
-												{
-													"minLength": 1
-												}
-											]
+											"minLength": 1
 										},
 										{
 											"type": "null"
@@ -346,27 +309,15 @@
 									"properties": {
 										"x": {
 											"type": "number",
-											"allOf": [
-												{
-													"minimum": 0
-												}
-											]
+											"minimum": 0
 										},
 										"y": {
 											"type": "number",
-											"allOf": [
-												{
-													"minimum": 0
-												}
-											]
+											"minimum": 0
 										},
 										"z": {
 											"type": "number",
-											"allOf": [
-												{
-													"minimum": 0
-												}
-											]
+											"minimum": 0
 										}
 									},
 									"required": ["x", "y", "z"],
@@ -404,11 +355,7 @@
 		},
 		"expectedMapPath": {
 			"type": "string",
-			"allOf": [
-				{
-					"minLength": 1
-				}
-			]
+			"minLength": 1
 		}
 	},
 	"required": ["contract", "viewpoint", "subject", "expectedMapPath"],

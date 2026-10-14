@@ -63,9 +63,6 @@ const approvedRuntimeExits = new Set([
 	"packages/unreal-assets/src/protocol-transport.ts"
 ]);
 const approvedPromiseAdapters = new Set([
-	// Perforce's Promise facade is adapted once behind the headless Effect service.
-	// Every borrowed library runtime is scoped and command interruption forwards an AbortSignal.
-	"packages/map-history/src/perforce.ts",
 	// The search adapter bridges Node worker messages once; callers receive scoped Effects.
 	"packages/game-text/src/search-worker-node.ts",
 	// The cold importer adapts worker messages and staged snapshot handles below SharedIndex.

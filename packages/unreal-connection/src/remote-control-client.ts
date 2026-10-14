@@ -4,7 +4,7 @@ import { TransportRequestError, UnrealRC } from "unreal-rc";
 const RemoteCallEnvelope = Schema.Struct({ ResultJson: Schema.String });
 const decodeRemoteCallEnvelope = Schema.decodeUnknownEffect(RemoteCallEnvelope);
 
-export class RemoteControlClientError extends Schema.TaggedErrorClass<RemoteControlClientError>()(
+export class RemoteControlClientError extends Schema.TaggedError<RemoteControlClientError>()(
 	"RemoteControlClientError",
 	{
 		endpoint: Schema.String,
@@ -102,7 +102,9 @@ export function makeRemoteControlClient(options: {
 									baseUrl: endpoint,
 									requestTimeoutMs: Duration.toMillis(timeout)
 								},
-								retry: false
+								retry: false,
+								// This adapter validates the complete function envelope below.
+								validateResponses: false
 							}),
 						catch: (cause) => transportError(request, cause)
 					}),
@@ -155,7 +157,7 @@ export function makeRemoteControlClient(options: {
 	return RemoteControlClient.of({ request });
 }
 
-const defaultTimeout = Config.duration("UE_SHED_REMOTE_CONTROL_TIMEOUT").pipe(
+const defaultTimeout = Config.Duration("UE_SHED_REMOTE_CONTROL_TIMEOUT").pipe(
 	Config.withDefault(Duration.seconds(10))
 );
 

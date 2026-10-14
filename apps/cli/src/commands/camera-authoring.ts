@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { readFile, stat, writeFile } from "node:fs/promises";
 import { Effect, Ref, Schedule, Schema } from "effect";
-import { Argument, Command, Flag } from "effect/unstable/cli";
+import { Argument, Command, Flag } from "effect/cli";
 import { printJson } from "../cli-runtime.js";
 import { observeCliOperation } from "../cli-operation.js";
 
@@ -12,10 +12,10 @@ const readInput = Effect.fn("Cli.camera_authoring.read")(function* (path: string
 		return Schema.decodeUnknownSync(Schema.Json)(JSON.parse(await readFile(path, "utf8")));
 	});
 });
-const draft = { draftPath: Argument.string("draft-json") };
+const draft = { draftPath: Argument.String("draft-json") };
 const create = Command.make(
 	"create",
-	{ ...draft, inputPath: Argument.string("input-json") },
+	{ ...draft, inputPath: Argument.String("input-json") },
 	(args) =>
 		observeCliOperation(
 			"CameraAuthoringCreate",
@@ -38,7 +38,7 @@ const create = Command.make(
 );
 const fromSelection = Command.make(
 	"from-selection",
-	{ ...draft, endpoint: Flag.string("endpoint") },
+	{ ...draft, endpoint: Flag.String("endpoint") },
 	(args) =>
 		observeCliOperation(
 			"CameraAuthoringFromSelection",
@@ -86,7 +86,7 @@ const show = Command.make("show", draft, (args) =>
 );
 const patch = Command.make(
 	"patch",
-	{ ...draft, inputPath: Argument.string("command-json") },
+	{ ...draft, inputPath: Argument.String("command-json") },
 	(args) =>
 		observeCliOperation(
 			"CameraAuthoringPatch",
@@ -104,7 +104,7 @@ const patch = Command.make(
 );
 const approve = Command.make(
 	"approve",
-	{ ...draft, inputPath: Argument.string("approval-json") },
+	{ ...draft, inputPath: Argument.String("approval-json") },
 	(args) =>
 		observeCliOperation(
 			"CameraAuthoringApprove",
@@ -122,7 +122,7 @@ const approve = Command.make(
 );
 const bridge = Command.make(
 	"bridge",
-	{ inputPath: Argument.string("request-json"), endpoint: Flag.string("endpoint") },
+	{ inputPath: Argument.String("request-json"), endpoint: Flag.String("endpoint") },
 	(args) =>
 		observeCliOperation(
 			"CameraAuthoringBridge",
@@ -149,9 +149,9 @@ const attach = Command.make(
 	"attach",
 	{
 		...draft,
-		cameraId: Argument.string("camera-id"),
-		endpoint: Flag.string("endpoint"),
-		output: Flag.string("output")
+		cameraId: Argument.String("camera-id"),
+		endpoint: Flag.String("endpoint"),
+		output: Flag.String("output")
 	},
 	(args) =>
 		observeCliOperation(
@@ -263,9 +263,9 @@ const recovery = Command.make(
 	"recovery",
 	{
 		...draft,
-		inputPath: Argument.string("proposal-or-snapshot-json"),
-		endpoint: Flag.string("endpoint"),
-		choice: Flag.choice("choice", ["inspect", "saved", "native"]).pipe(
+		inputPath: Argument.String("proposal-or-snapshot-json"),
+		endpoint: Flag.String("endpoint"),
+		choice: Flag.Literals("choice", ["inspect", "saved", "native"]).pipe(
 			Flag.withDefault("inspect")
 		)
 	},
@@ -310,8 +310,8 @@ const recoveryFile = Command.make(
 	"recovery-file",
 	{
 		...draft,
-		inputPath: Argument.string("proposal-or-snapshot-json"),
-		choice: Flag.choice("choice", ["inspect", "saved", "native"]).pipe(
+		inputPath: Argument.String("proposal-or-snapshot-json"),
+		choice: Flag.Literals("choice", ["inspect", "saved", "native"]).pipe(
 			Flag.withDefault("inspect")
 		)
 	},

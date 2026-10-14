@@ -98,14 +98,8 @@
 										"items": {
 											"$ref": "#/$defs/UAssetIoNonEmptyString"
 										},
-										"allOf": [
-											{
-												"minItems": 1
-											},
-											{
-												"maxItems": 64
-											}
-										]
+										"minItems": 1,
+										"maxItems": 64
 									}
 								},
 								"required": ["kind", "values"],
@@ -123,14 +117,8 @@
 										"items": {
 											"$ref": "#/$defs/UAssetIoNonEmptyString"
 										},
-										"allOf": [
-											{
-												"minItems": 1
-											},
-											{
-												"maxItems": 64
-											}
-										]
+										"minItems": 1,
+										"maxItems": 64
 									}
 								},
 								"required": ["kind", "values"],
@@ -148,14 +136,8 @@
 										"items": {
 											"$ref": "#/$defs/UAssetIoNonEmptyString"
 										},
-										"allOf": [
-											{
-												"minItems": 1
-											},
-											{
-												"maxItems": 64
-											}
-										]
+										"minItems": 1,
+										"maxItems": 64
 									}
 								},
 								"required": ["kind", "values"],
@@ -173,14 +155,8 @@
 										"items": {
 											"$ref": "#/$defs/UAssetIoNonEmptyString"
 										},
-										"allOf": [
-											{
-												"minItems": 1
-											},
-											{
-												"maxItems": 64
-											}
-										]
+										"minItems": 1,
+										"maxItems": 64
 									}
 								},
 								"required": ["kind", "values"],
@@ -188,14 +164,8 @@
 							}
 						]
 					},
-					"allOf": [
-						{
-							"minItems": 1
-						},
-						{
-							"maxItems": 16
-						}
-					]
+					"minItems": 1,
+					"maxItems": 16
 				}
 			},
 			"required": ["projectId", "expectedGeneration", "filters"],
@@ -218,14 +188,8 @@
 						},
 						"limit": {
 							"type": "integer",
-							"allOf": [
-								{
-									"exclusiveMinimum": 0
-								},
-								{
-									"maximum": 1024
-								}
-							]
+							"maximum": 1024,
+							"exclusiveMinimum": 0
 						},
 						"projectId": {
 							"$ref": "#/$defs/UAssetIoNonEmptyString"
@@ -249,14 +213,8 @@
 						},
 						"limit": {
 							"type": "integer",
-							"allOf": [
-								{
-									"exclusiveMinimum": 0
-								},
-								{
-									"maximum": 1024
-								}
-							]
+							"maximum": 1024,
+							"exclusiveMinimum": 0
 						},
 						"projectId": {
 							"$ref": "#/$defs/UAssetIoNonEmptyString"
@@ -280,14 +238,8 @@
 						},
 						"limit": {
 							"type": "integer",
-							"allOf": [
-								{
-									"exclusiveMinimum": 0
-								},
-								{
-									"maximum": 1024
-								}
-							]
+							"maximum": 1024,
+							"exclusiveMinimum": 0
 						},
 						"projectId": {
 							"$ref": "#/$defs/UAssetIoNonEmptyString"
@@ -297,14 +249,8 @@
 							"items": {
 								"$ref": "#/$defs/UAssetIoNonEmptyString"
 							},
-							"allOf": [
-								{
-									"minItems": 1
-								},
-								{
-									"maxItems": 64
-								}
-							]
+							"minItems": 1,
+							"maxItems": 64
 						}
 					},
 					"required": ["kind", "expectedGeneration", "limit", "projectId", "values"],
@@ -325,14 +271,8 @@
 						},
 						"limit": {
 							"type": "integer",
-							"allOf": [
-								{
-									"exclusiveMinimum": 0
-								},
-								{
-									"maximum": 1024
-								}
-							]
+							"maximum": 1024,
+							"exclusiveMinimum": 0
 						},
 						"projectId": {
 							"$ref": "#/$defs/UAssetIoNonEmptyString"
@@ -342,14 +282,8 @@
 							"items": {
 								"$ref": "#/$defs/UAssetIoNonEmptyString"
 							},
-							"allOf": [
-								{
-									"minItems": 1
-								},
-								{
-									"maxItems": 64
-								}
-							]
+							"minItems": 1,
+							"maxItems": 64
 						}
 					},
 					"required": ["kind", "expectedGeneration", "limit", "projectId", "values"],
@@ -370,14 +304,8 @@
 						},
 						"limit": {
 							"type": "integer",
-							"allOf": [
-								{
-									"exclusiveMinimum": 0
-								},
-								{
-									"maximum": 1024
-								}
-							]
+							"maximum": 1024,
+							"exclusiveMinimum": 0
 						},
 						"projectId": {
 							"$ref": "#/$defs/UAssetIoNonEmptyString"
@@ -387,14 +315,8 @@
 							"items": {
 								"$ref": "#/$defs/UAssetIoNonEmptyString"
 							},
-							"allOf": [
-								{
-									"minItems": 1
-								},
-								{
-									"maxItems": 64
-								}
-							]
+							"minItems": 1,
+							"maxItems": 64
 						}
 					},
 					"required": ["kind", "expectedGeneration", "limit", "projectId", "values"],
@@ -415,14 +337,8 @@
 						},
 						"limit": {
 							"type": "integer",
-							"allOf": [
-								{
-									"exclusiveMinimum": 0
-								},
-								{
-									"maximum": 1024
-								}
-							]
+							"maximum": 1024,
+							"exclusiveMinimum": 0
 						},
 						"projectId": {
 							"$ref": "#/$defs/UAssetIoNonEmptyString"
@@ -432,14 +348,8 @@
 							"items": {
 								"$ref": "#/$defs/UAssetIoNonEmptyString"
 							},
-							"allOf": [
-								{
-									"minItems": 1
-								},
-								{
-									"maxItems": 64
-								}
-							]
+							"minItems": 1,
+							"maxItems": 64
 						}
 					},
 					"required": ["kind", "expectedGeneration", "limit", "projectId", "values"],
@@ -463,11 +373,8 @@
 						},
 						"minor": {
 							"type": "integer",
-							"allOf": [
-								{
-									"minimum": 8
-								}
-							]
+							"minimum": 8,
+							"maximum": 9007199254740991
 						}
 					},
 					"required": ["major", "minor"],

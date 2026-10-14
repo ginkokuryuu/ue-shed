@@ -2,7 +2,7 @@ import { copyFile, readFile, rename, stat, writeFile } from "node:fs/promises";
 import { isAbsolute, join } from "node:path";
 import { Effect, Exit, Schedule, Schema } from "effect";
 
-export class NiagaraSessionError extends Schema.TaggedErrorClass<NiagaraSessionError>()(
+export class NiagaraSessionError extends Schema.TaggedError<NiagaraSessionError>()(
 	"NiagaraSessionError",
 	{ message: Schema.String }
 ) {}

@@ -209,7 +209,7 @@ export const LocalizationQueryPage = Schema.Struct({
 	lines: Schema.Array(LocalizationLinePreview).check(Schema.isMaxLength(50))
 });
 export type LocalizationQueryPage = typeof LocalizationQueryPage.Type;
-export class GameTextLocalizationError extends Schema.TaggedErrorClass<GameTextLocalizationError>()(
+export class GameTextLocalizationError extends Schema.TaggedError<GameTextLocalizationError>()(
 	"GameTextLocalizationError",
 	{
 		code: Schema.Literals([

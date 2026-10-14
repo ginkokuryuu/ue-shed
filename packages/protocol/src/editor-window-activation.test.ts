@@ -20,7 +20,9 @@ it("keeps TypeScript aligned with the shared Core window contract", () => {
 				"utf8"
 			)
 		);
-		const document = Schema.toJsonSchemaDocument(schema);
+		const document = Schema.toJsonSchemaDocument(Schema.toType(schema), {
+			onExcessProperty: "error"
+		});
 		expect({
 			$schema: "https://json-schema.org/draft/2020-12/schema",
 			$defs: document.definitions,

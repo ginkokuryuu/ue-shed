@@ -125,33 +125,30 @@ export function decodeDraftSessionWithMigration<Input>(input: Input) {
 	);
 }
 
-export class DraftFoldError extends Schema.TaggedErrorClass<DraftFoldError>()("DraftFoldError", {
+export class DraftFoldError extends Schema.TaggedError<DraftFoldError>()("DraftFoldError", {
 	commandId: Schema.String,
 	message: Schema.String
 }) {}
 
-export class DraftBuildError extends Schema.TaggedErrorClass<DraftBuildError>()("DraftBuildError", {
+export class DraftBuildError extends Schema.TaggedError<DraftBuildError>()("DraftBuildError", {
 	message: Schema.String
 }) {}
 
-export class DraftIntentError extends Schema.TaggedErrorClass<DraftIntentError>()(
-	"DraftIntentError",
-	{
-		code: Schema.Literals([
-			"duplicate_row_name",
-			"incompatible_value",
-			"invalid_row_name",
-			"invalid_row_order",
-			"missing_field",
-			"row_not_found",
-			"stale_fingerprint",
-			"unsupported_edit",
-			"unsupported_add"
-		]),
-		message: Schema.String,
-		recovery: Schema.String
-	}
-) {}
+export class DraftIntentError extends Schema.TaggedError<DraftIntentError>()("DraftIntentError", {
+	code: Schema.Literals([
+		"duplicate_row_name",
+		"incompatible_value",
+		"invalid_row_name",
+		"invalid_row_order",
+		"missing_field",
+		"row_not_found",
+		"stale_fingerprint",
+		"unsupported_edit",
+		"unsupported_add"
+	]),
+	message: Schema.String,
+	recovery: Schema.String
+}) {}
 
 function fail(command: CommandEnvelope, message: string): never {
 	throw new DraftFoldError({ commandId: command.id, message });

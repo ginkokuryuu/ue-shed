@@ -22,7 +22,7 @@ import { observeCliOperation } from "../cli-operation.js";
 import type { CliCommand } from "../command-model.js";
 
 type LocalizationRunCommand = Extract<CliCommand, { readonly _tag: "LocalizationRun" }>;
-class LocalizationRunConfigurationError extends Schema.TaggedErrorClass<LocalizationRunConfigurationError>()(
+class LocalizationRunConfigurationError extends Schema.TaggedError<LocalizationRunConfigurationError>()(
 	"LocalizationRunConfigurationError",
 	{
 		code: Schema.Literal("invalid_configuration"),

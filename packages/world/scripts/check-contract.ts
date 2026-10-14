@@ -9,7 +9,9 @@ const directory = fileURLToPath(
 	new URL("../../protocol/contracts/world/preparation/v1/", import.meta.url)
 );
 for (const [name, schema] of Object.entries({ request: WorldRequest, response: WorldResponse })) {
-	const document = Schema.toJsonSchemaDocument(schema);
+	const document = Schema.toJsonSchemaDocument(Schema.toType(schema), {
+		onExcessProperty: "error"
+	});
 	deepStrictEqual(JSON.parse(readFileSync(join(directory, `${name}.schema.json`), "utf8")), {
 		$schema: "https://json-schema.org/draft/2020-12/schema",
 		$id: `https://ue-shed.dev/contracts/world/preparation/v1/${name}.schema.json`,

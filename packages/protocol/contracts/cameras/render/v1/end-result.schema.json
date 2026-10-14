@@ -11,11 +11,7 @@
 				},
 				"sessionId": {
 					"type": "string",
-					"allOf": [
-						{
-							"pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$"
-						}
-					]
+					"pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$"
 				},
 				"restoration": {
 					"type": "string",
@@ -69,47 +65,23 @@
 				},
 				"message": {
 					"type": "string",
-					"allOf": [
-						{
-							"minLength": 1
-						},
-						{
-							"maxLength": 1024
-						}
-					]
+					"minLength": 1,
+					"maxLength": 1024
 				},
 				"recovery": {
 					"type": "string",
-					"allOf": [
-						{
-							"minLength": 1
-						},
-						{
-							"maxLength": 1024
-						}
-					]
+					"minLength": 1,
+					"maxLength": 1024
 				},
 				"sessionId": {
 					"type": "string",
-					"allOf": [
-						{
-							"minLength": 1
-						},
-						{
-							"maxLength": 1024
-						}
-					]
+					"minLength": 1,
+					"maxLength": 1024
 				},
 				"operationId": {
 					"type": "string",
-					"allOf": [
-						{
-							"minLength": 1
-						},
-						{
-							"maxLength": 1024
-						}
-					]
+					"minLength": 1,
+					"maxLength": 1024
 				},
 				"issues": {
 					"type": "array",
@@ -118,47 +90,23 @@
 						"properties": {
 							"code": {
 								"type": "string",
-								"allOf": [
-									{
-										"minLength": 1
-									},
-									{
-										"maxLength": 1024
-									}
-								]
+								"minLength": 1,
+								"maxLength": 1024
 							},
 							"path": {
 								"type": "string",
-								"allOf": [
-									{
-										"minLength": 1
-									},
-									{
-										"maxLength": 1024
-									}
-								]
+								"minLength": 1,
+								"maxLength": 1024
 							},
 							"message": {
 								"type": "string",
-								"allOf": [
-									{
-										"minLength": 1
-									},
-									{
-										"maxLength": 1024
-									}
-								]
+								"minLength": 1,
+								"maxLength": 1024
 							},
 							"recovery": {
 								"type": "string",
-								"allOf": [
-									{
-										"minLength": 1
-									},
-									{
-										"maxLength": 1024
-									}
-								]
+								"minLength": 1,
+								"maxLength": 1024
 							}
 						},
 						"required": ["code", "path", "message", "recovery"],

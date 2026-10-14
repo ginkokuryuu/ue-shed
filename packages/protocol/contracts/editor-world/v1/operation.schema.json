@@ -17,37 +17,15 @@
 									"type": "array",
 									"items": {
 										"type": "string",
-										"allOf": [
-											{
-												"minLength": 1
-											},
-											{
-												"maxLength": 1024
-											},
-											{
-												"pattern": "^\\/[A-Za-z0-9_./-]+$"
-											}
-										]
+										"minLength": 1,
+										"maxLength": 1024
 									},
-									"allOf": [
-										{
-											"maxItems": 256
-										}
-									]
+									"maxItems": 256
 								},
 								"mapPath": {
 									"type": "string",
-									"allOf": [
-										{
-											"minLength": 1
-										},
-										{
-											"maxLength": 1024
-										},
-										{
-											"pattern": "^\\/[A-Za-z0-9_./-]+$"
-										}
-									]
+									"minLength": 1,
+									"maxLength": 1024
 								},
 								"playSessionActive": {
 									"type": "boolean"
@@ -63,37 +41,15 @@
 									"type": "array",
 									"items": {
 										"type": "string",
-										"allOf": [
-											{
-												"minLength": 1
-											},
-											{
-												"maxLength": 1024
-											},
-											{
-												"pattern": "^\\/[A-Za-z0-9_./-]+$"
-											}
-										]
+										"minLength": 1,
+										"maxLength": 1024
 									},
-									"allOf": [
-										{
-											"maxItems": 256
-										}
-									]
+									"maxItems": 256
 								},
 								"mapPath": {
 									"type": "string",
-									"allOf": [
-										{
-											"minLength": 1
-										},
-										{
-											"maxLength": 1024
-										},
-										{
-											"pattern": "^\\/[A-Za-z0-9_./-]+$"
-										}
-									]
+									"minLength": 1,
+									"maxLength": 1024
 								},
 								"playSessionActive": {
 									"type": "boolean"
@@ -130,34 +86,14 @@
 						},
 						"operationId": {
 							"type": "string",
-							"allOf": [
-								{
-									"minLength": 1
-								},
-								{
-									"maxLength": 128
-								},
-								{
-									"pattern": "^[A-Za-z0-9][A-Za-z0-9._-]*$"
-								}
-							]
+							"minLength": 1,
+							"maxLength": 128,
+							"pattern": "^[A-Za-z0-9][A-Za-z0-9._-]*$"
 						},
 						"targetMapPath": {
 							"type": "string",
-							"allOf": [
-								{
-									"minLength": 1
-								},
-								{
-									"maxLength": 1024
-								},
-								{
-									"pattern": "^\\/[A-Za-z0-9_./-]+$"
-								},
-								{
-									"pattern": "^\\/Game\\/[A-Za-z0-9_./-]+$"
-								}
-							]
+							"minLength": 1,
+							"maxLength": 1024
 						}
 					},
 					"required": [
@@ -184,37 +120,15 @@
 									"type": "array",
 									"items": {
 										"type": "string",
-										"allOf": [
-											{
-												"minLength": 1
-											},
-											{
-												"maxLength": 1024
-											},
-											{
-												"pattern": "^\\/[A-Za-z0-9_./-]+$"
-											}
-										]
+										"minLength": 1,
+										"maxLength": 1024
 									},
-									"allOf": [
-										{
-											"maxItems": 256
-										}
-									]
+									"maxItems": 256
 								},
 								"mapPath": {
 									"type": "string",
-									"allOf": [
-										{
-											"minLength": 1
-										},
-										{
-											"maxLength": 1024
-										},
-										{
-											"pattern": "^\\/[A-Za-z0-9_./-]+$"
-										}
-									]
+									"minLength": 1,
+									"maxLength": 1024
 								},
 								"playSessionActive": {
 									"type": "boolean"
@@ -230,37 +144,15 @@
 									"type": "array",
 									"items": {
 										"type": "string",
-										"allOf": [
-											{
-												"minLength": 1
-											},
-											{
-												"maxLength": 1024
-											},
-											{
-												"pattern": "^\\/[A-Za-z0-9_./-]+$"
-											}
-										]
+										"minLength": 1,
+										"maxLength": 1024
 									},
-									"allOf": [
-										{
-											"maxItems": 256
-										}
-									]
+									"maxItems": 256
 								},
 								"mapPath": {
 									"type": "string",
-									"allOf": [
-										{
-											"minLength": 1
-										},
-										{
-											"maxLength": 1024
-										},
-										{
-											"pattern": "^\\/[A-Za-z0-9_./-]+$"
-										}
-									]
+									"minLength": 1,
+									"maxLength": 1024
 								},
 								"playSessionActive": {
 									"type": "boolean"
@@ -297,34 +189,14 @@
 						},
 						"operationId": {
 							"type": "string",
-							"allOf": [
-								{
-									"minLength": 1
-								},
-								{
-									"maxLength": 128
-								},
-								{
-									"pattern": "^[A-Za-z0-9][A-Za-z0-9._-]*$"
-								}
-							]
+							"minLength": 1,
+							"maxLength": 128,
+							"pattern": "^[A-Za-z0-9][A-Za-z0-9._-]*$"
 						},
 						"targetMapPath": {
 							"type": "string",
-							"allOf": [
-								{
-									"minLength": 1
-								},
-								{
-									"maxLength": 1024
-								},
-								{
-									"pattern": "^\\/[A-Za-z0-9_./-]+$"
-								},
-								{
-									"pattern": "^\\/Game\\/[A-Za-z0-9_./-]+$"
-								}
-							]
+							"minLength": 1,
+							"maxLength": 1024
 						}
 					},
 					"required": [
@@ -351,37 +223,15 @@
 									"type": "array",
 									"items": {
 										"type": "string",
-										"allOf": [
-											{
-												"minLength": 1
-											},
-											{
-												"maxLength": 1024
-											},
-											{
-												"pattern": "^\\/[A-Za-z0-9_./-]+$"
-											}
-										]
+										"minLength": 1,
+										"maxLength": 1024
 									},
-									"allOf": [
-										{
-											"maxItems": 256
-										}
-									]
+									"maxItems": 256
 								},
 								"mapPath": {
 									"type": "string",
-									"allOf": [
-										{
-											"minLength": 1
-										},
-										{
-											"maxLength": 1024
-										},
-										{
-											"pattern": "^\\/[A-Za-z0-9_./-]+$"
-										}
-									]
+									"minLength": 1,
+									"maxLength": 1024
 								},
 								"playSessionActive": {
 									"type": "boolean"
@@ -397,37 +247,15 @@
 									"type": "array",
 									"items": {
 										"type": "string",
-										"allOf": [
-											{
-												"minLength": 1
-											},
-											{
-												"maxLength": 1024
-											},
-											{
-												"pattern": "^\\/[A-Za-z0-9_./-]+$"
-											}
-										]
+										"minLength": 1,
+										"maxLength": 1024
 									},
-									"allOf": [
-										{
-											"maxItems": 256
-										}
-									]
+									"maxItems": 256
 								},
 								"mapPath": {
 									"type": "string",
-									"allOf": [
-										{
-											"minLength": 1
-										},
-										{
-											"maxLength": 1024
-										},
-										{
-											"pattern": "^\\/[A-Za-z0-9_./-]+$"
-										}
-									]
+									"minLength": 1,
+									"maxLength": 1024
 								},
 								"playSessionActive": {
 									"type": "boolean"
@@ -464,34 +292,14 @@
 						},
 						"operationId": {
 							"type": "string",
-							"allOf": [
-								{
-									"minLength": 1
-								},
-								{
-									"maxLength": 128
-								},
-								{
-									"pattern": "^[A-Za-z0-9][A-Za-z0-9._-]*$"
-								}
-							]
+							"minLength": 1,
+							"maxLength": 128,
+							"pattern": "^[A-Za-z0-9][A-Za-z0-9._-]*$"
 						},
 						"targetMapPath": {
 							"type": "string",
-							"allOf": [
-								{
-									"minLength": 1
-								},
-								{
-									"maxLength": 1024
-								},
-								{
-									"pattern": "^\\/[A-Za-z0-9_./-]+$"
-								},
-								{
-									"pattern": "^\\/Game\\/[A-Za-z0-9_./-]+$"
-								}
-							]
+							"minLength": 1,
+							"maxLength": 1024
 						},
 						"code": {
 							"type": "string",
@@ -563,34 +371,14 @@
 				},
 				"operationId": {
 					"type": "string",
-					"allOf": [
-						{
-							"minLength": 1
-						},
-						{
-							"maxLength": 128
-						},
-						{
-							"pattern": "^[A-Za-z0-9][A-Za-z0-9._-]*$"
-						}
-					]
+					"minLength": 1,
+					"maxLength": 128,
+					"pattern": "^[A-Za-z0-9][A-Za-z0-9._-]*$"
 				},
 				"targetMapPath": {
 					"type": "string",
-					"allOf": [
-						{
-							"minLength": 1
-						},
-						{
-							"maxLength": 1024
-						},
-						{
-							"pattern": "^\\/[A-Za-z0-9_./-]+$"
-						},
-						{
-							"pattern": "^\\/Game\\/[A-Za-z0-9_./-]+$"
-						}
-					]
+					"minLength": 1,
+					"maxLength": 1024
 				},
 				"status": {
 					"type": "string",
@@ -631,34 +419,14 @@
 				},
 				"operationId": {
 					"type": "string",
-					"allOf": [
-						{
-							"minLength": 1
-						},
-						{
-							"maxLength": 128
-						},
-						{
-							"pattern": "^[A-Za-z0-9][A-Za-z0-9._-]*$"
-						}
-					]
+					"minLength": 1,
+					"maxLength": 128,
+					"pattern": "^[A-Za-z0-9][A-Za-z0-9._-]*$"
 				},
 				"targetMapPath": {
 					"type": "string",
-					"allOf": [
-						{
-							"minLength": 1
-						},
-						{
-							"maxLength": 1024
-						},
-						{
-							"pattern": "^\\/[A-Za-z0-9_./-]+$"
-						},
-						{
-							"pattern": "^\\/Game\\/[A-Za-z0-9_./-]+$"
-						}
-					]
+					"minLength": 1,
+					"maxLength": 1024
 				},
 				"status": {
 					"type": "string",
@@ -702,34 +470,14 @@
 				},
 				"operationId": {
 					"type": "string",
-					"allOf": [
-						{
-							"minLength": 1
-						},
-						{
-							"maxLength": 128
-						},
-						{
-							"pattern": "^[A-Za-z0-9][A-Za-z0-9._-]*$"
-						}
-					]
+					"minLength": 1,
+					"maxLength": 128,
+					"pattern": "^[A-Za-z0-9][A-Za-z0-9._-]*$"
 				},
 				"targetMapPath": {
 					"type": "string",
-					"allOf": [
-						{
-							"minLength": 1
-						},
-						{
-							"maxLength": 1024
-						},
-						{
-							"pattern": "^\\/[A-Za-z0-9_./-]+$"
-						},
-						{
-							"pattern": "^\\/Game\\/[A-Za-z0-9_./-]+$"
-						}
-					]
+					"minLength": 1,
+					"maxLength": 1024
 				},
 				"status": {
 					"type": "string",

@@ -9,7 +9,7 @@ export const IdentifierKind = Schema.Literals([
 ]);
 export type IdentifierKind = Schema.Schema.Type<typeof IdentifierKind>;
 
-export class IdentifierValidationError extends Schema.TaggedErrorClass<IdentifierValidationError>()(
+export class IdentifierValidationError extends Schema.TaggedError<IdentifierValidationError>()(
 	"IdentifierValidationError",
 	{
 		kind: IdentifierKind,

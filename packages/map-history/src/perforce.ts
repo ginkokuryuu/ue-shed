@@ -1,4 +1,5 @@
 import { Cache, Context, Effect, Layer, Option, Schema } from "effect";
+import { P4, runOperation, type P4Service } from "p4client-ts";
 import type {
 	ListDepotFilesAtChangeOptions as P4ListDepotFilesAtChangeOptions,
 	P4DepotFileRevisionList,
@@ -7,8 +8,13 @@ import type {
 	P4ChangelistDescription,
 	P4ClientOptions
 } from "p4client-ts";
-import type { MaterializeDepotFilesOptions, P4MaterializeResult } from "p4client-ts/node";
-import { createP4Client, type P4PromiseClient } from "p4client-ts/promise";
+import {
+	layerNode,
+	materializeDepotFiles,
+	resolveConnection,
+	type MaterializeDepotFilesOptions,
+	type P4MaterializeResult
+} from "p4client-ts/node";
 import { tmpdir } from "node:os";
 import { join, resolve, win32 } from "node:path";
 import { MapHistoryError } from "./errors.js";
@@ -149,18 +155,16 @@ interface PerforceBackend {
 		options: P4ListDepotFilesAtChangeOptions
 	) => Effect.Effect<P4DepotFileRevisionList, unknown>;
 	readonly listSubmittedChangelists: (
-		options: ListChangelistsOptions
-	) => Effect.Effect<P4ChangelistPage, unknown>;
+		options: ListChangelistsOptions & { readonly status: "submitted" }
+	) => Effect.Effect<P4ChangelistPage<"submitted">, unknown>;
 	readonly materializeDepotFiles: (
-		options: MaterializeDepotFilesOptions
-	) => Effect.Effect<P4MaterializeResult, unknown>;
+		options: MaterializeDepotFilesOptions<typeof P4MaterializationFile.Type>
+	) => Effect.Effect<P4MaterializeResult<typeof P4MaterializationFile.Type>, unknown>;
 }
 
 type PerforceBackendResolver = (projectRoot: string | undefined) => PerforceBackend;
 
-const decodeP4TaggedRecords = Schema.decodeUnknownEffect(
-	Schema.Array(Schema.Record(Schema.String, Schema.Json))
-);
+const P4TaggedRecord = Schema.Record(Schema.String, Schema.Json);
 
 const P4MaterializationFile = Schema.Struct({
 	action: Schema.NonEmptyString,
@@ -178,13 +182,11 @@ function optionalString(value: string | null): { readonly value?: string } {
 }
 
 function toSubmittedChange(change: {
-	readonly change: number | "default";
+	readonly change: number;
 	readonly createdAt: string | null;
 	readonly description: string | null;
 	readonly user: string | null;
 }): PerforceSubmittedChange {
-	if (change.change === "default")
-		throw new Error("Submitted history cannot contain the default changelist.");
 	const description = optionalString(change.description);
 	const submittedAt = optionalString(change.createdAt);
 	const user = optionalString(change.user);
@@ -512,24 +514,16 @@ export function makePerforceHistorySource(
 				.pipe(
 					Effect.mapError((cause) => toMapHistoryError("materialize depot files", cause))
 				);
-			const metadata = new Map(
-				options.files.map((file) => [`${file.depotPath}#${file.revision}`, file])
-			);
-			const materialized: PerforceMaterializedFile[] = [];
-			for (const item of result.items) {
-				const file = metadata.get(`${item.file.depotFile}#${item.file.revision}`);
-				if (file === undefined) {
-					return yield* Effect.fail(
-						new MapHistoryError({
-							kind: "materialization",
-							message: "Perforce materialization returned an unrequested revision.",
-							recovery: "Inspect the exact depot revision metadata before retrying.",
-							retrySafe: false
-						})
-					);
-				}
-				materialized.push({ file, localPath: item.localPath });
-			}
+			const materialized = result.items.map((item) => ({
+				file: {
+					action: item.file.action,
+					changelist: item.file.changelist,
+					depotPath: item.file.depotFile,
+					revision: item.file.revision,
+					type: item.file.type
+				},
+				localPath: item.localPath
+			}));
 			return {
 				directory: result.directory,
 				files: materialized,
@@ -566,35 +560,21 @@ export function selectPerforceWorkspace(options: {
 		: undefined;
 }
 
-type PerforceClient = Pick<
-	P4PromiseClient,
-	| "describeChangelist"
-	| "listDepotFilesAtChange"
-	| "listChangelists"
-	| "materializeDepotFiles"
-	| "whereFiles"
-	| "runTagged"
-	| "resolveConnection"
-	| "getEnvironment"
-	| "listWorkspaces"
-	| "dispose"
->;
-type PerforceClientFactory = (options: P4ClientOptions) => PerforceClient;
+type PerforceLayerFactory = (options: P4ClientOptions) => ReturnType<typeof layerNode>;
 
-async function optionsForProject(
+const optionsForProject = Effect.fn("PerforceHistorySource.optionsForProject")(function* (
 	options: P4ClientOptions,
 	projectRoot: string | undefined,
-	createClient: PerforceClientFactory,
-	signal: AbortSignal
-): Promise<P4ClientOptions> {
+	makeLayer: PerforceLayerFactory
+) {
 	if (projectRoot === undefined) return options;
 	const projectOptions = { ...options, cwd: projectRoot };
-	const probe = createClient(projectOptions);
-	try {
-		const local = await probe.resolveConnection({ sources: ["p4"], signal });
-		const environment = await probe.getEnvironment({ signal });
+	return yield* Effect.gen(function* () {
+		const probe = yield* P4;
+		const local = yield* resolveConnection({ sources: ["p4"] });
+		const environment = yield* probe.getEnvironment({});
 		const user = options.connection?.user ?? local.connection.user ?? environment.user;
-		const workspaces = user == null ? [] : (await probe.listWorkspaces({ user, signal })).items;
+		const workspaces = user == null ? [] : (yield* probe.listWorkspaces({ user })).items;
 		const selectedClient = selectPerforceWorkspace({
 			configuredClient:
 				options.connection?.client ?? local.connection.client ?? environment.client,
@@ -607,75 +587,52 @@ async function optionsForProject(
 			connection: { ...local.connection, ...options.connection, client: selectedClient },
 			env: { ...options.env, P4CONFIG: p4ConfigBypassPath }
 		};
-	} finally {
-		await probe.dispose();
-	}
-}
+	}).pipe(Effect.provide(makeLayer(projectOptions)));
+});
 
 export function perforceHistorySourceLayer(
 	options: P4ClientOptions = {},
-	createClient: PerforceClientFactory = createP4Client
+	makeLayer: PerforceLayerFactory = layerNode
 ): Layer.Layer<PerforceHistorySource> {
 	return Layer.effect(
 		PerforceHistorySource,
 		Effect.gen(function* () {
-			// Cache configuration only. Every borrowed Promise runtime is scoped to its operation.
+			// Cache configuration only. Native layers share the calling Effect runtime.
 			const contexts = yield* Cache.makeWith(
 				(projectRoot: string | undefined) =>
-					Effect.tryPromise({
-						try: (signal) =>
-							optionsForProject(options, projectRoot, createClient, signal),
-						catch: (cause) => cause
-					}),
+					optionsForProject(options, projectRoot, makeLayer),
 				{ capacity: 4 }
 			);
-			const contextForProject = (projectRoot: string | undefined) =>
-				Effect.acquireRelease(
-					Cache.get(contexts, projectRoot).pipe(
-						Effect.map((config) => ({ client: createClient(config) }))
-					),
-					(context) => Effect.promise(() => context.client.dispose())
-				);
 			const withClient = <A>(
 				projectRoot: string | undefined,
-				run: (client: PerforceClient, signal: AbortSignal) => Promise<A>
+				run: (client: P4Service) => Effect.Effect<A, unknown>
 			) =>
-				Effect.scoped(
-					Effect.gen(function* () {
-						const context = yield* contextForProject(projectRoot);
-						return yield* Effect.tryPromise({
-							try: (signal) => run(context.client, signal),
-							catch: (cause) => cause
-						});
-					})
-				);
+				Effect.gen(function* () {
+					const config = yield* Cache.get(contexts, projectRoot);
+					return yield* Effect.flatMap(P4, run).pipe(Effect.provide(makeLayer(config)));
+				});
 			const backendForProject: PerforceBackendResolver = (projectRoot) => ({
 				describeChangelist: (change) =>
-					withClient(projectRoot, (client, signal) =>
-						client.describeChangelist({ change, signal })
-					),
+					withClient(projectRoot, (client) => client.describeChangelist({ change })),
 				listDepotFilesAtChange: (request) =>
-					withClient(projectRoot, (client, signal) =>
-						client.listDepotFilesAtChange({ ...request, signal })
-					),
+					withClient(projectRoot, (client) => client.listDepotFilesAtChange(request)),
 				listSubmittedChangelists: (request) =>
-					withClient(projectRoot, (client, signal) =>
-						client.listChangelists({ ...request, signal })
-					),
+					withClient(projectRoot, (client) => client.listChangelists(request)),
 				materializeDepotFiles: (request) =>
-					withClient(projectRoot, (client, signal) =>
-						client.materializeDepotFiles({ ...request, signal })
-					)
+					Effect.gen(function* () {
+						const config = yield* Cache.get(contexts, projectRoot);
+						return yield* runOperation(materializeDepotFiles, request).pipe(
+							Effect.provide(makeLayer(config))
+						);
+					})
 			});
 			const where = Effect.fn("PerforceHistorySource.where")(function* (path: string) {
 				const projectRoot = yield* selectedProjectRoot();
-				const context = yield* contextForProject(projectRoot).pipe(
+				const result = yield* withClient(projectRoot, (client) =>
+					client.whereFiles({ fileSpec: path })
+				).pipe(
 					Effect.mapError((cause) => toMapHistoryError("resolve Perforce path", cause))
 				);
-				const result = yield* Effect.tryPromise({
-					try: (signal) => context.client.whereFiles({ fileSpec: path, signal }),
-					catch: (cause) => toMapHistoryError("resolve Perforce path", cause)
-				});
 				const records = result.items;
 				if (
 					records.length !== 1 ||
@@ -714,9 +671,6 @@ export function perforceHistorySourceLayer(
 			const resolveMapLineage = Effect.fn("PerforceHistorySource.resolveMapLineage")(
 				function* (request: PerforceMapLineageOptions) {
 					const projectRoot = yield* selectedProjectRoot();
-					const context = yield* contextForProject(projectRoot).pipe(
-						Effect.mapError((cause) => toMapHistoryError("resolve map lineage", cause))
-					);
 					const pending = [request.depotPath];
 					const queried = new Set<string>();
 					const discovered = new Map<string, PerforceMapMove>();
@@ -724,20 +678,22 @@ export function perforceHistorySourceLayer(
 						const depotPath = pending.shift();
 						if (depotPath === undefined || queried.has(depotPath)) continue;
 						queried.add(depotPath);
-						const raw = yield* Effect.tryPromise({
-							try: (signal) =>
-								context.client.runTagged({
-									signal,
-									args: [
-										"filelog",
-										"-i",
-										"-m",
-										String(request.maxRevisionRecords),
-										depotPath
-									]
-								}),
-							catch: (cause) => toMapHistoryError("resolve map lineage", cause)
-						});
+						const raw = yield* withClient(projectRoot, (client) =>
+							client.runTagged({
+								schema: P4TaggedRecord,
+								args: [
+									"filelog",
+									"-i",
+									"-m",
+									String(request.maxRevisionRecords),
+									depotPath
+								]
+							})
+						).pipe(
+							Effect.mapError((cause) =>
+								toMapHistoryError("resolve map lineage", cause)
+							)
+						);
 						if (raw.failures.length > 0) {
 							return yield* Effect.fail(
 								mapLineageError(
@@ -746,15 +702,7 @@ export function perforceHistorySourceLayer(
 								)
 							);
 						}
-						const records = yield* decodeP4TaggedRecords(raw.items).pipe(
-							Effect.mapError(() =>
-								mapLineageError(
-									"ambiguous_map_lineage",
-									`Perforce returned invalid filelog records for ${depotPath}.`
-								)
-							)
-						);
-						for (const move of directMovesFromFilelog(records)) {
+						for (const move of directMovesFromFilelog(raw.items)) {
 							discovered.set(
 								`${move.change}\u0000${move.fromDepotPath}\u0000${move.toDepotPath}`,
 								move

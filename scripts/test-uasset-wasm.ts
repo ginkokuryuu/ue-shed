@@ -35,10 +35,10 @@ const sequenceSchema: JsonSchema.JsonSchema = JSON.parse(
 );
 const decodeSequence = Schema.decodeUnknownSync(
 	// JSON Schema contains pure value checks, with no Effect service requirements.
-	SchemaRepresentation.toSchema<Schema.Codec<unknown>>(
+	Schema.make<Schema.Codec<unknown>>(
 		SchemaRepresentation.fromJsonSchemaDocument(
 			JsonSchema.fromSchemaDraft2020_12(sequenceSchema)
-		)
+		).ast
 	),
 	{ onExcessProperty: "error" }
 );
@@ -85,10 +85,10 @@ const authoringSchema: JsonSchema.JsonSchema = JSON.parse(
 	)
 );
 const decodeAuthoringTable = Schema.decodeUnknownSync(
-	SchemaRepresentation.toSchema<Schema.Codec<unknown>>(
+	Schema.make<Schema.Codec<unknown>>(
 		SchemaRepresentation.fromJsonSchemaDocument(
 			JsonSchema.fromSchemaDraft2020_12(authoringSchema)
-		)
+		).ast
 	),
 	{ onExcessProperty: "error" }
 );
@@ -375,10 +375,10 @@ const animationSchema: JsonSchema.JsonSchema = JSON.parse(
 	)
 );
 const decodeAnimation = Schema.decodeUnknownSync(
-	SchemaRepresentation.toSchema<Schema.Codec<unknown>>(
+	Schema.make<Schema.Codec<unknown>>(
 		SchemaRepresentation.fromJsonSchemaDocument(
 			JsonSchema.fromSchemaDraft2020_12(animationSchema)
-		)
+		).ast
 	),
 	{ onExcessProperty: "error" }
 );

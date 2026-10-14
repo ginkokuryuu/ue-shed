@@ -21,7 +21,9 @@ const contracts = {
 	document: CameraAuthoringDocument
 };
 for (const [name, schema] of Object.entries(contracts)) {
-	const document = Schema.toJsonSchemaDocument(schema);
+	const document = Schema.toJsonSchemaDocument(Schema.toType(schema), {
+		onExcessProperty: "error"
+	});
 	const generated = {
 		$schema: "https://json-schema.org/draft/2020-12/schema",
 		$id: `https://ue-shed.dev/contracts/cameras/authoring/v1/${name}.schema.json`,

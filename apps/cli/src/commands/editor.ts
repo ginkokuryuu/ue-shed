@@ -1,4 +1,4 @@
-import { Argument, Command } from "effect/unstable/cli";
+import { Argument, Command } from "effect/cli";
 import { optionalFlag, optionalValue } from "./options.js";
 import {
 	runEditorPlaySession,
@@ -10,7 +10,7 @@ const playActions = ["status", "start", "simulate", "pause", "resume", "stop"] a
 type PlayAction = (typeof playActions)[number];
 
 function makePlayCommand(action: PlayAction) {
-	return Command.make(action, { endpoint: Argument.string("endpoint") }, ({ endpoint }) =>
+	return Command.make(action, { endpoint: Argument.String("endpoint") }, ({ endpoint }) =>
 		runEditorPlaySession({ _tag: "EditorPlaySession", action, endpoint })
 	).pipe(Command.withDescription(`Run the editor play-session ${action} operation.`));
 }
@@ -21,7 +21,7 @@ export const editorCommand = Command.make("editor").pipe(
 		Command.make(
 			"launch",
 			{
-				projectDescriptor: Argument.string("project-descriptor"),
+				projectDescriptor: Argument.String("project-descriptor"),
 				engineRoot: optionalFlag("engine-root")
 			},
 			({ projectDescriptor, engineRoot }) => {
@@ -45,8 +45,8 @@ export const editorCommand = Command.make("editor").pipe(
 				Command.make(
 					"open",
 					{
-						endpoint: Argument.string("endpoint"),
-						mapPath: Argument.string("map-path"),
+						endpoint: Argument.String("endpoint"),
+						mapPath: Argument.String("map-path"),
 						operationId: optionalFlag("operation")
 					},
 					({ endpoint, mapPath, operationId }) => {

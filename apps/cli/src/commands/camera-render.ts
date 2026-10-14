@@ -1,17 +1,17 @@
 import { readFile, stat, writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import { Effect, Layer, Schema } from "effect";
-import { Argument, Command, Flag } from "effect/unstable/cli";
+import { Argument, Command, Flag } from "effect/cli";
 import { printJson } from "../cli-runtime.js";
 import { observeCliOperation } from "../cli-operation.js";
 
 const render = Command.make(
 	"render",
 	{
-		requestPath: Argument.string("request-json"),
-		endpoint: Flag.string("endpoint"),
-		projectRoot: Flag.string("project"),
-		output: Flag.string("output")
+		requestPath: Argument.String("request-json"),
+		endpoint: Flag.String("endpoint"),
+		projectRoot: Flag.String("project"),
+		output: Flag.String("output")
 	},
 	(args) =>
 		observeCliOperation(

@@ -1,7 +1,7 @@
 import { spawn, type ChildProcess } from "node:child_process";
 import { Context, Effect, Exit, Layer, Ref, Schema, type Scope } from "effect";
 
-export class FixtureProcessError extends Schema.TaggedErrorClass<FixtureProcessError>()(
+export class FixtureProcessError extends Schema.TaggedError<FixtureProcessError>()(
 	"Workbench.FixtureProcessError",
 	{
 		causeText: Schema.String,

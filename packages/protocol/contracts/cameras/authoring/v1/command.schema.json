@@ -7,28 +7,16 @@
 			"properties": {
 				"arrangementId": {
 					"type": "string",
-					"allOf": [
-						{
-							"pattern": "^[a-zA-Z0-9][a-zA-Z0-9._-]{0,127}$"
-						}
-					]
+					"pattern": "^[a-zA-Z0-9][a-zA-Z0-9._-]{0,127}$"
 				},
 				"expectedRevision": {
 					"type": "integer",
-					"allOf": [
-						{
-							"minimum": 0,
-							"maximum": 9007199254740991
-						}
-					]
+					"minimum": 0,
+					"maximum": 9007199254740991
 				},
 				"operationId": {
 					"type": "string",
-					"allOf": [
-						{
-							"pattern": "^[a-zA-Z0-9][a-zA-Z0-9._-]{0,127}$"
-						}
-					]
+					"pattern": "^[a-zA-Z0-9][a-zA-Z0-9._-]{0,127}$"
 				},
 				"kind": {
 					"type": "string",
@@ -41,19 +29,11 @@
 						"properties": {
 							"id": {
 								"type": "string",
-								"allOf": [
-									{
-										"pattern": "^[a-zA-Z0-9][a-zA-Z0-9._-]{0,127}$"
-									}
-								]
+								"pattern": "^[a-zA-Z0-9][a-zA-Z0-9._-]{0,127}$"
 							},
 							"displayName": {
 								"type": "string",
-								"allOf": [
-									{
-										"minLength": 1
-									}
-								]
+								"minLength": 1
 							},
 							"yawDegrees": {
 								"type": "number"
@@ -63,42 +43,26 @@
 								"properties": {
 									"fieldOfViewDegrees": {
 										"type": "number",
-										"allOf": [
-											{
-												"minimum": 5,
-												"maximum": 170
-											}
-										]
+										"minimum": 5,
+										"maximum": 170
 									},
 									"distanceScale": {
 										"type": "number",
-										"allOf": [
-											{
-												"minimum": 0.01,
-												"maximum": 100
-											}
-										]
+										"minimum": 0.01,
+										"maximum": 100
 									},
 									"heightOffset": {
 										"type": "number"
 									},
 									"margin": {
 										"type": "number",
-										"allOf": [
-											{
-												"minimum": 0,
-												"maximum": 0.45
-											}
-										]
+										"minimum": 0,
+										"maximum": 0.45
 									},
 									"elevationDegrees": {
 										"type": "number",
-										"allOf": [
-											{
-												"minimum": -89,
-												"maximum": 89
-											}
-										]
+										"minimum": -89,
+										"maximum": 89
 									},
 									"yawOffset": {
 										"type": "number"
@@ -131,12 +95,8 @@
 									},
 									"fieldOfViewDegrees": {
 										"type": "number",
-										"allOf": [
-											{
-												"minimum": 5,
-												"maximum": 170
-											}
-										]
+										"minimum": 5,
+										"maximum": 170
 									},
 									"location": {
 										"type": "object",
@@ -186,22 +146,12 @@
 							},
 							"viewId": {
 								"type": "string",
-								"allOf": [
-									{
-										"minLength": 1
-									},
-									{
-										"pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$"
-									}
-								]
+								"minLength": 1,
+								"pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$"
 							},
 							"groupId": {
 								"type": "string",
-								"allOf": [
-									{
-										"pattern": "^[a-zA-Z0-9][a-zA-Z0-9._-]{0,127}$"
-									}
-								]
+								"pattern": "^[a-zA-Z0-9][a-zA-Z0-9._-]{0,127}$"
 							},
 							"visibility": {
 								"type": "object",
@@ -222,14 +172,8 @@
 																},
 																"actorPath": {
 																	"type": "string",
-																	"allOf": [
-																		{
-																			"pattern": "^\\/Game\\/"
-																		},
-																		{
-																			"maxLength": 4096
-																		}
-																	]
+																	"pattern": "^\\/Game\\/",
+																	"maxLength": 4096
 																}
 															},
 															"required": ["kind", "actorPath"],
@@ -243,20 +187,11 @@
 																	"enum": ["actor_guid"]
 																},
 																"actorGuid": {
-																	"type": "string",
-																	"allOf": [
-																		{
-																			"pattern": "^(?!00000000-00000000-00000000-00000000$)[0-9a-fA-F]{8}(?:-[0-9a-fA-F]{8}){3}$"
-																		}
-																	]
+																	"type": "string"
 																},
 																"lastKnownActorPath": {
 																	"type": "string",
-																	"allOf": [
-																		{
-																			"maxLength": 4096
-																		}
-																	]
+																	"maxLength": 4096
 																}
 															},
 															"required": [
@@ -270,21 +205,13 @@
 												},
 												"label": {
 													"type": "string",
-													"allOf": [
-														{
-															"maxLength": 256
-														}
-													]
+													"maxLength": 256
 												}
 											},
 											"required": ["locator", "label"],
 											"additionalProperties": false
 										},
-										"allOf": [
-											{
-												"maxItems": 256
-											}
-										]
+										"maxItems": 256
 									},
 									"protect": {
 										"type": "array",
@@ -302,14 +229,8 @@
 																},
 																"actorPath": {
 																	"type": "string",
-																	"allOf": [
-																		{
-																			"pattern": "^\\/Game\\/"
-																		},
-																		{
-																			"maxLength": 4096
-																		}
-																	]
+																	"pattern": "^\\/Game\\/",
+																	"maxLength": 4096
 																}
 															},
 															"required": ["kind", "actorPath"],
@@ -323,20 +244,11 @@
 																	"enum": ["actor_guid"]
 																},
 																"actorGuid": {
-																	"type": "string",
-																	"allOf": [
-																		{
-																			"pattern": "^(?!00000000-00000000-00000000-00000000$)[0-9a-fA-F]{8}(?:-[0-9a-fA-F]{8}){3}$"
-																		}
-																	]
+																	"type": "string"
 																},
 																"lastKnownActorPath": {
 																	"type": "string",
-																	"allOf": [
-																		{
-																			"maxLength": 4096
-																		}
-																	]
+																	"maxLength": 4096
 																}
 															},
 															"required": [
@@ -350,21 +262,13 @@
 												},
 												"label": {
 													"type": "string",
-													"allOf": [
-														{
-															"maxLength": 256
-														}
-													]
+													"maxLength": 256
 												}
 											},
 											"required": ["locator", "label"],
 											"additionalProperties": false
 										},
-										"allOf": [
-											{
-												"maxItems": 256
-											}
-										]
+										"maxItems": 256
 									}
 								},
 								"required": ["hide", "protect"],
@@ -374,27 +278,15 @@
 						"required": ["id", "displayName", "yawDegrees", "overrides", "viewId"],
 						"additionalProperties": false
 					},
-					"allOf": [
-						{
-							"maxItems": 256
-						}
-					]
+					"maxItems": 256
 				},
 				"removed": {
 					"type": "array",
 					"items": {
 						"type": "string",
-						"allOf": [
-							{
-								"pattern": "^[a-zA-Z0-9][a-zA-Z0-9._-]{0,127}$"
-							}
-						]
+						"pattern": "^[a-zA-Z0-9][a-zA-Z0-9._-]{0,127}$"
 					},
-					"allOf": [
-						{
-							"maxItems": 256
-						}
-					]
+					"maxItems": 256
 				},
 				"cameras": {
 					"type": "array",
@@ -403,11 +295,7 @@
 						"properties": {
 							"cameraId": {
 								"type": "string",
-								"allOf": [
-									{
-										"pattern": "^[a-zA-Z0-9][a-zA-Z0-9._-]{0,127}$"
-									}
-								]
+								"pattern": "^[a-zA-Z0-9][a-zA-Z0-9._-]{0,127}$"
 							},
 							"pose": {
 								"type": "object",
@@ -418,12 +306,8 @@
 									},
 									"fieldOfViewDegrees": {
 										"type": "number",
-										"allOf": [
-											{
-												"minimum": 5,
-												"maximum": 170
-											}
-										]
+										"minimum": 5,
+										"maximum": 170
 									},
 									"location": {
 										"type": "object",
@@ -481,11 +365,7 @@
 						"required": ["cameraId", "pose", "lensChanged", "poseChanged"],
 						"additionalProperties": false
 					},
-					"allOf": [
-						{
-							"maxItems": 256
-						}
-					]
+					"maxItems": 256
 				}
 			},
 			"required": ["arrangementId", "expectedRevision", "operationId", "kind", "cameras"],
@@ -496,28 +376,16 @@
 			"properties": {
 				"arrangementId": {
 					"type": "string",
-					"allOf": [
-						{
-							"pattern": "^[a-zA-Z0-9][a-zA-Z0-9._-]{0,127}$"
-						}
-					]
+					"pattern": "^[a-zA-Z0-9][a-zA-Z0-9._-]{0,127}$"
 				},
 				"expectedRevision": {
 					"type": "integer",
-					"allOf": [
-						{
-							"minimum": 0,
-							"maximum": 9007199254740991
-						}
-					]
+					"minimum": 0,
+					"maximum": 9007199254740991
 				},
 				"operationId": {
 					"type": "string",
-					"allOf": [
-						{
-							"pattern": "^[a-zA-Z0-9][a-zA-Z0-9._-]{0,127}$"
-						}
-					]
+					"pattern": "^[a-zA-Z0-9][a-zA-Z0-9._-]{0,127}$"
 				},
 				"kind": {
 					"type": "string",
@@ -545,11 +413,7 @@
 								},
 								"groupId": {
 									"type": "string",
-									"allOf": [
-										{
-											"pattern": "^[a-zA-Z0-9][a-zA-Z0-9._-]{0,127}$"
-										}
-									]
+									"pattern": "^[a-zA-Z0-9][a-zA-Z0-9._-]{0,127}$"
 								}
 							},
 							"required": ["kind", "groupId"],
@@ -566,20 +430,10 @@
 									"type": "array",
 									"items": {
 										"type": "string",
-										"allOf": [
-											{
-												"pattern": "^[a-zA-Z0-9][a-zA-Z0-9._-]{0,127}$"
-											}
-										]
+										"pattern": "^[a-zA-Z0-9][a-zA-Z0-9._-]{0,127}$"
 									},
-									"allOf": [
-										{
-											"minItems": 1
-										},
-										{
-											"maxItems": 256
-										}
-									]
+									"minItems": 1,
+									"maxItems": 256
 								}
 							},
 							"required": ["kind", "cameraIds"],
@@ -611,14 +465,8 @@
 											},
 											"actorPath": {
 												"type": "string",
-												"allOf": [
-													{
-														"pattern": "^\\/Game\\/"
-													},
-													{
-														"maxLength": 4096
-													}
-												]
+												"pattern": "^\\/Game\\/",
+												"maxLength": 4096
 											}
 										},
 										"required": ["kind", "actorPath"],
@@ -632,20 +480,11 @@
 												"enum": ["actor_guid"]
 											},
 											"actorGuid": {
-												"type": "string",
-												"allOf": [
-													{
-														"pattern": "^(?!00000000-00000000-00000000-00000000$)[0-9a-fA-F]{8}(?:-[0-9a-fA-F]{8}){3}$"
-													}
-												]
+												"type": "string"
 											},
 											"lastKnownActorPath": {
 												"type": "string",
-												"allOf": [
-													{
-														"maxLength": 4096
-													}
-												]
+												"maxLength": 4096
 											}
 										},
 										"required": ["kind", "actorGuid", "lastKnownActorPath"],
@@ -655,24 +494,14 @@
 							},
 							"label": {
 								"type": "string",
-								"allOf": [
-									{
-										"maxLength": 256
-									}
-								]
+								"maxLength": 256
 							}
 						},
 						"required": ["locator", "label"],
 						"additionalProperties": false
 					},
-					"allOf": [
-						{
-							"minItems": 1
-						},
-						{
-							"maxItems": 256
-						}
-					]
+					"minItems": 1,
+					"maxItems": 256
 				}
 			},
 			"required": [
@@ -692,28 +521,16 @@
 			"properties": {
 				"arrangementId": {
 					"type": "string",
-					"allOf": [
-						{
-							"pattern": "^[a-zA-Z0-9][a-zA-Z0-9._-]{0,127}$"
-						}
-					]
+					"pattern": "^[a-zA-Z0-9][a-zA-Z0-9._-]{0,127}$"
 				},
 				"expectedRevision": {
 					"type": "integer",
-					"allOf": [
-						{
-							"minimum": 0,
-							"maximum": 9007199254740991
-						}
-					]
+					"minimum": 0,
+					"maximum": 9007199254740991
 				},
 				"operationId": {
 					"type": "string",
-					"allOf": [
-						{
-							"pattern": "^[a-zA-Z0-9][a-zA-Z0-9._-]{0,127}$"
-						}
-					]
+					"pattern": "^[a-zA-Z0-9][a-zA-Z0-9._-]{0,127}$"
 				},
 				"kind": {
 					"type": "string",
@@ -741,11 +558,7 @@
 								},
 								"groupId": {
 									"type": "string",
-									"allOf": [
-										{
-											"pattern": "^[a-zA-Z0-9][a-zA-Z0-9._-]{0,127}$"
-										}
-									]
+									"pattern": "^[a-zA-Z0-9][a-zA-Z0-9._-]{0,127}$"
 								}
 							},
 							"required": ["kind", "groupId"],
@@ -762,20 +575,10 @@
 									"type": "array",
 									"items": {
 										"type": "string",
-										"allOf": [
-											{
-												"pattern": "^[a-zA-Z0-9][a-zA-Z0-9._-]{0,127}$"
-											}
-										]
+										"pattern": "^[a-zA-Z0-9][a-zA-Z0-9._-]{0,127}$"
 									},
-									"allOf": [
-										{
-											"minItems": 1
-										},
-										{
-											"maxItems": 256
-										}
-									]
+									"minItems": 1,
+									"maxItems": 256
 								}
 							},
 							"required": ["kind", "cameraIds"],
@@ -788,42 +591,26 @@
 					"properties": {
 						"fieldOfViewDegrees": {
 							"type": "number",
-							"allOf": [
-								{
-									"minimum": 5,
-									"maximum": 170
-								}
-							]
+							"minimum": 5,
+							"maximum": 170
 						},
 						"distanceScale": {
 							"type": "number",
-							"allOf": [
-								{
-									"minimum": 0.01,
-									"maximum": 100
-								}
-							]
+							"minimum": 0.01,
+							"maximum": 100
 						},
 						"heightOffset": {
 							"type": "number"
 						},
 						"margin": {
 							"type": "number",
-							"allOf": [
-								{
-									"minimum": 0,
-									"maximum": 0.45
-								}
-							]
+							"minimum": 0,
+							"maximum": 0.45
 						},
 						"elevationDegrees": {
 							"type": "number",
-							"allOf": [
-								{
-									"minimum": -89,
-									"maximum": 89
-								}
-							]
+							"minimum": -89,
+							"maximum": 89
 						},
 						"yawOffset": {
 							"type": "number"
@@ -879,28 +666,16 @@
 			"properties": {
 				"arrangementId": {
 					"type": "string",
-					"allOf": [
-						{
-							"pattern": "^[a-zA-Z0-9][a-zA-Z0-9._-]{0,127}$"
-						}
-					]
+					"pattern": "^[a-zA-Z0-9][a-zA-Z0-9._-]{0,127}$"
 				},
 				"expectedRevision": {
 					"type": "integer",
-					"allOf": [
-						{
-							"minimum": 0,
-							"maximum": 9007199254740991
-						}
-					]
+					"minimum": 0,
+					"maximum": 9007199254740991
 				},
 				"operationId": {
 					"type": "string",
-					"allOf": [
-						{
-							"pattern": "^[a-zA-Z0-9][a-zA-Z0-9._-]{0,127}$"
-						}
-					]
+					"pattern": "^[a-zA-Z0-9][a-zA-Z0-9._-]{0,127}$"
 				},
 				"kind": {
 					"type": "string",
@@ -928,11 +703,7 @@
 								},
 								"groupId": {
 									"type": "string",
-									"allOf": [
-										{
-											"pattern": "^[a-zA-Z0-9][a-zA-Z0-9._-]{0,127}$"
-										}
-									]
+									"pattern": "^[a-zA-Z0-9][a-zA-Z0-9._-]{0,127}$"
 								}
 							},
 							"required": ["kind", "groupId"],
@@ -949,20 +720,10 @@
 									"type": "array",
 									"items": {
 										"type": "string",
-										"allOf": [
-											{
-												"pattern": "^[a-zA-Z0-9][a-zA-Z0-9._-]{0,127}$"
-											}
-										]
+										"pattern": "^[a-zA-Z0-9][a-zA-Z0-9._-]{0,127}$"
 									},
-									"allOf": [
-										{
-											"minItems": 1
-										},
-										{
-											"maxItems": 256
-										}
-									]
+									"minItems": 1,
+									"maxItems": 256
 								}
 							},
 							"required": ["kind", "cameraIds"],
@@ -989,14 +750,8 @@
 													},
 													"actorPath": {
 														"type": "string",
-														"allOf": [
-															{
-																"pattern": "^\\/Game\\/"
-															},
-															{
-																"maxLength": 4096
-															}
-														]
+														"pattern": "^\\/Game\\/",
+														"maxLength": 4096
 													}
 												},
 												"required": ["kind", "actorPath"],
@@ -1010,20 +765,11 @@
 														"enum": ["actor_guid"]
 													},
 													"actorGuid": {
-														"type": "string",
-														"allOf": [
-															{
-																"pattern": "^(?!00000000-00000000-00000000-00000000$)[0-9a-fA-F]{8}(?:-[0-9a-fA-F]{8}){3}$"
-															}
-														]
+														"type": "string"
 													},
 													"lastKnownActorPath": {
 														"type": "string",
-														"allOf": [
-															{
-																"maxLength": 4096
-															}
-														]
+														"maxLength": 4096
 													}
 												},
 												"required": [
@@ -1037,21 +783,13 @@
 									},
 									"label": {
 										"type": "string",
-										"allOf": [
-											{
-												"maxLength": 256
-											}
-										]
+										"maxLength": 256
 									}
 								},
 								"required": ["locator", "label"],
 								"additionalProperties": false
 							},
-							"allOf": [
-								{
-									"maxItems": 256
-								}
-							]
+							"maxItems": 256
 						},
 						"protect": {
 							"type": "array",
@@ -1069,14 +807,8 @@
 													},
 													"actorPath": {
 														"type": "string",
-														"allOf": [
-															{
-																"pattern": "^\\/Game\\/"
-															},
-															{
-																"maxLength": 4096
-															}
-														]
+														"pattern": "^\\/Game\\/",
+														"maxLength": 4096
 													}
 												},
 												"required": ["kind", "actorPath"],
@@ -1090,20 +822,11 @@
 														"enum": ["actor_guid"]
 													},
 													"actorGuid": {
-														"type": "string",
-														"allOf": [
-															{
-																"pattern": "^(?!00000000-00000000-00000000-00000000$)[0-9a-fA-F]{8}(?:-[0-9a-fA-F]{8}){3}$"
-															}
-														]
+														"type": "string"
 													},
 													"lastKnownActorPath": {
 														"type": "string",
-														"allOf": [
-															{
-																"maxLength": 4096
-															}
-														]
+														"maxLength": 4096
 													}
 												},
 												"required": [
@@ -1117,21 +840,13 @@
 									},
 									"label": {
 										"type": "string",
-										"allOf": [
-											{
-												"maxLength": 256
-											}
-										]
+										"maxLength": 256
 									}
 								},
 								"required": ["locator", "label"],
 								"additionalProperties": false
 							},
-							"allOf": [
-								{
-									"maxItems": 256
-								}
-							]
+							"maxItems": 256
 						}
 					},
 					"required": ["hide", "protect"],
@@ -1153,28 +868,16 @@
 			"properties": {
 				"arrangementId": {
 					"type": "string",
-					"allOf": [
-						{
-							"pattern": "^[a-zA-Z0-9][a-zA-Z0-9._-]{0,127}$"
-						}
-					]
+					"pattern": "^[a-zA-Z0-9][a-zA-Z0-9._-]{0,127}$"
 				},
 				"expectedRevision": {
 					"type": "integer",
-					"allOf": [
-						{
-							"minimum": 0,
-							"maximum": 9007199254740991
-						}
-					]
+					"minimum": 0,
+					"maximum": 9007199254740991
 				},
 				"operationId": {
 					"type": "string",
-					"allOf": [
-						{
-							"pattern": "^[a-zA-Z0-9][a-zA-Z0-9._-]{0,127}$"
-						}
-					]
+					"pattern": "^[a-zA-Z0-9][a-zA-Z0-9._-]{0,127}$"
 				},
 				"kind": {
 					"type": "string",
@@ -1193,28 +896,16 @@
 			"properties": {
 				"arrangementId": {
 					"type": "string",
-					"allOf": [
-						{
-							"pattern": "^[a-zA-Z0-9][a-zA-Z0-9._-]{0,127}$"
-						}
-					]
+					"pattern": "^[a-zA-Z0-9][a-zA-Z0-9._-]{0,127}$"
 				},
 				"expectedRevision": {
 					"type": "integer",
-					"allOf": [
-						{
-							"minimum": 0,
-							"maximum": 9007199254740991
-						}
-					]
+					"minimum": 0,
+					"maximum": 9007199254740991
 				},
 				"operationId": {
 					"type": "string",
-					"allOf": [
-						{
-							"pattern": "^[a-zA-Z0-9][a-zA-Z0-9._-]{0,127}$"
-						}
-					]
+					"pattern": "^[a-zA-Z0-9][a-zA-Z0-9._-]{0,127}$"
 				},
 				"kind": {
 					"type": "string",
@@ -1242,14 +933,8 @@
 															},
 															"actorPath": {
 																"type": "string",
-																"allOf": [
-																	{
-																		"pattern": "^\\/Game\\/"
-																	},
-																	{
-																		"maxLength": 4096
-																	}
-																]
+																"pattern": "^\\/Game\\/",
+																"maxLength": 4096
 															}
 														},
 														"required": ["kind", "actorPath"],
@@ -1263,20 +948,11 @@
 																"enum": ["actor_guid"]
 															},
 															"actorGuid": {
-																"type": "string",
-																"allOf": [
-																	{
-																		"pattern": "^(?!00000000-00000000-00000000-00000000$)[0-9a-fA-F]{8}(?:-[0-9a-fA-F]{8}){3}$"
-																	}
-																]
+																"type": "string"
 															},
 															"lastKnownActorPath": {
 																"type": "string",
-																"allOf": [
-																	{
-																		"maxLength": 4096
-																	}
-																]
+																"maxLength": 4096
 															}
 														},
 														"required": [
@@ -1290,21 +966,13 @@
 											},
 											"label": {
 												"type": "string",
-												"allOf": [
-													{
-														"maxLength": 256
-													}
-												]
+												"maxLength": 256
 											}
 										},
 										"required": ["locator", "label"],
 										"additionalProperties": false
 									},
-									"allOf": [
-										{
-											"maxItems": 256
-										}
-									]
+									"maxItems": 256
 								},
 								"protect": {
 									"type": "array",
@@ -1322,14 +990,8 @@
 															},
 															"actorPath": {
 																"type": "string",
-																"allOf": [
-																	{
-																		"pattern": "^\\/Game\\/"
-																	},
-																	{
-																		"maxLength": 4096
-																	}
-																]
+																"pattern": "^\\/Game\\/",
+																"maxLength": 4096
 															}
 														},
 														"required": ["kind", "actorPath"],
@@ -1343,20 +1005,11 @@
 																"enum": ["actor_guid"]
 															},
 															"actorGuid": {
-																"type": "string",
-																"allOf": [
-																	{
-																		"pattern": "^(?!00000000-00000000-00000000-00000000$)[0-9a-fA-F]{8}(?:-[0-9a-fA-F]{8}){3}$"
-																	}
-																]
+																"type": "string"
 															},
 															"lastKnownActorPath": {
 																"type": "string",
-																"allOf": [
-																	{
-																		"maxLength": 4096
-																	}
-																]
+																"maxLength": 4096
 															}
 														},
 														"required": [
@@ -1370,21 +1023,13 @@
 											},
 											"label": {
 												"type": "string",
-												"allOf": [
-													{
-														"maxLength": 256
-													}
-												]
+												"maxLength": 256
 											}
 										},
 										"required": ["locator", "label"],
 										"additionalProperties": false
 									},
-									"allOf": [
-										{
-											"maxItems": 256
-										}
-									]
+									"maxItems": 256
 								}
 							},
 							"required": ["hide", "protect"],
@@ -1422,12 +1067,8 @@
 										},
 										"screenshotWarmupFrames": {
 											"type": "integer",
-											"allOf": [
-												{
-													"minimum": 1,
-													"maximum": 256
-												}
-											]
+											"minimum": 1,
+											"maximum": 256
 										}
 									},
 									"required": [
@@ -1458,12 +1099,8 @@
 										},
 										"lodDistanceScale": {
 											"type": "number",
-											"allOf": [
-												{
-													"minimum": 0.1,
-													"maximum": 100
-												}
-											]
+											"minimum": 0.1,
+											"maximum": 100
 										},
 										"fog": {
 											"type": "boolean"
@@ -1508,12 +1145,8 @@
 										},
 										"ev100": {
 											"type": "number",
-											"allOf": [
-												{
-													"minimum": -20,
-													"maximum": 30
-												}
-											]
+											"minimum": -20,
+											"maximum": 30
 										},
 										"compensation": {
 											"type": "string",
@@ -1576,12 +1209,8 @@
 																},
 																"horizontalFieldOfView": {
 																	"type": "number",
-																	"allOf": [
-																		{
-																			"minimum": 5,
-																			"maximum": 170
-																		}
-																	]
+																	"minimum": 5,
+																	"maximum": 170
 																}
 															},
 															"required": [
@@ -1599,14 +1228,8 @@
 																},
 																"width": {
 																	"type": "number",
-																	"allOf": [
-																		{
-																			"exclusiveMinimum": 0
-																		},
-																		{
-																			"maximum": 1000000000
-																		}
-																	]
+																	"exclusiveMinimum": 0,
+																	"maximum": 1000000000
 																}
 															},
 															"required": ["kind", "width"],
@@ -1623,21 +1246,13 @@
 											"properties": {
 												"width": {
 													"type": "integer",
-													"allOf": [
-														{
-															"minimum": 16,
-															"maximum": 16384
-														}
-													]
+													"minimum": 16,
+													"maximum": 16384
 												},
 												"height": {
 													"type": "integer",
-													"allOf": [
-														{
-															"minimum": 16,
-															"maximum": 16384
-														}
-													]
+													"minimum": 16,
+													"maximum": 16384
 												}
 											},
 											"required": ["width", "height"],
@@ -1645,12 +1260,8 @@
 										},
 										"minimumFrames": {
 											"type": "integer",
-											"allOf": [
-												{
-													"minimum": 1,
-													"maximum": 4096
-												}
-											]
+											"minimum": 1,
+											"maximum": 4096
 										}
 									},
 									"required": [
@@ -1668,21 +1279,13 @@
 							"properties": {
 								"minimumFrames": {
 									"type": "integer",
-									"allOf": [
-										{
-											"minimum": 1,
-											"maximum": 4096
-										}
-									]
+									"minimum": 1,
+									"maximum": 4096
 								},
 								"timeoutMs": {
 									"type": "integer",
-									"allOf": [
-										{
-											"minimum": 1000,
-											"maximum": 900000
-										}
-									]
+									"minimum": 1000,
+									"maximum": 900000
 								},
 								"initialView": {
 									"type": "object",
@@ -1733,12 +1336,8 @@
 																},
 																"horizontalFieldOfView": {
 																	"type": "number",
-																	"allOf": [
-																		{
-																			"minimum": 5,
-																			"maximum": 170
-																		}
-																	]
+																	"minimum": 5,
+																	"maximum": 170
 																}
 															},
 															"required": [
@@ -1756,14 +1355,8 @@
 																},
 																"width": {
 																	"type": "number",
-																	"allOf": [
-																		{
-																			"exclusiveMinimum": 0
-																		},
-																		{
-																			"maximum": 1000000000
-																		}
-																	]
+																	"exclusiveMinimum": 0,
+																	"maximum": 1000000000
 																}
 															},
 															"required": ["kind", "width"],
@@ -1780,21 +1373,13 @@
 											"properties": {
 												"width": {
 													"type": "integer",
-													"allOf": [
-														{
-															"minimum": 16,
-															"maximum": 16384
-														}
-													]
+													"minimum": 16,
+													"maximum": 16384
 												},
 												"height": {
 													"type": "integer",
-													"allOf": [
-														{
-															"minimum": 16,
-															"maximum": 16384
-														}
-													]
+													"minimum": 16,
+													"maximum": 16384
 												}
 											},
 											"required": ["width", "height"],
@@ -1802,12 +1387,8 @@
 										},
 										"minimumFrames": {
 											"type": "integer",
-											"allOf": [
-												{
-													"minimum": 1,
-													"maximum": 4096
-												}
-											]
+											"minimum": 1,
+											"maximum": 4096
 										}
 									},
 									"required": ["camera", "size", "minimumFrames"],
@@ -1846,42 +1427,26 @@
 												},
 												"maximumRegions": {
 													"type": "integer",
-													"allOf": [
-														{
-															"minimum": 1,
-															"maximum": 64
-														}
-													]
+													"minimum": 1,
+													"maximum": 64
 												},
 												"extent": {
 													"type": "object",
 													"properties": {
 														"x": {
 															"type": "number",
-															"allOf": [
-																{
-																	"minimum": 0,
-																	"maximum": 10000000
-																}
-															]
+															"minimum": 0,
+															"maximum": 10000000
 														},
 														"y": {
 															"type": "number",
-															"allOf": [
-																{
-																	"minimum": 0,
-																	"maximum": 10000000
-																}
-															]
+															"minimum": 0,
+															"maximum": 10000000
 														},
 														"z": {
 															"type": "number",
-															"allOf": [
-																{
-																	"minimum": 0,
-																	"maximum": 10000000
-																}
-															]
+															"minimum": 0,
+															"maximum": 10000000
 														}
 													},
 													"required": ["x", "y", "z"],
@@ -1900,14 +1465,7 @@
 										"properties": {
 											"assetPath": {
 												"type": "string",
-												"allOf": [
-													{
-														"pattern": "^\\/[A-Za-z0-9_./-]+$"
-													},
-													{
-														"maxLength": 1024
-													}
-												]
+												"maxLength": 1024
 											},
 											"loaded": {
 												"type": "boolean"
@@ -1919,11 +1477,7 @@
 										"required": ["assetPath", "loaded", "visible"],
 										"additionalProperties": false
 									},
-									"allOf": [
-										{
-											"maxItems": 64
-										}
-									]
+									"maxItems": 64
 								}
 							},
 							"required": ["geometry", "dataLayers"],
@@ -1942,28 +1496,16 @@
 			"properties": {
 				"arrangementId": {
 					"type": "string",
-					"allOf": [
-						{
-							"pattern": "^[a-zA-Z0-9][a-zA-Z0-9._-]{0,127}$"
-						}
-					]
+					"pattern": "^[a-zA-Z0-9][a-zA-Z0-9._-]{0,127}$"
 				},
 				"expectedRevision": {
 					"type": "integer",
-					"allOf": [
-						{
-							"minimum": 0,
-							"maximum": 9007199254740991
-						}
-					]
+					"minimum": 0,
+					"maximum": 9007199254740991
 				},
 				"operationId": {
 					"type": "string",
-					"allOf": [
-						{
-							"pattern": "^[a-zA-Z0-9][a-zA-Z0-9._-]{0,127}$"
-						}
-					]
+					"pattern": "^[a-zA-Z0-9][a-zA-Z0-9._-]{0,127}$"
 				},
 				"kind": {
 					"type": "string",
@@ -1971,19 +1513,11 @@
 				},
 				"cameraId": {
 					"type": "string",
-					"allOf": [
-						{
-							"pattern": "^[a-zA-Z0-9][a-zA-Z0-9._-]{0,127}$"
-						}
-					]
+					"pattern": "^[a-zA-Z0-9][a-zA-Z0-9._-]{0,127}$"
 				},
 				"displayName": {
 					"type": "string",
-					"allOf": [
-						{
-							"minLength": 1
-						}
-					]
+					"minLength": 1
 				}
 			},
 			"required": [
@@ -2001,28 +1535,16 @@
 			"properties": {
 				"arrangementId": {
 					"type": "string",
-					"allOf": [
-						{
-							"pattern": "^[a-zA-Z0-9][a-zA-Z0-9._-]{0,127}$"
-						}
-					]
+					"pattern": "^[a-zA-Z0-9][a-zA-Z0-9._-]{0,127}$"
 				},
 				"expectedRevision": {
 					"type": "integer",
-					"allOf": [
-						{
-							"minimum": 0,
-							"maximum": 9007199254740991
-						}
-					]
+					"minimum": 0,
+					"maximum": 9007199254740991
 				},
 				"operationId": {
 					"type": "string",
-					"allOf": [
-						{
-							"pattern": "^[a-zA-Z0-9][a-zA-Z0-9._-]{0,127}$"
-						}
-					]
+					"pattern": "^[a-zA-Z0-9][a-zA-Z0-9._-]{0,127}$"
 				},
 				"kind": {
 					"type": "string",
@@ -2033,61 +1555,37 @@
 					"properties": {
 						"id": {
 							"type": "string",
-							"allOf": [
-								{
-									"pattern": "^[a-zA-Z0-9][a-zA-Z0-9._-]{0,127}$"
-								}
-							]
+							"pattern": "^[a-zA-Z0-9][a-zA-Z0-9._-]{0,127}$"
 						},
 						"name": {
 							"type": "string",
-							"allOf": [
-								{
-									"minLength": 1
-								}
-							]
+							"minLength": 1
 						},
 						"overrides": {
 							"type": "object",
 							"properties": {
 								"fieldOfViewDegrees": {
 									"type": "number",
-									"allOf": [
-										{
-											"minimum": 5,
-											"maximum": 170
-										}
-									]
+									"minimum": 5,
+									"maximum": 170
 								},
 								"distanceScale": {
 									"type": "number",
-									"allOf": [
-										{
-											"minimum": 0.01,
-											"maximum": 100
-										}
-									]
+									"minimum": 0.01,
+									"maximum": 100
 								},
 								"heightOffset": {
 									"type": "number"
 								},
 								"margin": {
 									"type": "number",
-									"allOf": [
-										{
-											"minimum": 0,
-											"maximum": 0.45
-										}
-									]
+									"minimum": 0,
+									"maximum": 0.45
 								},
 								"elevationDegrees": {
 									"type": "number",
-									"allOf": [
-										{
-											"minimum": -89,
-											"maximum": 89
-										}
-									]
+									"minimum": -89,
+									"maximum": 89
 								},
 								"yawOffset": {
 									"type": "number"
@@ -2130,14 +1628,8 @@
 															},
 															"actorPath": {
 																"type": "string",
-																"allOf": [
-																	{
-																		"pattern": "^\\/Game\\/"
-																	},
-																	{
-																		"maxLength": 4096
-																	}
-																]
+																"pattern": "^\\/Game\\/",
+																"maxLength": 4096
 															}
 														},
 														"required": ["kind", "actorPath"],
@@ -2151,20 +1643,11 @@
 																"enum": ["actor_guid"]
 															},
 															"actorGuid": {
-																"type": "string",
-																"allOf": [
-																	{
-																		"pattern": "^(?!00000000-00000000-00000000-00000000$)[0-9a-fA-F]{8}(?:-[0-9a-fA-F]{8}){3}$"
-																	}
-																]
+																"type": "string"
 															},
 															"lastKnownActorPath": {
 																"type": "string",
-																"allOf": [
-																	{
-																		"maxLength": 4096
-																	}
-																]
+																"maxLength": 4096
 															}
 														},
 														"required": [
@@ -2178,21 +1661,13 @@
 											},
 											"label": {
 												"type": "string",
-												"allOf": [
-													{
-														"maxLength": 256
-													}
-												]
+												"maxLength": 256
 											}
 										},
 										"required": ["locator", "label"],
 										"additionalProperties": false
 									},
-									"allOf": [
-										{
-											"maxItems": 256
-										}
-									]
+									"maxItems": 256
 								},
 								"protect": {
 									"type": "array",
@@ -2210,14 +1685,8 @@
 															},
 															"actorPath": {
 																"type": "string",
-																"allOf": [
-																	{
-																		"pattern": "^\\/Game\\/"
-																	},
-																	{
-																		"maxLength": 4096
-																	}
-																]
+																"pattern": "^\\/Game\\/",
+																"maxLength": 4096
 															}
 														},
 														"required": ["kind", "actorPath"],
@@ -2231,20 +1700,11 @@
 																"enum": ["actor_guid"]
 															},
 															"actorGuid": {
-																"type": "string",
-																"allOf": [
-																	{
-																		"pattern": "^(?!00000000-00000000-00000000-00000000$)[0-9a-fA-F]{8}(?:-[0-9a-fA-F]{8}){3}$"
-																	}
-																]
+																"type": "string"
 															},
 															"lastKnownActorPath": {
 																"type": "string",
-																"allOf": [
-																	{
-																		"maxLength": 4096
-																	}
-																]
+																"maxLength": 4096
 															}
 														},
 														"required": [
@@ -2258,21 +1718,13 @@
 											},
 											"label": {
 												"type": "string",
-												"allOf": [
-													{
-														"maxLength": 256
-													}
-												]
+												"maxLength": 256
 											}
 										},
 										"required": ["locator", "label"],
 										"additionalProperties": false
 									},
-									"allOf": [
-										{
-											"maxItems": 256
-										}
-									]
+									"maxItems": 256
 								}
 							},
 							"required": ["hide", "protect"],
@@ -2286,20 +1738,10 @@
 					"type": "array",
 					"items": {
 						"type": "string",
-						"allOf": [
-							{
-								"pattern": "^[a-zA-Z0-9][a-zA-Z0-9._-]{0,127}$"
-							}
-						]
+						"pattern": "^[a-zA-Z0-9][a-zA-Z0-9._-]{0,127}$"
 					},
-					"allOf": [
-						{
-							"minItems": 1
-						},
-						{
-							"maxItems": 256
-						}
-					]
+					"minItems": 1,
+					"maxItems": 256
 				}
 			},
 			"required": [
@@ -2317,28 +1759,16 @@
 			"properties": {
 				"arrangementId": {
 					"type": "string",
-					"allOf": [
-						{
-							"pattern": "^[a-zA-Z0-9][a-zA-Z0-9._-]{0,127}$"
-						}
-					]
+					"pattern": "^[a-zA-Z0-9][a-zA-Z0-9._-]{0,127}$"
 				},
 				"expectedRevision": {
 					"type": "integer",
-					"allOf": [
-						{
-							"minimum": 0,
-							"maximum": 9007199254740991
-						}
-					]
+					"minimum": 0,
+					"maximum": 9007199254740991
 				},
 				"operationId": {
 					"type": "string",
-					"allOf": [
-						{
-							"pattern": "^[a-zA-Z0-9][a-zA-Z0-9._-]{0,127}$"
-						}
-					]
+					"pattern": "^[a-zA-Z0-9][a-zA-Z0-9._-]{0,127}$"
 				},
 				"kind": {
 					"type": "string",
@@ -2349,19 +1779,11 @@
 					"properties": {
 						"id": {
 							"type": "string",
-							"allOf": [
-								{
-									"pattern": "^[a-zA-Z0-9][a-zA-Z0-9._-]{0,127}$"
-								}
-							]
+							"pattern": "^[a-zA-Z0-9][a-zA-Z0-9._-]{0,127}$"
 						},
 						"displayName": {
 							"type": "string",
-							"allOf": [
-								{
-									"minLength": 1
-								}
-							]
+							"minLength": 1
 						},
 						"yawDegrees": {
 							"type": "number"
@@ -2371,42 +1793,26 @@
 							"properties": {
 								"fieldOfViewDegrees": {
 									"type": "number",
-									"allOf": [
-										{
-											"minimum": 5,
-											"maximum": 170
-										}
-									]
+									"minimum": 5,
+									"maximum": 170
 								},
 								"distanceScale": {
 									"type": "number",
-									"allOf": [
-										{
-											"minimum": 0.01,
-											"maximum": 100
-										}
-									]
+									"minimum": 0.01,
+									"maximum": 100
 								},
 								"heightOffset": {
 									"type": "number"
 								},
 								"margin": {
 									"type": "number",
-									"allOf": [
-										{
-											"minimum": 0,
-											"maximum": 0.45
-										}
-									]
+									"minimum": 0,
+									"maximum": 0.45
 								},
 								"elevationDegrees": {
 									"type": "number",
-									"allOf": [
-										{
-											"minimum": -89,
-											"maximum": 89
-										}
-									]
+									"minimum": -89,
+									"maximum": 89
 								},
 								"yawOffset": {
 									"type": "number"
@@ -2439,12 +1845,8 @@
 								},
 								"fieldOfViewDegrees": {
 									"type": "number",
-									"allOf": [
-										{
-											"minimum": 5,
-											"maximum": 170
-										}
-									]
+									"minimum": 5,
+									"maximum": 170
 								},
 								"location": {
 									"type": "object",
@@ -2494,22 +1896,12 @@
 						},
 						"viewId": {
 							"type": "string",
-							"allOf": [
-								{
-									"minLength": 1
-								},
-								{
-									"pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$"
-								}
-							]
+							"minLength": 1,
+							"pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$"
 						},
 						"groupId": {
 							"type": "string",
-							"allOf": [
-								{
-									"pattern": "^[a-zA-Z0-9][a-zA-Z0-9._-]{0,127}$"
-								}
-							]
+							"pattern": "^[a-zA-Z0-9][a-zA-Z0-9._-]{0,127}$"
 						},
 						"visibility": {
 							"type": "object",
@@ -2530,14 +1922,8 @@
 															},
 															"actorPath": {
 																"type": "string",
-																"allOf": [
-																	{
-																		"pattern": "^\\/Game\\/"
-																	},
-																	{
-																		"maxLength": 4096
-																	}
-																]
+																"pattern": "^\\/Game\\/",
+																"maxLength": 4096
 															}
 														},
 														"required": ["kind", "actorPath"],
@@ -2551,20 +1937,11 @@
 																"enum": ["actor_guid"]
 															},
 															"actorGuid": {
-																"type": "string",
-																"allOf": [
-																	{
-																		"pattern": "^(?!00000000-00000000-00000000-00000000$)[0-9a-fA-F]{8}(?:-[0-9a-fA-F]{8}){3}$"
-																	}
-																]
+																"type": "string"
 															},
 															"lastKnownActorPath": {
 																"type": "string",
-																"allOf": [
-																	{
-																		"maxLength": 4096
-																	}
-																]
+																"maxLength": 4096
 															}
 														},
 														"required": [
@@ -2578,21 +1955,13 @@
 											},
 											"label": {
 												"type": "string",
-												"allOf": [
-													{
-														"maxLength": 256
-													}
-												]
+												"maxLength": 256
 											}
 										},
 										"required": ["locator", "label"],
 										"additionalProperties": false
 									},
-									"allOf": [
-										{
-											"maxItems": 256
-										}
-									]
+									"maxItems": 256
 								},
 								"protect": {
 									"type": "array",
@@ -2610,14 +1979,8 @@
 															},
 															"actorPath": {
 																"type": "string",
-																"allOf": [
-																	{
-																		"pattern": "^\\/Game\\/"
-																	},
-																	{
-																		"maxLength": 4096
-																	}
-																]
+																"pattern": "^\\/Game\\/",
+																"maxLength": 4096
 															}
 														},
 														"required": ["kind", "actorPath"],
@@ -2631,20 +1994,11 @@
 																"enum": ["actor_guid"]
 															},
 															"actorGuid": {
-																"type": "string",
-																"allOf": [
-																	{
-																		"pattern": "^(?!00000000-00000000-00000000-00000000$)[0-9a-fA-F]{8}(?:-[0-9a-fA-F]{8}){3}$"
-																	}
-																]
+																"type": "string"
 															},
 															"lastKnownActorPath": {
 																"type": "string",
-																"allOf": [
-																	{
-																		"maxLength": 4096
-																	}
-																]
+																"maxLength": 4096
 															}
 														},
 														"required": [
@@ -2658,21 +2012,13 @@
 											},
 											"label": {
 												"type": "string",
-												"allOf": [
-													{
-														"maxLength": 256
-													}
-												]
+												"maxLength": 256
 											}
 										},
 										"required": ["locator", "label"],
 										"additionalProperties": false
 									},
-									"allOf": [
-										{
-											"maxItems": 256
-										}
-									]
+									"maxItems": 256
 								}
 							},
 							"required": ["hide", "protect"],
@@ -2684,11 +2030,7 @@
 				},
 				"afterCameraId": {
 					"type": "string",
-					"allOf": [
-						{
-							"pattern": "^[a-zA-Z0-9][a-zA-Z0-9._-]{0,127}$"
-						}
-					]
+					"pattern": "^[a-zA-Z0-9][a-zA-Z0-9._-]{0,127}$"
 				}
 			},
 			"required": ["arrangementId", "expectedRevision", "operationId", "kind", "camera"],
@@ -2699,28 +2041,16 @@
 			"properties": {
 				"arrangementId": {
 					"type": "string",
-					"allOf": [
-						{
-							"pattern": "^[a-zA-Z0-9][a-zA-Z0-9._-]{0,127}$"
-						}
-					]
+					"pattern": "^[a-zA-Z0-9][a-zA-Z0-9._-]{0,127}$"
 				},
 				"expectedRevision": {
 					"type": "integer",
-					"allOf": [
-						{
-							"minimum": 0,
-							"maximum": 9007199254740991
-						}
-					]
+					"minimum": 0,
+					"maximum": 9007199254740991
 				},
 				"operationId": {
 					"type": "string",
-					"allOf": [
-						{
-							"pattern": "^[a-zA-Z0-9][a-zA-Z0-9._-]{0,127}$"
-						}
-					]
+					"pattern": "^[a-zA-Z0-9][a-zA-Z0-9._-]{0,127}$"
 				},
 				"kind": {
 					"type": "string",
@@ -2728,30 +2058,16 @@
 				},
 				"cameraId": {
 					"type": "string",
-					"allOf": [
-						{
-							"pattern": "^[a-zA-Z0-9][a-zA-Z0-9._-]{0,127}$"
-						}
-					]
+					"pattern": "^[a-zA-Z0-9][a-zA-Z0-9._-]{0,127}$"
 				},
 				"newCameraId": {
 					"type": "string",
-					"allOf": [
-						{
-							"pattern": "^[a-zA-Z0-9][a-zA-Z0-9._-]{0,127}$"
-						}
-					]
+					"pattern": "^[a-zA-Z0-9][a-zA-Z0-9._-]{0,127}$"
 				},
 				"newViewId": {
 					"type": "string",
-					"allOf": [
-						{
-							"minLength": 1
-						},
-						{
-							"pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$"
-						}
-					]
+					"minLength": 1,
+					"pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$"
 				}
 			},
 			"required": [
@@ -2770,28 +2086,16 @@
 			"properties": {
 				"arrangementId": {
 					"type": "string",
-					"allOf": [
-						{
-							"pattern": "^[a-zA-Z0-9][a-zA-Z0-9._-]{0,127}$"
-						}
-					]
+					"pattern": "^[a-zA-Z0-9][a-zA-Z0-9._-]{0,127}$"
 				},
 				"expectedRevision": {
 					"type": "integer",
-					"allOf": [
-						{
-							"minimum": 0,
-							"maximum": 9007199254740991
-						}
-					]
+					"minimum": 0,
+					"maximum": 9007199254740991
 				},
 				"operationId": {
 					"type": "string",
-					"allOf": [
-						{
-							"pattern": "^[a-zA-Z0-9][a-zA-Z0-9._-]{0,127}$"
-						}
-					]
+					"pattern": "^[a-zA-Z0-9][a-zA-Z0-9._-]{0,127}$"
 				},
 				"kind": {
 					"type": "string",
@@ -2801,27 +2105,15 @@
 					"type": "array",
 					"items": {
 						"type": "string",
-						"allOf": [
-							{
-								"pattern": "^[a-zA-Z0-9][a-zA-Z0-9._-]{0,127}$"
-							}
-						]
+						"pattern": "^[a-zA-Z0-9][a-zA-Z0-9._-]{0,127}$"
 					},
-					"allOf": [
-						{
-							"minItems": 1
-						}
-					]
+					"minItems": 1
 				},
 				"discardCustomizedIds": {
 					"type": "array",
 					"items": {
 						"type": "string",
-						"allOf": [
-							{
-								"pattern": "^[a-zA-Z0-9][a-zA-Z0-9._-]{0,127}$"
-							}
-						]
+						"pattern": "^[a-zA-Z0-9][a-zA-Z0-9._-]{0,127}$"
 					}
 				}
 			},
@@ -2840,28 +2132,16 @@
 			"properties": {
 				"arrangementId": {
 					"type": "string",
-					"allOf": [
-						{
-							"pattern": "^[a-zA-Z0-9][a-zA-Z0-9._-]{0,127}$"
-						}
-					]
+					"pattern": "^[a-zA-Z0-9][a-zA-Z0-9._-]{0,127}$"
 				},
 				"expectedRevision": {
 					"type": "integer",
-					"allOf": [
-						{
-							"minimum": 0,
-							"maximum": 9007199254740991
-						}
-					]
+					"minimum": 0,
+					"maximum": 9007199254740991
 				},
 				"operationId": {
 					"type": "string",
-					"allOf": [
-						{
-							"pattern": "^[a-zA-Z0-9][a-zA-Z0-9._-]{0,127}$"
-						}
-					]
+					"pattern": "^[a-zA-Z0-9][a-zA-Z0-9._-]{0,127}$"
 				},
 				"kind": {
 					"type": "string",
@@ -2871,17 +2151,9 @@
 					"type": "array",
 					"items": {
 						"type": "string",
-						"allOf": [
-							{
-								"pattern": "^[a-zA-Z0-9][a-zA-Z0-9._-]{0,127}$"
-							}
-						]
+						"pattern": "^[a-zA-Z0-9][a-zA-Z0-9._-]{0,127}$"
 					},
-					"allOf": [
-						{
-							"minItems": 1
-						}
-					]
+					"minItems": 1
 				}
 			},
 			"required": ["arrangementId", "expectedRevision", "operationId", "kind", "cameraIds"],
@@ -2892,28 +2164,16 @@
 			"properties": {
 				"arrangementId": {
 					"type": "string",
-					"allOf": [
-						{
-							"pattern": "^[a-zA-Z0-9][a-zA-Z0-9._-]{0,127}$"
-						}
-					]
+					"pattern": "^[a-zA-Z0-9][a-zA-Z0-9._-]{0,127}$"
 				},
 				"expectedRevision": {
 					"type": "integer",
-					"allOf": [
-						{
-							"minimum": 0,
-							"maximum": 9007199254740991
-						}
-					]
+					"minimum": 0,
+					"maximum": 9007199254740991
 				},
 				"operationId": {
 					"type": "string",
-					"allOf": [
-						{
-							"pattern": "^[a-zA-Z0-9][a-zA-Z0-9._-]{0,127}$"
-						}
-					]
+					"pattern": "^[a-zA-Z0-9][a-zA-Z0-9._-]{0,127}$"
 				},
 				"kind": {
 					"type": "string",
@@ -2941,11 +2201,7 @@
 								},
 								"groupId": {
 									"type": "string",
-									"allOf": [
-										{
-											"pattern": "^[a-zA-Z0-9][a-zA-Z0-9._-]{0,127}$"
-										}
-									]
+									"pattern": "^[a-zA-Z0-9][a-zA-Z0-9._-]{0,127}$"
 								}
 							},
 							"required": ["kind", "groupId"],
@@ -2962,20 +2218,10 @@
 									"type": "array",
 									"items": {
 										"type": "string",
-										"allOf": [
-											{
-												"pattern": "^[a-zA-Z0-9][a-zA-Z0-9._-]{0,127}$"
-											}
-										]
+										"pattern": "^[a-zA-Z0-9][a-zA-Z0-9._-]{0,127}$"
 									},
-									"allOf": [
-										{
-											"minItems": 1
-										},
-										{
-											"maxItems": 256
-										}
-									]
+									"minItems": 1,
+									"maxItems": 256
 								}
 							},
 							"required": ["kind", "cameraIds"],
@@ -3019,28 +2265,16 @@
 			"properties": {
 				"arrangementId": {
 					"type": "string",
-					"allOf": [
-						{
-							"pattern": "^[a-zA-Z0-9][a-zA-Z0-9._-]{0,127}$"
-						}
-					]
+					"pattern": "^[a-zA-Z0-9][a-zA-Z0-9._-]{0,127}$"
 				},
 				"expectedRevision": {
 					"type": "integer",
-					"allOf": [
-						{
-							"minimum": 0,
-							"maximum": 9007199254740991
-						}
-					]
+					"minimum": 0,
+					"maximum": 9007199254740991
 				},
 				"operationId": {
 					"type": "string",
-					"allOf": [
-						{
-							"pattern": "^[a-zA-Z0-9][a-zA-Z0-9._-]{0,127}$"
-						}
-					]
+					"pattern": "^[a-zA-Z0-9][a-zA-Z0-9._-]{0,127}$"
 				},
 				"kind": {
 					"type": "string",
@@ -3051,42 +2285,26 @@
 					"properties": {
 						"fieldOfViewDegrees": {
 							"type": "number",
-							"allOf": [
-								{
-									"minimum": 5,
-									"maximum": 170
-								}
-							]
+							"minimum": 5,
+							"maximum": 170
 						},
 						"distanceScale": {
 							"type": "number",
-							"allOf": [
-								{
-									"minimum": 0.01,
-									"maximum": 100
-								}
-							]
+							"minimum": 0.01,
+							"maximum": 100
 						},
 						"heightOffset": {
 							"type": "number"
 						},
 						"margin": {
 							"type": "number",
-							"allOf": [
-								{
-									"minimum": 0,
-									"maximum": 0.45
-								}
-							]
+							"minimum": 0,
+							"maximum": 0.45
 						},
 						"elevationDegrees": {
 							"type": "number",
-							"allOf": [
-								{
-									"minimum": -89,
-									"maximum": 89
-								}
-							]
+							"minimum": -89,
+							"maximum": 89
 						},
 						"yawOffset": {
 							"type": "number"
@@ -3119,28 +2337,16 @@
 			"properties": {
 				"arrangementId": {
 					"type": "string",
-					"allOf": [
-						{
-							"pattern": "^[a-zA-Z0-9][a-zA-Z0-9._-]{0,127}$"
-						}
-					]
+					"pattern": "^[a-zA-Z0-9][a-zA-Z0-9._-]{0,127}$"
 				},
 				"expectedRevision": {
 					"type": "integer",
-					"allOf": [
-						{
-							"minimum": 0,
-							"maximum": 9007199254740991
-						}
-					]
+					"minimum": 0,
+					"maximum": 9007199254740991
 				},
 				"operationId": {
 					"type": "string",
-					"allOf": [
-						{
-							"pattern": "^[a-zA-Z0-9][a-zA-Z0-9._-]{0,127}$"
-						}
-					]
+					"pattern": "^[a-zA-Z0-9][a-zA-Z0-9._-]{0,127}$"
 				},
 				"kind": {
 					"type": "string",
@@ -3148,53 +2354,33 @@
 				},
 				"cameraId": {
 					"type": "string",
-					"allOf": [
-						{
-							"pattern": "^[a-zA-Z0-9][a-zA-Z0-9._-]{0,127}$"
-						}
-					]
+					"pattern": "^[a-zA-Z0-9][a-zA-Z0-9._-]{0,127}$"
 				},
 				"overrides": {
 					"type": "object",
 					"properties": {
 						"fieldOfViewDegrees": {
 							"type": "number",
-							"allOf": [
-								{
-									"minimum": 5,
-									"maximum": 170
-								}
-							]
+							"minimum": 5,
+							"maximum": 170
 						},
 						"distanceScale": {
 							"type": "number",
-							"allOf": [
-								{
-									"minimum": 0.01,
-									"maximum": 100
-								}
-							]
+							"minimum": 0.01,
+							"maximum": 100
 						},
 						"heightOffset": {
 							"type": "number"
 						},
 						"margin": {
 							"type": "number",
-							"allOf": [
-								{
-									"minimum": 0,
-									"maximum": 0.45
-								}
-							]
+							"minimum": 0,
+							"maximum": 0.45
 						},
 						"elevationDegrees": {
 							"type": "number",
-							"allOf": [
-								{
-									"minimum": -89,
-									"maximum": 89
-								}
-							]
+							"minimum": -89,
+							"maximum": 89
 						},
 						"yawOffset": {
 							"type": "number"
@@ -3234,28 +2420,16 @@
 			"properties": {
 				"arrangementId": {
 					"type": "string",
-					"allOf": [
-						{
-							"pattern": "^[a-zA-Z0-9][a-zA-Z0-9._-]{0,127}$"
-						}
-					]
+					"pattern": "^[a-zA-Z0-9][a-zA-Z0-9._-]{0,127}$"
 				},
 				"expectedRevision": {
 					"type": "integer",
-					"allOf": [
-						{
-							"minimum": 0,
-							"maximum": 9007199254740991
-						}
-					]
+					"minimum": 0,
+					"maximum": 9007199254740991
 				},
 				"operationId": {
 					"type": "string",
-					"allOf": [
-						{
-							"pattern": "^[a-zA-Z0-9][a-zA-Z0-9._-]{0,127}$"
-						}
-					]
+					"pattern": "^[a-zA-Z0-9][a-zA-Z0-9._-]{0,127}$"
 				},
 				"kind": {
 					"type": "string",
@@ -3263,11 +2437,7 @@
 				},
 				"cameraId": {
 					"type": "string",
-					"allOf": [
-						{
-							"pattern": "^[a-zA-Z0-9][a-zA-Z0-9._-]{0,127}$"
-						}
-					]
+					"pattern": "^[a-zA-Z0-9][a-zA-Z0-9._-]{0,127}$"
 				},
 				"pose": {
 					"type": "object",
@@ -3278,12 +2448,8 @@
 						},
 						"fieldOfViewDegrees": {
 							"type": "number",
-							"allOf": [
-								{
-									"minimum": 5,
-									"maximum": 170
-								}
-							]
+							"minimum": 5,
+							"maximum": 170
 						},
 						"location": {
 							"type": "object",
@@ -3355,28 +2521,16 @@
 			"properties": {
 				"arrangementId": {
 					"type": "string",
-					"allOf": [
-						{
-							"pattern": "^[a-zA-Z0-9][a-zA-Z0-9._-]{0,127}$"
-						}
-					]
+					"pattern": "^[a-zA-Z0-9][a-zA-Z0-9._-]{0,127}$"
 				},
 				"expectedRevision": {
 					"type": "integer",
-					"allOf": [
-						{
-							"minimum": 0,
-							"maximum": 9007199254740991
-						}
-					]
+					"minimum": 0,
+					"maximum": 9007199254740991
 				},
 				"operationId": {
 					"type": "string",
-					"allOf": [
-						{
-							"pattern": "^[a-zA-Z0-9][a-zA-Z0-9._-]{0,127}$"
-						}
-					]
+					"pattern": "^[a-zA-Z0-9][a-zA-Z0-9._-]{0,127}$"
 				},
 				"kind": {
 					"type": "string",
@@ -3384,11 +2538,7 @@
 				},
 				"cameraId": {
 					"type": "string",
-					"allOf": [
-						{
-							"pattern": "^[a-zA-Z0-9][a-zA-Z0-9._-]{0,127}$"
-						}
-					]
+					"pattern": "^[a-zA-Z0-9][a-zA-Z0-9._-]{0,127}$"
 				}
 			},
 			"required": ["arrangementId", "expectedRevision", "operationId", "kind", "cameraId"],
@@ -3399,28 +2549,16 @@
 			"properties": {
 				"arrangementId": {
 					"type": "string",
-					"allOf": [
-						{
-							"pattern": "^[a-zA-Z0-9][a-zA-Z0-9._-]{0,127}$"
-						}
-					]
+					"pattern": "^[a-zA-Z0-9][a-zA-Z0-9._-]{0,127}$"
 				},
 				"expectedRevision": {
 					"type": "integer",
-					"allOf": [
-						{
-							"minimum": 0,
-							"maximum": 9007199254740991
-						}
-					]
+					"minimum": 0,
+					"maximum": 9007199254740991
 				},
 				"operationId": {
 					"type": "string",
-					"allOf": [
-						{
-							"pattern": "^[a-zA-Z0-9][a-zA-Z0-9._-]{0,127}$"
-						}
-					]
+					"pattern": "^[a-zA-Z0-9][a-zA-Z0-9._-]{0,127}$"
 				},
 				"kind": {
 					"type": "string",
@@ -3431,42 +2569,26 @@
 					"properties": {
 						"fieldOfViewDegrees": {
 							"type": "number",
-							"allOf": [
-								{
-									"minimum": 5,
-									"maximum": 170
-								}
-							]
+							"minimum": 5,
+							"maximum": 170
 						},
 						"distanceScale": {
 							"type": "number",
-							"allOf": [
-								{
-									"minimum": 0.01,
-									"maximum": 100
-								}
-							]
+							"minimum": 0.01,
+							"maximum": 100
 						},
 						"heightOffset": {
 							"type": "number"
 						},
 						"margin": {
 							"type": "number",
-							"allOf": [
-								{
-									"minimum": 0,
-									"maximum": 0.45
-								}
-							]
+							"minimum": 0,
+							"maximum": 0.45
 						},
 						"elevationDegrees": {
 							"type": "number",
-							"allOf": [
-								{
-									"minimum": -89,
-									"maximum": 89
-								}
-							]
+							"minimum": -89,
+							"maximum": 89
 						},
 						"yawOffset": {
 							"type": "number"
@@ -3498,61 +2620,37 @@
 						"properties": {
 							"id": {
 								"type": "string",
-								"allOf": [
-									{
-										"pattern": "^[a-zA-Z0-9][a-zA-Z0-9._-]{0,127}$"
-									}
-								]
+								"pattern": "^[a-zA-Z0-9][a-zA-Z0-9._-]{0,127}$"
 							},
 							"name": {
 								"type": "string",
-								"allOf": [
-									{
-										"minLength": 1
-									}
-								]
+								"minLength": 1
 							},
 							"overrides": {
 								"type": "object",
 								"properties": {
 									"fieldOfViewDegrees": {
 										"type": "number",
-										"allOf": [
-											{
-												"minimum": 5,
-												"maximum": 170
-											}
-										]
+										"minimum": 5,
+										"maximum": 170
 									},
 									"distanceScale": {
 										"type": "number",
-										"allOf": [
-											{
-												"minimum": 0.01,
-												"maximum": 100
-											}
-										]
+										"minimum": 0.01,
+										"maximum": 100
 									},
 									"heightOffset": {
 										"type": "number"
 									},
 									"margin": {
 										"type": "number",
-										"allOf": [
-											{
-												"minimum": 0,
-												"maximum": 0.45
-											}
-										]
+										"minimum": 0,
+										"maximum": 0.45
 									},
 									"elevationDegrees": {
 										"type": "number",
-										"allOf": [
-											{
-												"minimum": -89,
-												"maximum": 89
-											}
-										]
+										"minimum": -89,
+										"maximum": 89
 									},
 									"yawOffset": {
 										"type": "number"
@@ -3595,14 +2693,8 @@
 																},
 																"actorPath": {
 																	"type": "string",
-																	"allOf": [
-																		{
-																			"pattern": "^\\/Game\\/"
-																		},
-																		{
-																			"maxLength": 4096
-																		}
-																	]
+																	"pattern": "^\\/Game\\/",
+																	"maxLength": 4096
 																}
 															},
 															"required": ["kind", "actorPath"],
@@ -3616,20 +2708,11 @@
 																	"enum": ["actor_guid"]
 																},
 																"actorGuid": {
-																	"type": "string",
-																	"allOf": [
-																		{
-																			"pattern": "^(?!00000000-00000000-00000000-00000000$)[0-9a-fA-F]{8}(?:-[0-9a-fA-F]{8}){3}$"
-																		}
-																	]
+																	"type": "string"
 																},
 																"lastKnownActorPath": {
 																	"type": "string",
-																	"allOf": [
-																		{
-																			"maxLength": 4096
-																		}
-																	]
+																	"maxLength": 4096
 																}
 															},
 															"required": [
@@ -3643,21 +2726,13 @@
 												},
 												"label": {
 													"type": "string",
-													"allOf": [
-														{
-															"maxLength": 256
-														}
-													]
+													"maxLength": 256
 												}
 											},
 											"required": ["locator", "label"],
 											"additionalProperties": false
 										},
-										"allOf": [
-											{
-												"maxItems": 256
-											}
-										]
+										"maxItems": 256
 									},
 									"protect": {
 										"type": "array",
@@ -3675,14 +2750,8 @@
 																},
 																"actorPath": {
 																	"type": "string",
-																	"allOf": [
-																		{
-																			"pattern": "^\\/Game\\/"
-																		},
-																		{
-																			"maxLength": 4096
-																		}
-																	]
+																	"pattern": "^\\/Game\\/",
+																	"maxLength": 4096
 																}
 															},
 															"required": ["kind", "actorPath"],
@@ -3696,20 +2765,11 @@
 																	"enum": ["actor_guid"]
 																},
 																"actorGuid": {
-																	"type": "string",
-																	"allOf": [
-																		{
-																			"pattern": "^(?!00000000-00000000-00000000-00000000$)[0-9a-fA-F]{8}(?:-[0-9a-fA-F]{8}){3}$"
-																		}
-																	]
+																	"type": "string"
 																},
 																"lastKnownActorPath": {
 																	"type": "string",
-																	"allOf": [
-																		{
-																			"maxLength": 4096
-																		}
-																	]
+																	"maxLength": 4096
 																}
 															},
 															"required": [
@@ -3723,21 +2783,13 @@
 												},
 												"label": {
 													"type": "string",
-													"allOf": [
-														{
-															"maxLength": 256
-														}
-													]
+													"maxLength": 256
 												}
 											},
 											"required": ["locator", "label"],
 											"additionalProperties": false
 										},
-										"allOf": [
-											{
-												"maxItems": 256
-											}
-										]
+										"maxItems": 256
 									}
 								},
 								"required": ["hide", "protect"],
@@ -3755,19 +2807,11 @@
 						"properties": {
 							"id": {
 								"type": "string",
-								"allOf": [
-									{
-										"pattern": "^[a-zA-Z0-9][a-zA-Z0-9._-]{0,127}$"
-									}
-								]
+								"pattern": "^[a-zA-Z0-9][a-zA-Z0-9._-]{0,127}$"
 							},
 							"displayName": {
 								"type": "string",
-								"allOf": [
-									{
-										"minLength": 1
-									}
-								]
+								"minLength": 1
 							},
 							"yawDegrees": {
 								"type": "number"
@@ -3777,42 +2821,26 @@
 								"properties": {
 									"fieldOfViewDegrees": {
 										"type": "number",
-										"allOf": [
-											{
-												"minimum": 5,
-												"maximum": 170
-											}
-										]
+										"minimum": 5,
+										"maximum": 170
 									},
 									"distanceScale": {
 										"type": "number",
-										"allOf": [
-											{
-												"minimum": 0.01,
-												"maximum": 100
-											}
-										]
+										"minimum": 0.01,
+										"maximum": 100
 									},
 									"heightOffset": {
 										"type": "number"
 									},
 									"margin": {
 										"type": "number",
-										"allOf": [
-											{
-												"minimum": 0,
-												"maximum": 0.45
-											}
-										]
+										"minimum": 0,
+										"maximum": 0.45
 									},
 									"elevationDegrees": {
 										"type": "number",
-										"allOf": [
-											{
-												"minimum": -89,
-												"maximum": 89
-											}
-										]
+										"minimum": -89,
+										"maximum": 89
 									},
 									"yawOffset": {
 										"type": "number"
@@ -3845,12 +2873,8 @@
 									},
 									"fieldOfViewDegrees": {
 										"type": "number",
-										"allOf": [
-											{
-												"minimum": 5,
-												"maximum": 170
-											}
-										]
+										"minimum": 5,
+										"maximum": 170
 									},
 									"location": {
 										"type": "object",
@@ -3900,22 +2924,12 @@
 							},
 							"viewId": {
 								"type": "string",
-								"allOf": [
-									{
-										"minLength": 1
-									},
-									{
-										"pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$"
-									}
-								]
+								"minLength": 1,
+								"pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$"
 							},
 							"groupId": {
 								"type": "string",
-								"allOf": [
-									{
-										"pattern": "^[a-zA-Z0-9][a-zA-Z0-9._-]{0,127}$"
-									}
-								]
+								"pattern": "^[a-zA-Z0-9][a-zA-Z0-9._-]{0,127}$"
 							},
 							"visibility": {
 								"type": "object",
@@ -3936,14 +2950,8 @@
 																},
 																"actorPath": {
 																	"type": "string",
-																	"allOf": [
-																		{
-																			"pattern": "^\\/Game\\/"
-																		},
-																		{
-																			"maxLength": 4096
-																		}
-																	]
+																	"pattern": "^\\/Game\\/",
+																	"maxLength": 4096
 																}
 															},
 															"required": ["kind", "actorPath"],
@@ -3957,20 +2965,11 @@
 																	"enum": ["actor_guid"]
 																},
 																"actorGuid": {
-																	"type": "string",
-																	"allOf": [
-																		{
-																			"pattern": "^(?!00000000-00000000-00000000-00000000$)[0-9a-fA-F]{8}(?:-[0-9a-fA-F]{8}){3}$"
-																		}
-																	]
+																	"type": "string"
 																},
 																"lastKnownActorPath": {
 																	"type": "string",
-																	"allOf": [
-																		{
-																			"maxLength": 4096
-																		}
-																	]
+																	"maxLength": 4096
 																}
 															},
 															"required": [
@@ -3984,21 +2983,13 @@
 												},
 												"label": {
 													"type": "string",
-													"allOf": [
-														{
-															"maxLength": 256
-														}
-													]
+													"maxLength": 256
 												}
 											},
 											"required": ["locator", "label"],
 											"additionalProperties": false
 										},
-										"allOf": [
-											{
-												"maxItems": 256
-											}
-										]
+										"maxItems": 256
 									},
 									"protect": {
 										"type": "array",
@@ -4016,14 +3007,8 @@
 																},
 																"actorPath": {
 																	"type": "string",
-																	"allOf": [
-																		{
-																			"pattern": "^\\/Game\\/"
-																		},
-																		{
-																			"maxLength": 4096
-																		}
-																	]
+																	"pattern": "^\\/Game\\/",
+																	"maxLength": 4096
 																}
 															},
 															"required": ["kind", "actorPath"],
@@ -4037,20 +3022,11 @@
 																	"enum": ["actor_guid"]
 																},
 																"actorGuid": {
-																	"type": "string",
-																	"allOf": [
-																		{
-																			"pattern": "^(?!00000000-00000000-00000000-00000000$)[0-9a-fA-F]{8}(?:-[0-9a-fA-F]{8}){3}$"
-																		}
-																	]
+																	"type": "string"
 																},
 																"lastKnownActorPath": {
 																	"type": "string",
-																	"allOf": [
-																		{
-																			"maxLength": 4096
-																		}
-																	]
+																	"maxLength": 4096
 																}
 															},
 															"required": [
@@ -4064,21 +3040,13 @@
 												},
 												"label": {
 													"type": "string",
-													"allOf": [
-														{
-															"maxLength": 256
-														}
-													]
+													"maxLength": 256
 												}
 											},
 											"required": ["locator", "label"],
 											"additionalProperties": false
 										},
-										"allOf": [
-											{
-												"maxItems": 256
-											}
-										]
+										"maxItems": 256
 									}
 								},
 								"required": ["hide", "protect"],
@@ -4088,24 +3056,14 @@
 						"required": ["id", "displayName", "yawDegrees", "overrides", "viewId"],
 						"additionalProperties": false
 					},
-					"allOf": [
-						{
-							"minItems": 1
-						},
-						{
-							"maxItems": 256
-						}
-					]
+					"minItems": 1,
+					"maxItems": 256
 				},
 				"discardCustomizedIds": {
 					"type": "array",
 					"items": {
 						"type": "string",
-						"allOf": [
-							{
-								"pattern": "^[a-zA-Z0-9][a-zA-Z0-9._-]{0,127}$"
-							}
-						]
+						"pattern": "^[a-zA-Z0-9][a-zA-Z0-9._-]{0,127}$"
 					}
 				}
 			},

@@ -73,7 +73,7 @@ export function cameraRenderReuseIdentity(args: {
 		.digest("hex")}`;
 }
 
-export class CameraRenderError extends Schema.TaggedErrorClass<CameraRenderError>()(
+export class CameraRenderError extends Schema.TaggedError<CameraRenderError>()(
 	"CameraRenderError",
 	{
 		code: Schema.Union([
@@ -440,6 +440,14 @@ export function makeCameraRenderer(
 							)
 						);
 			if (result.status === "failed") return yield* nativeError("capture", result);
+			if (result.status === "running")
+				return yield* new CameraRenderError({
+					code: "correlation_mismatch",
+					operation: "capture",
+					sessionId: request.sessionId,
+					message: "Frame polling ended before the capture completed.",
+					recovery: "Inspect the native session before retrying."
+				});
 			if (
 				!isDeepStrictEqual(result.evidence.camera, frame.camera) ||
 				!isDeepStrictEqual(result.evidence.policy, request.policy) ||

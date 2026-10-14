@@ -12,7 +12,7 @@ import { CliRuntime, printJson } from "../cli-runtime.js";
 import type { CliCommand } from "../command-model.js";
 import { loadLocalizationContext } from "./localization.js";
 
-export class LocalizationBaselineIOError extends Schema.TaggedErrorClass<LocalizationBaselineIOError>()(
+export class LocalizationBaselineIOError extends Schema.TaggedError<LocalizationBaselineIOError>()(
 	"LocalizationBaselineIOError",
 	{
 		code: Schema.Literals([

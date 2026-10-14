@@ -42,13 +42,14 @@ export const makeRetainedGameTextIndexWith = Effect.fn("GameTextIndex.retain")(f
 					const resource = yield* RcRef.make({
 						acquire: Effect.gen(function* () {
 							if (yield* Ref.get(retired)) return yield* Effect.interrupt;
-							const acquisitionScope = yield* Effect.scope;
+							const acquisitionScope = yield* Scope.fork(yield* Effect.scope);
 							yield* Effect.addFinalizer(() =>
 								Ref.set(retired, true).pipe(
 									Effect.andThen(Scope.close(lifetime, Exit.void))
 								)
 							);
 							return yield* acquire(request).pipe(
+								Effect.provideService(Scope.Scope, acquisitionScope),
 								Effect.provideService(GameTextIndexProgressReporter, (progress) => {
 									if (!Ref.getUnsafe(retired)) reportProgress(progress);
 								}),

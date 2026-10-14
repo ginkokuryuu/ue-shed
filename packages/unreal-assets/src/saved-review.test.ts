@@ -444,7 +444,9 @@ describe("saved review", () => {
 		expect(result.outcome).toBe("partial");
 	});
 	it("keeps published CLI JSON output conformant with the runtime schema", () => {
-		const document = Schema.toJsonSchemaDocument(SavedReviewOutput);
+		const document = Schema.toJsonSchemaDocument(Schema.toType(SavedReviewOutput), {
+			onExcessProperty: "error"
+		});
 		const expected = JSON.parse(
 			readFileSync(
 				new URL("../contracts/saved-review.v1.schema.json", import.meta.url),

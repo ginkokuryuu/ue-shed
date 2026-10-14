@@ -26,7 +26,9 @@ describe("editor foreground responsiveness contract", () => {
 			["foreground-state-result", EditorForegroundStateResult]
 		] as const) {
 			const wire = JSON.parse(readFileSync(new URL(`${name}.schema.json`, contract), "utf8"));
-			const document = Schema.toJsonSchemaDocument(schema);
+			const document = Schema.toJsonSchemaDocument(Schema.toType(schema), {
+				onExcessProperty: "error"
+			});
 			expect({
 				$schema: "https://json-schema.org/draft/2020-12/schema",
 				$defs: document.definitions,

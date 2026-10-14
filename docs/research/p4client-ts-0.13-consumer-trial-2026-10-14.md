@@ -1,5 +1,153 @@
 # p4client-ts 0.13 consumer trial
 
+## Replacement release candidate, 2026-10-14
+
+This section supersedes the earlier candidate's findings below. Work remains on
+`trial/p4client-ts-0.13`; main is unchanged and nothing has been pushed. The file
+specifier is unchanged, but the tarball and lockfile integrity were refreshed.
+Candidate SHA-256:
+`597d18003e03880587d80cd0d447ff4c74ad59e48cb6e9e899d8e9ba2d634b07`.
+
+### What changed
+
+- Upgrade the shared Effect catalog and its platform-node, opentelemetry and
+  vitest packages from beta.98 to stable 4.0.4. The candidate's peer is now
+  `^4.0.0`. Delete `.pnpmfile.cjs`; neither beta.37 nor beta.98 remains in the
+  lockfile. The single-version architecture policy is unchanged.
+- Replace the trial's Promise client bridge with native `P4` / `layerNode`
+  composition. Commands use the host runtime and Effect interruption directly;
+  separate runtimes, AbortSignals and disposal are gone. Remove the Perforce
+  Promise-adapter exemption from the architecture checker. Cache only resolved
+  project options, with project selection still owned by the host.
+- Replace the custom Promise test factory with native P4 layers and the published
+  `/testing` scripted executor. Raw lineage queries now pass the host Schema
+  directly to `runTagged`; partial-failure rejection remains intentional.
+- Remove the impossible-default submitted-change guard and the materialization
+  metadata rejoin. Carry the submitted status and materialization input row type
+  through the adapter, and project metadata directly from returned items.
+- Add disposable-server regression coverage for a deleted exact revision: require
+  `P4MaterializationError` / `missing_output`, preserve an existing destination,
+  and leave no staging file. Existing saved-map fixture bytes are unchanged.
+- Apply the host compatibility changes required by stable Effect: `TaggedError`,
+  Config and CLI constructor renames, `effect/cli`, the JSON Schema conversion
+  API, and explicit closeable acquisition scopes. Preserve omitted CLI booleans
+  with explicit defaults and closed wire objects with `onExcessProperty: "error"`.
+  Refresh generated schema artifacts for stable's flattened constraints, safe
+  integer bounds and previously unrepresented array bounds; use decoded types
+  for transformed wire values and Unicode regexes for exported ASCII patterns.
+- Validate the complete Remote Control envelope in UE Shed instead of relying on
+  unreal-rc's removed excess-property preservation option. Preserve the useful
+  retired-camera refusal as a domain error. Disable cooperative scheduler yields
+  only at the existing bounded synchronous Game Text query boundary; true
+  asynchronous effects still cannot run there.
+
+### Status of the ten reported library problems
+
+| Earlier item                                   | Current status and evidence                                                                                                                                                                                                                              |
+| ---------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 1. Effect peer range/import failure            | **Fixed.** Stable peer, successful native imports and one Effect version; architecture gate passes without an exception.                                                                                                                                 |
+| 2. Native adoption/schema incompatibility      | **Fixed for this host after moving to stable.** The live adapter, native mock layers, interruption test and typed raw Schema all compose directly. Beta hosts remain outside the supported peer contract, as documented.                                 |
+| 3. Missing type/result migration map           | **Fixed.** MIGRATION.md now maps old exported types, status-specific pages, snapshot results and existing ISO timestamp fields.                                                                                                                          |
+| 4. Error construction/category migration       | **Fixed.** The guide has an object-constructor example, complete categories and reason-based distinctions. Missing named users/clients can be `not_found`; they are not all configuration failures.                                                      |
+| 5. Lost materialization metadata type          | **Fixed.** Generic input/result types retain the full supplied row; the consumer metadata join is removed and the projection test passes.                                                                                                                |
+| 6. Deleted revision false success              | **Fixed, verified on a real server.** Exact deleted revision 2 fails with `missing_output`, preserves prior output and cleans staging. Normal history and its CLI journey also pass.                                                                     |
+| 7. Missing usable consumer test/replay example | **Fixed.** The testing guide includes service mocks, strict replay and a complete Promise replay recipe; `/testing` is packed. Native scripted executor and P4 test layers work in the consumer. The guide uses Bun, but our Vitest consumer also works. |
+| 8. Missing project-scoped discovery recipe     | **Fixed in documentation.** Getting Started now gives resolution, explicit connection, user filtering, workspace matching and isolated derivation. App-owned project selection remains necessary by design.                                              |
+| 9. Raw tagged partial failures not called out  | **Fixed in documentation.** The migration guide explicitly documents raw `failures` and auditing both items and failures. The consumer continues to reject incomplete lineage/mapping evidence.                                                          |
+| 10. Submitted changelist narrowing             | **Fixed.** Literal submitted status yields numeric changes in service, Promise, runner and watched declarations; the adapter no longer guards against `default`.                                                                                         |
+
+The documentation assessment used the supplied MIGRATION.md and the local
+library's `packages/www/src/content/docs/guides/getting-started.mdx` and
+`testing-and-fixtures.mdx`. No upstream files were modified.
+
+### New findings and remaining feedback
+
+No new p4client-ts defect was reproduced in the consumer's exercised acquisition
+paths. Moving this host from beta.98 to stable is a repository-wide migration,
+not a drop-in dependency edit: constructor/export renames, schema artifact
+changes, CLI boolean defaults and cooperative scheduling all require attention.
+An adjacent unreal-rc consumer also depended on the removed Schema
+`onExcessProperty: "preserve"` behavior and dropped the companion's `ResultJson`.
+UE Shed now decodes that envelope itself; unreal-rc should update its open
+response schema for stable Effect rather than depend on that removed option.
+
+The Perforce harness's committed Windows downloader hashes still do not match
+current r26.1 downloads. This is the existing UE Shed harness issue, not a
+p4client-ts regression. Explicit matching 2026.1 binaries still work. Keep
+materialization's documented nontransactional batch behavior and Promise-client
+ownership guidance: they are product contracts, not outstanding defects.
+
+The candidate remains a local file dependency. A fresh install needs that
+machine-local tarball; this trial branch is not publishable until it uses a
+published release. The stable runtime requirement and migration cost are the
+remaining adoption feedback. The earlier library blockers are resolved.
+
+### Follow-up verification
+
+Final commands used Node 26.5.0 and pnpm 11.17.0. The shell's default Node was
+24.21.0, so checks explicitly prepended the discovered Node 26 installation.
+
+- `pnpm install --frozen-lockfile`: passed with the replacement tarball's new
+  integrity. `pnpm --filter @ue-shed/map-history why effect` reports only 4.0.4.
+  The obsolete local beta.37 directory was also removed after checking that it
+  was an unredirected directory inside this workspace's pnpm store.
+- `pnpm check:precommit`: passed after the final source changes: formatting, lint,
+  repository-wide builds/typecheck, StyleX, 43 architecture tests and contracts.
+  Lint still prints warnings, with no errors. Formatting and contract checks
+  were rerun after ordering generated JSON keys for review.
+- `pnpm effect:architecture`: passed after the final adapter edits, without
+  relaxing version policy or retaining the Perforce Promise exemption.
+- `pnpm exec vitest run packages/map-history/src`: 86 passed; four real-server
+  tests skipped here and exercised separately below.
+- `pnpm test:perforce-map-history`, with the explicit matching 2026.1 binaries
+  from the earlier trial: four real-server tests passed, including the new
+  deleted-revision/output-preservation case, plus the CLI child-process journey.
+  Final suite duration was 3.70 s. The disposable server was removed normally.
+- Focused Perforce, Remote Control, HTTP texture-preview, camera-arrangement and
+  Review CLI coverage: 118 passed, with five opt-in tests skipped. The real
+  Perforce and native Unreal lanes ran separately.
+- The reproduced Game Text scheduler case (seed 22) plus the eight existing
+  persisted differential cases: all nine passed after the final rebuild.
+- `pnpm license:check`: passed. `pnpm test:release`: 49 passed.
+- `pnpm test:uasset-wasm`: passed: 23 inspection fixtures, 12 authoring fixtures,
+  eight compact projection fixtures, Blueprint/Level Sequence coverage and typed
+  failure/limit checks. No Rust parser or codegen implementation changed.
+- UE 5.7: `pnpm test:unreal-plugins out/p4-trial-ue57` passed, all 11 plugins built
+  and 35 producer tests passed.
+- UE 5.8: `pnpm test:unreal-plugins out/p4-trial-ue58` passed, all 11 plugins built
+  and 35 producer tests passed. Each invocation used its discovered/verified
+  engine root explicitly. Evidence remains under those output directories.
+- `git diff --check`: passed. No saved Unreal fixture bytes, C++ sources or
+  engine API calls were changed. The saved-asset engine matrix was not rerun;
+  the relevant producer checks above ran on both required engine versions.
+
+**The broad test suite is not green.** `pnpm test` recorded 2,502 passed,
+38 failed, 52 skipped and two file-handle garbage-collection errors during a
+parallel run before the final scheduler/camera fixes, alongside Unreal builds.
+A bounded rerun of its failing files still had 14 failures before the final
+scheduler rebuild. These are real recorded failures, not a passing portable gate.
+
+After rebuilding, the final one-worker rerun of Game Text index steps,
+localization-status CLI integration and scale tests passed 36 of 37 tests. The
+index-step and localization-status suites passed. The remaining scale test is
+`rejects a cached edit as a fresh PO measurement and restores the source bytes`:
+its `benchmark-localization-import.ts --mode shared --select cold --po-change-byte 110`
+child exits unsuccessfully. This reproduces in isolation and is still unresolved;
+it has not been attributed to p4client-ts or compared against the earlier Effect
+baseline. Broader timeout/file-handle findings also need a clean complete rerun
+before claiming the portable gate. No timeout limits or tests were disabled.
+
+What still does not work: the default pinned Windows Perforce downloader, that
+isolated scale benchmark test, and a fully verified broad portable gate. The
+local tarball also prevents publishing this branch as-is. No outstanding defect
+from the ten original p4client-ts feedback items remains reproduced. Remaining
+feedback is the stable-host migration cost, unreal-rc's removed excess-property
+assumption, and the separate scale/cleanup investigation above.
+
+## Earlier candidate: historical record
+
+Everything below describes the superseded tarball, including its private beta.37
+hook and failed architecture gate; those statements are not the current state.
 Local branch: `trial/p4client-ts-0.13`. Candidate: the supplied
 `p4client-ts-0.13.0.tgz`, installed as a file dependency. This is a consumer trial,
 not a publishable release dependency. No upstream library files were changed.

@@ -31,19 +31,11 @@
 		},
 		"sessionId": {
 			"type": "string",
-			"allOf": [
-				{
-					"pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$"
-				}
-			]
+			"pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$"
 		},
 		"operationId": {
 			"type": "string",
-			"allOf": [
-				{
-					"pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$"
-				}
-			]
+			"pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$"
 		},
 		"camera": {
 			"type": "object",
@@ -91,12 +83,8 @@
 								},
 								"horizontalFieldOfView": {
 									"type": "number",
-									"allOf": [
-										{
-											"minimum": 5,
-											"maximum": 170
-										}
-									]
+									"minimum": 5,
+									"maximum": 170
 								}
 							},
 							"required": ["kind", "horizontalFieldOfView"],
@@ -111,14 +99,8 @@
 								},
 								"width": {
 									"type": "number",
-									"allOf": [
-										{
-											"exclusiveMinimum": 0
-										},
-										{
-											"maximum": 1000000000
-										}
-									]
+									"exclusiveMinimum": 0,
+									"maximum": 1000000000
 								}
 							},
 							"required": ["kind", "width"],
@@ -135,21 +117,13 @@
 			"properties": {
 				"width": {
 					"type": "integer",
-					"allOf": [
-						{
-							"minimum": 16,
-							"maximum": 16384
-						}
-					]
+					"minimum": 16,
+					"maximum": 16384
 				},
 				"height": {
 					"type": "integer",
-					"allOf": [
-						{
-							"minimum": 16,
-							"maximum": 16384
-						}
-					]
+					"minimum": 16,
+					"maximum": 16384
 				}
 			},
 			"required": ["width", "height"],
@@ -179,30 +153,18 @@
 					"properties": {
 						"x": {
 							"type": "number",
-							"allOf": [
-								{
-									"minimum": 0,
-									"maximum": 10000000
-								}
-							]
+							"minimum": 0,
+							"maximum": 10000000
 						},
 						"y": {
 							"type": "number",
-							"allOf": [
-								{
-									"minimum": 0,
-									"maximum": 10000000
-								}
-							]
+							"minimum": 0,
+							"maximum": 10000000
 						},
 						"z": {
 							"type": "number",
-							"allOf": [
-								{
-									"minimum": 0,
-									"maximum": 10000000
-								}
-							]
+							"minimum": 0,
+							"maximum": 10000000
 						}
 					},
 					"required": ["x", "y", "z"],

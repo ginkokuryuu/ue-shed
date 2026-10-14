@@ -138,7 +138,9 @@ for (const { file, schema } of invalidFixtures) {
 }
 
 // SAFETY: this repository fixture is decoded by the matching protocol schema below.
-const provisioningDocument = Schema.toJsonSchemaDocument(ProvisionedCameraRequest);
+const provisioningDocument = Schema.toJsonSchemaDocument(Schema.toType(ProvisionedCameraRequest), {
+	onExcessProperty: "error"
+});
 deepStrictEqual(
 	JSON.parse(
 		readFileSync(

@@ -91,7 +91,7 @@ function runWorkbenchLiveBenchmark(): void {
 
 const benchmark = Effect.scoped(
 	Effect.gen(function* () {
-		const endpoint = yield* Config.string("UE_SHED_REMOTE_CONTROL_ENDPOINT").pipe(
+		const endpoint = yield* Config.String("UE_SHED_REMOTE_CONTROL_ENDPOINT").pipe(
 			Config.withDefault(defaultRemoteControlEndpoint)
 		);
 		const observatory = yield* Observatory;

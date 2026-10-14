@@ -735,7 +735,7 @@ export const CameraArrangementCommand = Schema.Union([
 	})
 ]);
 export type CameraArrangementCommand = typeof CameraArrangementCommand.Type;
-export class CameraArrangementError extends Schema.TaggedErrorClass<CameraArrangementError>()(
+export class CameraArrangementError extends Schema.TaggedError<CameraArrangementError>()(
 	"CameraArrangementError",
 	{
 		code: Schema.Literals([
@@ -931,6 +931,8 @@ export function applyCameraArrangementCommand(
 	let cameras = current.cameras;
 	let retiredCameraIds = current.retiredCameraIds;
 	if (command.kind === "regenerate") {
+		if (command.cameras.some((camera) => retiredCameraIds.includes(camera.id)))
+			throw arrangementFailure("invalid", "Retired identities cannot be reused.");
 		const proposal = previewArrangementRegeneration(current, command.cameras);
 		if (proposal.customized.some((id) => !command.discardCustomizedIds.includes(id)))
 			throw arrangementFailure(

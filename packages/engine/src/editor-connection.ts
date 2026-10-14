@@ -7,7 +7,7 @@ import { Context, Duration, Effect, Layer, Schedule, Schema } from "effect";
 
 const coreObjectPath = "/Script/UEShedCore.Default__UEShedCoreLibrary";
 
-export class EditorConnectionError extends Schema.TaggedErrorClass<EditorConnectionError>()(
+export class EditorConnectionError extends Schema.TaggedError<EditorConnectionError>()(
 	"EditorConnectionError",
 	{
 		code: Schema.Literals([

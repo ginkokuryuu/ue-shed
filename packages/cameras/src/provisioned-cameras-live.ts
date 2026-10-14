@@ -14,7 +14,7 @@ const cameraLibraryPath = "/Script/UEShedCameras.Default__UEShedCameraLibrary";
 const positiveWidth = Schema.Int.check(Schema.isBetween({ minimum: 64, maximum: 2560 }));
 const positiveHeight = Schema.Int.check(Schema.isBetween({ minimum: 64, maximum: 1440 }));
 
-export class ProvisionedCameraError extends Schema.TaggedErrorClass<ProvisionedCameraError>()(
+export class ProvisionedCameraError extends Schema.TaggedError<ProvisionedCameraError>()(
 	"ProvisionedCameraError",
 	{
 		message: Schema.String,

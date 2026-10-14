@@ -449,7 +449,9 @@ export const decodeUAssetIoRequest = Schema.decodeUnknownEffect(UAssetIoRequest)
 export const decodeUAssetIoEvent = Schema.decodeUnknownEffect(UAssetIoEvent);
 
 export function makeUAssetIoJsonSchema(contract: Schema.Top) {
-	const document = Schema.toJsonSchemaDocument(contract);
+	const document = Schema.toJsonSchemaDocument(Schema.toType(contract), {
+		onExcessProperty: "error"
+	});
 	const definitions = { ...document.definitions };
 	if ("UAssetIoNonNegativeInt" in definitions) {
 		definitions.UAssetIoNonNegativeInt = {

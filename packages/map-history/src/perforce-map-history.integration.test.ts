@@ -1,9 +1,14 @@
 import { execFile } from "node:child_process";
 import { readFileSync } from "node:fs";
+import { mkdtemp, mkdir, readFile, readdir, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { dirname, join } from "node:path";
 import { promisify } from "node:util";
 import { assetReaderLayer } from "@ue-shed/unreal-assets";
 import { DateTime, Effect, Layer, Schema } from "effect";
 import { describe, expect, it } from "vitest";
+import { runOperation } from "p4client-ts";
+import { layerNode, materializeDepotFiles, materializedFilePath } from "p4client-ts/node";
 import { mapHistoryLayer, readPerforceMapHistory } from "./map-history.js";
 import { perforceHistorySourceLayer } from "./perforce.js";
 import { PerforceMapHistoryQuery, type PerforceMapRevision } from "./schema.js";
@@ -130,6 +135,43 @@ function requireConfig(): HarnessConfig {
 }
 
 describe.skipIf(config === undefined)("real Perforce Map History conformance", () => {
+	it("rejects a deleted revision and preserves an existing output", async () => {
+		const value = requireConfig();
+		const directory = await mkdtemp(join(tmpdir(), "ue-shed-p4-materialize-"));
+		const depotFile =
+			"//ue-shed-map-history/Content/__ExternalActors__/Fixture/History/L_MapHistoryWorld/3/75/FQFCSRE35IMERPMI8K3KT5.uasset";
+		const localPath = materializedFilePath(directory, depotFile);
+		try {
+			await mkdir(dirname(localPath), { recursive: true });
+			await writeFile(localPath, "previous output");
+			const error = await Effect.runPromise(
+				runOperation(materializeDepotFiles, {
+					directory,
+					fileSpec: [{ depotFile, revision: 2, action: "delete" }],
+					maxFiles: 1
+				}).pipe(
+					Effect.flip,
+					Effect.provide(
+						layerNode({
+							cwd: value.projectRoot,
+							env: p4Environment(value),
+							executable: value.p4.executable,
+							timeoutMs: 15_000
+						})
+					)
+				)
+			);
+			expect(error).toMatchObject({
+				_tag: "P4MaterializationError",
+				reason: "missing_output"
+			});
+			expect(await readFile(localPath, "utf8")).toBe("previous output");
+			expect(await readdir(dirname(localPath))).toEqual(["FQFCSRE35IMERPMI8K3KT5.uasset"]);
+		} finally {
+			await rm(directory, { recursive: true, force: true });
+		}
+	});
+
 	it("reconstructs a conventional map revision through the isolated Perforce path", async () => {
 		const value = requireConfig();
 		const beforeHave = await p4Have(value);

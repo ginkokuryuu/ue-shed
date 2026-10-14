@@ -41,7 +41,7 @@ export const GameTextRuleDocument = Schema.Union([
 ]);
 export type GameTextRuleDocument = typeof GameTextRuleDocument.Type;
 
-export class GameTextRuleDocumentError extends Schema.TaggedErrorClass<GameTextRuleDocumentError>()(
+export class GameTextRuleDocumentError extends Schema.TaggedError<GameTextRuleDocumentError>()(
 	"GameTextRuleDocumentError",
 	{
 		code: Schema.Literals([

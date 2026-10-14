@@ -15,8 +15,8 @@ This module intentionally remains Perforce-specific. A downstream MB Map produce
 `@ue-shed/unreal-assets` directly and own its product contract/archive; only independently reusable
 identity, diff, or playback primitive gaps should be proposed upstream.
 
-This local trial branch uses the supplied p4client-ts 0.13 tarball and a repository-only Effect
-compatibility hook. See the [consumer trial notes](../../docs/research/p4client-ts-0.13-consumer-trial-2026-10-14.md)
+This local trial branch uses the supplied p4client-ts 0.13 release candidate and stable Effect 4.0.4.
+See the [consumer trial notes](../../docs/research/p4client-ts-0.13-consumer-trial-2026-10-14.md)
 for verification, upstream feedback, and why this dependency configuration is not publishable.
 
 Install the published headless package with its exact compatible release dependencies:

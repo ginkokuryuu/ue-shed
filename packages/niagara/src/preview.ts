@@ -61,7 +61,7 @@ export interface NiagaraPreviewRunOutcome {
 	readonly manifestPath: string;
 }
 
-export class NiagaraPreviewError extends Schema.TaggedErrorClass<NiagaraPreviewError>()(
+export class NiagaraPreviewError extends Schema.TaggedError<NiagaraPreviewError>()(
 	"NiagaraPreviewError",
 	NiagaraPreviewFailure.fields
 ) {}

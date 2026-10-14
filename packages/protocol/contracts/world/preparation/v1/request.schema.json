@@ -80,33 +80,17 @@
 							"properties": {
 								"worldId": {
 									"type": "string",
-									"allOf": [
-										{
-											"pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$"
-										}
-									]
+									"pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$"
 								},
 								"mapPath": {
 									"type": "string",
-									"allOf": [
-										{
-											"minLength": 1
-										},
-										{
-											"maxLength": 1024
-										}
-									]
+									"minLength": 1,
+									"maxLength": 1024
 								},
 								"projectName": {
 									"type": "string",
-									"allOf": [
-										{
-											"minLength": 1
-										},
-										{
-											"maxLength": 1024
-										}
-									]
+									"minLength": 1,
+									"maxLength": 1024
 								},
 								"partitioned": {
 									"type": "boolean"
@@ -159,30 +143,18 @@
 														"properties": {
 															"x": {
 																"type": "number",
-																"allOf": [
-																	{
-																		"minimum": 0,
-																		"maximum": 10000000
-																	}
-																]
+																"minimum": 0,
+																"maximum": 10000000
 															},
 															"y": {
 																"type": "number",
-																"allOf": [
-																	{
-																		"minimum": 0,
-																		"maximum": 10000000
-																	}
-																]
+																"minimum": 0,
+																"maximum": 10000000
 															},
 															"z": {
 																"type": "number",
-																"allOf": [
-																	{
-																		"minimum": 0,
-																		"maximum": 10000000
-																	}
-																]
+																"minimum": 0,
+																"maximum": 10000000
 															}
 														},
 														"required": ["x", "y", "z"],
@@ -208,22 +180,12 @@
 												"properties": {
 													"actorGuid": {
 														"type": "string",
-														"allOf": [
-															{
-																"pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
-															}
-														]
+														"pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
 													},
 													"containerId": {
 														"type": "string",
-														"allOf": [
-															{
-																"minLength": 1
-															},
-															{
-																"maxLength": 1024
-															}
-														]
+														"minLength": 1,
+														"maxLength": 1024
 													}
 												},
 												"required": ["actorGuid", "containerId"],
@@ -234,30 +196,18 @@
 												"properties": {
 													"x": {
 														"type": "number",
-														"allOf": [
-															{
-																"minimum": 0,
-																"maximum": 10000000
-															}
-														]
+														"minimum": 0,
+														"maximum": 10000000
 													},
 													"y": {
 														"type": "number",
-														"allOf": [
-															{
-																"minimum": 0,
-																"maximum": 10000000
-															}
-														]
+														"minimum": 0,
+														"maximum": 10000000
 													},
 													"z": {
 														"type": "number",
-														"allOf": [
-															{
-																"minimum": 0,
-																"maximum": 10000000
-															}
-														]
+														"minimum": 0,
+														"maximum": 10000000
 													}
 												},
 												"required": ["x", "y", "z"],
@@ -269,11 +219,7 @@
 									}
 								]
 							},
-							"allOf": [
-								{
-									"maxItems": 64
-								}
-							]
+							"maxItems": 64
 						},
 						"dataLayers": {
 							"type": "array",
@@ -282,14 +228,8 @@
 								"properties": {
 									"assetPath": {
 										"type": "string",
-										"allOf": [
-											{
-												"minLength": 1
-											},
-											{
-												"maxLength": 1024
-											}
-										]
+										"minLength": 1,
+										"maxLength": 1024
 									},
 									"loaded": {
 										"type": "boolean"
@@ -301,20 +241,12 @@
 								"required": ["assetPath", "loaded", "visible"],
 								"additionalProperties": false
 							},
-							"allOf": [
-								{
-									"maxItems": 64
-								}
-							]
+							"maxItems": 64
 						},
 						"maximumActors": {
 							"type": "integer",
-							"allOf": [
-								{
-									"minimum": 1,
-									"maximum": 100000
-								}
-							]
+							"minimum": 1,
+							"maximum": 100000
 						}
 					},
 					"required": ["world", "targets", "dataLayers", "maximumActors"],
@@ -359,20 +291,12 @@
 				},
 				"leaseId": {
 					"type": "string",
-					"allOf": [
-						{
-							"pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$"
-						}
-					]
+					"pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$"
 				},
 				"leaseMs": {
 					"type": "integer",
-					"allOf": [
-						{
-							"minimum": 1000,
-							"maximum": 120000
-						}
-					]
+					"minimum": 1000,
+					"maximum": 120000
 				},
 				"requirements": {
 					"type": "object",
@@ -382,33 +306,17 @@
 							"properties": {
 								"worldId": {
 									"type": "string",
-									"allOf": [
-										{
-											"pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$"
-										}
-									]
+									"pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$"
 								},
 								"mapPath": {
 									"type": "string",
-									"allOf": [
-										{
-											"minLength": 1
-										},
-										{
-											"maxLength": 1024
-										}
-									]
+									"minLength": 1,
+									"maxLength": 1024
 								},
 								"projectName": {
 									"type": "string",
-									"allOf": [
-										{
-											"minLength": 1
-										},
-										{
-											"maxLength": 1024
-										}
-									]
+									"minLength": 1,
+									"maxLength": 1024
 								},
 								"partitioned": {
 									"type": "boolean"
@@ -461,30 +369,18 @@
 														"properties": {
 															"x": {
 																"type": "number",
-																"allOf": [
-																	{
-																		"minimum": 0,
-																		"maximum": 10000000
-																	}
-																]
+																"minimum": 0,
+																"maximum": 10000000
 															},
 															"y": {
 																"type": "number",
-																"allOf": [
-																	{
-																		"minimum": 0,
-																		"maximum": 10000000
-																	}
-																]
+																"minimum": 0,
+																"maximum": 10000000
 															},
 															"z": {
 																"type": "number",
-																"allOf": [
-																	{
-																		"minimum": 0,
-																		"maximum": 10000000
-																	}
-																]
+																"minimum": 0,
+																"maximum": 10000000
 															}
 														},
 														"required": ["x", "y", "z"],
@@ -510,22 +406,12 @@
 												"properties": {
 													"actorGuid": {
 														"type": "string",
-														"allOf": [
-															{
-																"pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
-															}
-														]
+														"pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
 													},
 													"containerId": {
 														"type": "string",
-														"allOf": [
-															{
-																"minLength": 1
-															},
-															{
-																"maxLength": 1024
-															}
-														]
+														"minLength": 1,
+														"maxLength": 1024
 													}
 												},
 												"required": ["actorGuid", "containerId"],
@@ -536,30 +422,18 @@
 												"properties": {
 													"x": {
 														"type": "number",
-														"allOf": [
-															{
-																"minimum": 0,
-																"maximum": 10000000
-															}
-														]
+														"minimum": 0,
+														"maximum": 10000000
 													},
 													"y": {
 														"type": "number",
-														"allOf": [
-															{
-																"minimum": 0,
-																"maximum": 10000000
-															}
-														]
+														"minimum": 0,
+														"maximum": 10000000
 													},
 													"z": {
 														"type": "number",
-														"allOf": [
-															{
-																"minimum": 0,
-																"maximum": 10000000
-															}
-														]
+														"minimum": 0,
+														"maximum": 10000000
 													}
 												},
 												"required": ["x", "y", "z"],
@@ -571,11 +445,7 @@
 									}
 								]
 							},
-							"allOf": [
-								{
-									"maxItems": 64
-								}
-							]
+							"maxItems": 64
 						},
 						"dataLayers": {
 							"type": "array",
@@ -584,14 +454,8 @@
 								"properties": {
 									"assetPath": {
 										"type": "string",
-										"allOf": [
-											{
-												"minLength": 1
-											},
-											{
-												"maxLength": 1024
-											}
-										]
+										"minLength": 1,
+										"maxLength": 1024
 									},
 									"loaded": {
 										"type": "boolean"
@@ -603,20 +467,12 @@
 								"required": ["assetPath", "loaded", "visible"],
 								"additionalProperties": false
 							},
-							"allOf": [
-								{
-									"maxItems": 64
-								}
-							]
+							"maxItems": 64
 						},
 						"maximumActors": {
 							"type": "integer",
-							"allOf": [
-								{
-									"minimum": 1,
-									"maximum": 100000
-								}
-							]
+							"minimum": 1,
+							"maximum": 100000
 						}
 					},
 					"required": ["world", "targets", "dataLayers", "maximumActors"],
@@ -657,19 +513,11 @@
 				},
 				"leaseId": {
 					"type": "string",
-					"allOf": [
-						{
-							"pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$"
-						}
-					]
+					"pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$"
 				},
 				"worldId": {
 					"type": "string",
-					"allOf": [
-						{
-							"pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$"
-						}
-					]
+					"pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$"
 				},
 				"action": {
 					"type": "string",
@@ -677,12 +525,8 @@
 				},
 				"revision": {
 					"type": "integer",
-					"allOf": [
-						{
-							"minimum": 1,
-							"maximum": 1000000
-						}
-					]
+					"minimum": 1,
+					"maximum": 1000000
 				},
 				"targets": {
 					"type": "array",
@@ -719,30 +563,18 @@
 												"properties": {
 													"x": {
 														"type": "number",
-														"allOf": [
-															{
-																"minimum": 0,
-																"maximum": 10000000
-															}
-														]
+														"minimum": 0,
+														"maximum": 10000000
 													},
 													"y": {
 														"type": "number",
-														"allOf": [
-															{
-																"minimum": 0,
-																"maximum": 10000000
-															}
-														]
+														"minimum": 0,
+														"maximum": 10000000
 													},
 													"z": {
 														"type": "number",
-														"allOf": [
-															{
-																"minimum": 0,
-																"maximum": 10000000
-															}
-														]
+														"minimum": 0,
+														"maximum": 10000000
 													}
 												},
 												"required": ["x", "y", "z"],
@@ -768,22 +600,12 @@
 										"properties": {
 											"actorGuid": {
 												"type": "string",
-												"allOf": [
-													{
-														"pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
-													}
-												]
+												"pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
 											},
 											"containerId": {
 												"type": "string",
-												"allOf": [
-													{
-														"minLength": 1
-													},
-													{
-														"maxLength": 1024
-													}
-												]
+												"minLength": 1,
+												"maxLength": 1024
 											}
 										},
 										"required": ["actorGuid", "containerId"],
@@ -794,30 +616,18 @@
 										"properties": {
 											"x": {
 												"type": "number",
-												"allOf": [
-													{
-														"minimum": 0,
-														"maximum": 10000000
-													}
-												]
+												"minimum": 0,
+												"maximum": 10000000
 											},
 											"y": {
 												"type": "number",
-												"allOf": [
-													{
-														"minimum": 0,
-														"maximum": 10000000
-													}
-												]
+												"minimum": 0,
+												"maximum": 10000000
 											},
 											"z": {
 												"type": "number",
-												"allOf": [
-													{
-														"minimum": 0,
-														"maximum": 10000000
-													}
-												]
+												"minimum": 0,
+												"maximum": 10000000
 											}
 										},
 										"required": ["x", "y", "z"],
@@ -829,11 +639,7 @@
 							}
 						]
 					},
-					"allOf": [
-						{
-							"maxItems": 64
-						}
-					]
+					"maxItems": 64
 				}
 			},
 			"required": ["contract", "leaseId", "worldId", "action", "revision", "targets"],
@@ -870,19 +676,11 @@
 				},
 				"leaseId": {
 					"type": "string",
-					"allOf": [
-						{
-							"pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$"
-						}
-					]
+					"pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$"
 				},
 				"worldId": {
 					"type": "string",
-					"allOf": [
-						{
-							"pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$"
-						}
-					]
+					"pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$"
 				},
 				"action": {
 					"type": "string",

@@ -47,20 +47,13 @@
 					"type": "array",
 					"items": {
 						"type": "string",
-						"allOf": [
-							{
-								"minLength": 1
-							}
-						]
+						"minLength": 1
 					}
 				},
 				"scannedActorCount": {
 					"type": "integer",
-					"allOf": [
-						{
-							"minimum": 0
-						}
-					]
+					"minimum": 0,
+					"maximum": 9007199254740991
 				},
 				"isComplete": {
 					"type": "boolean"
@@ -72,11 +65,7 @@
 						"properties": {
 							"code": {
 								"type": "string",
-								"allOf": [
-									{
-										"minLength": 1
-									}
-								]
+								"minLength": 1
 							},
 							"message": {
 								"type": "string"

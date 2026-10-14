@@ -10,7 +10,9 @@ import { MapTileReleaseResult } from "../src/map-tile-schema.js";
 const directory = fileURLToPath(
 	new URL("../../protocol/contracts/cameras/render/v1/", import.meta.url)
 );
-const releaseDocument = Schema.toJsonSchemaDocument(MapTileReleaseResult);
+const releaseDocument = Schema.toJsonSchemaDocument(Schema.toType(MapTileReleaseResult), {
+	onExcessProperty: "error"
+});
 deepStrictEqual(
 	JSON.parse(
 		readFileSync(join(directory, "../../map-tile/v1/release-result.schema.json"), "utf8")
@@ -44,7 +46,9 @@ for (const [name, schema] of Object.entries(contracts)) {
 	const authoritative = Schema.decodeUnknownSync(Schema.Json)(
 		JSON.parse(readFileSync(join(directory, `${name}.schema.json`), "utf8"))
 	);
-	const runtime = Schema.toJsonSchemaDocument(schema);
+	const runtime = Schema.toJsonSchemaDocument(Schema.toType(schema), {
+		onExcessProperty: "error"
+	});
 	deepStrictEqual(
 		authoritative,
 		{

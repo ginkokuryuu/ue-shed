@@ -9,7 +9,7 @@ export interface AuthoringFilePickerOptions {
 	readonly title: string;
 }
 
-export class AuthoringFilePickerError extends Schema.TaggedErrorClass<AuthoringFilePickerError>()(
+export class AuthoringFilePickerError extends Schema.TaggedError<AuthoringFilePickerError>()(
 	"AuthoringFilePickerError",
 	{
 		cause: Schema.Defect(),

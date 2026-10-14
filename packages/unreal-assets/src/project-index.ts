@@ -166,17 +166,17 @@ const ErrorFields = {
 	retrySafe: Schema.Boolean
 };
 
-export class ProjectIndexUnavailable extends Schema.TaggedErrorClass<ProjectIndexUnavailable>()(
+export class ProjectIndexUnavailable extends Schema.TaggedError<ProjectIndexUnavailable>()(
 	"ProjectIndexUnavailable",
 	ErrorFields
 ) {}
 
-export class ProjectIndexInvalidRequest extends Schema.TaggedErrorClass<ProjectIndexInvalidRequest>()(
+export class ProjectIndexInvalidRequest extends Schema.TaggedError<ProjectIndexInvalidRequest>()(
 	"ProjectIndexInvalidRequest",
 	ErrorFields
 ) {}
 
-export class ProjectIndexStaleGeneration extends Schema.TaggedErrorClass<ProjectIndexStaleGeneration>()(
+export class ProjectIndexStaleGeneration extends Schema.TaggedError<ProjectIndexStaleGeneration>()(
 	"ProjectIndexStaleGeneration",
 	{
 		...ErrorFields,
@@ -185,17 +185,17 @@ export class ProjectIndexStaleGeneration extends Schema.TaggedErrorClass<Project
 	}
 ) {}
 
-export class ProjectIndexIncompatibleWorker extends Schema.TaggedErrorClass<ProjectIndexIncompatibleWorker>()(
+export class ProjectIndexIncompatibleWorker extends Schema.TaggedError<ProjectIndexIncompatibleWorker>()(
 	"ProjectIndexIncompatibleWorker",
 	ErrorFields
 ) {}
 
-export class ProjectIndexCorruptCatalog extends Schema.TaggedErrorClass<ProjectIndexCorruptCatalog>()(
+export class ProjectIndexCorruptCatalog extends Schema.TaggedError<ProjectIndexCorruptCatalog>()(
 	"ProjectIndexCorruptCatalog",
 	ErrorFields
 ) {}
 
-export class ProjectIndexRefreshFailed extends Schema.TaggedErrorClass<ProjectIndexRefreshFailed>()(
+export class ProjectIndexRefreshFailed extends Schema.TaggedError<ProjectIndexRefreshFailed>()(
 	"ProjectIndexRefreshFailed",
 	ErrorFields
 ) {}

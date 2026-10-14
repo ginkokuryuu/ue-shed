@@ -9,14 +9,8 @@
 		},
 		"processId": {
 			"type": "integer",
-			"allOf": [
-				{
-					"exclusiveMinimum": 0
-				},
-				{
-					"exclusiveMaximum": 4294967295
-				}
-			]
+			"exclusiveMinimum": 0,
+			"exclusiveMaximum": 4294967295
 		},
 		"status": {
 			"type": "string",
