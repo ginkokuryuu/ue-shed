@@ -302,7 +302,9 @@ describe("package text layer", () => {
 					)
 				).toMatchObject({ equal: true, differenceCount: 0 });
 			});
-		}
+		},
+		// The 0.002 scale takes 2.6-3.5 s on hosted runners, too close to the 5 s default.
+		20_000
 	);
 	it("refresh reads changed/new/renamed/flag-gained packages, drops removed/flag-lost ones, and reuses the rest", async () => {
 		await withStore(async (cache) => {
