@@ -46,7 +46,7 @@
 	"dependencies": {
 		"@ue-shed/protocol": "workspace:0.13.0",
 		"@ue-shed/unreal-assets": "workspace:0.13.0",
-		"p4client-ts": "file:D:/tmp/p4client-0.13/p4client-ts-0.13.0.tgz"
+		"p4client-ts": "0.13.0"
 	},
 	"devDependencies": {
 		"@effect/vitest": "catalog:",

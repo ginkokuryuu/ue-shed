@@ -5,10 +5,11 @@
 Adopted. Map History's p4client-ts 0.13 migration from this trial was merged with main on
 `feat/p4client-ts-0.13` ("Adopt p4client-ts 0.13"). Main's Effect 4.0.4 upgrade (#76)
 superseded the trial's own Effect upgrade, so that merge kept main's Effect setup and only the
-Map History adapter, its tests and the deleted-revision regression from this trial. Until
-p4client-ts 0.13.0 is published, the dependency is a tarball packed from p4client-ts `01d6ab3`
-(SHA-256 `8b0b32c96448fc414c8e2627f782b56350ffe91df69b579c7cd57e18438dd781`). The sections
-below are the dated trial record.
+Map History adapter, its tests and the deleted-revision regression from this trial. Map History
+depends on the published `p4client-ts@0.13.0` (npm, from p4client-ts `4985fcf`). Before it was
+published, the branch was tested against a tarball packed from `bb6de90`, the same source; the two
+packages differ only in the line endings of `LICENSE` and `package.json`. The sections below are
+the dated trial record.
 
 ## Replacement release candidate, 2026-10-14
 
