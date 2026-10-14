@@ -26,7 +26,7 @@ import {
 
 export const DEFAULT_MAP_CAPTURE_ROOT = ".ue-shed/map-capture";
 
-export class MapCaptureStorageError extends Schema.TaggedErrorClass<MapCaptureStorageError>()(
+export class MapCaptureStorageError extends Schema.TaggedError<MapCaptureStorageError>()(
 	"MapCaptureStorageError",
 	{
 		message: Schema.String,
@@ -47,7 +47,7 @@ export class MapCaptureStorageError extends Schema.TaggedErrorClass<MapCaptureSt
 	}
 ) {}
 
-export class MapCaptureArtifactSourceRejected extends Schema.TaggedErrorClass<MapCaptureArtifactSourceRejected>()(
+export class MapCaptureArtifactSourceRejected extends Schema.TaggedError<MapCaptureArtifactSourceRejected>()(
 	"MapCaptureArtifactSourceRejected",
 	{
 		message: Schema.String,

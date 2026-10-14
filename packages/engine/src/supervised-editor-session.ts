@@ -69,7 +69,7 @@ export type OwnedProcessTerminationReason = Extract<
 	{ readonly kind: "terminated" }
 >["reason"];
 
-export class SupervisedEditorSessionError extends Schema.TaggedErrorClass<SupervisedEditorSessionError>()(
+export class SupervisedEditorSessionError extends Schema.TaggedError<SupervisedEditorSessionError>()(
 	"SupervisedEditorSessionError",
 	{
 		code: Schema.Literals([

@@ -19,7 +19,7 @@ export const POEditFailureCode = Schema.Literals([
 ]);
 export type POEditFailureCode = typeof POEditFailureCode.Type;
 
-export class POEditError extends Schema.TaggedErrorClass<POEditError>()("POEditError", {
+export class POEditError extends Schema.TaggedError<POEditError>()("POEditError", {
 	code: POEditFailureCode,
 	identity: Schema.NullOr(LocalizationIdentity),
 	message: Schema.String,

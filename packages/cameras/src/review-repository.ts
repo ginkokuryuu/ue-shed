@@ -28,7 +28,7 @@ function hasErrorCode(cause: unknown, code: string): boolean {
 	return cause instanceof Object && "code" in cause && cause.code === code;
 }
 
-export class ReviewStorageError extends Schema.TaggedErrorClass<ReviewStorageError>()(
+export class ReviewStorageError extends Schema.TaggedError<ReviewStorageError>()(
 	"ReviewStorageError",
 	{
 		message: Schema.String,
@@ -50,7 +50,7 @@ export class ReviewStorageError extends Schema.TaggedErrorClass<ReviewStorageErr
 	}
 ) {}
 
-export class ReviewArtifactSourceRejected extends Schema.TaggedErrorClass<ReviewArtifactSourceRejected>()(
+export class ReviewArtifactSourceRejected extends Schema.TaggedError<ReviewArtifactSourceRejected>()(
 	"ReviewArtifactSourceRejected",
 	{
 		message: Schema.String,

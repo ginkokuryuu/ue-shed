@@ -21,6 +21,7 @@ export default defineProject({
 	// Packages that ship Solid source or import their own CSS must go through Vite, not Node.
 	ssr: { noExternal: ["@tanstack/charts", "peculiar-sheets", "@dschz/solid-flow"] },
 	test: {
+		maxWorkers: 4,
 		environment: "jsdom",
 		setupFiles: ["./scripts/setup-solid-tests.ts", "./scripts/component-test-setup.ts"],
 		include: [

@@ -4,13 +4,13 @@ import { Schema } from "effect";
 export const CameraActorReference = Schema.Union([
 	Schema.Struct({
 		kind: Schema.Literal("actor_path"),
-		actorPath: Schema.String.check(Schema.isStartsWith("/Game/"), Schema.isMaxLength(4096))
+		actorPath: Schema.String.check(Schema.isStartingWith("/Game/"), Schema.isMaxLength(4096))
 	}),
 	Schema.Struct({
 		kind: Schema.Literal("actor_guid"),
 		actorGuid: Schema.String.check(
 			Schema.isPattern(
-				/^(?!00000000-00000000-00000000-00000000$)[0-9a-fA-F]{8}(?:-[0-9a-fA-F]{8}){3}$/
+				/^(?!00000000-00000000-00000000-00000000$)[0-9a-fA-F]{8}(?:-[0-9a-fA-F]{8}){3}$/u
 			)
 		),
 		lastKnownActorPath: Schema.String.check(Schema.isMaxLength(4096))
@@ -67,10 +67,10 @@ export function mergeCameraVisibility(
 /** Map-specific exclusions are separate from actor-free framing recipes. */
 export const CameraVisibilityPreset = Schema.Struct({
 	version: Schema.Literal(1),
-	id: Schema.String.check(Schema.isPattern(/^[a-zA-Z0-9][a-zA-Z0-9._-]{0,127}$/)),
+	id: Schema.String.check(Schema.isPattern(/^[a-zA-Z0-9][a-zA-Z0-9._-]{0,127}$/u)),
 	name: Schema.NonEmptyString,
 	projectName: Schema.NonEmptyString,
-	mapPath: Schema.String.check(Schema.isStartsWith("/Game/")),
+	mapPath: Schema.String.check(Schema.isStartingWith("/Game/")),
 	actors: CameraVisibilityList
 });
 export type CameraVisibilityPreset = typeof CameraVisibilityPreset.Type;

@@ -29,7 +29,7 @@ const PreviewRequest = Schema.Struct({
 type PreviewRequest = Schema.Schema.Type<typeof PreviewRequest>;
 const decodePreviewRequest = Schema.decodeUnknownEffect(PreviewRequest);
 
-export class OfflineTexturePreviewError extends Schema.TaggedErrorClass<OfflineTexturePreviewError>()(
+export class OfflineTexturePreviewError extends Schema.TaggedError<OfflineTexturePreviewError>()(
 	"Workbench.OfflineTexturePreviewError",
 	{
 		code: Schema.Literals([

@@ -32,7 +32,7 @@ implementations use the same conformance fixtures.
 Expected failures are typed values. This includes missing capabilities, connection loss, bad input,
 drift, conflicts, missing actors, and stream gaps.
 
-Define application errors with `Schema.TaggedErrorClass` so their tags and structured fields are
+Define application errors with `Schema.TaggedError` so their tags and structured fields are
 schema-owned. Decode unknown input with `Schema.decodeUnknownEffect` and translate parse failures at
 the boundary that owns the recovery decision. Synchronous construction is reserved for trusted
 constants, tests, and measured startup or hot paths whose throwing contract is explicit.

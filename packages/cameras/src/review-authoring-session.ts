@@ -74,7 +74,7 @@ function candidatesForRevision(args: {
 	return [current, ...args.candidates.filter((_, candidateIndex) => candidateIndex !== index)];
 }
 
-export class ReviewAuthoringSessionError extends Schema.TaggedErrorClass<ReviewAuthoringSessionError>()(
+export class ReviewAuthoringSessionError extends Schema.TaggedError<ReviewAuthoringSessionError>()(
 	"ReviewAuthoringSessionError",
 	{
 		message: Schema.String,

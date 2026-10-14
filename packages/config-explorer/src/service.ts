@@ -35,7 +35,7 @@ import {
 	type ConfigLayerCoverage
 } from "./schema.js";
 
-export class ConfigExplorerError extends Schema.TaggedErrorClass<ConfigExplorerError>()(
+export class ConfigExplorerError extends Schema.TaggedError<ConfigExplorerError>()(
 	"ConfigExplorerError",
 	ConfigExplorerPublicError.fields
 ) {}

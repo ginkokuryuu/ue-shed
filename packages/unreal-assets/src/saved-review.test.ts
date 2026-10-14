@@ -1,3 +1,4 @@
+import { makeWireJsonSchemaDocument, canonicalJsonSchemaReferences } from "@ue-shed/protocol";
 import { readFileSync } from "node:fs";
 import {
 	BlueprintGraphRead,
@@ -444,18 +445,20 @@ describe("saved review", () => {
 		expect(result.outcome).toBe("partial");
 	});
 	it("keeps published CLI JSON output conformant with the runtime schema", () => {
-		const document = Schema.toJsonSchemaDocument(SavedReviewOutput);
+		const document = makeWireJsonSchemaDocument(SavedReviewOutput);
 		const expected = JSON.parse(
 			readFileSync(
 				new URL("../contracts/saved-review.v1.schema.json", import.meta.url),
 				"utf8"
 			)
 		);
-		expect({
-			$schema: "https://json-schema.org/draft/2020-12/schema",
-			$defs: document.definitions,
-			...document.schema
-		}).toEqual(expected);
+		expect(
+			canonicalJsonSchemaReferences({
+				$schema: "https://json-schema.org/draft/2020-12/schema",
+				$defs: document.definitions,
+				...document.schema
+			})
+		).toEqual(canonicalJsonSchemaReferences(expected));
 	});
 	it("distinguishes layout from pin defaults without treating export order as changes", () => {
 		const before = blueprint();

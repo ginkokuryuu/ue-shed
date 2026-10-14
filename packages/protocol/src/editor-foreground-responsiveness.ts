@@ -10,9 +10,9 @@ export const EDITOR_FOREGROUND_LEASE_LIMITS = {
 
 const ProcessId = Schema.Int.check(Schema.isGreaterThan(0), Schema.isLessThan(4_294_967_295));
 
-export const EditorForegroundLeaseId = Schema.String.check(Schema.isPattern(/^[0-9a-f]{32}$/)).pipe(
-	Schema.brand("EditorForegroundLeaseId")
-);
+export const EditorForegroundLeaseId = Schema.String.check(
+	Schema.isPattern(/^[0-9a-f]{32}$/u)
+).pipe(Schema.brand("EditorForegroundLeaseId"));
 export type EditorForegroundLeaseId = typeof EditorForegroundLeaseId.Type;
 
 export const EditorForegroundLeaseTtlMs = Schema.Int.check(

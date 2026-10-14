@@ -54,11 +54,14 @@
 		"typecheck": "tsc --noEmit"
 	},
 	"dependencies": {
-		"@ue-shed/protocol": "workspace:0.13.0",
-		"effect": "catalog:"
+		"@ue-shed/protocol": "workspace:0.13.0"
 	},
 	"devDependencies": {
-		"@ue-shed/authoring": "workspace:0.0.0"
+		"@ue-shed/authoring": "workspace:0.0.0",
+		"effect": "catalog:"
+	},
+	"peerDependencies": {
+		"effect": "^4.0.0"
 	},
 	"engines": {
 		"node": ">=22.14.0"

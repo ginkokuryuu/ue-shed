@@ -19,23 +19,20 @@ import {
 	type CustodianReport
 } from "./schema.js";
 
-export class CustodianError extends Schema.TaggedErrorClass<CustodianError>()(
-	"ProjectCustodian.Error",
-	{
-		code: Schema.Literals([
-			"invalid_request",
-			"scan_failed",
-			"prepare_failed",
-			"invalid_proposal",
-			"execution_in_progress",
-			"execution_failed"
-		]),
-		message: Schema.String,
-		recovery: Schema.String,
-		retrySafe: Schema.Boolean,
-		cause: Schema.Defect()
-	}
-) {}
+export class CustodianError extends Schema.TaggedError<CustodianError>()("ProjectCustodian.Error", {
+	code: Schema.Literals([
+		"invalid_request",
+		"scan_failed",
+		"prepare_failed",
+		"invalid_proposal",
+		"execution_in_progress",
+		"execution_failed"
+	]),
+	message: Schema.String,
+	recovery: Schema.String,
+	retrySafe: Schema.Boolean,
+	cause: Schema.Defect()
+}) {}
 
 export interface CustodianApi {
 	readonly scan: (

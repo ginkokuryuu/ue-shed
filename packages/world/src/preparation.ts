@@ -27,7 +27,7 @@ import {
 	type WorldTarget
 } from "./schema.js";
 
-export class WorldPreparationError extends Schema.TaggedErrorClass<WorldPreparationError>()(
+export class WorldPreparationError extends Schema.TaggedError<WorldPreparationError>()(
 	"WorldPreparationError",
 	{
 		code: Schema.String,

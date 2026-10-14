@@ -6,7 +6,7 @@ const nonNegativeInt = Schema.Int.check(Schema.isGreaterThanOrEqualTo(0));
 export const AutomationObjectPath = Schema.NonEmptyString.check(
 	Schema.isMaxLength(2048),
 	// eslint-disable-next-line no-control-regex -- Object paths cannot contain control characters.
-	Schema.isPattern(/^\/[^\u0000-\u001f]*$/)
+	Schema.isPattern(/^\/[^\u0000-\u001f]*$/u)
 );
 
 export const AutomationError = Schema.Struct({

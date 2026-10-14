@@ -87,7 +87,10 @@ it.effect("executes the public plugin list command through the CLI runtime", () 
 				"utf8"
 			)
 		);
-		try {
+		yield* Effect.addFinalizer(() =>
+			Effect.promise(() => rm(root, { force: true, recursive: true }))
+		);
+		{
 			const output = yield* Ref.make("");
 			const layer = Layer.succeed(
 				CliRuntime,
@@ -102,8 +105,6 @@ it.effect("executes the public plugin list command through the CLI runtime", () 
 			);
 			expect(yield* Ref.get(output)).toContain("UEShedCore");
 			expect(yield* Ref.get(output)).toContain("0.1.0-rc.1");
-		} finally {
-			yield* Effect.promise(() => rm(root, { force: true, recursive: true }));
 		}
 	})
 );
@@ -261,7 +262,10 @@ it.effect(
 			);
 			const ruleFile = join(root, "rules.json");
 			yield* Effect.promise(() => writeFile(ruleFile, "{secret-project-term", "utf8"));
-			try {
+			yield* Effect.addFinalizer(() =>
+				Effect.promise(() => rm(root, { force: true, recursive: true }))
+			);
+			{
 				const output = yield* Ref.make("");
 				const layer = Layer.succeed(
 					CliRuntime,
@@ -282,8 +286,6 @@ it.effect(
 				expect(error.message).not.toContain("secret-project-term");
 				expect(error.message).not.toContain(ruleFile);
 				expect(yield* Ref.get(output)).toBe("");
-			} finally {
-				yield* Effect.promise(() => rm(root, { force: true, recursive: true }));
 			}
 		})
 );

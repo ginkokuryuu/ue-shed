@@ -1,6 +1,6 @@
 import { Context, Effect, Layer, Ref, Schema } from "effect";
 
-export class ElectronAppError extends Schema.TaggedErrorClass<ElectronAppError>()(
+export class ElectronAppError extends Schema.TaggedError<ElectronAppError>()(
 	"Workbench.ElectronAppError",
 	{
 		causeText: Schema.String,

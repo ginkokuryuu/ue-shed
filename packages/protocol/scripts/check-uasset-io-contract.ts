@@ -1,3 +1,5 @@
+import { Schema } from "effect";
+import { canonicalJsonSchemaReferences } from "../../../scripts/canonical-json-schema.ts";
 import { deepStrictEqual } from "node:assert";
 import { readFile } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
@@ -10,9 +12,14 @@ for (const [name, contract] of [
 	const path = fileURLToPath(
 		new URL("../contracts/uasset-io/v1/" + name + ".schema.json", import.meta.url)
 	);
-	const authoritative: unknown = JSON.parse(await readFile(path, "utf8"));
+	const authoritative = Schema.decodeUnknownSync(Schema.Record(Schema.String, Schema.Json))(
+		JSON.parse(await readFile(path, "utf8"))
+	);
 	try {
-		deepStrictEqual(authoritative, makeUAssetIoJsonSchema(contract));
+		deepStrictEqual(
+			canonicalJsonSchemaReferences(authoritative),
+			canonicalJsonSchemaReferences(makeUAssetIoJsonSchema(contract))
+		);
 	} catch {
 		throw new Error("uasset-io/v1 " + name + " runtime schema does not match the JSON Schema");
 	}

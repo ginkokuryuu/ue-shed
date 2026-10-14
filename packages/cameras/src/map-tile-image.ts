@@ -27,7 +27,7 @@ export const MapTileParentImages = Schema.Tuple([
 ]);
 export type MapTileParentImages = typeof MapTileParentImages.Type;
 
-export class MapTileImageError extends Schema.TaggedErrorClass<MapTileImageError>()(
+export class MapTileImageError extends Schema.TaggedError<MapTileImageError>()(
 	"MapTileImageError",
 	{
 		code: Schema.Literals(["invalid_image", "invalid_crop", "invalid_children"]),

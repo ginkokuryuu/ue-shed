@@ -30,7 +30,7 @@ import {
 import { WorkbenchEditorHandoff } from "./editor-handoff.js";
 import { RemoteControlClient } from "@ue-shed/unreal-connection";
 
-export class CameraWorkspaceError extends Schema.TaggedErrorClass<CameraWorkspaceError>()(
+export class CameraWorkspaceError extends Schema.TaggedError<CameraWorkspaceError>()(
 	"CameraWorkspaceError",
 	{ message: Schema.String }
 ) {}

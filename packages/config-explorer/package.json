@@ -40,11 +40,14 @@
 		"typecheck": "tsc --noEmit"
 	},
 	"dependencies": {
-		"@ue-shed/engine": "workspace:0.13.0",
-		"effect": "catalog:"
+		"@ue-shed/engine": "workspace:0.13.0"
 	},
 	"devDependencies": {
-		"@effect/vitest": "catalog:"
+		"@effect/vitest": "catalog:",
+		"effect": "catalog:"
+	},
+	"peerDependencies": {
+		"effect": "^4.0.0"
 	},
 	"engines": {
 		"node": ">=22.14.0"

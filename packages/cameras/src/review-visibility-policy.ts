@@ -11,7 +11,7 @@ import {
 	type VisibilityPolicyId as VisibilityPolicyIdType
 } from "./review-schema.js";
 
-export class ReviewVisibilityPolicyError extends Schema.TaggedErrorClass<ReviewVisibilityPolicyError>()(
+export class ReviewVisibilityPolicyError extends Schema.TaggedError<ReviewVisibilityPolicyError>()(
 	"ReviewVisibilityPolicyError",
 	{
 		code: Schema.Literals([

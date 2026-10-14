@@ -15,7 +15,7 @@ export interface AuthoringLivePort<E> {
 	readonly save: (request: AuthoringSaveRequest) => Effect.Effect<AuthoringSaveResult, E>;
 }
 
-export class ApplyWorkflowError extends Schema.TaggedErrorClass<ApplyWorkflowError>()(
+export class ApplyWorkflowError extends Schema.TaggedError<ApplyWorkflowError>()(
 	"ApplyWorkflowError",
 	{
 		code: Schema.String,

@@ -80,7 +80,7 @@ const cameraPipeNameConfig = Config.schema(NonEmptyConfigString, "UE_SHED_CAMERA
 const projectRootConfig = Config.option(
 	Config.schema(NonEmptyConfigString, "UE_SHED_PROJECT_ROOT")
 );
-const rememberProjectsConfig = Config.boolean("UE_SHED_REMEMBER_PROJECTS").pipe(
+const rememberProjectsConfig = Config.Boolean("UE_SHED_REMEMBER_PROJECTS").pipe(
 	Config.withDefault(true)
 );
 const authoringSessionRootConfig = Config.option(

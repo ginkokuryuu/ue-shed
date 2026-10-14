@@ -24,7 +24,7 @@ export const BlueprintWorkerResponse = Schema.Union([
 ]);
 export type BlueprintWorkerResponse = Schema.Schema.Type<typeof BlueprintWorkerResponse>;
 
-export class BlueprintBrowserError extends Schema.TaggedErrorClass<BlueprintBrowserError>()(
+export class BlueprintBrowserError extends Schema.TaggedError<BlueprintBrowserError>()(
 	"BlueprintBrowserError",
 	{ operation: Schema.String, message: Schema.String }
 ) {}

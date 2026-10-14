@@ -1,3 +1,5 @@
+import { assertJsonSchemaEquivalent } from "../../../scripts/canonical-json-schema.ts";
+import { makeWireJsonSchemaDocument } from "@ue-shed/protocol";
 import { deepStrictEqual } from "node:assert/strict";
 import { readFileSync, readdirSync } from "node:fs";
 import { fileURLToPath } from "node:url";
@@ -10,8 +12,8 @@ import { MapTileReleaseResult } from "../src/map-tile-schema.js";
 const directory = fileURLToPath(
 	new URL("../../protocol/contracts/cameras/render/v1/", import.meta.url)
 );
-const releaseDocument = Schema.toJsonSchemaDocument(MapTileReleaseResult);
-deepStrictEqual(
+const releaseDocument = makeWireJsonSchemaDocument(MapTileReleaseResult);
+assertJsonSchemaEquivalent(
 	JSON.parse(
 		readFileSync(join(directory, "../../map-tile/v1/release-result.schema.json"), "utf8")
 	),
@@ -44,8 +46,8 @@ for (const [name, schema] of Object.entries(contracts)) {
 	const authoritative = Schema.decodeUnknownSync(Schema.Json)(
 		JSON.parse(readFileSync(join(directory, `${name}.schema.json`), "utf8"))
 	);
-	const runtime = Schema.toJsonSchemaDocument(schema);
-	deepStrictEqual(
+	const runtime = makeWireJsonSchemaDocument(schema);
+	assertJsonSchemaEquivalent(
 		authoritative,
 		{
 			$schema: "https://json-schema.org/draft/2020-12/schema",

@@ -199,7 +199,7 @@ export const decodeAuthoringLoadResult = Schema.decodeUnknownEffect(AuthoringLoa
 export const decodeAuthoringCatalogResult = Schema.decodeUnknownEffect(AuthoringCatalogResult);
 export const decodeAuthoringCatalogProgress = Schema.decodeUnknownEffect(AuthoringCatalogProgress);
 
-export class AuthoringClientError extends Schema.TaggedErrorClass<AuthoringClientError>()(
+export class AuthoringClientError extends Schema.TaggedError<AuthoringClientError>()(
 	"AuthoringClientError",
 	{
 		cause: Schema.Defect(),

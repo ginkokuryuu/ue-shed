@@ -313,7 +313,7 @@ export type PluginBundleManifestValidationCode = Schema.Schema.Type<
 >;
 
 /** An expected manifest or artifact failure that a CLI can report with recovery guidance. */
-export class PluginBundleManifestValidationError extends Schema.TaggedErrorClass<PluginBundleManifestValidationError>()(
+export class PluginBundleManifestValidationError extends Schema.TaggedError<PluginBundleManifestValidationError>()(
 	"PluginBundleManifestValidationError",
 	{
 		code: PluginBundleManifestValidationCode,
@@ -726,7 +726,7 @@ export const ResolvedPluginGraph = Schema.Struct({
 });
 export type ResolvedPluginGraph = typeof ResolvedPluginGraph.Type;
 
-export class PluginDependencyResolutionError extends Schema.TaggedErrorClass<PluginDependencyResolutionError>()(
+export class PluginDependencyResolutionError extends Schema.TaggedError<PluginDependencyResolutionError>()(
 	"PluginDependencyResolutionError",
 	{
 		code: Schema.Literals(["duplicate_requested_plugin", "requested_plugin_unavailable"]),

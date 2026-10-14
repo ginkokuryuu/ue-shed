@@ -9,7 +9,7 @@ export const IdentifierKind = Schema.Literals([
 ]);
 export type IdentifierKind = Schema.Schema.Type<typeof IdentifierKind>;
 
-export class IdentifierValidationError extends Schema.TaggedErrorClass<IdentifierValidationError>()(
+export class IdentifierValidationError extends Schema.TaggedError<IdentifierValidationError>()(
 	"IdentifierValidationError",
 	{
 		kind: IdentifierKind,
@@ -162,3 +162,5 @@ export * from "./uasset-inspection.js";
 export * from "./editor-window-activation.js";
 export * from "./editor-foreground-responsiveness.js";
 export * from "./level-sequence.js";
+
+export { makeWireJsonSchemaDocument, canonicalJsonSchemaReferences } from "./json-schema.js";

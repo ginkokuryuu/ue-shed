@@ -4,7 +4,7 @@ import { extname, join } from "node:path";
 import { spawn, type ChildProcess } from "node:child_process";
 import { Context, Effect, Exit, Layer, Schema } from "effect";
 
-export class OfflineTexturePreviewHostError extends Schema.TaggedErrorClass<OfflineTexturePreviewHostError>()(
+export class OfflineTexturePreviewHostError extends Schema.TaggedError<OfflineTexturePreviewHostError>()(
 	"Workbench.OfflineTexturePreviewHostError",
 	{
 		causeText: Schema.String,
