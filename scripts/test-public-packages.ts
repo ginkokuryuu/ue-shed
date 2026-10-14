@@ -296,7 +296,7 @@ try {
 				type: "module",
 				dependencies: {
 					...dependencyEntries,
-					effect: "4.0.0-beta.98"
+					effect: "4.0.4"
 				}
 			},
 			null,

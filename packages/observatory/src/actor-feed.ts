@@ -69,7 +69,7 @@ export interface ActorObservationDiagnostic {
 	readonly sequence: bigint;
 }
 
-export class ActorFeedError extends Schema.TaggedErrorClass<ActorFeedError>()("ActorFeedError", {
+export class ActorFeedError extends Schema.TaggedError<ActorFeedError>()("ActorFeedError", {
 	message: Schema.String,
 	operation: Schema.Literals(["listen", "decode_limit"]),
 	pipeName: Schema.String,
@@ -292,7 +292,7 @@ export function makeActorFeedTestLayer(feed: Partial<ActorFeedApi> = {}): Layer.
 // mismatch, and bounded recovery exhaustion.
 // ---------------------------------------------------------------------------
 
-export class ActorObservationControlError extends Schema.TaggedErrorClass<ActorObservationControlError>()(
+export class ActorObservationControlError extends Schema.TaggedError<ActorObservationControlError>()(
 	"ActorObservationControlError",
 	{
 		endpoint: Schema.String,
@@ -303,7 +303,7 @@ export class ActorObservationControlError extends Schema.TaggedErrorClass<ActorO
 	}
 ) {}
 
-export class ActorObservationSessionError extends Schema.TaggedErrorClass<ActorObservationSessionError>()(
+export class ActorObservationSessionError extends Schema.TaggedError<ActorObservationSessionError>()(
 	"ActorObservationSessionError",
 	{
 		endpoint: Schema.String,
@@ -313,7 +313,7 @@ export class ActorObservationSessionError extends Schema.TaggedErrorClass<ActorO
 	}
 ) {}
 
-export class ActorObservationRecoveryExhaustedError extends Schema.TaggedErrorClass<ActorObservationRecoveryExhaustedError>()(
+export class ActorObservationRecoveryExhaustedError extends Schema.TaggedError<ActorObservationRecoveryExhaustedError>()(
 	"ActorObservationRecoveryExhaustedError",
 	{
 		attempts: Schema.Int,

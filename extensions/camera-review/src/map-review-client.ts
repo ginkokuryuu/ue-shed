@@ -63,7 +63,7 @@ export type {
 	MapReviewSetSummary
 } from "@ue-shed/cameras/review-contracts";
 
-export class MapReviewClientError extends Schema.TaggedErrorClass<MapReviewClientError>()(
+export class MapReviewClientError extends Schema.TaggedError<MapReviewClientError>()(
 	"MapReviewClientError",
 	{
 		cause: Schema.Defect(),

@@ -4,7 +4,7 @@ Runtime schemas, branded identifiers, compatibility values, and versioned wire c
 UE Shed clients and Unreal companion plugins.
 
 ```sh
-npm install --save-exact @ue-shed/protocol effect@4.0.0-beta.98
+npm install --save-exact @ue-shed/protocol effect@4.0.4
 ```
 
 The package supports Node.js 22.14 or newer and exposes one stable JavaScript entry point:

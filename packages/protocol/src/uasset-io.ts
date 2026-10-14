@@ -1,4 +1,5 @@
 import { Schema } from "effect";
+import { makeWireJsonSchemaDocument } from "./json-schema.js";
 import { AuthoringTableSnapshot } from "./authoring.js";
 import { BlueprintGraphProjection } from "./blueprint-graph.js";
 import { LevelSequenceProjection } from "./level-sequence.js";
@@ -449,7 +450,10 @@ export const decodeUAssetIoRequest = Schema.decodeUnknownEffect(UAssetIoRequest)
 export const decodeUAssetIoEvent = Schema.decodeUnknownEffect(UAssetIoEvent);
 
 export function makeUAssetIoJsonSchema(contract: Schema.Top) {
-	const document = Schema.toJsonSchemaDocument(contract);
+	const document = makeWireJsonSchemaDocument(contract, {
+		referencePolicy: ({ identifier }) =>
+			identifier === "UAssetIoNonEmptyStringEncoded" ? "UAssetIoNonEmptyString" : identifier
+	});
 	const definitions = { ...document.definitions };
 	if ("UAssetIoNonNegativeInt" in definitions) {
 		definitions.UAssetIoNonNegativeInt = {

@@ -35,7 +35,7 @@ function pureStagingPath(
 	return artifact.stagingPath;
 }
 
-export class ReviewAuthoringConnectionError extends Schema.TaggedErrorClass<ReviewAuthoringConnectionError>()(
+export class ReviewAuthoringConnectionError extends Schema.TaggedError<ReviewAuthoringConnectionError>()(
 	"ReviewAuthoringConnectionError",
 	{
 		endpoint: Schema.String,

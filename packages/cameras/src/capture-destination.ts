@@ -3,7 +3,7 @@ import { lstat, mkdir, open, readFile, realpath, rename, rm, unlink } from "node
 import { basename, dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import { Effect, Schema } from "effect";
 
-export class CaptureFilesystemError extends Schema.TaggedErrorClass<CaptureFilesystemError>()(
+export class CaptureFilesystemError extends Schema.TaggedError<CaptureFilesystemError>()(
 	"CaptureFilesystemError",
 	{
 		message: Schema.String,
@@ -13,7 +13,7 @@ export class CaptureFilesystemError extends Schema.TaggedErrorClass<CaptureFiles
 	}
 ) {}
 
-export class CaptureArtifactSourceRejected extends Schema.TaggedErrorClass<CaptureArtifactSourceRejected>()(
+export class CaptureArtifactSourceRejected extends Schema.TaggedError<CaptureArtifactSourceRejected>()(
 	"CaptureArtifactSourceRejected",
 	{
 		message: Schema.String,

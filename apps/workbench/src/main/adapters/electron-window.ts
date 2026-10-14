@@ -1,6 +1,6 @@
 import { Context, Effect, Layer, Ref, Schema } from "effect";
 
-export class WorkbenchWindowError extends Schema.TaggedErrorClass<WorkbenchWindowError>()(
+export class WorkbenchWindowError extends Schema.TaggedError<WorkbenchWindowError>()(
 	"Workbench.WorkbenchWindowError",
 	{
 		causeText: Schema.String,

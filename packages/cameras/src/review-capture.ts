@@ -34,7 +34,7 @@ import {
 	type ViewResult
 } from "./review-schema.js";
 
-export class ReviewCaptureRunError extends Schema.TaggedErrorClass<ReviewCaptureRunError>()(
+export class ReviewCaptureRunError extends Schema.TaggedError<ReviewCaptureRunError>()(
 	"ReviewCaptureRunError",
 	{
 		message: Schema.String,

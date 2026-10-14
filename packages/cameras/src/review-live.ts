@@ -13,7 +13,7 @@ import {
 
 const reviewLibraryPath = "/Script/UEShedCamerasEditor.Default__UEShedCameraReviewLibrary";
 
-export class ReviewCaptureConnectionError extends Schema.TaggedErrorClass<ReviewCaptureConnectionError>()(
+export class ReviewCaptureConnectionError extends Schema.TaggedError<ReviewCaptureConnectionError>()(
 	"ReviewCaptureConnectionError",
 	{ endpoint: Schema.String, message: Schema.String, retrySafe: Schema.Boolean }
 ) {}

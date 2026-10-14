@@ -24,7 +24,7 @@ type LocalizationApplyCommand = Extract<CliCommand, { readonly _tag: "Localizati
 
 const maxChangeSetBytes = 8 * 1024 * 1024;
 
-class LocalizationApplyInputError extends Schema.TaggedErrorClass<LocalizationApplyInputError>()(
+class LocalizationApplyInputError extends Schema.TaggedError<LocalizationApplyInputError>()(
 	"LocalizationApplyInputError",
 	{
 		code: Schema.Literals(["change_set_unreadable", "change_set_too_large"]),

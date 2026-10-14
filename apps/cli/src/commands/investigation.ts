@@ -1,13 +1,13 @@
-import { Argument, Command, Flag } from "effect/unstable/cli";
+import { Argument, Command, Flag } from "effect/cli";
 import { runInvestigation } from "../workflows/investigation.js";
 import { optionalFlag, optionalValue, readerFields } from "./options.js";
 
 const run = Command.make(
 	"run",
 	{
-		projectRoot: Argument.string("project-root"),
-		preset: Flag.string("preset"),
-		format: Flag.choice("format", ["json", "csv"]).pipe(Flag.withDefault("json")),
+		projectRoot: Argument.String("project-root"),
+		preset: Flag.String("preset"),
+		format: Flag.Literals("format", ["json", "csv"]).pipe(Flag.withDefault("json")),
 		output: optionalFlag("output"),
 		reader: optionalFlag("reader")
 	},

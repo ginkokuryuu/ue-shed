@@ -17,7 +17,7 @@ including Node 24 and 26. Earlier runtimes lack the built-in Zstd APIs used by t
 Pin the package and the host's Effect runtime exactly:
 
 ```sh
-npm install --save-exact @ue-shed/game-text effect@4.0.0-beta.98
+npm install --save-exact @ue-shed/game-text effect@4.0.4
 ```
 
 `@ue-shed/unreal-assets` is a normal package dependency. It remains a separate artifact and is not

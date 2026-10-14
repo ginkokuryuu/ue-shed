@@ -73,7 +73,7 @@ export function cameraRenderReuseIdentity(args: {
 		.digest("hex")}`;
 }
 
-export class CameraRenderError extends Schema.TaggedErrorClass<CameraRenderError>()(
+export class CameraRenderError extends Schema.TaggedError<CameraRenderError>()(
 	"CameraRenderError",
 	{
 		code: Schema.Union([
@@ -439,6 +439,10 @@ export function makeCameraRenderer(
 								renderError("capture", request.sessionId, cause)
 							)
 						);
+			if (result.status === "running")
+				return yield* Effect.die(
+					new Error("Camera polling ended before a terminal status.")
+				);
 			if (result.status === "failed") return yield* nativeError("capture", result);
 			if (
 				!isDeepStrictEqual(result.evidence.camera, frame.camera) ||

@@ -18,7 +18,7 @@ const decoder = new TextDecoder("utf-8", { fatal: true, ignoreBOM: true });
 const isString = Schema.is(Schema.String);
 const kinds = ["bytes", "u8", "u32", "stringIds", "strings"] as const;
 export type SnapshotKind = (typeof kinds)[number];
-export class SnapshotFormatError extends Schema.TaggedErrorClass<SnapshotFormatError>()(
+export class SnapshotFormatError extends Schema.TaggedError<SnapshotFormatError>()(
 	"SnapshotFormatError",
 	{ section: Schema.String, message: Schema.String, recovery: Schema.String }
 ) {}

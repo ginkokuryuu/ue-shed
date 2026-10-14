@@ -30,7 +30,7 @@ export const LocalizationChangeSet = Schema.Struct({
 });
 export type LocalizationChangeSet = typeof LocalizationChangeSet.Type;
 
-export class LocalizationChangeSetError extends Schema.TaggedErrorClass<LocalizationChangeSetError>()(
+export class LocalizationChangeSetError extends Schema.TaggedError<LocalizationChangeSetError>()(
 	"LocalizationChangeSetError",
 	{
 		code: Schema.Literals([

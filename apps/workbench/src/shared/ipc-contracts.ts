@@ -250,7 +250,7 @@ export interface EditorResponsivenessSettings extends Schema.Schema.Type<
 export const GameObjectPath = Schema.String.check(
 	Schema.isMinLength(1),
 	Schema.isMaxLength(1_024),
-	Schema.isStartsWith("/Game/")
+	Schema.isStartingWith("/Game/")
 ).pipe(Schema.brand("GameObjectPath"));
 export type GameObjectPath = Schema.Schema.Type<typeof GameObjectPath>;
 

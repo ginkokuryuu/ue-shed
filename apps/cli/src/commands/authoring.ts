@@ -1,5 +1,5 @@
 import { AuthoringValue } from "@ue-shed/protocol";
-import { Argument, Command, Flag } from "effect/unstable/cli";
+import { Argument, Command, Flag } from "effect/cli";
 import { Effect, Schema } from "effect";
 import { CliCommandError } from "../cli-runtime.js";
 import {
@@ -48,14 +48,14 @@ const readerFlag = optionalFlag("reader");
 
 const authoringTablesCommand = Command.make(
 	"tables",
-	{ projectRoot: Argument.string("project-root"), reader: readerFlag },
+	{ projectRoot: Argument.String("project-root"), reader: readerFlag },
 	({ projectRoot, reader }) =>
 		runAuthoringTables({ _tag: "AuthoringTables", projectRoot, ...readerFields(reader) })
 ).pipe(Command.withDescription("Discover saved DataTables."));
 
 const authoringRelationshipsCommand = Command.make(
 	"relationships",
-	{ projectRoot: Argument.string("project-root"), reader: readerFlag },
+	{ projectRoot: Argument.String("project-root"), reader: readerFlag },
 	({ projectRoot, reader }) =>
 		runAuthoringRelationships({
 			_tag: "AuthoringRelationships",
@@ -67,9 +67,9 @@ const authoringRelationshipsCommand = Command.make(
 const authoringJoinCommand = Command.make(
 	"join",
 	{
-		projectRoot: Argument.string("project-root"),
-		sourceTableObjectPath: Argument.string("source-table"),
-		referenceFieldName: Argument.string("reference-field"),
+		projectRoot: Argument.String("project-root"),
+		sourceTableObjectPath: Argument.String("source-table"),
+		referenceFieldName: Argument.String("reference-field"),
 		reader: readerFlag
 	},
 	({ projectRoot, sourceTableObjectPath, referenceFieldName, reader }) =>
@@ -85,8 +85,8 @@ const authoringJoinCommand = Command.make(
 const authoringAnalyzeCommand = Command.make(
 	"analyze",
 	{
-		projectRoot: Argument.string("project-root"),
-		tableObjectPath: Argument.string("table"),
+		projectRoot: Argument.String("project-root"),
+		tableObjectPath: Argument.String("table"),
 		reader: readerFlag
 	},
 	({ projectRoot, tableObjectPath, reader }) =>
@@ -101,7 +101,7 @@ const authoringAnalyzeCommand = Command.make(
 const authoringCatalogCommand = Command.make(
 	"catalog",
 	{
-		projectRoot: Argument.string("project-root"),
+		projectRoot: Argument.String("project-root"),
 		endpoint: optionalFlag("endpoint"),
 		reader: readerFlag
 	},
@@ -119,8 +119,8 @@ const authoringCatalogCommand = Command.make(
 const authoringParityCommand = Command.make(
 	"parity",
 	{
-		projectRoot: Argument.string("project-root"),
-		endpoint: Argument.string("endpoint"),
+		projectRoot: Argument.String("project-root"),
+		endpoint: Argument.String("endpoint"),
 		reader: readerFlag
 	},
 	({ projectRoot, endpoint, reader }) =>
@@ -134,25 +134,25 @@ const authoringParityCommand = Command.make(
 
 const authoringInspectCommand = Command.make(
 	"inspect",
-	{ assetPath: Argument.string("asset"), reader: readerFlag },
+	{ assetPath: Argument.String("asset"), reader: readerFlag },
 	({ assetPath, reader }) =>
 		runAuthoringInspect({ _tag: "AuthoringInspect", assetPath, ...readerFields(reader) })
 ).pipe(Command.withDescription("Inspect one saved DataTable."));
 
 const authoringLiveTablesCommand = Command.make(
 	"tables",
-	{ endpoint: Argument.string("endpoint") },
+	{ endpoint: Argument.String("endpoint") },
 	({ endpoint }) => runAuthoringLiveTables({ _tag: "AuthoringLiveTables", endpoint })
 ).pipe(Command.withDescription("List live DataTables from Unreal."));
 
 const authoringLiveInspectCommand = Command.make(
 	"inspect",
-	{ endpoint: Argument.string("endpoint"), tablePath: Argument.string("table") },
+	{ endpoint: Argument.String("endpoint"), tablePath: Argument.String("table") },
 	({ endpoint, tablePath }) =>
 		runAuthoringLiveInspect({ _tag: "AuthoringLiveInspect", endpoint, tablePath })
 ).pipe(Command.withDescription("Inspect one live DataTable."));
 
-const sessionProjectFlag = Flag.string("project");
+const sessionProjectFlag = Flag.String("project");
 const sessionIdOption = optionalFlag("id");
 const sessionIndexOption = nonNegativeIntegerFlag("index", "Invalid non-negative row index").pipe(
 	Flag.optional
@@ -173,7 +173,7 @@ const sessionsListCommand = Command.make(
 const sessionsCreateCommand = Command.make(
 	"create",
 	{
-		assetPath: Argument.string("asset"),
+		assetPath: Argument.String("asset"),
 		projectRoot: sessionProjectFlag,
 		id: sessionIdOption,
 		index: sessionIndexOption,
@@ -197,7 +197,7 @@ function makeSessionLifecycleCommand(
 	return Command.make(
 		action,
 		{
-			sessionId: Argument.string("session-id"),
+			sessionId: Argument.String("session-id"),
 			projectRoot: sessionProjectFlag,
 			id: sessionIdOption,
 			index: sessionIndexOption,
@@ -227,7 +227,7 @@ function makeSessionReviewCommand(action: "review" | "validate" | "diff") {
 	return Command.make(
 		action,
 		{
-			sessionId: Argument.string("session-id"),
+			sessionId: Argument.String("session-id"),
 			projectRoot: sessionProjectFlag,
 			id: sessionIdOption,
 			index: sessionIndexOption,
@@ -247,11 +247,11 @@ function makeSessionReviewCommand(action: "review" | "validate" | "diff") {
 const sessionsSetCellCommand = Command.make(
 	"set-cell",
 	{
-		sessionId: Argument.string("session-id"),
-		tablePath: Argument.string("table"),
-		rowId: Argument.string("row-id"),
-		fieldName: Argument.string("field"),
-		valueJson: Argument.string("value-json"),
+		sessionId: Argument.String("session-id"),
+		tablePath: Argument.String("table"),
+		rowId: Argument.String("row-id"),
+		fieldName: Argument.String("field"),
+		valueJson: Argument.String("value-json"),
 		projectRoot: sessionProjectFlag,
 		id: sessionIdOption,
 		index: sessionIndexOption,
@@ -276,9 +276,9 @@ const sessionsSetCellCommand = Command.make(
 const sessionsAddRowCommand = Command.make(
 	"add-row",
 	{
-		sessionId: Argument.string("session-id"),
-		tablePath: Argument.string("table"),
-		rowName: Argument.string("row-name"),
+		sessionId: Argument.String("session-id"),
+		tablePath: Argument.String("table"),
+		rowName: Argument.String("row-name"),
 		projectRoot: sessionProjectFlag,
 		index: sessionIndexOption,
 		id: sessionIdOption,
@@ -300,10 +300,10 @@ const sessionsAddRowCommand = Command.make(
 const sessionsDuplicateRowCommand = Command.make(
 	"duplicate-row",
 	{
-		sessionId: Argument.string("session-id"),
-		tablePath: Argument.string("table"),
-		sourceRowId: Argument.string("source-row-id"),
-		rowName: Argument.string("row-name"),
+		sessionId: Argument.String("session-id"),
+		tablePath: Argument.String("table"),
+		sourceRowId: Argument.String("source-row-id"),
+		rowName: Argument.String("row-name"),
 		projectRoot: sessionProjectFlag,
 		index: sessionIndexOption,
 		id: sessionIdOption,
@@ -326,9 +326,9 @@ const sessionsDuplicateRowCommand = Command.make(
 const sessionsRemoveRowCommand = Command.make(
 	"remove-row",
 	{
-		sessionId: Argument.string("session-id"),
-		tablePath: Argument.string("table"),
-		rowId: Argument.string("row-id"),
+		sessionId: Argument.String("session-id"),
+		tablePath: Argument.String("table"),
+		rowId: Argument.String("row-id"),
 		projectRoot: sessionProjectFlag,
 		id: sessionIdOption,
 		index: sessionIndexOption,
@@ -347,10 +347,10 @@ const sessionsRemoveRowCommand = Command.make(
 const sessionsRenameRowCommand = Command.make(
 	"rename-row",
 	{
-		sessionId: Argument.string("session-id"),
-		tablePath: Argument.string("table"),
-		rowId: Argument.string("row-id"),
-		rowName: Argument.string("row-name"),
+		sessionId: Argument.String("session-id"),
+		tablePath: Argument.String("table"),
+		rowId: Argument.String("row-id"),
+		rowName: Argument.String("row-name"),
 		projectRoot: sessionProjectFlag,
 		id: sessionIdOption,
 		index: sessionIndexOption,
@@ -370,9 +370,9 @@ const sessionsRenameRowCommand = Command.make(
 const sessionsReorderRowsCommand = Command.make(
 	"reorder-rows",
 	{
-		sessionId: Argument.string("session-id"),
-		tablePath: Argument.string("table"),
-		rowIdsJson: Argument.string("row-ids-json"),
+		sessionId: Argument.String("session-id"),
+		tablePath: Argument.String("table"),
+		rowIdsJson: Argument.String("row-ids-json"),
 		projectRoot: sessionProjectFlag,
 		id: sessionIdOption,
 		index: sessionIndexOption,
@@ -396,8 +396,8 @@ function makeSessionLiveCommand(action: "apply" | "reconcile" | "save") {
 	return Command.make(
 		action,
 		{
-			sessionId: Argument.string("session-id"),
-			endpoint: Argument.string("endpoint"),
+			sessionId: Argument.String("session-id"),
+			endpoint: Argument.String("endpoint"),
 			projectRoot: sessionProjectFlag,
 			id: sessionIdOption,
 			index: sessionIndexOption,

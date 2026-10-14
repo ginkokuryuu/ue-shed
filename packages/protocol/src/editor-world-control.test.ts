@@ -1,3 +1,4 @@
+import { makeWireJsonSchemaDocument, canonicalJsonSchemaReferences } from "./json-schema.js";
 import { Effect, Schema } from "effect";
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
@@ -25,12 +26,14 @@ describe("editor world-control wire contract", () => {
 					"utf8"
 				)
 			);
-			const document = Schema.toJsonSchemaDocument(schema);
-			expect({
-				$schema: "https://json-schema.org/draft/2020-12/schema",
-				$defs: document.definitions,
-				...document.schema
-			}).toEqual(wire);
+			const document = makeWireJsonSchemaDocument(schema);
+			expect(
+				canonicalJsonSchemaReferences({
+					$schema: "https://json-schema.org/draft/2020-12/schema",
+					$defs: document.definitions,
+					...document.schema
+				})
+			).toEqual(canonicalJsonSchemaReferences(wire));
 		}
 	});
 	it("does not accept a pending acknowledgement as a completed map open", () => {

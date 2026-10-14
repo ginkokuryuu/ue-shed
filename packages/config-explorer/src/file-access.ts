@@ -1,7 +1,7 @@
 import { access, readdir, readFile, stat } from "node:fs/promises";
 import { Context, Effect, Layer, Schema } from "effect";
 
-export class ConfigFileAccessError extends Schema.TaggedErrorClass<ConfigFileAccessError>()(
+export class ConfigFileAccessError extends Schema.TaggedError<ConfigFileAccessError>()(
 	"ConfigFileAccessError",
 	{
 		operation: Schema.Literals(["read", "list", "stat"]),

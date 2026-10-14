@@ -67,7 +67,7 @@ export const CustodianCancelRunResult = Schema.Union([
 export type CustodianCancelRunResult = typeof CustodianCancelRunResult.Type;
 export const decodeCustodianCancelRunResult = Schema.decodeUnknownEffect(CustodianCancelRunResult);
 
-export class CustodianClientError extends Schema.TaggedErrorClass<CustodianClientError>()(
+export class CustodianClientError extends Schema.TaggedError<CustodianClientError>()(
 	"ProjectCustodian.ClientError",
 	{
 		cause: Schema.Defect(),

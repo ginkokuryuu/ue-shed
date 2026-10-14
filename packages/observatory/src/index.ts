@@ -37,7 +37,7 @@ const ObservationCadenceResponse = Schema.Union([
 	})
 ]);
 
-export class ObservatoryConnectionError extends Schema.TaggedErrorClass<ObservatoryConnectionError>()(
+export class ObservatoryConnectionError extends Schema.TaggedError<ObservatoryConnectionError>()(
 	"ObservatoryConnectionError",
 	{
 		message: Schema.String,
