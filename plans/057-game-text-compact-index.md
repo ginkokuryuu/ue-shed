@@ -1592,11 +1592,13 @@ Three findings from the PR review, each with a test that failed before its fix:
   hydrating a finding re-checks its block. Nearly every block is one line and takes the same path
   as before.
 
-The same 1× project, Node 24.21 and the default heap; one run. Its open stage rebuilt the cache
-after the merge with main (33.6 s). The scan took 115.4 s (114–118 s before) and returned the same
-2,027,740 findings. Stalls: median 16 ms, p95 0.17 s, longest 0.47 s, 546 over 100 ms (537 in the
-recorded run). Peak V8 heap during the scan was 245 MiB (209–234 MiB before); 59 MiB was kept
-after collection.
+The same 1× project, Node 24.21 and the default heap; two runs. The first run's open stage rebuilt
+the cache after the merge with main (33.6 s); the second opened it warm (2.3 s). The scans took
+115.4 s and 114.3 s (114–118 s before) and returned the same 2,027,740 findings. Stalls: median
+16 ms, p95 0.17 s and 0.16 s, longest 0.47 s and 0.50 s, 546 and 541 over 100 ms (533–548 in the
+recorded runs). Peak V8 heap during the scan was 234 MiB and 237 MiB (209–234 MiB before); 57 MiB
+and 54 MiB were kept after collection (52 MiB before). About 2.4 MiB of that comes from main: the
+heap kept after opening the index is 48.4 MiB, against 46.0 MiB in the recorded run.
 
 Verification: `pnpm exec vitest run packages/game-text` passes 394 tests (4 skipped), the
 Workbench Game Text host tests 29 in three files, and `pnpm run check:precommit` passes.
