@@ -1512,3 +1512,64 @@ Open:
 - The scan holds the host's main thread for its 6 minutes; it should move off the main thread.
 - Hydration runs through Effect per entry and Schema-decodes every evidence entry the index wrote.
 - Proposals should hydrate their rows in adjacent pages.
+
+### Phase 8 follow-up: scan pages, stalls and hydration
+
+Recorded 2026-10-14 on Windows, Node 24.21.0 and the default heap, on the generated 1× project
+(583,507 lines, 10 cultures) with the retained Phase 1 inputs and Phase 4 package records. The
+scale harness has a quality stage: `--select quality` opens the generated target's index through
+the production refresh layer and runs its `localizationQuality` with the review file, as Workbench
+does. A 10 ms interval timer runs during the scan; its gaps are the event-loop stalls. Every run
+returns 2,027,740 findings. The first run built the index in 81 s; later runs open it in 2.5 s.
+
+A CPU profile of the 2048-line scan put 69% of it in line hydration. Effect.fn's stack capture
+and span for every evidence entry and occurrence took 23% of the scan, schema decoding about 17%
+(`decodeLocalizationSnapshot` decoded each entry, then hydration decoded it again), and shared
+string lookups 26%. The checks, without the units they hydrate, took about 6%.
+
+Hydration now reads a page's columns, evidence entries and strings once, then builds its lines in
+a plain synchronous loop. `decodeLocalizationSnapshot` rebuilds entries without decoding each one:
+the importer validates Unreal's files against the same schemas when it writes the index, and
+section checksums guard the index's bytes. At 2048-line pages:
+
+| Hydration                                   |      Scan | Peak V8 heap |
+| ------------------------------------------- | --------: | -----------: |
+| Before                                      | 201–208 s |  350–443 MiB |
+| Synchronous loop, entries decoded twice     |     144 s |      338 MiB |
+| Synchronous loop, decoded once              |     142 s |      301 MiB |
+| Synchronous loop, no per-entry decode (now) | 104–107 s |  241–246 MiB |
+
+Page sizes before and after that change, which also added the setup yields below; one run each
+unless a range is given:
+
+| Lines per page        | Scan before / after | Stall p95 before / after | Longest stall before / after |
+| --------------------- | ------------------: | -----------------------: | ---------------------------: |
+| 2048                  |     201–208 / 104 s |              2.5 / 1.1 s |              4.1–5.0 / 2.6 s |
+| 1024                  |         217 / 108 s |             1.4 / 0.56 s |                  2.6 / 1.4 s |
+| 512                   |         228 / 112 s |            0.71 / 0.30 s |                  1.7 / 1.0 s |
+| **256 (now)**         |     236 / 114–118 s |       0.35 / 0.16–0.17 s |            1.3 / 0.48–0.71 s |
+| 2048, yield every 256 |         191 / 104 s |             1.7 / 0.56 s |                  3.1 / 2.0 s |
+
+The scan now checks 256 lines per page. It is the only size that keeps the longest stall well
+under a second. It costs 10% against 2048-line pages with the new hydration (114 s against 104 s)
+and is 43% faster than before. Yielding every 256 lines inside 2048-line pages does not help:
+hydrating the page is one synchronous block. The setup before the first page also yields now;
+decoding every line ID took 0.7 s and the unit index 0.25 s in one block. With 256-line pages the
+median gap is 15 ms. The longest stalls are one-time column loads early in the scan; after them,
+pages stay under 0.4 s. Peak V8 heap during the scan is 209–234 MiB. Heap kept after collection is
+52 MiB, 46 MiB of it the opened index; the findings columns are array buffers.
+
+Measured, not changed:
+
+- Per-page column reads. Each page still makes hundreds of Effect.fn calls to read its columns:
+  about 80 line and culture columns, nine occurrence columns per package shard it touches, and
+  each evidence file's runs. Their overhead is 15% of the 256-line profile and most of what small
+  pages cost. A per-reader cache of these columns would remove most of it.
+- Shared string lookups take 37% of the 256-line profile. `bytesSync` rebuilds the segment start
+  list and a block key for every ID.
+- Units hydrated for the checks take 19%, and finding hashes (`canonicalJson`) 7%.
+
+Verification: `pnpm exec vitest run packages/game-text` passes 388 tests (4 skipped), including a
+new oracle test whose 600-key target spans three pages and fails if a page boundary drops a line.
+The Workbench Game Text host tests (28 in three files), the harness tests (18), the localization
+import oracle (50) and `pnpm run check:precommit` pass. No 10× run was made and Unreal was not run.

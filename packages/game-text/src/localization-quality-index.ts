@@ -43,8 +43,13 @@ import type { TextCorpus, TextUnit, TextUnitId } from "./schema.js";
 import { snapshotCheck } from "./snapshot-format.js";
 import { encodeWtf8 } from "./wtf8.js";
 
-/** Lines hydrated per scan page. Bounds the scan's heap; adjacent rows share evidence reads. */
-const SCAN_PAGE_LINES = 2048;
+/**
+ * Lines hydrated and checked per scan page; the scan yields after each. Measured on 583,507
+ * lines and 10 cultures, the longest event-loop stall was 0.5–0.7 s at 256 lines, 1.0 s at 512
+ * and 2.6 s at 2048, for a scan 10% longer than at 2048 (114 s against 104 s). Yielding inside
+ * 2048-line pages still stalled 2.0 s: hydrating the page is one synchronous block.
+ */
+const SCAN_PAGE_LINES = 256;
 /** Positions hydrated per batch when a workspace reads many findings, as an export does. */
 const ITEM_BATCH = 2048;
 
@@ -195,6 +200,7 @@ export const indexedLocalizationQuality = Effect.fn("GameText.localizationQualit
 		duplicates: yield* duplicateSources(data, target.cultures)
 	};
 	const units = unitIndex(data);
+	yield* Effect.yieldNow;
 	/** One line's findings in report order, and its check diagnostics. */
 	const check = (line: LocalizationLine) => {
 		let lineUnits: readonly TextUnit[] | undefined;
@@ -228,16 +234,23 @@ export const indexedLocalizationQuality = Effect.fn("GameText.localizationQualit
 	};
 
 	// Report order is line ID order; the scan reads rows in storage order and reorders after.
+	// Decoding every line ID takes about 0.7 s at 583,507 lines, so it yields per page too.
+	// The unit index above and the sort below take about 0.25 s and 0.1 s.
 	const count = data.joined.meta.count;
-	const order = (() => {
-		const ids = Array.from({ length: count }, (_, row) => data.lineId(row));
-		const collator = new Intl.Collator();
-		return Uint32Array.from(
-			Array.from({ length: count }, (_, row) => row).sort((a, b) =>
-				collator.compare(ids[a]!, ids[b]!)
-			)
-		);
-	})();
+	const ids: string[] = [];
+	for (let start = 0; start < count; start += SCAN_PAGE_LINES) {
+		for (let row = start; row < Math.min(count, start + SCAN_PAGE_LINES); row++)
+			ids[row] = data.lineId(row);
+		yield* Effect.yieldNow;
+	}
+	const collator = new Intl.Collator();
+	const order = Uint32Array.from(
+		Array.from({ length: count }, (_, row) => row).sort((a, b) =>
+			collator.compare(ids[a]!, ids[b]!)
+		)
+	);
+	// A suspended generator keeps its locals; release the IDs before the long scan.
+	ids.length = 0;
 	yield* Effect.yieldNow;
 	const rank = new Uint32Array(count);
 	for (let index = 0; index < count; index++) rank[order[index]!] = index;
