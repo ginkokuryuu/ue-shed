@@ -45,9 +45,13 @@
 #include "K2Node_Event.h"
 #include "Kismet2/BlueprintEditorUtils.h"
 #include "Kismet2/KismetEditorUtilities.h"
+#include "Kismet2/EnumEditorUtils.h"
+#include "Engine/UserDefinedEnum.h"
 #include "Internationalization/StringTable.h"
 #include "Internationalization/StringTableCore.h"
 #include "Internationalization/Text.h"
+#include "Internationalization/TextNamespaceUtil.h"
+#include "Internationalization/TextPackageNamespaceUtil.h"
 #include "LevelSequence.h"
 #include "MovieScene.h"
 #include "MovieSceneBinding.h"
@@ -1154,7 +1158,58 @@ bool GenerateGameTextCorpus()
 		StringTable->GetStringTableId(), FTextKey(TEXT("PromptContinue")));
 	if (bTextAssetCreated) FAssetRegistryModule::AssetCreated(TextAsset);
 	TextAssetPackage->MarkPackageDirty();
-	return SaveAsset(TextAssetPackage, TextAsset);
+	if (!SaveAsset(TextAssetPackage, TextAsset)) return false;
+
+	// UserDefinedEnum display names are player-facing text stored in DisplayNameMap.
+	static const TCHAR* EnumPackageName = TEXT("/Game/Fixture/Text/E_TextDisplayNames");
+	static const TCHAR* EnumAssetName = TEXT("E_TextDisplayNames");
+	UPackage* EnumPackage = FindOrCreatePackage(EnumPackageName);
+	if (EnumPackage == nullptr) return false;
+	UUserDefinedEnum* Enum = FindObject<UUserDefinedEnum>(EnumPackage, EnumAssetName);
+	const bool bEnumCreated = Enum == nullptr;
+	if (bEnumCreated)
+	{
+		Enum = Cast<UUserDefinedEnum>(FEnumEditorUtils::CreateUserDefinedEnum(
+			EnumPackage, EnumAssetName, RF_Public | RF_Standalone | RF_Transactional));
+		if (Enum == nullptr) return false;
+	}
+	while (Enum->NumEnums() - 1 < 2) FEnumEditorUtils::AddNewEnumeratorForUserDefinedEnum(Enum);
+	// Key the names as the enum editor's text box does: the package namespace applied to the
+	// text namespace. FText::FromString alone is never gathered, so it would not be game text.
+	const FString PackageNamespace = TextNamespaceUtil::EnsurePackageNamespace(Enum);
+	const FString DisplayNamespace = TextNamespaceUtil::BuildFullNamespace(
+		TEXT("Fixture.Enum"), PackageNamespace, /*bAlwaysApplyPackageNamespace*/ true);
+	const auto DisplayName = [&DisplayNamespace](const TCHAR* Key, const TCHAR* Source)
+	{
+		return FText::ChangeKey(FTextKey(DisplayNamespace), FTextKey(Key), FText::FromString(Source));
+	};
+	if (!FEnumEditorUtils::SetEnumeratorDisplayName(Enum, 0, DisplayName(TEXT("CommonItem"), TEXT("Common Item")))
+		|| !FEnumEditorUtils::SetEnumeratorDisplayName(Enum, 1, DisplayName(TEXT("RareItem"), TEXT("Rare Item"))))
+		return false;
+	if (bEnumCreated) FAssetRegistryModule::AssetCreated(Enum);
+	EnumPackage->MarkPackageDirty();
+	return SaveAsset(EnumPackage, Enum);
+}
+
+bool VerifyTextDisplayNameEnum()
+{
+	const UUserDefinedEnum* Enum = LoadObject<UUserDefinedEnum>(
+		nullptr, TEXT("/Game/Fixture/Text/E_TextDisplayNames.E_TextDisplayNames"));
+	if (Enum == nullptr || Enum->NumEnums() - 1 != 2) return false;
+	const FString PackageNamespace = TextNamespaceUtil::GetPackageNamespace(Enum);
+	const auto IsDisplayName = [Enum, &PackageNamespace](int32 Index, const TCHAR* Key, const TCHAR* Source)
+	{
+		const FText Name = Enum->GetDisplayNameTextByIndex(Index);
+		const FString Namespace = FTextInspector::GetNamespace(Name).Get(FString());
+		// Saved with the package marker, which gather strips once to `Fixture.Enum`.
+		return Name.ToString() == Source && FTextInspector::GetKey(Name).Get(FString()) == Key
+			&& !PackageNamespace.IsEmpty()
+			&& TextNamespaceUtil::ExtractPackageNamespace(Namespace) == PackageNamespace
+			&& TextNamespaceUtil::StripPackageNamespace(Namespace) == TEXT("Fixture.Enum")
+			&& Name.ShouldGatherForLocalization();
+	};
+	return IsDisplayName(0, TEXT("CommonItem"), TEXT("Common Item"))
+		&& IsDisplayName(1, TEXT("RareItem"), TEXT("Rare Item"));
 }
 
 bool VerifyGameTextCorpus()
@@ -1181,7 +1236,8 @@ bool VerifyGameTextCorpus()
 		&& TextAsset->EqualSourceSecond.ToString() == TEXT("Confirm")
 		&& FTextInspector::GetKey(TextAsset->EqualSourceFirst)
 			!= FTextInspector::GetKey(TextAsset->EqualSourceSecond)
-		&& TextAsset->StringTableReference.IsFromStringTable();
+		&& TextAsset->StringTableReference.IsFromStringTable()
+		&& VerifyTextDisplayNameEnum();
 }
 
 TSharedRef<FJsonObject> TextEvidence(const FText& Text)

@@ -1008,6 +1008,7 @@ fn decode_enum_data(
     let cpp_form_offset = reader.tell();
     let raw_form = reader.read_u8(&format!("{object_path}.CppForm"))?;
     let cpp_form = enum_cpp_form(raw_form, cpp_form_offset)?;
+    skip_enum_underlying_type(reader, context, object_path)?;
 
     let display_names = display_name_map(context.package, properties);
     let entries = raw_entries
@@ -1038,6 +1039,30 @@ fn enum_cpp_form(raw_form: u8, cpp_form_offset: u64) -> Result<EnumCppForm, Asse
         }
     };
     Ok(cpp_form)
+}
+
+/// Validates the `uint8 UnderlyingType` UE 5.8 saves after `CppForm`.
+///
+/// The shared `UEnum` layout recipe stops at `CppForm`; the saved custom version selects this
+/// UE 5.8 suffix (`FFortniteMainBranchObjectVersion::EnumUnderlyingType`).
+fn skip_enum_underlying_type(
+    reader: &mut crate::archive::Reader<'_>,
+    context: &AssetDecodeContext<'_>,
+    object_path: &ObjectPath,
+) -> Result<(), AssetError> {
+    if !context.package.summary.has_enum_underlying_type() {
+        return Ok(());
+    }
+    let offset = reader.tell();
+    let underlying = reader.read_u8(&format!("{object_path}.UnderlyingType"))?;
+    // `UEnum::EUnderlyingType`: int8 through uint64.
+    if underlying > 7 {
+        return Err(AssetError::new(
+            AssetErrorKind::MalformedData,
+            format!("unsupported Enum UnderlyingType {underlying} at byte {offset}"),
+        ));
+    }
+    Ok(())
 }
 
 impl AssetDecoder for EnumDecoder {
@@ -4802,6 +4827,56 @@ mod tests {
                 .collect::<Vec<_>>(),
             vec![Some("Red".to_owned()), Some("Green".to_owned()), None],
         );
+    }
+
+    /// UE 5.8 saves a `uint8 UnderlyingType` after `CppForm` (FortniteMain `EnumUnderlyingType`);
+    /// without it every 5.8 UserDefinedEnum left one trailing byte and failed to decode.
+    #[test]
+    fn reads_the_ue58_enum_underlying_type() {
+        let mut package = test_package(enum_names());
+        package
+            .summary
+            .custom_versions
+            .push(crate::package::CustomVersion {
+                key: crate::archive::Guid {
+                    a: 0x601D_1886,
+                    b: 0xAC64_4F84,
+                    c: 0xAA16_D3DE,
+                    d: 0x0DEA_C7D6,
+                },
+                version: 255,
+                friendly_name: None,
+            });
+        for (underlying, valid) in [(0_u8, true), (7, true), (8, false)] {
+            let mut export_bytes = write_userdefinedenum_export(0, &[], &[(1, 0), (2, 1)], 2);
+            export_bytes.push(underlying);
+            let export = test_export(
+                export_bytes.len() as u64,
+                "/Game/Test/E_Color.E_Color",
+                USERDEFINEDENUM_CLASS,
+            );
+            for schemas in [
+                &EmptySchemas as &dyn SchemaProvider,
+                embedded_source_model(),
+            ] {
+                let context = AssetDecodeContext {
+                    source: &export_bytes,
+                    package: &package,
+                    schemas,
+                };
+                let decoded = decode_export(&export, &context);
+                if valid {
+                    let Ok(Some(DecodedAsset::Enum(decoded))) = decoded else {
+                        panic!("UnderlyingType {underlying}: {decoded:?}");
+                    };
+                    assert_eq!(decoded.cpp_form, EnumCppForm::EnumClass);
+                    assert_eq!(decoded.entries.len(), 2);
+                } else {
+                    let error = decoded.expect_err("out-of-range UnderlyingType");
+                    assert!(error.message().contains("UnderlyingType"), "{error}");
+                }
+            }
+        }
     }
 
     #[test]

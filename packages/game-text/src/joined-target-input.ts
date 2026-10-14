@@ -251,10 +251,6 @@ export const loadJoinPackages = Effect.fn("JoinedTarget.packages")(function* (
 			"package.status",
 			"package.decode_errors",
 			"package.occurrence_start",
-			"package.gap0",
-			"package.gap1",
-			"package.gap2",
-			"package.gap3",
 			...occurrenceFields.map((field) => `occurrence.${field}`)
 		])
 			columns[field] = yield* u32(file, field);
@@ -288,15 +284,9 @@ export const loadJoinPackages = Effect.fn("JoinedTarget.packages")(function* (
 		for (let row = 0; row < shard.count; row++, pkg++) {
 			const c = shard.columns;
 			let next = c["package.status"]![row]!;
-			// Preserve today's diagnostic precedence, including not_gatherable -> partial.
-			if (
-				next === 2 ||
-				(next !== 3 &&
-					["package.gap0", "package.gap1", "package.gap2", "package.gap3"].some(
-						(field) => c[field]![row]! > 0
-					))
-			)
-				next = 1;
+			// Preserve the diagnostic precedence not_gatherable -> partial. Decoder gaps are detail;
+			// the reader's status already says whether gatherable text is missing.
+			if (next === 2) next = 1;
 			status[pkg] = next;
 			const start = c["package.occurrence_start"]![row]!,
 				end = c["package.occurrence_start"]![row + 1]!;

@@ -17,6 +17,7 @@ use crate::direct_executor;
 use crate::protocol::{
     Contract, Operation, Request, ResultFrame, decode_event, decode_request_frame,
 };
+use crate::protocol_result::SavedAssetPackageTextEvent;
 #[cfg(test)]
 use crate::protocol_result::{
     InspectionStatus, SavedAsset, SavedAssetDecodeError, SavedAssetDecodeErrorKind,
@@ -269,6 +270,18 @@ impl Emitter {
                     | ResultFrame::ProjectIndexDictionaryPage { .. }
             ) {
             compatible = legacy_header_result(result);
+            &compatible
+        } else if self.contract.version.minor < 10
+            && let ResultFrame::ExtractTextPackages {
+                event: SavedAssetPackageTextEvent::Package { record },
+            } = result
+            && record.gather_coverage.is_some()
+        {
+            let mut record = record.clone();
+            record.gather_coverage = None;
+            compatible = ResultFrame::ExtractTextPackages {
+                event: SavedAssetPackageTextEvent::Package { record },
+            };
             &compatible
         } else {
             result

@@ -78,6 +78,8 @@ export {
 	SavedAssetScanProgress,
 	SavedAssetScanSummary,
 	SavedAssetTextCoverageGap,
+	SavedAssetGatherCoverage,
+	SavedAssetMissingGatherableText,
 	SavedAssetPackageTextEvent,
 	SavedAssetPackageTextRecord,
 	SavedAssetTextExtractionEvent,

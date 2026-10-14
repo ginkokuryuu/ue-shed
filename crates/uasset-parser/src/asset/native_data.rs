@@ -175,6 +175,7 @@ pub(super) fn enumeration(
         return Err(invalid_layout(path, "CppForm"));
     };
     let cpp_form = enum_cpp_form(raw_form, reader.tell().saturating_sub(1))?;
+    skip_enum_underlying_type(reader, context, path)?;
     let display_names = display_name_map(context.package, properties);
     let mut entries = Vec::with_capacity(raw_entries.len());
     for mut entry in raw_entries {

@@ -314,6 +314,12 @@ export async function generateGameTextScale(options: {
 }
 
 /** Relative paths are relocated by the replay adapter, keeping bytes independent of output root. */
+/** Generated gaps with an unsupported history; their packages are partial, so they count. */
+export function gameTextScaleHistoryGaps(recipe: { readonly gaps: number }) {
+	const cycles = Math.floor(recipe.gaps / 10_000);
+	return cycles * (10_000 - 9994) + Math.max(0, (recipe.gaps % 10_000) - 9994);
+}
+
 export function* gameTextScaleEvents(
 	recipe: GameTextScaleRecipe,
 	seed: number

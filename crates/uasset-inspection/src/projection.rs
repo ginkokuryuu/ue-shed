@@ -8,7 +8,7 @@ use serde::Serialize;
 
 use uasset_parser::asset::{
     ANIM_SEQUENCE_CLASS, CURVETABLE_CLASS, DecodedAsset, DecodedUObject, SKELETON_CLASS,
-    USERDEFINEDSTRUCT_CLASS,
+    USERDEFINEDENUM_CLASS, USERDEFINEDSTRUCT_CLASS,
 };
 use uasset_parser::package::Package;
 use uasset_parser::property::{
@@ -231,7 +231,19 @@ pub fn project_text_asset(package: &Package, asset: &DecodedAsset) -> TextAssetP
             TextEditCapability::ReadOnly,
             &mut output,
         ),
-        DecodedAsset::Enum(_) => {}
+        // DisplayNameMap (`TMap<FName, FText>`) carries the entries' player-facing names.
+        DecodedAsset::Enum(decoded_enum) => visit_text_stream(
+            package,
+            &decoded_enum.properties,
+            "",
+            &|property_path| TextLocation::AssetProperty {
+                object_path: decoded_enum.object_path.to_string(),
+                class_path: USERDEFINEDENUM_CLASS.to_owned(),
+                property_path: property_path.to_owned(),
+            },
+            TextEditCapability::ReadOnly,
+            &mut output,
+        ),
     }
     output
 }

@@ -9,6 +9,7 @@ import {
 	type SavedAssetTextExtractionEvent,
 	type SavedAssetPackageTextEvent,
 	type SavedAssetTextOccurrence,
+	type SavedAssetGatherCoverage,
 	SavedAssetTextCoverageGap,
 	type SavedProperty,
 	type SavedPropertyValue
@@ -577,11 +578,11 @@ interface TextExtractionAccumulator {
 	readonly packageCoverage: TextPackageCoverage[];
 	readonly coverageGaps: Map<string, PackageTextGaps>;
 	readonly partialPackages: Map<string, number>;
+	readonly missingGatherable: Map<string, SavedAssetGatherCoverage>;
 	readonly diagnostics: TextCorpusDiagnostic[];
 	failedPackages: number;
 	inspectedPackages: number;
 	readonly occurrences: TextOccurrence[];
-	unsupportedTextProperties: number;
 	summary?: Extract<SavedAssetTextExtractionEvent, { readonly event: "text_summary" }>;
 }
 
@@ -590,11 +591,11 @@ function emptyTextExtractionAccumulator(): TextExtractionAccumulator {
 		packageCoverage: [],
 		coverageGaps: new Map(),
 		partialPackages: new Map(),
+		missingGatherable: new Map(),
 		diagnostics: [],
 		failedPackages: 0,
 		inspectedPackages: 0,
-		occurrences: [],
-		unsupportedTextProperties: 0
+		occurrences: []
 	};
 }
 
@@ -615,6 +616,10 @@ function gapMessage(total: number, counts: TextCoverageGapCounts): string {
 	return `${total} ${total === 1 ? "property was" : "properties were"} not decoded: ${reasons.join(", ")}.`;
 }
 
+function missingMessage(missing: SavedAssetGatherCoverage): string {
+	return `${missing.missing} of ${missing.runtimeSites} runtime text ${missing.runtimeSites === 1 ? "entry" : "entries"} in this package's gather table ${missing.missing === 1 ? "was" : "were"} not decoded.`;
+}
+
 function foldTextExtractionEvent(
 	projectRoot: string,
 	accumulator: TextExtractionAccumulator,
@@ -632,12 +637,14 @@ function foldTextExtractionEvent(
 				samples: [...event.gapSamples],
 				total
 			});
-			accumulator.unsupportedTextProperties += total;
 		}
 		accumulator.packageCoverage.push({ packageFile, status: event.status });
 		accumulator.inspectedPackages += 1;
-		if (event.status === "partial")
+		if (event.status === "partial") {
 			accumulator.partialPackages.set(packageFile, event.decodeErrors);
+			if ((event.gatherCoverage?.missing ?? 0) > 0)
+				accumulator.missingGatherable.set(packageFile, event.gatherCoverage!);
+		}
 		return accumulator;
 	}
 	if (event.event === "text_occurrence") {
@@ -667,7 +674,6 @@ function foldTextExtractionEvent(
 		}
 		gaps.counts[event.coverage_gap.reason] += 1;
 		gaps.total += 1;
-		accumulator.unsupportedTextProperties += 1;
 		if (gaps.samples.length < 3) {
 			gaps.samples.push(event.coverage_gap);
 		} else if (event.coverage_gap.reason === "unsupported_text_history") {
@@ -740,22 +746,27 @@ function buildTextCorpusFromExtraction(options: {
 		})
 		.sort((left, right) => left.id.localeCompare(right.id));
 	const diagnostics = [...accumulator.diagnostics];
-	const partialFiles = new Set([
-		...accumulator.partialPackages.keys(),
-		...accumulator.coverageGaps.keys()
-	]);
+	// The reader decides partial packages. With gather evidence, undecoded properties that hold
+	// no gatherable text leave a package complete; their gaps are detail for partial packages only.
+	const partialFiles = new Set(accumulator.partialPackages.keys());
+	let unsupportedTextProperties = 0;
+	let missingGatherableText = 0;
 	for (const packageFile of partialFiles) {
 		const gaps = accumulator.coverageGaps.get(packageFile);
+		const missing = accumulator.missingGatherable.get(packageFile);
 		const sample = gaps?.samples[0];
 		const decodeErrors = accumulator.partialPackages.get(packageFile) ?? 0;
+		unsupportedTextProperties += gaps?.counts.unsupported_text_history ?? 0;
+		missingGatherableText += missing?.missing ?? 0;
+		const reason =
+			gaps === undefined
+				? decodeErrors > 0
+					? `${decodeErrors} decode error(s) limit this package's coverage.`
+					: "The saved-package reader reported incomplete coverage for this package."
+				: gapMessage(gaps.total, gaps.counts);
 		diagnostics.push({
 			code: "package_partially_decoded",
-			message:
-				gaps === undefined
-					? decodeErrors > 0
-						? `${decodeErrors} decode error(s) limit this package's coverage.`
-						: "The saved-package reader reported incomplete coverage for this package."
-					: gapMessage(gaps.total, gaps.counts),
+			message: missing === undefined ? reason : `${missingMessage(missing)} ${reason}`,
 			packageFile,
 			...(gaps === undefined ? undefined : { coverageGapCounts: gaps.counts }),
 			...(sample === undefined
@@ -765,6 +776,14 @@ function buildTextCorpusFromExtraction(options: {
 						propertyPath: sample.property_path
 					})
 		});
+		for (const sample of missing?.missingSamples ?? []) {
+			diagnostics.push({
+				code: "gatherable_text_not_decoded",
+				message: `"${sample.source}" is in this package's gather table (namespace "${sample.namespace}", key "${sample.key}") but was not decoded.`,
+				packageFile,
+				objectPath: sample.site
+			});
+		}
 		for (const gap of gaps?.samples ?? []) {
 			if (gap.reason !== "unsupported_text_history") continue;
 			diagnostics.push({
@@ -777,15 +796,7 @@ function buildTextCorpusFromExtraction(options: {
 			});
 		}
 	}
-	const packageCoverage = accumulator.packageCoverage.map(
-		(coverage): TextPackageCoverage => ({
-			...coverage,
-			status:
-				coverage.status === "complete" && partialFiles.has(coverage.packageFile)
-					? "partial"
-					: coverage.status
-		})
-	);
+	const packageCoverage = accumulator.packageCoverage;
 	const partialPackages = packageCoverage.filter(
 		(coverage) => coverage.status === "partial"
 	).length;
@@ -803,12 +814,7 @@ function buildTextCorpusFromExtraction(options: {
 			: (summary?.scannedAssets ?? options.discoveredPackages);
 	return {
 		schemaVersion: 1,
-		status:
-			partialFiles.size > 0 ||
-			accumulator.failedPackages > 0 ||
-			accumulator.unsupportedTextProperties > 0
-				? "partial"
-				: "complete",
+		status: partialFiles.size > 0 || accumulator.failedPackages > 0 ? "partial" : "complete",
 		coverage: {
 			discoveredPackages,
 			inspectedPackages,
@@ -818,7 +824,8 @@ function buildTextCorpusFromExtraction(options: {
 			textOccurrences: accumulator.occurrences.length,
 			resolvedOccurrences,
 			unresolvedOccurrences: accumulator.occurrences.length - resolvedOccurrences,
-			unsupportedTextProperties: accumulator.unsupportedTextProperties
+			unsupportedTextProperties,
+			...(missingGatherableText > 0 ? { missingGatherableText } : undefined)
 		},
 		units,
 		packageCoverage,

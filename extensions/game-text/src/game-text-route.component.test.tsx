@@ -816,8 +816,7 @@ describe("Game Text writing workspace", () => {
 		expect(within(results).queryByText("Continue")).toBeNull();
 	});
 
-	it("shows excluded packages as outside Unreal gather coverage", async () => {
-		const user = userEvent.setup();
+	it("does not warn about packages Unreal does not gather either", async () => {
 		mount(
 			makeClient({
 				...corpus,
@@ -835,15 +834,10 @@ describe("Game Text writing workspace", () => {
 			})
 		);
 		await screen.findByText("2 matches");
-		const trigger = screen.getByRole("button", { name: "Read problems" });
-		expect(trigger.textContent).toBe("1 asset excluded from gather");
-		await user.click(trigger);
-		expect(screen.getByRole("dialog", { name: "Read problems" }).textContent).toContain(
-			"excluded because Unreal does not gather"
-		);
+		expect(screen.queryByRole("button", { name: "Read problems" })).toBeNull();
 	});
 
-	it("keeps partial coverage, unsupported fields and related read problems inspectable", async () => {
+	it("keeps unread gathered lines, excluded packages and related read problems inspectable", async () => {
 		const user = userEvent.setup();
 		mount(
 			makeClient({
@@ -854,8 +848,13 @@ describe("Game Text writing workspace", () => {
 					discoveredPackages: 3,
 					partialPackages: 1,
 					failedPackages: 1,
-					unsupportedTextProperties: 2
+					unsupportedTextProperties: 2,
+					missingGatherableText: 3
 				},
+				packageCoverage: ["A", "B", "C", "D"].map((name) => ({
+					packageFile: `Content/Native/${name}.uasset`,
+					status: "not_gatherable" as const
+				})),
 				diagnostics: [
 					{
 						code: "unsupported_text_history",
@@ -869,11 +868,14 @@ describe("Game Text writing workspace", () => {
 		);
 		await screen.findByText("2 matches");
 		const trigger = screen.getByRole("button", { name: "Read problems" });
-		expect(trigger.textContent).toBe("2 assets not fully read");
+		expect(trigger.textContent).toBe("3 lines not read");
 		await user.click(trigger);
 		const problems = screen.getByRole("dialog", { name: "Read problems" });
-		expect(problems.textContent).toContain("Only part of the project's saved text was read");
-		expect(problems.textContent).toContain("2 text fields could not be decoded");
+		expect(problems.textContent).toContain("Some text Unreal gathers");
+		expect(problems.textContent).toContain(
+			"3 lines listed in the assets' gather data could not be read"
+		);
+		expect(problems.textContent).toContain("4 assets skipped because Unreal does not gather");
 		await user.keyboard("{Escape}");
 		expect(screen.queryByRole("dialog", { name: "Read problems" })).toBeNull();
 		const results = screen.getByRole("region", { name: "Results" });

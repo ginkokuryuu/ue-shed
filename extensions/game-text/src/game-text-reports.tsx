@@ -225,11 +225,11 @@ export function GameTextReports(props: {
 									{textCountLabel(report().coverage.inspectedPackages, "asset")}{" "}
 									read · {report().coverage.partialPackages} partly read ·{" "}
 									{report().coverage.failedPackages} unread ·{" "}
-									{textCountLabel(
-										report().coverage.unsupportedTextProperties,
-										"unsupported field"
-									)}
-									·{" "}
+									<Show when={report().coverage.missingGatherableText}>
+										{(missing) =>
+											`${textCountLabel(missing(), "gathered line")} not read · `
+										}
+									</Show>
 									{textCountLabel(report().gatherFilesRead, "localization file")}{" "}
 									read
 									<Show when={report().gatherFilesMissing}>

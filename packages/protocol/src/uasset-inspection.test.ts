@@ -34,6 +34,63 @@ describe("saved asset inspection wire contract", () => {
 		expect(inspection.assets).toHaveLength(0);
 	});
 
+	it("accepts the null display names and paths the native saved inspection writes", async () => {
+		const inspection = await Effect.runPromise(
+			decodeSavedAssetInspection({
+				assets: [
+					{
+						kind: "Enum",
+						object_path: "/Game/E_Item.E_Item",
+						class_path: "/Script/Engine.UserDefinedEnum",
+						enum_cpp_form: "Namespaced",
+						enum_entries: [
+							{ name: "E_Item::Common", value: 0, display_name: "Common Item" },
+							{ name: "E_Item::E_MAX", value: 1, display_name: null }
+						],
+						row_count: 2
+					},
+					{
+						kind: "Struct",
+						object_path: "/Game/S_Item.S_Item",
+						class_path: "/Script/Engine.UserDefinedStruct",
+						struct_flags: 0,
+						struct_fields: [
+							{
+								name: "Count",
+								type: "IntProperty",
+								referenced_path: null,
+								display_name: null
+							}
+						],
+						row_count: 1
+					}
+				],
+				decode_errors: [],
+				package: {
+					name: "/Game/E_Item",
+					package_flags: 0,
+					summary_size: 64,
+					total_header_size: 128,
+					version: {
+						legacy_file: 0,
+						legacy_ue3: 0,
+						ue4: 1,
+						ue5: 0,
+						licensee: 0
+					}
+				},
+				path: "Content/E_Item.uasset",
+				schema_version: 8,
+				status: "ok"
+			})
+		);
+		const [enumAsset, structAsset] = inspection.assets;
+		expect(enumAsset?.kind === "Enum" && enumAsset.enum_entries[1]?.display_name).toBeNull();
+		expect(
+			structAsset?.kind === "Struct" && structAsset.struct_fields[0]?.referenced_path
+		).toBe(null);
+	});
+
 	it("rejects an inspection with an unknown asset kind", async () => {
 		const result = await Effect.runPromise(
 			Effect.result(
