@@ -22,7 +22,11 @@ import {
 	type LocalizationQualityReport
 } from "./localization-quality-schema.js";
 import { LocalizationFocus, localizationFocusPage } from "./localization-view.js";
-import { LocalizationUnknownReason, type LocalizationJoin } from "./localization-schema.js";
+import {
+	LocalizationUnknownReason,
+	type LocalizationJoin,
+	type LocalizationLine
+} from "./localization-schema.js";
 import { localizationShippedTranslation } from "./localization-shipped-translation.js";
 import {
 	LocalizationProgressCulture,
@@ -191,7 +195,15 @@ export const WorkspaceQualityFocusResult = Schema.Union([
 ]);
 export type WorkspaceQualityFocusResult = typeof WorkspaceQualityFocusResult.Type;
 type Finding = LocalizationQualityReport["findings"][number];
-function filterOf(finding: Finding): WorkspaceQualityFilter {
+type SourceFinding = TextQualityReport["findings"][number];
+type RuleId = (typeof TextQualityRuleSummary.Type)["ruleId"];
+/** A shown finding: the finding, its line when known, and the summary the list displays. */
+export interface WorkspaceQualityItem {
+	readonly finding: Finding | SourceFinding;
+	readonly line: LocalizationLine | undefined;
+	readonly summary: WorkspaceFinding;
+}
+export function workspaceQualityFilterOf(finding: Finding | SourceFinding): WorkspaceQualityFilter {
 	if (finding.kind === "localization_character_budget") return "character_budget";
 	if (finding.kind === "localization_terminology") return "terminology";
 	return finding.kind;
@@ -246,11 +258,102 @@ function problem(finding: Finding): string {
 						"”";
 	}
 }
-function hash(value: string): string {
-	let result = 0xcbf29ce484222325n;
-	for (let index = 0; index < value.length; index++)
-		result = BigInt.asUintN(64, (result ^ BigInt(value.charCodeAt(index))) * 0x100000001b3n);
-	return result.toString(16);
+/** What tells localization findings apart. */
+interface HashedLocalizationFinding {
+	readonly lineId: string;
+	readonly culture: string;
+	readonly ruleId: string;
+	readonly kind: string;
+	readonly actual: object;
+	readonly expectation: object;
+}
+/**
+ * JSON with object keys sorted at every level: listed properties serialize in list order, so equal
+ * values hash equally whether a schema or a check built them.
+ */
+function canonicalJson(finding: HashedLocalizationFinding): string {
+	const values = [
+		finding.lineId,
+		finding.culture,
+		finding.ruleId,
+		finding.kind,
+		finding.actual,
+		finding.expectation
+	];
+	const keys = new Set<string>();
+	JSON.stringify(values, (key, item) => {
+		keys.add(key);
+		return item;
+	});
+	return JSON.stringify(values, [...keys].sort());
+}
+/**
+ * Two 32-bit lanes of a fast string hash over the finding's line, culture, rule, check and
+ * observed and expected values. IDs stay stable while that text is unchanged.
+ */
+export function localizationFindingHash(
+	finding: HashedLocalizationFinding
+): readonly [number, number] {
+	const text = canonicalJson(finding);
+	let first = 0x811c9dc5,
+		second = 0x9e3779b9;
+	for (let index = 0; index < text.length; index++) {
+		const code = text.charCodeAt(index);
+		first = Math.imul(first ^ code, 0x01000193);
+		second = Math.imul(second ^ code, 0x5bd1e995);
+		second ^= second >>> 15;
+	}
+	return [first >>> 0, second >>> 0];
+}
+export function localizationFindingId([first, second]: readonly [number, number]) {
+	return TextQualityFindingId.make(
+		"localization-finding:" +
+			first.toString(16).padStart(8, "0") +
+			second.toString(16).padStart(8, "0")
+	);
+}
+/** The finding's suggested change when it fits a proposal; otherwise undefined. */
+export function eligibleLocalizationChange(finding: Finding | SourceFinding) {
+	return "suggestedChange" in finding &&
+		finding.suggestedChange &&
+		Schema.is(BoundedChange)(finding.suggestedChange)
+		? finding.suggestedChange
+		: undefined;
+}
+export function workspaceQualityItem(
+	finding: Finding | SourceFinding,
+	line: LocalizationLine | undefined
+): WorkspaceQualityItem {
+	const localized = "culture" in finding;
+	const id = localized
+		? localizationFindingId(localizationFindingHash(finding))
+		: textQualityFindingId(finding);
+	const location = finding.affectedOccurrences[0]?.location;
+	const context =
+		(location
+			? textAssetName(location.objectPath)
+			: (line?.manifest[0]?.path ?? "Source file")) +
+		" · " +
+		(localized
+			? finding.identity.key
+			: (line?.identity?.key ??
+				(location?.kind === "string_table_entry" ? location.entryKey : finding.ruleId))) +
+		" · " +
+		workspaceQualityLabels[workspaceQualityFilterOf(finding)] +
+		" · " +
+		textCountLabel(finding.affectedOccurrences.length, "location");
+	const summary: WorkspaceFinding = {
+		id,
+		filter: workspaceQualityFilterOf(finding),
+		source: (localized
+			? (line?.manifest[0]?.source.Text ?? line?.source ?? "")
+			: finding.actual.source
+		).slice(0, 512),
+		problem: ((localized ? finding.culture + " · " : "") + problem(finding)).slice(0, 1024),
+		context: context.slice(0, 1024),
+		...(localized ? { culture: finding.culture } : undefined)
+	};
+	return { finding, line, summary };
 }
 function ranges(text: string, finding: Finding, side: "source" | "translation") {
 	const matches: Array<{ start: number; end: number }> = [];
@@ -289,14 +392,51 @@ function ranges(text: string, finding: Finding, side: "source" | "translation") 
 	return matches.sort((a, b) => a.start - b.start);
 }
 
+/** Localization findings in report order. Facts are cheap; only `items` reads lines. */
+export interface LocalizationFindingList {
+	readonly length: number;
+	culture(position: number): CultureCode;
+	filter(position: number): WorkspaceQualityFilter;
+	ruleId(position: number): RuleId;
+	eligible(position: number): boolean;
+	/** The first position with this ID within the culture selection. */
+	find(id: TextQualityFindingId, culture: CultureCode | undefined): number | undefined;
+	items(positions: readonly number[]): readonly WorkspaceQualityItem[];
+	/** Check diagnostic counts in first-seen order. */
+	limits(
+		culture: CultureCode | undefined
+	): ReadonlyArray<{ code: LocalizationCheckDiagnostic["code"]; count: number }>;
+}
+export interface LocalizationQualityMetadata {
+	readonly join: Pick<LocalizationJoin, "target" | "nativeCulture" | "cultures">;
+	readonly rules: readonly RuleId[];
+	readonly unsupportedRuleCultures: number;
+	readonly status: TextCorpus["status"];
+	readonly coverage: TextCorpus["coverage"];
+	/** The line a source finding's unit belongs to, for its context. */
+	readonly lineOfUnit: (id: TextUnitId) => LocalizationLine | undefined;
+}
+
+/** Findings and metadata a quality workspace reads, however they are stored. */
+export interface LocalizationQuality {
+	readonly findings: LocalizationFindingList;
+	readonly metadata: LocalizationQualityMetadata;
+}
+
 /** A retained index; every page, type count and proposal uses the same culture/filter selection. */
 export function localizationQualityWorkspace(
 	source: TextQualityReport | undefined,
 	report: LocalizationQualityReport,
 	join: LocalizationJoin
 ) {
-	const sourceQuery = source ? textQualityQuery(source) : undefined;
-	const sourceFindings = source?.findings ?? [];
+	return localizationQualityWorkspaceOf(source, localizationQuality(report, join));
+}
+
+/** The in-memory form: findings of a whole report, with the join their lines come from. */
+export function localizationQuality(
+	report: LocalizationQualityReport,
+	join: LocalizationJoin
+): LocalizationQuality {
 	const lines = new Map(join.lines.map((line) => [line.id, line]));
 	const units = new Map(
 		join.lines.flatMap((line) =>
@@ -305,113 +445,163 @@ export function localizationQualityWorkspace(
 				: []
 		)
 	);
-	const indexed = [...sourceFindings, ...report.findings].map((finding) => {
-		const localized = "culture" in finding;
-		const line = localized ? lines.get(finding.lineId) : units.get(finding.textUnitId);
-		const id = localized
-			? TextQualityFindingId.make("localization-finding:" + hash(JSON.stringify(finding)))
-			: textQualityFindingId(finding);
-		const location = finding.affectedOccurrences[0]?.location;
-		const context =
-			(location
-				? textAssetName(location.objectPath)
-				: (line?.manifest[0]?.path ?? "Source file")) +
-			" · " +
-			(localized
-				? finding.identity.key
-				: (line?.identity?.key ??
-					(location?.kind === "string_table_entry"
-						? location.entryKey
-						: finding.ruleId))) +
-			" · " +
-			workspaceQualityLabels[filterOf(finding)] +
-			" · " +
-			textCountLabel(finding.affectedOccurrences.length, "location");
-		const summary: WorkspaceFinding = {
-			id,
-			filter: filterOf(finding),
-			source: (localized
-				? (line?.manifest[0]?.source.Text ?? line?.source ?? "")
-				: finding.actual.source
-			).slice(0, 512),
-			problem: ((localized ? finding.culture + " · " : "") + problem(finding)).slice(0, 1024),
-			context: context.slice(0, 1024),
-			...(localized ? { culture: finding.culture } : undefined)
-		};
-		return { finding, line, summary };
-	});
-	const matched = (request: WorkspaceQualityRequest) =>
-		indexed.filter(
-			({ summary }) =>
-				(!request.culture || !summary.culture || summary.culture === request.culture) &&
-				(request.filter === "all" || request.filter === summary.filter)
+	const items = report.findings.map((finding) =>
+		workspaceQualityItem(
+			finding,
+			"culture" in finding ? lines.get(finding.lineId) : units.get(finding.textUnitId)
+		)
+	);
+	return {
+		findings: {
+			length: items.length,
+			culture: (position) => items[position]!.summary.culture!,
+			filter: (position) => items[position]!.summary.filter,
+			ruleId: (position) => items[position]!.finding.ruleId,
+			eligible: (position) =>
+				eligibleLocalizationChange(items[position]!.finding) !== undefined,
+			find: (id, culture) => {
+				const position = items.findIndex(
+					({ summary }) => summary.id === id && (!culture || summary.culture === culture)
+				);
+				return position < 0 ? undefined : position;
+			},
+			items: (positions) => positions.map((position) => items[position]!),
+			limits: (culture) => {
+				const limits = new Map<LocalizationCheckDiagnostic["code"], number>();
+				for (const diagnostic of report.checkDiagnostics) {
+					if (!culture || diagnostic.culture === culture)
+						limits.set(diagnostic.code, (limits.get(diagnostic.code) ?? 0) + 1);
+				}
+				return [...limits].map(([code, count]) => ({ code, count }));
+			}
+		},
+		metadata: {
+			join,
+			rules: report.rules.map((rule) => rule.ruleId),
+			unsupportedRuleCultures: report.ruleDiagnostics?.length ?? 0,
+			status: report.status,
+			coverage: report.coverage,
+			lineOfUnit: (id) => units.get(id)
+		}
+	};
+}
+
+/** The workspace over any finding list. Source findings come first, then localization findings. */
+export function localizationQualityWorkspaceOf(
+	source: TextQualityReport | undefined,
+	{ findings: list, metadata }: LocalizationQuality
+) {
+	const sourceQuery = source ? textQualityQuery(source) : undefined;
+	const sourceItems = (source?.findings ?? []).map((finding) =>
+		workspaceQualityItem(finding, metadata.lineOfUnit(finding.textUnitId))
+	);
+	const sourceCount = sourceItems.length,
+		total = sourceCount + list.length;
+	const inCulture = (request: { culture?: CultureCode | undefined }, position: number) =>
+		position < sourceCount ||
+		!request.culture ||
+		list.culture(position - sourceCount) === request.culture;
+	const filterAt = (position: number) =>
+		position < sourceCount
+			? sourceItems[position]!.summary.filter
+			: list.filter(position - sourceCount);
+	const ruleAt = (position: number) =>
+		position < sourceCount
+			? sourceItems[position]!.finding.ruleId
+			: list.ruleId(position - sourceCount);
+	const eligibleAt = (position: number) =>
+		position < sourceCount
+			? eligibleLocalizationChange(sourceItems[position]!.finding) !== undefined
+			: list.eligible(position - sourceCount);
+	const itemsAt = (positions: readonly number[]): WorkspaceQualityItem[] => {
+		const localized = list.items(
+			positions.filter((position) => position >= sourceCount).map((p) => p - sourceCount)
 		);
-	const eligible = (finding: Finding) =>
-		"suggestedChange" in finding &&
-		finding.suggestedChange &&
-		Schema.is(BoundedChange)(finding.suggestedChange)
-			? finding.suggestedChange
-			: undefined;
+		let next = 0;
+		return positions.map((position) =>
+			position < sourceCount ? sourceItems[position]! : localized[next++]!
+		);
+	};
+	/** Summaries in batches, so a large export never holds every finding and line at once. */
+	const summariesAt = (positions: readonly number[]) => {
+		const summaries: WorkspaceFinding[] = [];
+		for (let start = 0; start < positions.length; start += 2048)
+			for (const item of itemsAt(positions.slice(start, start + 2048)))
+				summaries.push(item.summary);
+		return summaries;
+	};
+	const matched = (request: WorkspaceQualityRequest, wanted = (_position: number) => true) => {
+		const positions: number[] = [];
+		for (let position = 0; position < total; position++)
+			if (
+				inCulture(request, position) &&
+				(request.filter === "all" || request.filter === filterAt(position)) &&
+				wanted(position)
+			)
+				positions.push(position);
+		return positions;
+	};
 	const search = (request: WorkspaceQualityRequest): WorkspaceQualityPage => {
-		const culture = indexed.filter(
-			({ summary }) =>
-				!request.culture || !summary.culture || summary.culture === request.culture
-		);
 		const typeCounts = new Map<WorkspaceQualityFilter, number>();
-		const ruleCounts = new Map<Finding["ruleId"], number>();
-		for (const { summary, finding } of culture) {
-			typeCounts.set(summary.filter, (typeCounts.get(summary.filter) ?? 0) + 1);
-			ruleCounts.set(finding.ruleId, (ruleCounts.get(finding.ruleId) ?? 0) + 1);
+		const ruleCounts = new Map<string, number>();
+		const offset = request.offset ?? 0,
+			page: number[] = [];
+		let cultureCount = 0,
+			matchedCount = 0,
+			suggestedFixCount = 0;
+		for (let position = 0; position < total; position++) {
+			if (!inCulture(request, position)) continue;
+			cultureCount++;
+			const filter = filterAt(position),
+				rule = ruleAt(position);
+			typeCounts.set(filter, (typeCounts.get(filter) ?? 0) + 1);
+			ruleCounts.set(rule, (ruleCounts.get(rule) ?? 0) + 1);
+			if (request.filter !== "all" && request.filter !== filter) continue;
+			if (matchedCount >= offset && matchedCount < offset + 50) page.push(position);
+			matchedCount++;
+			if (eligibleAt(position)) suggestedFixCount++;
 		}
 		const counts = Schema.decodeUnknownSync(WorkspaceQualityPage.fields.counts)(
 			Object.fromEntries(
 				WorkspaceQualityFilter.literals.map((filter) => [
 					filter,
-					filter === "all" ? culture.length : (typeCounts.get(filter) ?? 0)
+					filter === "all" ? cultureCount : (typeCounts.get(filter) ?? 0)
 				])
 			)
 		);
-		const limits = new Map<LocalizationCheckDiagnostic["code"], number>();
-		for (const diagnostic of report.checkDiagnostics) {
-			if (!request.culture || diagnostic.culture === request.culture)
-				limits.set(diagnostic.code, (limits.get(diagnostic.code) ?? 0) + 1);
-		}
-		const findings = matched(request),
-			offset = request.offset ?? 0;
 		return {
 			counts,
-			limits: [...limits].map(([code, count]) => ({ code, count })),
-			unsupportedRuleCultures: report.ruleDiagnostics?.length ?? 0,
-			total: findings.length,
-			findings: findings.slice(offset, offset + 50).map((item) => item.summary),
-			suggestedFixCount: findings.filter(({ finding }) => eligible(finding)).length,
-			rules: [...(source?.rules ?? []), ...report.rules].map((rule) => ({
-				ruleId: rule.ruleId,
-				findingCount: ruleCounts.get(rule.ruleId) ?? 0
-			})),
-			...(offset + 50 < findings.length ? { nextOffset: offset + 50 } : undefined)
+			limits: [...list.limits(request.culture)],
+			unsupportedRuleCultures: metadata.unsupportedRuleCultures,
+			total: matchedCount,
+			findings: itemsAt(page).map((item) => item.summary),
+			suggestedFixCount,
+			rules: [...(source?.rules ?? []).map((rule) => rule.ruleId), ...metadata.rules].map(
+				(ruleId) => ({ ruleId, findingCount: ruleCounts.get(ruleId) ?? 0 })
+			),
+			...(offset + 50 < matchedCount ? { nextOffset: offset + 50 } : undefined)
 		};
 	};
 	return {
 		search,
 		export(request: WorkspaceQualityRequest): WorkspaceQualityReport {
-			const { nextOffset: _offset, ...metadata } = search(request);
+			const { nextOffset: _offset, ...page } = search(request);
 			return {
-				...metadata,
-				findings: matched(request).map((item) => item.summary),
-				corpusCoverage: report.coverage,
-				status: report.status,
+				...page,
+				findings: summariesAt(matched(request)),
+				corpusCoverage: metadata.coverage,
+				status: metadata.status,
 				target: request.target,
 				filter: request.filter,
 				...(request.culture ? { culture: request.culture } : undefined)
 			};
 		},
 		focus(request: WorkspaceQualityFocusRequest): WorkspaceQualityFocusResult {
-			const item = indexed.find(
-				({ summary }) =>
-					summary.id === request.id &&
-					(!request.culture || !summary.culture || summary.culture === request.culture)
-			);
+			let item = sourceItems.find(({ summary }) => summary.id === request.id);
+			if (!item) {
+				const position = list.find(request.id, request.culture);
+				item = position === undefined ? undefined : list.items([position])[0];
+			}
 			if (!item) return { status: "not_found" };
 			const { finding, line, summary } = item;
 			if (!("culture" in finding)) {
@@ -431,7 +621,7 @@ export function localizationQualityWorkspace(
 			const sourceText = line.manifest[0]?.source.Text ?? line.source;
 			const translation = mark ? localizationShippedTranslation(mark).value : null;
 			const detail = localizationFocusPage(
-				join,
+				metadata.join,
 				{
 					...line,
 					cultures: line.cultures.filter((mark) => mark.culture === finding.culture)
@@ -443,7 +633,7 @@ export function localizationQualityWorkspace(
 					poContextOffset: request.poContextOffset ?? 0
 				}
 			);
-			const change = eligible(finding);
+			const change = eligibleLocalizationChange(finding);
 			return {
 				status: "found",
 				focus: {
@@ -481,8 +671,8 @@ export function localizationQualityWorkspace(
 			const seen = new Set<string>();
 			let remaining = 0,
 				bytes = 0;
-			for (const { finding } of matched(request)) {
-				const change = eligible(finding);
+			for (const { finding } of itemsAt(matched(request, eligibleAt))) {
+				const change = eligibleLocalizationChange(finding);
 				if (!change) continue;
 				const key = JSON.stringify([
 					change.target,

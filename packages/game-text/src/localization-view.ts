@@ -202,7 +202,7 @@ function runtimeText(
 
 /** A single line's bounded presentation, without file provenance, metadata or PO document blocks. */
 export function localizationFocusPage(
-	join: LocalizationJoin,
+	join: Pick<LocalizationJoin, "target" | "nativeCulture" | "cultures">,
 	line: LocalizationLine,
 	request: LocalizationFocusRequest
 ): LocalizationFocus {

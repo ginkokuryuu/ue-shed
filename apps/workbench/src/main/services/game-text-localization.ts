@@ -4,8 +4,9 @@ import {
 	GameTextIndexSteps,
 	type GameTextProjectIndex,
 	GameTextIndexError,
-	localizationQualityWorkspace,
 	checkLocalizationTarget,
+	localizationQuality,
+	localizationQualityWorkspaceOf,
 	evaluateGameTextSourceQuality,
 	localizationProgressReport,
 	localizationReportPage,
@@ -119,7 +120,7 @@ export const makeGameTextLocalization = Effect.fn("Workbench.GameText.localizati
 		| {
 				join: LocalizationJoin;
 				document: GameTextRuleDocument | undefined;
-				model: ReturnType<typeof localizationQualityWorkspace>;
+				model: ReturnType<typeof localizationQualityWorkspaceOf>;
 		  }
 		| undefined
 	>(undefined);
@@ -136,6 +137,7 @@ export const makeGameTextLocalization = Effect.fn("Workbench.GameText.localizati
 				readonly projectRoot: string;
 				readonly corpus: TextCorpus;
 				readonly join: LocalizationJoin;
+				readonly quality: GameTextIndexRefreshResult["localizationQuality"];
 				readonly evidence: LocalizationTargetEvidence;
 				readonly review: LocalizationReviewSnapshot | undefined;
 				readonly model: TextCorpusQuery;
@@ -336,6 +338,7 @@ export const makeGameTextLocalization = Effect.fn("Workbench.GameText.localizati
 					projectRoot: root,
 					corpus,
 					join,
+					quality: indexed.success.localizationQuality,
 					model,
 					search: indexed.success.search,
 					borrow: indexed.success.borrow,
@@ -401,16 +404,21 @@ export const makeGameTextLocalization = Effect.fn("Workbench.GameText.localizati
 		const document = yield* rules();
 		const cached = yield* Ref.get(qualityCache);
 		if (cached?.join === retained.join && cached.document === document) return cached.model;
-		const model = localizationQualityWorkspace(
+		const options = retained.review ? { review: retained.review.file } : {};
+		// Indexed targets check page by page and keep findings as columns.
+		const model = localizationQualityWorkspaceOf(
 			document ? evaluateGameTextSourceQuality(retained.corpus, document) : undefined,
-			checkLocalizationTarget(
-				retained.corpus,
-				retained.join,
-				retained.evidence,
-				retained.review ? { review: retained.review.file } : {},
-				document
-			),
-			retained.join
+			retained.quality?.(options, document) ??
+				localizationQuality(
+					checkLocalizationTarget(
+						retained.corpus,
+						retained.join,
+						retained.evidence,
+						options,
+						document
+					),
+					retained.join
+				)
 		);
 		yield* Ref.set(qualityCache, { join: retained.join, document, model });
 		return model;

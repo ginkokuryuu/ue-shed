@@ -50,6 +50,7 @@ import {
 	indexedLocalizationJoin,
 	readIndexedLocalizationEvidence
 } from "./index-context.js";
+import { indexedLocalizationQuality } from "./localization-quality-index.js";
 import { openJoinedTarget, readJoinedTarget } from "./joined-target-reader.js";
 import type { TextCorpusSearchRequest } from "./schema.js";
 import type { importLocalizationTarget } from "./localization-import.js";
@@ -664,6 +665,7 @@ export const makeGameTextIndexSteps = (
 						})
 					);
 			reportProgress({ phase: "ready", completed: 0, total: 0 });
+			const corpus = indexedTextCorpus(joined, query);
 			return {
 				...result,
 				project: target.project,
@@ -676,8 +678,16 @@ export const makeGameTextIndexSteps = (
 				query,
 				search,
 				evidence: indexedEvidence,
-				corpus: indexedTextCorpus(joined, query),
-				localizationJoin: indexedLocalizationJoin(joined, query)
+				corpus,
+				localizationJoin: indexedLocalizationJoin(joined, query),
+				localizationQuality: (options, ruleDocument) =>
+					indexedLocalizationQuality(
+						joined,
+						corpus,
+						indexedEvidence,
+						options,
+						ruleDocument
+					)
 			};
 		}, normalizeFailure);
 		const invalidate = Effect.fn("GameTextIndex.invalidate")(function* (
