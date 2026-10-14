@@ -51,23 +51,26 @@ if (
 const root = resolve(selectedRoot);
 const selectedProject = projectFile(root);
 const explicitEngineRoot = process.env.UE_SHED_UNREAL_ENGINE_ROOT;
-const engineRoot = await Effect.runPromise(
+const { root: engineRoot, version: engineVersion } = await Effect.runPromise(
 	Effect.flatMap(EngineInstallationDiscovery, (engines) =>
 		engines.resolve({
 			projectDescriptor: selectedProject,
 			...(explicitEngineRoot === undefined ? undefined : { explicitRoot: explicitEngineRoot })
 		})
-	).pipe(
-		Effect.provide(EngineInstallationDiscoveryLive),
-		Effect.map(({ root }) => root)
-	)
+	).pipe(Effect.provide(EngineInstallationDiscoveryLive))
 );
 const engineTools = unrealEngineTools(engineRoot);
 console.log(`Selected Unreal engine: ${engineRoot}`);
 await Effect.runPromise(
 	Effect.gen(function* () {
-		yield* validateUnrealProjectBuildId(engineRoot, selectedProject);
-		if (mode === "ue_shed") yield* validateUnrealRemoteControlBuild(engineRoot);
+		yield* validateUnrealProjectBuildId(
+			engineRoot,
+			selectedProject,
+			process.platform,
+			engineVersion
+		);
+		if (mode === "ue_shed")
+			yield* validateUnrealRemoteControlBuild(engineRoot, process.platform, engineVersion);
 	}).pipe(
 		Effect.catch((error) =>
 			Effect.sync(() => {

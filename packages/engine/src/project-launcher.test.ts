@@ -11,6 +11,7 @@ import {
 	UnrealProjectLauncherLive,
 	makeUnrealProjectProcessTestLayer,
 	unrealEditorCommandletExecutable,
+	unrealEditorExecutable,
 	unrealProjectLaunchArguments,
 	validateUnrealProjectBuildId,
 	validateUnrealRemoteControlBuild,
@@ -57,6 +58,99 @@ it("rejects different builds of the same engine before launch and accepts matchi
 		await rm(root, { recursive: true, force: true });
 	}
 });
+
+it("resolves UE4 and UE5 editor executable paths", () => {
+	const platforms = ["win32", "darwin", "linux"] satisfies readonly NodeJS.Platform[];
+	for (const platform of platforms) {
+		const folder = platform === "win32" ? "Win64" : platform === "darwin" ? "Mac" : "Linux";
+		const extension = platform === "win32" ? ".exe" : "";
+		expect(unrealEditorExecutable("/UE", platform, { major: 4, minor: 27, patch: 2 })).toBe(
+			join("/UE", "Engine", "Binaries", folder, `UE4Editor${extension}`)
+		);
+		expect(unrealEditorExecutable("/UE", platform, { major: 5, minor: 7, patch: 0 })).toBe(
+			join("/UE", "Engine", "Binaries", folder, `UnrealEditor${extension}`)
+		);
+	}
+	expect(unrealEditorExecutable("C:/UE", "win32")).toBe(
+		join("C:/UE", "Engine", "Binaries", "Win64", "UnrealEditor.exe")
+	);
+});
+
+it.effect("launches a UE4 project with Remote Control using UE4Editor binaries", () =>
+	Effect.gen(function* () {
+		const root = yield* Effect.promise(() => mkdtemp(join(tmpdir(), "ue-shed-ue4-launch-")));
+		const folder =
+			process.platform === "win32"
+				? "Win64"
+				: process.platform === "darwin"
+					? "Mac"
+					: "Linux";
+		const engineBin = join(root, "Engine", "Binaries", folder);
+		const executable = join(
+			engineBin,
+			process.platform === "win32" ? "UE4Editor.exe" : "UE4Editor"
+		);
+		const projectDescriptor = join(root, "Project", "Fixture.uproject");
+		const projectBin = join(root, "Project", "Binaries", folder);
+		const plugin = join(root, "Engine", "Plugins", "VirtualProduction", "RemoteControl");
+		const pluginBin = join(plugin, "Binaries", folder);
+		yield* Effect.promise(async () => {
+			for (const directory of [engineBin, projectBin, pluginBin])
+				await mkdir(directory, { recursive: true });
+			await writeFile(executable, "");
+			await writeFile(projectDescriptor, "{}");
+			await writeFile(
+				join(engineBin, "UE4Editor.modules"),
+				JSON.stringify({ BuildId: "427" })
+			);
+			await writeFile(
+				join(projectBin, "UE4Editor.modules"),
+				JSON.stringify({ BuildId: "427" })
+			);
+			await writeFile(
+				join(plugin, "RemoteControl.uplugin"),
+				JSON.stringify({ Modules: [{ Name: "RemoteControl" }] })
+			);
+			await writeFile(
+				join(pluginBin, "UE4Editor.modules"),
+				JSON.stringify({
+					BuildId: "427",
+					Modules: { RemoteControl: "UE4Editor-RemoteControl.dll" }
+				})
+			);
+			await writeFile(join(pluginBin, "UE4Editor-RemoteControl.dll"), "fixture");
+		});
+		const launches = yield* Ref.make<readonly UnrealProjectProcessLaunchOptions[]>([]);
+		const layer = UnrealProjectLauncherLive.pipe(
+			Layer.provide(
+				Layer.merge(
+					makeEngineInstallationDiscoveryTestLayer(() =>
+						Effect.succeed({ root, version: { major: 4, minor: 27, patch: 2 } })
+					),
+					makeUnrealProjectProcessTestLayer((options) =>
+						Ref.update(launches, (current) => [...current, options]).pipe(Effect.as(42))
+					)
+				)
+			)
+		);
+		const launch = Effect.flatMap(UnrealProjectLauncher, (launcher) =>
+			launcher.launch({
+				mode: { kind: "with_plugins", plugins: [], remoteControlHttpPort: 30_001 },
+				projectDescriptor
+			})
+		).pipe(Effect.provide(layer));
+		expect(yield* launch).toMatchObject({ executable, pid: 42 });
+		yield* Effect.promise(() =>
+			writeFile(join(projectBin, "UE4Editor.modules"), JSON.stringify({ BuildId: "other" }))
+		);
+		expect(yield* Effect.result(launch)).toMatchObject({
+			_tag: "Failure",
+			failure: { code: "build_mismatch" }
+		});
+		expect(yield* Ref.get(launches)).toHaveLength(1);
+		yield* Effect.promise(() => rm(root, { force: true, recursive: true }));
+	})
+);
 
 it("resolves platform commandlet executable paths", () => {
 	const platforms = ["win32", "darwin", "linux"] satisfies readonly NodeJS.Platform[];
