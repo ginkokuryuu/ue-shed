@@ -29,8 +29,12 @@ unmatched line should not be assumed to be gathered-only.
 `complete` means every runtime entry in the package's saved gatherable text table was decoded. The
 editor writes that table when it saves a package, and Unreal's asset gather reads it instead of the
 exports, so it is the engine-authored list of localizable text the package contributes. Entries are
-matched by namespace (without the package namespace marker) and key; editor-only sites are skipped
-as the default gather skips them. Known unsupported histories, rejected decoders, unavailable engine
+matched by namespace, key and source string, because Unreal groups gathered text by namespace and
+source and treats another source under the same key as separate text. The table namespace is
+compared as saved: Unreal already removed the package namespace marker from `FText` entries, and
+String Tables save their authored namespace. Decoded `FText` namespaces lose that trailing marker
+once; String Table rows keep theirs. Editor-only sites are skipped as the default gather skips
+them. Known unsupported histories, rejected decoders, unavailable engine
 features and legacy containers still produce coverage gaps, but only a missing table entry makes a
 package partial.
 

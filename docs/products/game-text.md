@@ -101,7 +101,9 @@ coverage does.
 
 A package is partial when text Unreal gathers from it was not read. The reader compares the
 decoded lines with the package's saved gatherable text table, the list Unreal's asset gather reads,
-by namespace and key, ignoring editor-only sites. Undecodable properties that hold no gatherable
+by namespace, key and source text, ignoring editor-only sites. Decoded identities use the gathered
+namespace rule above. A decoded line covers only the entry with its own source text, so another
+source variant under the same key stays unread. Undecodable properties that hold no gatherable
 text, such as native Niagara structs, remain counted as coverage gaps but no longer make a package
 partial. `missingGatherableText` counts the runtime entries that were not read, and each partial
 package lists up to three of them, with source text and Unreal site, as

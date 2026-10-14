@@ -8,28 +8,39 @@ use std::collections::BTreeSet;
 
 use uasset_parser::Package;
 use uasset_parser::gatherable_text::{
-    gather_reads_table, read_gatherable_text, strip_package_namespace,
+    GatherableText, gather_reads_table, read_gatherable_text, strip_package_namespace,
 };
 use uasset_parser::package::PackageError;
 
-use crate::projection::{TextIdentity, TextOccurrence};
+use crate::projection::{TextIdentity, TextLocation, TextOccurrence};
 
-/// Namespace and key of every keyed text occurrence decoded from one package.
+/// Namespace, key and source string of every keyed text occurrence decoded from one package.
+///
+/// Unreal gathers one entry per namespace and source string (UE 5.7 and 5.8
+/// `FPropertyLocalizationDataGatherer`), so a decoded key only covers the entry with the same
+/// source; a different source under the same key is separate text.
 #[derive(Clone, Debug, Default)]
-pub struct DecodedTextKeys(BTreeSet<(String, String)>);
+pub struct DecodedTextKeys(BTreeSet<(String, String, String)>);
 
 impl DecodedTextKeys {
     pub fn record<'a>(&mut self, occurrences: impl IntoIterator<Item = &'a TextOccurrence>) {
         for occurrence in occurrences {
             if let TextIdentity::Resolved { namespace, key } = &occurrence.identity {
+                // Gather strips the package marker from a serialized FText namespace once.
+                // String Tables gather their authored namespace verbatim.
+                let namespace = match occurrence.location {
+                    TextLocation::StringTableEntry { .. } => namespace,
+                    _ => strip_package_namespace(namespace),
+                };
                 self.0
-                    .insert((strip_package_namespace(namespace).to_owned(), key.clone()));
+                    .insert((namespace.to_owned(), key.clone(), occurrence.source.clone()));
             }
         }
     }
 
-    fn contains(&self, namespace: &str, key: &str) -> bool {
-        self.0.contains(&(namespace.to_owned(), key.to_owned()))
+    fn contains(&self, namespace: &str, key: &str, source: &str) -> bool {
+        self.0
+            .contains(&(namespace.to_owned(), key.to_owned(), source.to_owned()))
     }
 }
 
@@ -46,7 +57,7 @@ pub struct GatherCoverage {
     pub missing_samples: Vec<MissingGatherableText>,
 }
 
-/// A runtime gatherable text site whose namespace and key no decoded occurrence matches.
+/// A runtime gatherable text site whose namespace, key and source no decoded occurrence matches.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct MissingGatherableText {
     pub namespace: String,
@@ -75,9 +86,10 @@ pub fn gather_coverage(
     if !gather_reads_table(package, path) {
         return Ok(None);
     }
-    let Some(entries) = read_gatherable_text(source, &package.summary)? else {
-        return Ok(None);
-    };
+    Ok(read_gatherable_text(source, &package.summary)?.map(|entries| compare(entries, decoded)))
+}
+
+fn compare(entries: Vec<GatherableText>, decoded: &DecodedTextKeys) -> GatherCoverage {
     let mut coverage = GatherCoverage::default();
     for entry in entries {
         for site in entry.sites {
@@ -85,7 +97,7 @@ pub fn gather_coverage(
                 continue;
             }
             coverage.runtime_sites += 1;
-            if decoded.contains(&entry.namespace, &site.key) {
+            if decoded.contains(&entry.namespace, &site.key, &entry.source) {
                 continue;
             }
             coverage.missing += 1;
@@ -99,5 +111,126 @@ pub fn gather_coverage(
             }
         }
     }
-    Ok(Some(coverage))
+    coverage
+}
+
+#[cfg(test)]
+mod tests {
+    use uasset_parser::gatherable_text::{GatherableText, GatherableTextSite};
+
+    use super::{DecodedTextKeys, compare};
+    use crate::projection::{TextEditCapability, TextIdentity, TextLocation, TextOccurrence};
+
+    fn entry(namespace: &str, source: &str, key: &str) -> GatherableText {
+        GatherableText {
+            namespace: namespace.to_owned(),
+            source: source.to_owned(),
+            sites: vec![GatherableTextSite {
+                key: key.to_owned(),
+                site_description: format!("/Game/UI.UI:{key}"),
+                is_editor_only: false,
+                is_optional: false,
+            }],
+        }
+    }
+
+    fn occurrence(
+        namespace: &str,
+        key: &str,
+        source: &str,
+        location: TextLocation,
+    ) -> TextOccurrence {
+        TextOccurrence {
+            source: source.to_owned(),
+            dev_notes: String::new(),
+            identity: TextIdentity::Resolved {
+                namespace: namespace.to_owned(),
+                key: key.to_owned(),
+            },
+            location,
+            edit_capability: TextEditCapability::ReadOnly,
+        }
+    }
+
+    fn property() -> TextLocation {
+        TextLocation::AssetProperty {
+            object_path: "/Game/UI.UI".to_owned(),
+            class_path: "/Script/Engine.DataAsset".to_owned(),
+            property_path: "Label".to_owned(),
+        }
+    }
+
+    fn string_table_row(key: &str) -> TextLocation {
+        TextLocation::StringTableEntry {
+            object_path: "/Game/ST_Menu.ST_Menu".to_owned(),
+            entry_key: key.to_owned(),
+        }
+    }
+
+    fn decoded(occurrences: &[TextOccurrence]) -> DecodedTextKeys {
+        let mut keys = DecodedTextKeys::default();
+        keys.record(occurrences);
+        keys
+    }
+
+    /// Gather saved `UI [Tutorial]` after stripping the FText's package marker; the decoded
+    /// FText still carries it. Stripping the table namespace too reported this as unread.
+    #[test]
+    fn an_ftext_namespace_loses_only_its_package_marker() {
+        let coverage = compare(
+            vec![entry("UI [Tutorial]", "Next", "K")],
+            &decoded(&[occurrence(
+                "UI [Tutorial] [8D4F2A61B0C9E7F3]",
+                "K",
+                "Next",
+                property(),
+            )]),
+        );
+        assert_eq!((coverage.runtime_sites, coverage.missing), (1, 0));
+    }
+
+    /// String Tables gather their authored namespace without stripping anything.
+    #[test]
+    fn a_string_table_namespace_is_compared_verbatim() {
+        let coverage = compare(
+            vec![entry("Menu [Legacy]", "Quit", "Quit")],
+            &decoded(&[occurrence(
+                "Menu [Legacy]",
+                "Quit",
+                "Quit",
+                string_table_row("Quit"),
+            )]),
+        );
+        assert_eq!((coverage.runtime_sites, coverage.missing), (1, 0));
+
+        // The authored suffix is part of the identity, so a different table stays missing.
+        let coverage = compare(
+            vec![entry("Menu [Legacy]", "Quit", "Quit")],
+            &decoded(&[occurrence("Menu", "Quit", "Quit", string_table_row("Quit"))]),
+        );
+        assert_eq!(coverage.missing, 1);
+    }
+
+    /// Unreal gathers `UI/K = "Continue"` and `UI/K = "Delete"` as separate entries; decoding one
+    /// source must leave the other missing.
+    #[test]
+    fn a_decoded_key_covers_only_its_own_source_string() {
+        let coverage = compare(
+            vec![entry("UI", "Continue", "K"), entry("UI", "Delete", "K")],
+            &decoded(&[occurrence("UI", "K", "Continue", property())]),
+        );
+        assert_eq!((coverage.runtime_sites, coverage.missing), (2, 1));
+        let samples: Vec<_> = coverage
+            .missing_samples
+            .iter()
+            .map(|missing| {
+                (
+                    missing.namespace.as_str(),
+                    missing.key.as_str(),
+                    missing.source.as_str(),
+                )
+            })
+            .collect();
+        assert_eq!(samples, [("UI", "K", "Delete")]);
+    }
 }

@@ -37,7 +37,11 @@ const MAX_METADATA_DEPTH: usize = 32;
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct GatherableText {
-    /// Namespace without the package localization namespace marker.
+    /// The namespace exactly as saved, which gather passes to the manifest unchanged.
+    ///
+    /// `FPropertyLocalizationDataGatherer::GatherTextInstance` has already stripped the package
+    /// namespace marker from `FText` entries, and String Tables save their authored namespace,
+    /// so a trailing `[...]` here is part of the namespace (UE 5.7 and 5.8).
     pub namespace: String,
     pub source: String,
     pub sites: Vec<GatherableTextSite>,
@@ -128,7 +132,7 @@ fn read_entries(
             });
         }
         entries.push(GatherableText {
-            namespace: strip_package_namespace(&namespace).to_owned(),
+            namespace,
             source: text_source,
             sites,
         });
@@ -193,6 +197,9 @@ pub fn gather_reads_table(package: &Package, path: &str) -> bool {
 
 /// `TextNamespaceUtil::StripPackageNamespace`: drops a trailing `[PACKAGE_NAMESPACE]` marker and,
 /// like the engine's `StripPackageNamespaceInline`, trims the whitespace before it.
+///
+/// Apply it once, to a namespace serialized in an `FText`. Gather table namespaces are already
+/// stripped, so stripping them again would remove an authored `[...]` suffix.
 #[must_use]
 pub fn strip_package_namespace(namespace: &str) -> &str {
     if !namespace.ends_with(']') {
@@ -349,9 +356,10 @@ mod tests {
     }
 
     /// One entry with two sites; every metadata value type, nested, and optional 5.8 DevNotes.
+    /// Gather saved the namespace already stripped, so `[Tutorial]` is authored text.
     fn synthetic_table(dev_notes: bool) -> Vec<u8> {
         let mut bytes = Vec::new();
-        push_fstring(&mut bytes, "UI [ABCDEF0123456789]");
+        push_fstring(&mut bytes, "UI [Tutorial]");
         push_fstring(&mut bytes, "Start");
         push_i32(&mut bytes, 1);
         push_metadata_string(&mut bytes, "Context", "Menu");
@@ -391,7 +399,6 @@ mod tests {
             let mut reader = Reader::new(&bytes);
             let entries = read_entries(&mut reader, 1, dev_notes).expect("table reads");
             assert_eq!(reader.tell(), bytes.len() as u64, "consumed whole table");
-            assert_eq!(entries[0].namespace, "UI");
             assert_eq!(entries[0].source, "Start");
             let sites: Vec<_> = entries[0]
                 .sites
@@ -400,6 +407,15 @@ mod tests {
                 .collect();
             assert_eq!(sites, [("Start", false), ("StartTooltip", true)]);
         }
+    }
+
+    /// Regression: the table namespace was stripped a second time, turning `UI [Tutorial]` into
+    /// `UI` and reporting fully decoded text as unread.
+    #[test]
+    fn keeps_the_saved_namespace_verbatim() {
+        let bytes = synthetic_table(false);
+        let entries = read_entries(&mut Reader::new(&bytes), 1, false).expect("table reads");
+        assert_eq!(entries[0].namespace, "UI [Tutorial]");
     }
 
     #[test]
