@@ -652,7 +652,11 @@ export const SupervisedEditorSessionLive = Layer.effect(
 						: { explicitRoot: request.explicitEngineRoot })
 				})
 				.pipe(Effect.mapError(engineDiscoveryError));
-			const executable = unrealEditorExecutable(installation.root);
+			const executable = unrealEditorExecutable(
+				installation.root,
+				globalThis.process.platform,
+				installation.version
+			);
 			yield* filesystemEntry(executable, "editor_missing", "Unreal Editor executable");
 			const process = yield* Effect.acquireRelease(
 				processes.launch({

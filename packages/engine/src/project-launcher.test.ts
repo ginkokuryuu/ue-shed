@@ -1,6 +1,6 @@
 import { mkdtemp, mkdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join, resolve } from "node:path";
+import { dirname, join, resolve } from "node:path";
 import { it } from "@effect/vitest";
 import { Effect, Layer, Ref } from "effect";
 import { expect } from "vitest";
@@ -11,6 +11,7 @@ import {
 	UnrealProjectLauncherLive,
 	makeUnrealProjectProcessTestLayer,
 	unrealEditorCommandletExecutable,
+	unrealEditorExecutable,
 	unrealProjectLaunchArguments,
 	validateUnrealProjectBuildId,
 	validateUnrealRemoteControlBuild,
@@ -57,6 +58,114 @@ it("rejects different builds of the same engine before launch and accepts matchi
 		await rm(root, { recursive: true, force: true });
 	}
 });
+
+/** Unreal's on-disk editor layout for the host, spelled out independently of the helper. */
+function editorExecutableFixture(root: string, name: "UE4Editor" | "UnrealEditor"): string {
+	const binaries = join(root, "Engine", "Binaries");
+	if (process.platform === "win32") return join(binaries, "Win64", `${name}.exe`);
+	if (process.platform === "darwin")
+		return join(binaries, "Mac", `${name}.app`, "Contents", "MacOS", name);
+	return join(binaries, "Linux", name);
+}
+
+it("resolves UE4 and UE5 editor executable paths", () => {
+	const ue4 = { major: 4, minor: 27, patch: 2 };
+	const ue5 = { major: 5, minor: 7, patch: 0 };
+	expect(unrealEditorExecutable("/UE", "win32", ue4)).toBe(
+		join("/UE/Engine/Binaries/Win64/UE4Editor.exe")
+	);
+	expect(unrealEditorExecutable("/UE", "win32", ue5)).toBe(
+		join("/UE/Engine/Binaries/Win64/UnrealEditor.exe")
+	);
+	expect(unrealEditorExecutable("/UE", "linux", ue4)).toBe(
+		join("/UE/Engine/Binaries/Linux/UE4Editor")
+	);
+	expect(unrealEditorExecutable("/UE", "linux", ue5)).toBe(
+		join("/UE/Engine/Binaries/Linux/UnrealEditor")
+	);
+	expect(unrealEditorExecutable("/UE", "darwin", ue4)).toBe(
+		join("/UE/Engine/Binaries/Mac/UE4Editor.app/Contents/MacOS/UE4Editor")
+	);
+	expect(unrealEditorExecutable("/UE", "darwin", ue5)).toBe(
+		join("/UE/Engine/Binaries/Mac/UnrealEditor.app/Contents/MacOS/UnrealEditor")
+	);
+	expect(unrealEditorExecutable("C:/UE", "win32")).toBe(
+		join("C:/UE", "Engine", "Binaries", "Win64", "UnrealEditor.exe")
+	);
+});
+
+it.effect("launches a UE4 project with Remote Control using UE4Editor binaries", () =>
+	Effect.gen(function* () {
+		const root = yield* Effect.promise(() => mkdtemp(join(tmpdir(), "ue-shed-ue4-launch-")));
+		const folder =
+			process.platform === "win32"
+				? "Win64"
+				: process.platform === "darwin"
+					? "Mac"
+					: "Linux";
+		const engineBin = join(root, "Engine", "Binaries", folder);
+		const executable = editorExecutableFixture(root, "UE4Editor");
+		const projectDescriptor = join(root, "Project", "Fixture.uproject");
+		const projectBin = join(root, "Project", "Binaries", folder);
+		const plugin = join(root, "Engine", "Plugins", "VirtualProduction", "RemoteControl");
+		const pluginBin = join(plugin, "Binaries", folder);
+		yield* Effect.promise(async () => {
+			for (const directory of [dirname(executable), engineBin, projectBin, pluginBin])
+				await mkdir(directory, { recursive: true });
+			await writeFile(executable, "");
+			await writeFile(projectDescriptor, "{}");
+			await writeFile(
+				join(engineBin, "UE4Editor.modules"),
+				JSON.stringify({ BuildId: "427" })
+			);
+			await writeFile(
+				join(projectBin, "UE4Editor.modules"),
+				JSON.stringify({ BuildId: "427" })
+			);
+			await writeFile(
+				join(plugin, "RemoteControl.uplugin"),
+				JSON.stringify({ Modules: [{ Name: "RemoteControl" }] })
+			);
+			await writeFile(
+				join(pluginBin, "UE4Editor.modules"),
+				JSON.stringify({
+					BuildId: "427",
+					Modules: { RemoteControl: "UE4Editor-RemoteControl.dll" }
+				})
+			);
+			await writeFile(join(pluginBin, "UE4Editor-RemoteControl.dll"), "fixture");
+		});
+		const launches = yield* Ref.make<readonly UnrealProjectProcessLaunchOptions[]>([]);
+		const layer = UnrealProjectLauncherLive.pipe(
+			Layer.provide(
+				Layer.merge(
+					makeEngineInstallationDiscoveryTestLayer(() =>
+						Effect.succeed({ root, version: { major: 4, minor: 27, patch: 2 } })
+					),
+					makeUnrealProjectProcessTestLayer((options) =>
+						Ref.update(launches, (current) => [...current, options]).pipe(Effect.as(42))
+					)
+				)
+			)
+		);
+		const launch = Effect.flatMap(UnrealProjectLauncher, (launcher) =>
+			launcher.launch({
+				mode: { kind: "with_plugins", plugins: [], remoteControlHttpPort: 30_001 },
+				projectDescriptor
+			})
+		).pipe(Effect.provide(layer));
+		expect(yield* launch).toMatchObject({ executable, pid: 42 });
+		yield* Effect.promise(() =>
+			writeFile(join(projectBin, "UE4Editor.modules"), JSON.stringify({ BuildId: "other" }))
+		);
+		expect(yield* Effect.result(launch)).toMatchObject({
+			_tag: "Failure",
+			failure: { code: "build_mismatch" }
+		});
+		expect(yield* Ref.get(launches)).toHaveLength(1);
+		yield* Effect.promise(() => rm(root, { force: true, recursive: true }));
+	})
+);
 
 it("resolves platform commandlet executable paths", () => {
 	const platforms = ["win32", "darwin", "linux"] satisfies readonly NodeJS.Platform[];
@@ -117,19 +226,15 @@ it("builds normal and plugin launch arguments without a shell", () => {
 it.effect("resolves the engine and launches through the supplied process adapter", () =>
 	Effect.gen(function* () {
 		const root = yield* Effect.promise(() => mkdtemp(join(tmpdir(), "ue-shed-engine-launch-")));
-		const executable = join(
-			root,
-			"Engine",
-			"Binaries",
+		const folder =
 			process.platform === "win32"
 				? "Win64"
 				: process.platform === "darwin"
 					? "Mac"
-					: "Linux",
-			process.platform === "win32" ? "UnrealEditor.exe" : "UnrealEditor"
-		);
+					: "Linux";
+		const executable = editorExecutableFixture(root, "UnrealEditor");
 		const projectDescriptor = join(root, "Fixture.uproject");
-		yield* Effect.promise(() => mkdir(join(executable, ".."), { recursive: true }));
+		yield* Effect.promise(() => mkdir(dirname(executable), { recursive: true }));
 		yield* Effect.promise(() => writeFile(executable, ""));
 		yield* Effect.promise(() => writeFile(projectDescriptor, "{}"));
 		const launches = yield* Ref.make<readonly UnrealProjectProcessLaunchOptions[]>([]);
@@ -149,15 +254,11 @@ it.effect("resolves the engine and launches through the supplied process adapter
 		expect(yield* Ref.get(launches)).toEqual([
 			{ args: [projectDescriptor], cwd: root, executable }
 		]);
-		const projectBinaries = join(
-			root,
-			"Binaries",
-			process.platform === "win32" ? "Win64" : process.platform === "darwin" ? "Mac" : "Linux"
-		);
+		const projectBinaries = join(root, "Binaries", folder);
 		yield* Effect.promise(async () => {
 			await mkdir(projectBinaries, { recursive: true });
 			await writeFile(
-				join(executable, "..", "UnrealEditor.modules"),
+				join(root, "Engine", "Binaries", folder, "UnrealEditor.modules"),
 				JSON.stringify({ BuildId: "engine-build" })
 			);
 			await writeFile(
