@@ -31,7 +31,7 @@ import { Effect, Schema } from "effect";
 export type PluginManifestEntry = PluginBundleManifest["plugins"][number];
 export type PluginReleaseManifest = PluginBundleManifest;
 
-export class PluginInstallerError extends Schema.TaggedErrorClass<PluginInstallerError>()(
+export class PluginInstallerError extends Schema.TaggedError<PluginInstallerError>()(
 	"PluginInstallerError",
 	{ message: Schema.String }
 ) {}

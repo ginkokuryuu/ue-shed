@@ -5,22 +5,22 @@ import {
 	type TextWhere
 } from "@ue-shed/game-text/browser";
 import { Option } from "effect";
-import { Flag } from "effect/unstable/cli";
+import { Flag } from "effect/cli";
 
 export function localizationFlags() {
 	return {
-		culture: Flag.string("culture").pipe(Flag.optional),
-		state: Flag.choice("state", LocalizationState.literals).pipe(Flag.optional),
-		limit: Flag.integer("limit").pipe(
+		culture: Flag.String("culture").pipe(Flag.optional),
+		state: Flag.Literals("state", LocalizationState.literals).pipe(Flag.optional),
+		limit: Flag.Int("limit").pipe(
 			Flag.filter(
 				(value) => value >= 1 && value <= 50,
 				() => "--limit must be between 1 and 50"
 			),
 			Flag.withDefault(50)
 		),
-		kinds: Flag.choice("kind", TextOriginKind.literals).pipe(Flag.atMost(5)),
-		path: Flag.string("path").pipe(Flag.optional),
-		files: Flag.string("files").pipe(Flag.optional),
+		kinds: Flag.Literals("kind", TextOriginKind.literals).pipe(Flag.atMost(5)),
+		path: Flag.String("path").pipe(Flag.optional),
+		files: Flag.String("files").pipe(Flag.optional),
 		...filterFlags()
 	};
 }
@@ -28,9 +28,9 @@ export function localizationFlags() {
 /** `--filter` clauses (repeatable), `--cultures`, the culture scope, and `--group`. */
 export function filterFlags() {
 	return {
-		filters: Flag.string("filter").pipe(Flag.atMost(32)),
-		cultures: Flag.string("cultures").pipe(Flag.optional),
-		group: Flag.choice("group", TextGroupBy.literals).pipe(Flag.optional)
+		filters: Flag.String("filter").pipe(Flag.atMost(32)),
+		cultures: Flag.String("cultures").pipe(Flag.optional),
+		group: Flag.Literals("group", TextGroupBy.literals).pipe(Flag.optional)
 	};
 }
 

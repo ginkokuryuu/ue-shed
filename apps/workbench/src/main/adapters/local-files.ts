@@ -4,7 +4,7 @@ import { open, rename, rm, writeFile } from "node:fs/promises";
 import { isAbsolute, relative, resolve, sep } from "node:path";
 import { Context, Effect, Layer, Schema } from "effect";
 
-export class LocalFilesError extends Schema.TaggedErrorClass<LocalFilesError>()(
+export class LocalFilesError extends Schema.TaggedError<LocalFilesError>()(
 	"Workbench.LocalFilesError",
 	{
 		causeText: Schema.String,

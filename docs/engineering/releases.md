@@ -70,6 +70,13 @@ saved-asset evidence, or plugin artifacts. For a portable-only release, record w
 output, which proves the pack step builds packages in workspace dependency order. Commit the release
 before running it.
 
+Published Effect libraries declare `effect` and runtime `@effect/*` integrations as required
+`^4.0.0` peers, with `catalog:` dev dependencies for exact workspace development and tests.
+Applications must install Effect once; consumers of `@ue-shed/observability` must also install
+`@effect/opentelemetry`. Internal UE Shed package dependencies remain exact suite versions.
+The packed-consumer gate supplies Effect 4.0.0 to verify the peer range independently of the
+workspace catalog at 4.0.4 and checks that each library resolves the application's copy.
+
 The normal package gate builds and packs every public package, validates metadata and checksums,
 installs the tarballs into a clean offline consumer, and exercises the saved-project Game Text
 journey. The protected public-package allowlist remains a conformance boundary; it prevents an

@@ -1,6 +1,6 @@
 import { Effect, Schema } from "effect";
 
-export class CliSignalError extends Schema.TaggedErrorClass<CliSignalError>()("CliSignalError", {
+export class CliSignalError extends Schema.TaggedError<CliSignalError>()("CliSignalError", {
 	signal: Schema.Literals(["SIGINT", "SIGTERM"])
 }) {}
 

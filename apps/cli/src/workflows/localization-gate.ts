@@ -60,7 +60,7 @@ export function localizationGateSummary(result: LocalizationGateResult): string 
 }
 
 /** The change could not be judged: a verdict here could pass what it never saw. */
-class LocalizationGateError extends Schema.TaggedErrorClass<LocalizationGateError>()(
+class LocalizationGateError extends Schema.TaggedError<LocalizationGateError>()(
 	"LocalizationGateError",
 	{
 		code: Schema.Literals(["unreadable_evidence", "unreadable_package"]),

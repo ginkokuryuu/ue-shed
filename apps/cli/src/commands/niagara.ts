@@ -1,4 +1,4 @@
-import { Argument, Command, Flag } from "effect/unstable/cli";
+import { Argument, Command, Flag } from "effect/cli";
 import { runNiagaraPreview } from "../workflows/niagara.js";
 import { optionalFlag, optionalValue, positiveIntegerFlag } from "./options.js";
 
@@ -9,20 +9,20 @@ function optionalNumber(value: string | undefined): number | undefined {
 const preview = Command.make(
 	"preview",
 	{
-		background: Flag.choice("background", ["default", "dark", "light"]).pipe(Flag.optional),
-		profile: Flag.choice("profile", [
+		background: Flag.Literals("background", ["default", "dark", "light"]).pipe(Flag.optional),
+		profile: Flag.Literals("profile", [
 			"ground_impact",
 			"projectile",
 			"aura",
 			"environment"
 		]).pipe(Flag.optional),
-		renderMode: Flag.choice("render-mode", ["transparent", "scene"]).pipe(Flag.optional),
-		cameraMode: Flag.choice("camera-mode", ["saved", "auto_fit"]).pipe(Flag.optional),
+		renderMode: Flag.Literals("render-mode", ["transparent", "scene"]).pipe(Flag.optional),
+		cameraMode: Flag.Literals("camera-mode", ["saved", "auto_fit"]).pipe(Flag.optional),
 		exposureCompensation: optionalFlag("exposure"),
 		cameraPadding: optionalFlag("camera-padding"),
-		projectDescriptor: Argument.string("project"),
-		systemObjectPath: Argument.string("system"),
-		captureMode: Flag.choice("capture-mode", ["component_only", "full_scene"]).pipe(
+		projectDescriptor: Argument.String("project"),
+		systemObjectPath: Argument.String("system"),
+		captureMode: Flag.Literals("capture-mode", ["component_only", "full_scene"]).pipe(
 			Flag.optional
 		),
 		durationSeconds: optionalFlag("duration"),

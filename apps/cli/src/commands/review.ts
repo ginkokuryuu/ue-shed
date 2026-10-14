@@ -1,4 +1,4 @@
-import { Argument, Command, Flag } from "effect/unstable/cli";
+import { Argument, Command, Flag } from "effect/cli";
 import { Effect } from "effect";
 import { CliCommandError } from "../cli-runtime.js";
 import {
@@ -15,22 +15,22 @@ import { optionalFlag, optionalValue } from "./options.js";
 
 const reviewSetValidateCommand = Command.make(
 	"validate",
-	{ reviewSetPath: Argument.string("review-set") },
+	{ reviewSetPath: Argument.String("review-set") },
 	({ reviewSetPath }) => runReviewSetValidate({ _tag: "ReviewSetValidate", reviewSetPath })
 ).pipe(Command.withDescription("Validate a Review Set document."));
 
 const reviewPoliciesListCommand = Command.make(
 	"list",
-	{ reviewSetPath: Argument.string("review-set") },
+	{ reviewSetPath: Argument.String("review-set") },
 	({ reviewSetPath }) => runReviewPolicies({ _tag: "ReviewPoliciesList", reviewSetPath })
 ).pipe(Command.withDescription("Validate and list Visibility Policies and View overrides."));
 
 const reviewPoliciesReplaceCommand = Command.make(
 	"replace",
 	{
-		reviewSetPath: Argument.string("review-set"),
-		viewId: Argument.string("view-id"),
-		policyPath: Argument.string("policy-json"),
+		reviewSetPath: Argument.String("review-set"),
+		viewId: Argument.String("view-id"),
+		policyPath: Argument.String("policy-json"),
 		overridesPath: optionalFlag("overrides")
 	},
 	({ reviewSetPath, viewId, policyPath, overridesPath }) => {
@@ -52,9 +52,9 @@ const reviewPoliciesReplaceCommand = Command.make(
 const reviewPoliciesApplyCommand = Command.make(
 	"apply",
 	{
-		reviewSetPath: Argument.string("review-set"),
-		policyId: Argument.string("policy-id"),
-		viewIds: Argument.string("view-id").pipe(Argument.variadic({ min: 1 }))
+		reviewSetPath: Argument.String("review-set"),
+		policyId: Argument.String("policy-id"),
+		viewIds: Argument.String("view-id").pipe(Argument.variadic({ min: 1 }))
 	},
 	({ reviewSetPath, policyId, viewIds }) =>
 		runReviewPolicies({
@@ -68,8 +68,8 @@ const reviewPoliciesApplyCommand = Command.make(
 const reviewViewPutCommand = Command.make(
 	"put",
 	{
-		reviewSetPath: Argument.string("review-set"),
-		viewPath: Argument.string("view-json")
+		reviewSetPath: Argument.String("review-set"),
+		viewPath: Argument.String("view-json")
 	},
 	({ reviewSetPath, viewPath }) =>
 		runReviewViewPut({ _tag: "ReviewViewPut", reviewSetPath, viewPath })
@@ -81,7 +81,7 @@ const reviewViewPutCommand = Command.make(
 
 const reviewFramingCandidatesCommand = Command.make(
 	"candidates",
-	{ endpoint: Argument.string("endpoint"), parametersPath: optionalFlag("parameters") },
+	{ endpoint: Argument.String("endpoint"), parametersPath: optionalFlag("parameters") },
 	({ endpoint, parametersPath }) => {
 		const parameters = optionalValue(parametersPath);
 		return runReviewFraming({
@@ -95,10 +95,10 @@ const reviewFramingCandidatesCommand = Command.make(
 const reviewFramingApproveCommand = Command.make(
 	"approve",
 	{
-		reviewSetPath: Argument.string("review-set"),
-		endpoint: Argument.string("endpoint"),
-		viewId: Argument.string("view-id"),
-		candidateId: Argument.string("candidate-id"),
+		reviewSetPath: Argument.String("review-set"),
+		endpoint: Argument.String("endpoint"),
+		viewId: Argument.String("view-id"),
+		candidateId: Argument.String("candidate-id"),
 		parametersPath: optionalFlag("parameters")
 	},
 	({ reviewSetPath, endpoint, viewId, candidateId, parametersPath }) => {
@@ -116,7 +116,7 @@ const reviewFramingApproveCommand = Command.make(
 
 const reviewAuthoringBootstrapCommand = Command.make(
 	"bootstrap",
-	{ projectRoot: Argument.string("project-root"), endpoint: Argument.string("endpoint") },
+	{ projectRoot: Argument.String("project-root"), endpoint: Argument.String("endpoint") },
 	({ projectRoot, endpoint }) =>
 		runReviewAuthoring({ _tag: "ReviewAuthoringBootstrap", endpoint, projectRoot })
 ).pipe(Command.withDescription("Bootstrap a Review authoring session."));
@@ -124,10 +124,10 @@ const reviewAuthoringBootstrapCommand = Command.make(
 const reviewAuthoringStartCommand = Command.make(
 	"start",
 	{
-		projectRoot: Argument.string("project-root"),
-		reviewSetPath: Argument.string("review-set"),
-		endpoint: Argument.string("endpoint"),
-		viewId: Argument.string("view-id")
+		projectRoot: Argument.String("project-root"),
+		reviewSetPath: Argument.String("review-set"),
+		endpoint: Argument.String("endpoint"),
+		viewId: Argument.String("view-id")
 	},
 	({ projectRoot, reviewSetPath, endpoint, viewId }) =>
 		runReviewAuthoring({
@@ -142,9 +142,9 @@ const reviewAuthoringStartCommand = Command.make(
 const reviewAuthoringAppendCommand = Command.make(
 	"append",
 	{
-		projectRoot: Argument.string("project-root"),
-		reviewSetPath: Argument.string("review-set"),
-		endpoint: Argument.string("endpoint")
+		projectRoot: Argument.String("project-root"),
+		reviewSetPath: Argument.String("review-set"),
+		endpoint: Argument.String("endpoint")
 	},
 	({ projectRoot, reviewSetPath, endpoint }) =>
 		runReviewAuthoring({
@@ -158,9 +158,9 @@ const reviewAuthoringAppendCommand = Command.make(
 const reviewAuthoringTuneCommand = Command.make(
 	"tune",
 	{
-		projectRoot: Argument.string("project-root"),
-		sessionId: Argument.string("session-id"),
-		patchPath: Argument.string("patch-json")
+		projectRoot: Argument.String("project-root"),
+		sessionId: Argument.String("session-id"),
+		patchPath: Argument.String("patch-json")
 	},
 	({ projectRoot, sessionId, patchPath }) =>
 		runReviewAuthoring({
@@ -175,8 +175,8 @@ function makeReviewAuthoringLocalCommand(action: "show" | "discard") {
 	return Command.make(
 		action,
 		{
-			projectRoot: Argument.string("project-root"),
-			sessionId: Argument.string("session-id")
+			projectRoot: Argument.String("project-root"),
+			sessionId: Argument.String("session-id")
 		},
 		({ projectRoot, sessionId }) =>
 			action === "show"
@@ -189,9 +189,9 @@ function makeReviewAuthoringLiveCommand(action: "resume" | "reframe" | "approve"
 	return Command.make(
 		action,
 		{
-			projectRoot: Argument.string("project-root"),
-			sessionId: Argument.string("session-id"),
-			endpoint: Argument.string("endpoint")
+			projectRoot: Argument.String("project-root"),
+			sessionId: Argument.String("session-id"),
+			endpoint: Argument.String("endpoint")
 		},
 		({ projectRoot, sessionId, endpoint }) => {
 			const fields = { endpoint, projectRoot, sessionId };
@@ -207,10 +207,10 @@ function makeReviewAuthoringLiveCommand(action: "resume" | "reframe" | "approve"
 const reviewCaptureCommand = Command.make(
 	"capture",
 	{
-		projectRoot: Argument.string("project-root"),
-		reviewSetPath: Argument.string("review-set"),
-		endpoint: Argument.string("endpoint"),
-		cause: Flag.choice("cause", ["external_automation"]).pipe(Flag.optional),
+		projectRoot: Argument.String("project-root"),
+		reviewSetPath: Argument.String("review-set"),
+		endpoint: Argument.String("endpoint"),
+		cause: Flag.Literals("cause", ["external_automation"]).pipe(Flag.optional),
 		correlationId: optionalFlag("correlation")
 	},
 	({ projectRoot, reviewSetPath, endpoint, cause, correlationId }) => {
@@ -236,13 +236,13 @@ const reviewCaptureCommand = Command.make(
 
 const reviewHistoryCommand = Command.make(
 	"history",
-	{ projectRoot: Argument.string("project-root") },
+	{ projectRoot: Argument.String("project-root") },
 	({ projectRoot }) => runReviewHistory({ _tag: "ReviewHistory", projectRoot })
 ).pipe(Command.withDescription("List local Review capture history."));
 
 const reviewShowCommand = Command.make(
 	"show",
-	{ runPath: Argument.string("run-json") },
+	{ runPath: Argument.String("run-json") },
 	({ runPath }) => runReviewShow({ _tag: "ReviewShow", runPath })
 ).pipe(Command.withDescription("Show one Review capture run."));
 

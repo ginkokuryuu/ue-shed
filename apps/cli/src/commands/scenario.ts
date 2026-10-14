@@ -1,12 +1,12 @@
-import { Argument, Command, Flag } from "effect/unstable/cli";
+import { Argument, Command, Flag } from "effect/cli";
 import { runScenario } from "../workflows/scenario.js";
 import { optionalValue, positiveIntegerFlag } from "./options.js";
 
 const runCommand = Command.make(
 	"run",
 	{
-		document: Flag.string("document").pipe(Flag.optional),
-		endpoint: Argument.string("endpoint"),
+		document: Flag.String("document").pipe(Flag.optional),
+		endpoint: Argument.String("endpoint"),
 		evidenceLimit: positiveIntegerFlag(
 			"evidence-limit",
 			"--evidence-limit requires a positive integer"

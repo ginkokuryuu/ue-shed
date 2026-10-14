@@ -1,4 +1,4 @@
-import { Argument, Command, Flag } from "effect/unstable/cli";
+import { Argument, Command, Flag } from "effect/cli";
 import { Option } from "effect";
 import {
 	localizationFlags,
@@ -16,7 +16,7 @@ import {
 	runTextSearch
 } from "../asset-workflows.js";
 
-const optionalFlag = (name: string) => Flag.string(name).pipe(Flag.optional);
+const optionalFlag = (name: string) => Flag.String(name).pipe(Flag.optional);
 
 function optionalValue<A>(value: Option.Option<A>): A | undefined {
 	return Option.isSome(value) ? value.value : undefined;
@@ -28,11 +28,11 @@ function readerFields(reader: Option.Option<string>) {
 }
 
 function repeatedStringFlag(name: string) {
-	return Flag.string(name).pipe(Flag.atMost(Number.MAX_SAFE_INTEGER));
+	return Flag.String(name).pipe(Flag.atMost(Number.MAX_SAFE_INTEGER));
 }
 
 function positiveIntegerFlag(name: string, message: string) {
-	return Flag.integer(name).pipe(
+	return Flag.Int(name).pipe(
 		Flag.filter(
 			(value) => value > 0,
 			() => message
@@ -45,7 +45,7 @@ const readerFlag = optionalFlag("reader");
 const assetsScanCommand = Command.make(
 	"scan",
 	{
-		path: Argument.string("path"),
+		path: Argument.String("path"),
 		classPrefixes: repeatedStringFlag("class-prefix"),
 		classes: repeatedStringFlag("class"),
 		names: repeatedStringFlag("name"),
@@ -53,7 +53,7 @@ const assetsScanCommand = Command.make(
 			"maximum-assets",
 			"--maximum-assets requires a positive integer"
 		).pipe(Flag.optional),
-		full: Flag.boolean("full").pipe(Flag.optional),
+		full: Flag.Boolean("full").pipe(Flag.optional),
 		reader: readerFlag
 	},
 	({ path, classPrefixes, classes, names, maximumAssets, full, reader }) => {
@@ -82,7 +82,7 @@ export const assetsCommand = Command.make("assets").pipe(
 			Command.make(
 				name,
 				{
-					path: Argument.string("asset-path"),
+					path: Argument.String("asset-path"),
 					baseline: optionalFlag("baseline"),
 					reader: readerFlag
 				},
@@ -107,7 +107,7 @@ export const assetsCommand = Command.make("assets").pipe(
 
 const textScanCommand = Command.make(
 	"scan",
-	{ projectRoot: Argument.string("project-root"), reader: readerFlag },
+	{ projectRoot: Argument.String("project-root"), reader: readerFlag },
 	({ projectRoot, reader }) =>
 		runTextScan({ _tag: "TextScan", projectRoot, ...readerFields(reader) })
 ).pipe(Command.withDescription("Build the saved player-facing text corpus."));
@@ -115,10 +115,10 @@ const textScanCommand = Command.make(
 const textSearchCommand = Command.make(
 	"search",
 	{
-		projectRoot: Argument.string("project-root"),
-		query: Argument.string("query").pipe(Argument.variadic({ min: 1 })),
+		projectRoot: Argument.String("project-root"),
+		query: Argument.String("query").pipe(Argument.variadic({ min: 1 })),
 		target: optionalFlag("target"),
-		searchTranslations: Flag.boolean("search-translations").pipe(Flag.optional),
+		searchTranslations: Flag.Boolean("search-translations").pipe(Flag.optional),
 		...localizationFlags(),
 		reader: readerFlag
 	},
@@ -159,9 +159,9 @@ const textSearchCommand = Command.make(
 const textReviewCommand = Command.make(
 	"review",
 	{
-		projectRoot: Argument.string("project-root"),
+		projectRoot: Argument.String("project-root"),
 		reader: readerFlag,
-		rules: Flag.string("rules")
+		rules: Flag.String("rules")
 	},
 	({ projectRoot, reader, rules }) =>
 		runTextReview({
@@ -178,7 +178,7 @@ const textRulesCommand = Command.make("rules").pipe(
 	Command.withSubcommands([
 		Command.make(
 			"init",
-			{ projectRoot: Argument.string("project-root"), output: optionalFlag("output") },
+			{ projectRoot: Argument.String("project-root"), output: optionalFlag("output") },
 			({ projectRoot, output }) => {
 				const value = optionalValue(output);
 				return runTextRulesInit({
@@ -203,7 +203,7 @@ export const textCommand = Command.make("text").pipe(
 
 const inputInspectCommand = Command.make(
 	"inspect",
-	{ path: Argument.string("asset-or-project"), reader: readerFlag },
+	{ path: Argument.String("asset-or-project"), reader: readerFlag },
 	({ path, reader }) => runInputInspect({ _tag: "InputInspect", path, ...readerFields(reader) })
 ).pipe(Command.withDescription("Inspect saved Enhanced Input assets."));
 

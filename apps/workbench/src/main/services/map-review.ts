@@ -222,7 +222,7 @@ interface ReviewFailure {
 	readonly status: "failed";
 }
 
-export class SavedWorldUnavailable extends Schema.TaggedErrorClass<SavedWorldUnavailable>()(
+export class SavedWorldUnavailable extends Schema.TaggedError<SavedWorldUnavailable>()(
 	"SavedWorldUnavailable",
 	{
 		message: Schema.String,

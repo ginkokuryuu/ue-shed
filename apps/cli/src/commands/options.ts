@@ -1,8 +1,8 @@
-import { Flag } from "effect/unstable/cli";
+import { Flag } from "effect/cli";
 import { Option } from "effect";
 
 export function optionalFlag(name: string) {
-	return Flag.string(name).pipe(Flag.optional);
+	return Flag.String(name).pipe(Flag.optional);
 }
 
 export function optionalValue<A>(value: Option.Option<A>): A | undefined {
@@ -15,7 +15,7 @@ export function readerFields(reader: Option.Option<string>) {
 }
 
 export function positiveIntegerFlag(name: string, message: string) {
-	return Flag.integer(name).pipe(
+	return Flag.Int(name).pipe(
 		Flag.filter(
 			(value) => value > 0,
 			() => message
@@ -24,7 +24,7 @@ export function positiveIntegerFlag(name: string, message: string) {
 }
 
 export function nonNegativeIntegerFlag(name: string, message: string) {
-	return Flag.integer(name).pipe(
+	return Flag.Int(name).pipe(
 		Flag.filter(
 			(value) => value >= 0,
 			() => message

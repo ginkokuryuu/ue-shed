@@ -1,5 +1,8 @@
 # `@ue-shed/unreal-assets`
 
+The application must provide `effect@^4.0.0` as a peer dependency. Reuse one compatible
+Effect installation across the application and UE Shed libraries.
+
 The paired TypeScript/native reader caps cumulative protocol output at 10 GiB. Catalog scans
 default to a 50-minute timeout; single-asset operations keep their 30-second timeout. Hosts can
 configure `catalogTimeoutMs` and `timeoutMs` explicitly.

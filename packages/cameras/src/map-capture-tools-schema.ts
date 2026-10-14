@@ -25,7 +25,7 @@ export const MapCaptureSelection = Schema.Union([
 				path: Schema.NonEmptyString,
 				label: Schema.String,
 				actorGuid: Schema.optionalKey(
-					Schema.String.check(Schema.isPattern(/^[0-9A-Fa-f]{32}$/))
+					Schema.String.check(Schema.isPattern(/^[0-9A-Fa-f]{32}$/u))
 				)
 			})
 		).check(Schema.isMinLength(1), Schema.isMaxLength(1024)),

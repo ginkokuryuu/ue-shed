@@ -55,7 +55,7 @@ export const LocalizationBaseline = Schema.Struct({
 	entries: Schema.Array(LocalizationBaselineEntry).check(Schema.isMaxLength(100_000))
 });
 export type LocalizationBaseline = typeof LocalizationBaseline.Type;
-export class LocalizationReportError extends Schema.TaggedErrorClass<LocalizationReportError>()(
+export class LocalizationReportError extends Schema.TaggedError<LocalizationReportError>()(
 	"LocalizationReportError",
 	{
 		code: Schema.Literals([

@@ -1,5 +1,8 @@
 # @ue-shed/localization
 
+The application must provide `effect@^4.0.0` as a peer dependency. Reuse one compatible
+Effect installation across the application and UE Shed libraries.
+
 Read saved Unreal localization evidence without Unreal, an asset scan, or Workbench. The package
 has no Game Text dependency. It supports the committed Unreal 4.27, 5.7 and 5.8 format layouts.
 

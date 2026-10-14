@@ -50,7 +50,7 @@ function isInputMappingContextClass(classPath: string): boolean {
 	);
 }
 
-export class EnhancedInputScanError extends Schema.TaggedErrorClass<EnhancedInputScanError>()(
+export class EnhancedInputScanError extends Schema.TaggedError<EnhancedInputScanError>()(
 	"EnhancedInputScanError",
 	EnhancedInputPublicError.fields
 ) {}

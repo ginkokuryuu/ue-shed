@@ -8,12 +8,14 @@ import {
 } from "./camera-render-schema.js";
 
 const NonEmptyString = Schema.String.check(Schema.isMinLength(1));
-const SafeIdentifier = NonEmptyString.check(Schema.isPattern(/^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/));
+const SafeIdentifier = NonEmptyString.check(
+	Schema.isPattern(/^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/u)
+);
 const SafeRevisionIdentifier = NonEmptyString.check(
-	Schema.isPattern(/^[A-Za-z0-9][A-Za-z0-9._-]{0,255}$/)
+	Schema.isPattern(/^[A-Za-z0-9][A-Za-z0-9._-]{0,255}$/u)
 );
 const SafeRelativePath = NonEmptyString.check(
-	Schema.isPattern(/^(?![A-Za-z]:)(?![\\/])(?!\.\.(?:[\\/]|$))(?!.*[\\/]\.\.(?:[\\/]|$)).+$/)
+	Schema.isPattern(/^(?![A-Za-z]:)(?![\\/])(?!\.\.(?:[\\/]|$))(?!.*[\\/]\.\.(?:[\\/]|$)).+$/u)
 );
 const BoundedString = Schema.String.check(Schema.isMaxLength(1_024));
 const NonNegativeInteger = Schema.Int.check(Schema.isGreaterThanOrEqualTo(0));
@@ -21,9 +23,9 @@ const PositiveInteger = Schema.Int.check(Schema.isGreaterThan(0));
 const Fraction = Schema.Finite.check(Schema.isBetween({ minimum: 0, maximum: 1 }));
 
 export const ReviewSubjectActorPath = Schema.String.check(
-	Schema.isMinLength(7),
+	Schema.isMinCodePoints(7),
 	Schema.isMaxLength(4_096),
-	Schema.isStartsWith("/Game/")
+	Schema.isStartingWith("/Game/")
 );
 export type ReviewSubjectActorPath = Schema.Schema.Type<typeof ReviewSubjectActorPath>;
 
@@ -34,14 +36,14 @@ export type ReviewSubjectActorPath = Schema.Schema.Type<typeof ReviewSubjectActo
  */
 export const ReviewSubjectActorGuid = Schema.String.check(
 	Schema.isPattern(
-		/^(?!00000000-00000000-00000000-00000000$)[0-9a-fA-F]{8}(?:-[0-9a-fA-F]{8}){3}$/
+		/^(?!00000000-00000000-00000000-00000000$)[0-9a-fA-F]{8}(?:-[0-9a-fA-F]{8}){3}$/u
 	)
 ).pipe(Schema.brand("ReviewSubjectActorGuid"));
 export type ReviewSubjectActorGuid = Schema.Schema.Type<typeof ReviewSubjectActorGuid>;
 
 export const ReviewCaptureOperationId = Schema.String.check(
 	Schema.isPattern(
-		/^(?!00000000-0000-0000-0000-000000000000$)[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/
+		/^(?!00000000-0000-0000-0000-000000000000$)[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/u
 	)
 );
 export type ReviewCaptureOperationId = Schema.Schema.Type<typeof ReviewCaptureOperationId>;
@@ -81,7 +83,7 @@ export type CaptureRunId = Schema.Schema.Type<typeof CaptureRunId>;
 
 const FramingCandidateIdentifier = NonEmptyString.check(
 	Schema.isMaxLength(384),
-	Schema.isPattern(/^[A-Za-z0-9][A-Za-z0-9._/-]*$/)
+	Schema.isPattern(/^[A-Za-z0-9][A-Za-z0-9._/-]*$/u)
 );
 
 export const FramingCandidateId = FramingCandidateIdentifier.pipe(
@@ -1903,7 +1905,7 @@ export type ReviewAuthoringSessionRecovery = Schema.Schema.Type<
 
 export const CaptureArtifact = Schema.Struct({
 	byteLength: NonNegativeInteger,
-	contentHash: Schema.String.check(Schema.isPattern(/^sha256:[a-f0-9]{64}$/)),
+	contentHash: Schema.String.check(Schema.isPattern(/^sha256:[a-f0-9]{64}$/u)),
 	height: PositiveInteger,
 	id: ArtifactId,
 	mediaType: Schema.Literal("image/png"),
@@ -2151,7 +2153,7 @@ const PreviousLegacyCaptureRun = Schema.Struct({
 
 const LegacyCaptureArtifact = Schema.Struct({
 	byteLength: NonNegativeInteger,
-	contentHash: Schema.String.check(Schema.isPattern(/^sha256:[a-f0-9]{64}$/)),
+	contentHash: Schema.String.check(Schema.isPattern(/^sha256:[a-f0-9]{64}$/u)),
 	height: PositiveInteger,
 	id: ArtifactId,
 	mediaType: Schema.Literal("image/png"),

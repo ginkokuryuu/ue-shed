@@ -1,5 +1,8 @@
 # `@ue-shed/plugin-distribution`
 
+The application must provide `effect@^4.0.0` as a peer dependency. Reuse one compatible
+Effect installation across the application and UE Shed libraries.
+
 Headless installation, verification, immutable caching, dependency resolution, and scoped leasing for
 UE Shed Unreal plugin distributions. The package does not depend on Workbench, Electron, a project
 layout, or a particular release transport, and it never mutates an Unreal project.

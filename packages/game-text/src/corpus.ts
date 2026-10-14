@@ -36,7 +36,7 @@ interface ExtractionProgress {
 	readonly totalAssets: number;
 }
 
-export class TextCorpusScanError extends Schema.TaggedErrorClass<TextCorpusScanError>()(
+export class TextCorpusScanError extends Schema.TaggedError<TextCorpusScanError>()(
 	"TextCorpusScanError",
 	{
 		code: Schema.Literals(["invalid_project", "scan_limit_exceeded"]),

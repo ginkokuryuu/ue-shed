@@ -188,7 +188,7 @@ export const CameraBridgeResponse = Schema.Union([
 	})
 ]);
 export type CameraBridgeResponse = typeof CameraBridgeResponse.Type;
-export class CameraBridgeError extends Schema.TaggedErrorClass<CameraBridgeError>()(
+export class CameraBridgeError extends Schema.TaggedError<CameraBridgeError>()(
 	"CameraBridgeError",
 	{
 		code: Schema.Literals([

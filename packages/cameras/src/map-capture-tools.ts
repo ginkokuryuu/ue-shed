@@ -3,7 +3,7 @@ import { decodeCompanionCapabilityManifest } from "@ue-shed/protocol";
 import { RemoteControlClient } from "@ue-shed/unreal-connection";
 import { MapCaptureSelection, MapCaptureReadiness } from "./map-capture-tools-schema.js";
 export * from "./map-capture-tools-schema.js";
-export class MapCaptureInspectionError extends Schema.TaggedErrorClass<MapCaptureInspectionError>()(
+export class MapCaptureInspectionError extends Schema.TaggedError<MapCaptureInspectionError>()(
 	"MapCaptureInspectionError",
 	{ message: Schema.String, recovery: Schema.String }
 ) {}

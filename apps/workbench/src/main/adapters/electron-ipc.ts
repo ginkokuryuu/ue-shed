@@ -1,7 +1,7 @@
 import { Context, Effect, Fiber, Layer, Ref, Schema, type Scope } from "effect";
 import { decodeInvokeArgs, encodeInvokeResult, type InvokeContract } from "../ipc-contracts.js";
 
-export class ElectronIpcError extends Schema.TaggedErrorClass<ElectronIpcError>()(
+export class ElectronIpcError extends Schema.TaggedError<ElectronIpcError>()(
 	"Workbench.ElectronIpcError",
 	{
 		causeText: Schema.String,

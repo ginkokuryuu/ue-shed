@@ -146,7 +146,7 @@ export interface MapCaptureProgressEvent extends Schema.Schema.Type<
 	typeof MapCaptureProgressEvent
 > {}
 
-export class MapCaptureClientError extends Schema.TaggedErrorClass<MapCaptureClientError>()(
+export class MapCaptureClientError extends Schema.TaggedError<MapCaptureClientError>()(
 	"MapCaptureClientError",
 	{
 		cause: Schema.Defect(),

@@ -18,9 +18,9 @@ const staticRoot = resolve(import.meta.dirname, "../../app/dist");
 
 const configurationLive = Layer.unwrap(
 	Effect.gen(function* () {
-		const projectRoot = yield* Config.string("UE_SHED_PROJECT_ROOT");
+		const projectRoot = yield* Config.String("UE_SHED_PROJECT_ROOT");
 		const remoteControlEndpoint = yield* Config.option(
-			Config.string("UE_SHED_REMOTE_CONTROL_ENDPOINT")
+			Config.String("UE_SHED_REMOTE_CONTROL_ENDPOINT")
 		);
 		return shedHostConfigurationLayer({
 			authoringAsset: { status: "not_configured" },
@@ -128,8 +128,8 @@ async function handleStatic(request: IncomingMessage, response: ServerResponse):
 
 const serverConfiguration = await Effect.runPromise(
 	Effect.all({
-		host: Config.string("UE_SHED_HOST_ADDRESS").pipe(Config.withDefault("127.0.0.1")),
-		port: Config.number("UE_SHED_HOST_PORT").pipe(Config.withDefault(4174))
+		host: Config.String("UE_SHED_HOST_ADDRESS").pipe(Config.withDefault("127.0.0.1")),
+		port: Config.Number("UE_SHED_HOST_PORT").pipe(Config.withDefault(4174))
 	})
 );
 

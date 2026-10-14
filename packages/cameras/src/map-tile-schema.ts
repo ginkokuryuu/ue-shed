@@ -10,13 +10,13 @@ import {
 } from "./map-tile-pyramid.js";
 
 const NonEmptyString = Schema.String.check(Schema.isMinLength(1), Schema.isMaxLength(1_024));
-const SafeIdentifier = Schema.String.check(Schema.isPattern(/^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/));
+const SafeIdentifier = Schema.String.check(Schema.isPattern(/^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/u));
 const PositiveInteger = Schema.Int.check(Schema.isGreaterThan(0));
 const NonNegativeInteger = Schema.Int.check(Schema.isGreaterThanOrEqualTo(0));
 const PositiveFinite = Schema.Finite.check(Schema.isGreaterThan(0));
-const Sha256 = Schema.String.check(Schema.isPattern(/^sha256:[a-f0-9]{64}$/));
+const Sha256 = Schema.String.check(Schema.isPattern(/^sha256:[a-f0-9]{64}$/u));
 const IsoTimestamp = Schema.String.check(
-	Schema.isPattern(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{3})?Z$/)
+	Schema.isPattern(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{3})?Z$/u)
 );
 
 export const MapCapturePlanId = SafeIdentifier.pipe(Schema.brand("MapCapturePlanId"));
@@ -51,7 +51,7 @@ export type MapCaptureWorldBounds = typeof MapCaptureWorldBounds.Type;
 
 export const MapCaptureProject = Schema.Struct({
 	id: SafeIdentifier,
-	mapPath: Schema.String.check(Schema.isPattern(/^\/[A-Za-z0-9_./-]+$/))
+	mapPath: Schema.String.check(Schema.isPattern(/^\/[A-Za-z0-9_./-]+$/u))
 });
 export type MapCaptureProject = typeof MapCaptureProject.Type;
 
@@ -344,7 +344,7 @@ export const MapTileArtifact = Schema.Struct({
 	hash: Sha256,
 	height: PositiveInteger,
 	key: MapTileKeySchema,
-	relativePath: Schema.String.check(Schema.isPattern(/^Z\d{2,}\/R\d{3,}_C\d{3,}\.png$/)),
+	relativePath: Schema.String.check(Schema.isPattern(/^Z\d{2,}\/R\d{3,}_C\d{3,}\.png$/u)),
 	width: PositiveInteger,
 	worldBounds: MapCaptureWorldBounds
 });

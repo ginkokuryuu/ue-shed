@@ -10,7 +10,7 @@ const Presets = Schema.Struct({ version: Schema.Literal(1), presets: Schema.Arra
 export type ActorFilterPreset = typeof Preset.Type;
 export const actorFilterStorageKey = "ue-shed.actor-filter-presets.v1";
 
-export class ActorUtilityError extends Schema.TaggedErrorClass<ActorUtilityError>()(
+export class ActorUtilityError extends Schema.TaggedError<ActorUtilityError>()(
 	"ActorUtilityError",
 	{ message: Schema.String }
 ) {}

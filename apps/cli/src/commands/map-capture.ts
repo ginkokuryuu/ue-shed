@@ -1,4 +1,4 @@
-import { Argument, Command, Flag } from "effect/unstable/cli";
+import { Argument, Command, Flag } from "effect/cli";
 import {
 	runMapCaptureSelection,
 	runMapCaptureReadiness,
@@ -13,8 +13,8 @@ import { nonNegativeIntegerFlag, optionalFlag, optionalValue } from "./options.j
 const mapCapturePlanValidateCommand = Command.make(
 	"validate",
 	{
-		projectRoot: Argument.string("project-root"),
-		planPath: Argument.string("plan")
+		projectRoot: Argument.String("project-root"),
+		planPath: Argument.String("plan")
 	},
 	({ projectRoot, planPath }) =>
 		runMapCapturePlanValidate({
@@ -27,8 +27,8 @@ const mapCapturePlanValidateCommand = Command.make(
 const mapCaptureInspectCommand = Command.make(
 	"inspect",
 	{
-		projectRoot: Argument.string("project-root"),
-		planPath: Argument.string("plan")
+		projectRoot: Argument.String("project-root"),
+		planPath: Argument.String("plan")
 	},
 	({ projectRoot, planPath }) =>
 		runMapCaptureInspect({ _tag: "MapCaptureInspect", planPath, projectRoot })
@@ -42,16 +42,16 @@ const levelsFlag = Flag.atMost(
 const mapCaptureRunCommand = Command.make(
 	"run",
 	{
-		projectRoot: Argument.string("project-root"),
-		planPath: Argument.string("plan"),
-		endpoint: Argument.string("endpoint"),
+		projectRoot: Argument.String("project-root"),
+		planPath: Argument.String("plan"),
+		endpoint: Argument.String("endpoint"),
 		correlationId: optionalFlag("correlation"),
-		captureBackend: Flag.choice("backend", [
+		captureBackend: Flag.Literals("backend", [
 			"lit_camera_tiles",
 			"scene_capture_tiles",
 			"viewport_high_resolution"
 		]).pipe(Flag.optional),
-		openMap: Flag.boolean("open-map").pipe(Flag.optional),
+		openMap: Flag.Boolean("open-map").pipe(Flag.optional),
 		levels: levelsFlag,
 		tilesPath: optionalFlag("tiles")
 	},
@@ -90,8 +90,8 @@ const mapCaptureRunCommand = Command.make(
 const mapCaptureRunsCommand = Command.make(
 	"runs",
 	{
-		projectRoot: Argument.string("project-root"),
-		planId: Argument.string("plan-id")
+		projectRoot: Argument.String("project-root"),
+		planId: Argument.String("plan-id")
 	},
 	({ projectRoot, planId }) => runMapCaptureRuns({ _tag: "MapCaptureRuns", planId, projectRoot })
 ).pipe(Command.withDescription("List only atomically completed runs for one plan."));
@@ -106,9 +106,9 @@ export const mapCaptureCommand = Command.make("map-capture").pipe(
 				Command.make(
 					"from-selection",
 					{
-						projectRoot: Argument.string("project-root"),
-						endpoint: Argument.string("endpoint"),
-						output: Argument.string("output")
+						projectRoot: Argument.String("project-root"),
+						endpoint: Argument.String("endpoint"),
+						output: Argument.String("output")
 					},
 					({ projectRoot, endpoint, output }) =>
 						runMapCapturePlanFromSelection(projectRoot, endpoint, output)
@@ -119,12 +119,12 @@ export const mapCaptureCommand = Command.make("map-capture").pipe(
 				)
 			])
 		),
-		Command.make("selection", { endpoint: Argument.string("endpoint") }, ({ endpoint }) =>
+		Command.make("selection", { endpoint: Argument.String("endpoint") }, ({ endpoint }) =>
 			runMapCaptureSelection(endpoint)
 		).pipe(Command.withDescription("Inspect combined bounds of selected editor actors.")),
 		Command.make(
 			"readiness",
-			{ endpoint: Argument.string("endpoint"), mapPath: Argument.string("map-path") },
+			{ endpoint: Argument.String("endpoint"), mapPath: Argument.String("map-path") },
 			({ endpoint, mapPath }) => runMapCaptureReadiness(endpoint, mapPath)
 		).pipe(Command.withDescription("Inspect Lit capture blockers without starting capture.")),
 		mapCaptureInspectCommand,

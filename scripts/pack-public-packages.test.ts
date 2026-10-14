@@ -10,6 +10,7 @@ import {
 	PUBLIC_PACKAGES,
 	PUBLIC_VERSION,
 	publicPackageSelectionArgs,
+	validateEffectPeers,
 	validatePackedManifest
 } from "./pack-public-packages.ts";
 
@@ -27,6 +28,40 @@ const cleanFiles = [
 	"package/LICENSE",
 	...sourceFiles.flatMap(emitted)
 ];
+
+test("published Effect runtimes are required compatible peers", () => {
+	const manifest = {
+		name: "@ue-shed/observability",
+		version: PUBLIC_VERSION,
+		peerDependencies: { effect: "^4.0.0", "@effect/opentelemetry": "^4.0.0" }
+	};
+	assert.deepEqual(validateEffectPeers(manifest), []);
+	for (const field of ["dependencies", "optionalDependencies"] as const) {
+		for (const name of ["effect", "@effect/opentelemetry"]) {
+			assert.deepEqual(validateEffectPeers({ ...manifest, [field]: { [name]: "4.0.4" } }), [
+				`${manifest.name} must declare ${name} as a peer dependency`
+			]);
+		}
+	}
+	for (const name of ["effect", "@effect/opentelemetry"]) {
+		for (const range of ["4.0.4", "catalog:", "^3.0.0"]) {
+			assert.deepEqual(
+				validateEffectPeers({
+					...manifest,
+					peerDependencies: { ...manifest.peerDependencies, [name]: range }
+				}),
+				[`${manifest.name} must declare required peer ${name} ^4.0.0`]
+			);
+		}
+		assert.deepEqual(
+			validateEffectPeers({
+				...manifest,
+				peerDependenciesMeta: { [name]: { optional: true } }
+			}),
+			[`${manifest.name} must declare required peer ${name} ^4.0.0`]
+		);
+	}
+});
 
 test("accepts dist files that the current sources emit", () => {
 	assert.deepEqual(findStrayTypeScriptOutput({ files: cleanFiles, sourceFiles }), []);

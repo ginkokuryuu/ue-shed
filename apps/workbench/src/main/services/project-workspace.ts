@@ -82,7 +82,7 @@ function candidateFilters(kind: WorkbenchProjectCandidateKind): readonly Project
 	return byKind[kind];
 }
 
-export class WorkbenchProjectUnavailable extends Schema.TaggedErrorClass<WorkbenchProjectUnavailable>()(
+export class WorkbenchProjectUnavailable extends Schema.TaggedError<WorkbenchProjectUnavailable>()(
 	"WorkbenchProjectUnavailable",
 	{
 		message: Schema.String,

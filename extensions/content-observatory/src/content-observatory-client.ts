@@ -106,7 +106,7 @@ export type ContentObservatoryState = Schema.Schema.Type<typeof ContentObservato
 
 export const decodeContentObservatoryState = Schema.decodeUnknownEffect(ContentObservatoryState);
 
-export class ContentObservatoryClientError extends Schema.TaggedErrorClass<ContentObservatoryClientError>()(
+export class ContentObservatoryClientError extends Schema.TaggedError<ContentObservatoryClientError>()(
 	"ContentObservatoryClientError",
 	{
 		cause: Schema.Defect(),

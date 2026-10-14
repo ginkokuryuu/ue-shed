@@ -1,7 +1,7 @@
 import { Schema } from "effect";
 
 const text = Schema.String.check(Schema.isMinLength(1), Schema.isMaxLength(1024));
-const id = Schema.String.check(Schema.isPattern(/^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/));
+const id = Schema.String.check(Schema.isPattern(/^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/u));
 const integer = (minimum: number, maximum: number) =>
 	Schema.Int.check(Schema.isBetween({ minimum, maximum }));
 export const WorldLeaseId = id.pipe(Schema.brand("WorldLeaseId"));
@@ -18,7 +18,7 @@ export const WorldRegion = Schema.Struct({ center: WorldVector, extent: WorldExt
 export type WorldRegion = typeof WorldRegion.Type;
 export const WorldActorIdentity = Schema.Struct({
 	actorGuid: Schema.String.check(
-		Schema.isPattern(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/)
+		Schema.isPattern(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/u)
 	),
 	containerId: text
 });

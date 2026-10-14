@@ -50,7 +50,7 @@
 		"effect": "catalog:"
 	},
 	"peerDependencies": {
-		"effect": "catalog:"
+		"effect": "^4.0.0"
 	},
 	"engines": {
 		"node": "^22.15.0 || >=23.8.0"

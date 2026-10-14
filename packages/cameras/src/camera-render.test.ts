@@ -1,4 +1,4 @@
-import { Cause, Deferred, Effect, Exit, Fiber, Schema, Stream } from "effect";
+import { Cause, Deferred, Effect, Exit, Fiber, Result, Schema, Stream } from "effect";
 import {
 	WorldPreparation,
 	WorldId,
@@ -8,6 +8,8 @@ import {
 } from "@ue-shed/world";
 import { renderPreparedCamera } from "./prepared-camera.js";
 import { describe, expect, it } from "vitest";
+import { it as effectIt } from "@effect/vitest";
+import { TestClock } from "effect/testing";
 import {
 	RemoteControlClient,
 	RemoteControlClientError,
@@ -156,6 +158,48 @@ function harness(
 }
 
 describe("shared renderer lifecycle", () => {
+	for (const terminal of ["captured", "failed"] as const) {
+		effectIt.effect(`polls running frames until ${terminal} and restores the session`, () =>
+			Effect.gen(function* () {
+				const polled = yield* Deferred.make<void>();
+				let polls = 0;
+				const running = {
+					status: "running",
+					sessionId: request.sessionId,
+					operationId: frame.operationId,
+					phase: "capturing",
+					renderedFrames: 0,
+					elapsedMs: 0
+				};
+				const h = harness((name) => {
+					if (name === "StartCameraFrame") return Effect.succeed(running);
+					if (name !== "PollCameraFrame") return undefined;
+					return Effect.gen(function* () {
+						if (++polls === 1) {
+							yield* Deferred.succeed(polled, undefined);
+							return running;
+						}
+						return terminal === "captured" ? captured : failed("capture_failed");
+					});
+				});
+				const fiber = yield* h.run().pipe(Effect.result, Effect.forkScoped);
+				yield* Deferred.await(polled);
+				yield* TestClock.adjust("100 millis");
+				const result = yield* Fiber.join(fiber);
+				if (terminal === "captured") {
+					expect(result).toEqual(Result.succeed(captured));
+				} else {
+					expect(result).toMatchObject({
+						_tag: "Failure",
+						failure: { code: "capture_failed" }
+					});
+				}
+				expect(polls).toBe(2);
+				expect(h.calls.filter((name) => name === "StartCameraFrame")).toHaveLength(1);
+				expect(h.calls.at(-1)).toBe("EndCameraRender");
+			})
+		);
+	}
 	it("keeps actor context through capture and restores camera before world ownership", async () => {
 		const events: string[] = [];
 		const h = harness((name) => {

@@ -13,7 +13,7 @@ import { Context, Effect, Layer, Schema } from "effect";
 const coreObjectPath = "/Script/UEShedCore.Default__UEShedCoreLibrary";
 const capability = "editor.play-session.v1";
 
-export class EditorPlaySessionError extends Schema.TaggedErrorClass<EditorPlaySessionError>()(
+export class EditorPlaySessionError extends Schema.TaggedError<EditorPlaySessionError>()(
 	"EditorPlaySessionError",
 	{
 		code: Schema.Literals(["capability_unavailable", "contract_failure", "transport_failure"]),

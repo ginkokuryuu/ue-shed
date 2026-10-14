@@ -27,7 +27,7 @@ export const TextureAuditLaunchResult = Schema.Union([
 ]);
 export type TextureAuditLaunchResult = Schema.Schema.Type<typeof TextureAuditLaunchResult>;
 
-export class TextureAuditClientError extends Schema.TaggedErrorClass<TextureAuditClientError>()(
+export class TextureAuditClientError extends Schema.TaggedError<TextureAuditClientError>()(
 	"TextureAuditClientError",
 	{
 		cause: Schema.Defect(),

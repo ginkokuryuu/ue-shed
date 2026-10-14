@@ -16,7 +16,7 @@ import { readerLayer } from "../cli-operation.js";
 export function cliGameTextIndexLayer(reader?: string) {
 	return Layer.unwrap(
 		Effect.gen(function* () {
-			const cacheRoot = yield* Config.string("UE_SHED_PROJECT_INDEX_CACHE_ROOT").pipe(
+			const cacheRoot = yield* Config.String("UE_SHED_PROJECT_INDEX_CACHE_ROOT").pipe(
 				Config.withDefault(join(homedir(), ".cache", "ue-shed"))
 			);
 			return gameTextIndexRefreshLayer(cacheRoot).pipe(
