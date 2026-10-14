@@ -353,6 +353,9 @@ export const makeGameTextLocalization = Effect.fn("Workbench.GameText.localizati
 					evidence,
 					review
 				});
+				// A scan nobody waits for would otherwise keep checking, and pinning, the previous
+				// selection until another quality request happened to replace it.
+				yield* qualityLock.withPermits(1)(clearQuality());
 				yield* indexed.success.retain;
 				yield* Effect.annotateCurrentSpan({
 					lineCount: textCounts.total,
@@ -412,6 +415,8 @@ export const makeGameTextLocalization = Effect.fn("Workbench.GameText.localizati
 		// One scan per selection and rules document, shared by every request that needs it.
 		const scan = yield* qualityLock.withPermits(1)(
 			Effect.gen(function* () {
+				// A selection published since this request began has already cleared the cache.
+				if ((yield* Ref.get(selected)) !== retained) return undefined;
 				const cached = yield* Ref.get(qualityCache);
 				if (cached?.join === retained.join && cached.document === document)
 					return cached.scan;
@@ -446,6 +451,7 @@ export const makeGameTextLocalization = Effect.fn("Workbench.GameText.localizati
 				return scan;
 			})
 		);
+		if (!scan) return undefined;
 		const exit = yield* Fiber.await(scan);
 		// A newer selection, rescan or rules change interrupted it; the caller asks again.
 		if (Exit.isFailure(exit) && Cause.hasInterruptsOnly(exit.cause)) return undefined;
