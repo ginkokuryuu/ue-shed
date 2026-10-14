@@ -1,3 +1,4 @@
+import { canonicalJsonSchemaReferences } from "./json-schema.js";
 import { deepStrictEqual } from "node:assert";
 import { readFile } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
@@ -40,7 +41,10 @@ describe("uasset IO protocol v1", () => {
 					"utf8"
 				)
 			);
-			deepStrictEqual(checkedIn, makeUAssetIoJsonSchema(contract));
+			deepStrictEqual(
+				canonicalJsonSchemaReferences(checkedIn),
+				canonicalJsonSchemaReferences(makeUAssetIoJsonSchema(contract))
+			);
 		}
 	});
 

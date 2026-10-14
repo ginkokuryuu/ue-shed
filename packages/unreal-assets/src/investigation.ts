@@ -10,7 +10,7 @@ export interface InvestigationSource extends Schema.Schema.Type<typeof Investiga
 
 export const InvestigationFormat = Schema.Literals(["json", "csv"]);
 export type InvestigationFormat = Schema.Schema.Type<typeof InvestigationFormat>;
-export class InvestigationError extends Schema.TaggedErrorClass<InvestigationError>()(
+export class InvestigationError extends Schema.TaggedError<InvestigationError>()(
 	"InvestigationError",
 	{
 		message: Schema.String,

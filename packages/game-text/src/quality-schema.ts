@@ -103,7 +103,7 @@ export const TextQualityRuleDocument = Schema.Struct({
 });
 export type TextQualityRuleDocument = Schema.Schema.Type<typeof TextQualityRuleDocument>;
 
-export class TextQualityRuleDocumentError extends Schema.TaggedErrorClass<TextQualityRuleDocumentError>()(
+export class TextQualityRuleDocumentError extends Schema.TaggedError<TextQualityRuleDocumentError>()(
 	"TextQualityRuleDocumentError",
 	{
 		code: Schema.Literals([

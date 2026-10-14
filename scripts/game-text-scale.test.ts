@@ -267,7 +267,7 @@ describe("generated scale harness", () => {
 		const stopped = decode(await readFile(stoppedOutput, "utf8"));
 		expect(stopped.results[0]?.status).toBe("stopped");
 		expect(stopped.results[0]?.error).toContain("RSS limit exceeded");
-	});
+	}, 30_000);
 	it("stream-validates counts and sizes and rejects a damaged event stream", async () => {
 		const result = await validateGameTextScale(first);
 		expect(result.files).toHaveLength(22);

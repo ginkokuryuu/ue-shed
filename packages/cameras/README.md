@@ -1,5 +1,8 @@
 # `@ue-shed/cameras`
 
+The application must provide `effect@^4.0.0` as a peer dependency. Reuse one compatible
+Effect installation across the application and UE Shed libraries.
+
 Headless camera observation and durable Map Review APIs. The package owns the versioned BGRA8 frame
 decoder, bounded named-pipe server, latest-frame snapshots, subscriptions, host metrics, Remote
 Control adapters, portable Review Set schemas, filesystem repository, and Capture Run orchestrator.

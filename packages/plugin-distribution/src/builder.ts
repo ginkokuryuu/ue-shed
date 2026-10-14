@@ -71,17 +71,17 @@ const BuildErrorFields = {
 	stage: Schema.String
 };
 
-export class InvalidCompiledPluginBuild extends Schema.TaggedErrorClass<InvalidCompiledPluginBuild>()(
+export class InvalidCompiledPluginBuild extends Schema.TaggedError<InvalidCompiledPluginBuild>()(
 	"InvalidCompiledPluginBuild",
 	BuildErrorFields
 ) {}
 
-export class CompiledPluginBuildFailed extends Schema.TaggedErrorClass<CompiledPluginBuildFailed>()(
+export class CompiledPluginBuildFailed extends Schema.TaggedError<CompiledPluginBuildFailed>()(
 	"CompiledPluginBuildFailed",
 	{ ...BuildErrorFields, exitCode: Schema.NullOr(Schema.Int) }
 ) {}
 
-export class CompiledPluginBuildCancelled extends Schema.TaggedErrorClass<CompiledPluginBuildCancelled>()(
+export class CompiledPluginBuildCancelled extends Schema.TaggedError<CompiledPluginBuildCancelled>()(
 	"CompiledPluginBuildCancelled",
 	BuildErrorFields
 ) {}

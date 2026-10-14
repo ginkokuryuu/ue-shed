@@ -13,7 +13,7 @@ export const AuthoringActorReferencesRequest = Schema.Struct({
 	rowName: Schema.NonEmptyString.check(
 		Schema.isMaxLength(1023),
 		// eslint-disable-next-line no-control-regex -- Unreal row names cannot contain control characters.
-		Schema.isPattern(/^[^\u0000-\u001f]*$/)
+		Schema.isPattern(/^[^\u0000-\u001f]*$/u)
 	),
 	maxActors: Schema.Int.check(Schema.isBetween({ minimum: 1, maximum: 100000 })),
 	maxResults: Schema.Int.check(Schema.isBetween({ minimum: 1, maximum: 10000 }))

@@ -23,7 +23,7 @@ export const EditorForegroundResponsivenessFailure = Schema.Literals([
 export type EditorForegroundResponsivenessFailure =
 	typeof EditorForegroundResponsivenessFailure.Type;
 
-export class EditorForegroundResponsivenessError extends Schema.TaggedErrorClass<EditorForegroundResponsivenessError>()(
+export class EditorForegroundResponsivenessError extends Schema.TaggedError<EditorForegroundResponsivenessError>()(
 	"EditorForegroundResponsivenessError",
 	{
 		reason: EditorForegroundResponsivenessFailure,

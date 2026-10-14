@@ -1,11 +1,14 @@
 # `@ue-shed/unreal-connection`
 
+The application must provide `effect@^4.0.0` as a peer dependency. Reuse one compatible
+Effect installation across the application and UE Shed libraries.
+
 Typed Remote Control connectivity, companion capability negotiation, reconnect behavior, and
 bounded data-plane helpers for headless UE Shed hosts. It depends on protocol contracts, not domain
 UIs or Workbench.
 
 ```sh
-npm install --save-exact @ue-shed/unreal-connection @ue-shed/protocol effect@4.0.0-beta.98
+npm install --save-exact @ue-shed/unreal-connection @ue-shed/protocol "effect@^4.0.0"
 ```
 
 Node.js 22.14 or newer is required. The package exposes one stable entry point:

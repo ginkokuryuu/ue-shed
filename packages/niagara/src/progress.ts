@@ -2,7 +2,7 @@ import { readFile, lstat } from "node:fs/promises";
 import { Effect, Schema } from "effect";
 import { NiagaraPreviewProgress } from "./progress-schema.js";
 export * from "./progress-schema.js";
-export class NiagaraProgressError extends Schema.TaggedErrorClass<NiagaraProgressError>()(
+export class NiagaraProgressError extends Schema.TaggedError<NiagaraProgressError>()(
 	"NiagaraProgressError",
 	{ message: Schema.String }
 ) {}

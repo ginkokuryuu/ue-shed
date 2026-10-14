@@ -6,7 +6,7 @@ import { ScenarioDocument } from "./schema.js";
 const maximumBytes = 4 * 1024 * 1024;
 const documentJson = Schema.fromJsonString(ScenarioDocument);
 
-export class ScenarioDocumentFileError extends Schema.TaggedErrorClass<ScenarioDocumentFileError>()(
+export class ScenarioDocumentFileError extends Schema.TaggedError<ScenarioDocumentFileError>()(
 	"ScenarioDocumentFileError",
 	{ message: Schema.String, path: Schema.String, recovery: Schema.String }
 ) {}

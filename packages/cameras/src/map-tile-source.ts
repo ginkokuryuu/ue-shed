@@ -79,7 +79,7 @@ export interface MapTileSourceLayout {
 	readonly sources: Iterable<MapTileSource>;
 }
 
-export class MapTileSourceError extends Schema.TaggedErrorClass<MapTileSourceError>()(
+export class MapTileSourceError extends Schema.TaggedError<MapTileSourceError>()(
 	"MapTileSourceError",
 	{
 		code: Schema.Literals(["invalid_grid", "invalid_source", "source_limit_exceeded"]),

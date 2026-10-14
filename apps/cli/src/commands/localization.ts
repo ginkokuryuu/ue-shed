@@ -1,6 +1,6 @@
 import { Effect, Option } from "effect";
 import { CliCommandError } from "../cli-runtime.js";
-import { Argument, Command, Flag } from "effect/unstable/cli";
+import { Argument, Command, Flag } from "effect/cli";
 import {
 	LocalizationCheckId,
 	LocalizationGateCheck,
@@ -34,14 +34,14 @@ export const localizationCommand = Command.make("loc").pipe(
 		Command.make(
 			"run",
 			{
-				operation: Argument.choice("operation", LocalizationOperation.literals),
-				projectRoot: Argument.string("project-root"),
-				target: Flag.string("target"),
-				engineRoot: Flag.string("engine-root").pipe(Flag.optional),
-				carry: Flag.string("carry").pipe(Flag.optional),
-				plan: Flag.boolean("plan"),
-				json: Flag.boolean("json"),
-				timeout: Flag.integer("timeout").pipe(Flag.withDefault(1800))
+				operation: Argument.Literals("operation", LocalizationOperation.literals),
+				projectRoot: Argument.String("project-root"),
+				target: Flag.String("target"),
+				engineRoot: Flag.String("engine-root").pipe(Flag.optional),
+				carry: Flag.String("carry").pipe(Flag.optional),
+				plan: Flag.Boolean("plan").pipe(Flag.withDefault(false)),
+				json: Flag.Boolean("json").pipe(Flag.withDefault(false)),
+				timeout: Flag.Int("timeout").pipe(Flag.withDefault(1800))
 			},
 			({ operation, projectRoot, target, engineRoot, carry, plan, json, timeout }) => {
 				const command = {
@@ -78,14 +78,14 @@ export const localizationCommand = Command.make("loc").pipe(
 		Command.make(
 			"apply",
 			{
-				projectRoot: Argument.string("project-root"),
-				changes: Flag.string("changes"),
-				skipStale: Flag.boolean("skip-stale"),
-				review: Flag.boolean("review"),
-				sync: Flag.boolean("sync"),
-				engineRoot: Flag.string("engine-root").pipe(Flag.optional),
-				json: Flag.boolean("json"),
-				timeout: Flag.integer("timeout").pipe(Flag.withDefault(1800))
+				projectRoot: Argument.String("project-root"),
+				changes: Flag.String("changes"),
+				skipStale: Flag.Boolean("skip-stale").pipe(Flag.withDefault(false)),
+				review: Flag.Boolean("review").pipe(Flag.withDefault(false)),
+				sync: Flag.Boolean("sync").pipe(Flag.withDefault(false)),
+				engineRoot: Flag.String("engine-root").pipe(Flag.optional),
+				json: Flag.Boolean("json").pipe(Flag.withDefault(false)),
+				timeout: Flag.Int("timeout").pipe(Flag.withDefault(1800))
 			},
 			({ projectRoot, changes, skipStale, review, sync, engineRoot, json, timeout }) => {
 				const command = {
@@ -113,11 +113,11 @@ export const localizationCommand = Command.make("loc").pipe(
 		Command.make(
 			"report",
 			{
-				projectRoot: Argument.string("project-root"),
-				target: Flag.string("target"),
-				baseline: Flag.string("baseline").pipe(Flag.optional),
-				saveBaseline: Flag.string("save-baseline").pipe(Flag.optional),
-				reader: Flag.string("reader").pipe(Flag.optional)
+				projectRoot: Argument.String("project-root"),
+				target: Flag.String("target"),
+				baseline: Flag.String("baseline").pipe(Flag.optional),
+				saveBaseline: Flag.String("save-baseline").pipe(Flag.optional),
+				reader: Flag.String("reader").pipe(Flag.optional)
 			},
 			({ projectRoot, target, baseline, saveBaseline, reader }) =>
 				runLocalizationReport({
@@ -136,12 +136,12 @@ export const localizationCommand = Command.make("loc").pipe(
 		Command.make(
 			"check",
 			{
-				projectRoot: Argument.string("project-root"),
-				target: Flag.string("target"),
-				culture: Flag.string("culture").pipe(Flag.optional),
-				checks: Flag.choice("check", LocalizationCheckId.literals).pipe(Flag.atMost(64)),
-				changes: Flag.string("changes").pipe(Flag.optional),
-				reader: Flag.string("reader").pipe(Flag.optional)
+				projectRoot: Argument.String("project-root"),
+				target: Flag.String("target"),
+				culture: Flag.String("culture").pipe(Flag.optional),
+				checks: Flag.Literals("check", LocalizationCheckId.literals).pipe(Flag.atMost(64)),
+				changes: Flag.String("changes").pipe(Flag.optional),
+				reader: Flag.String("reader").pipe(Flag.optional)
 			},
 			({ projectRoot, target, culture, checks, changes, reader }) =>
 				runLocalizationCheck({
@@ -161,15 +161,20 @@ export const localizationCommand = Command.make("loc").pipe(
 		Command.make(
 			"review",
 			{
-				action: Argument.choice("action", ["set", "clear", "accept", "unaccept"] as const),
-				projectRoot: Argument.string("project-root"),
-				target: Flag.string("target"),
-				culture: Flag.string("culture"),
-				lines: Flag.string("line").pipe(Flag.between(1, 500)),
-				flags: Flag.choice("flag", LocalizationReviewFlag.literals).pipe(Flag.atMost(4)),
-				check: Flag.string("check").pipe(Flag.optional),
-				by: Flag.string("by").pipe(Flag.withDefault("ue-shed-cli")),
-				reviewFile: Flag.string("review-file").pipe(Flag.optional)
+				action: Argument.Literals("action", [
+					"set",
+					"clear",
+					"accept",
+					"unaccept"
+				] as const),
+				projectRoot: Argument.String("project-root"),
+				target: Flag.String("target"),
+				culture: Flag.String("culture"),
+				lines: Flag.String("line").pipe(Flag.between(1, 500)),
+				flags: Flag.Literals("flag", LocalizationReviewFlag.literals).pipe(Flag.atMost(4)),
+				check: Flag.String("check").pipe(Flag.optional),
+				by: Flag.String("by").pipe(Flag.withDefault("ue-shed-cli")),
+				reviewFile: Flag.String("review-file").pipe(Flag.optional)
 			},
 			({ action, projectRoot, target, culture, lines, flags, check, by, reviewFile }) =>
 				runLocalizationReview({
@@ -191,7 +196,7 @@ export const localizationCommand = Command.make("loc").pipe(
 		),
 		Command.make(
 			"targets",
-			{ projectRoot: Argument.string("project-root") },
+			{ projectRoot: Argument.String("project-root") },
 			({ projectRoot }) =>
 				runLocalizationTargets({ _tag: "LocalizationTargets", projectRoot })
 		).pipe(
@@ -202,17 +207,19 @@ export const localizationCommand = Command.make("loc").pipe(
 		Command.make(
 			"export",
 			{
-				projectRoot: Argument.string("project-root"),
-				target: Flag.string("target"),
-				output: Flag.string("output"),
-				reader: Flag.string("reader").pipe(Flag.optional),
-				review: Flag.choice("review", LocalizationReviewLens.literals).pipe(Flag.optional),
-				keyChanged: Flag.boolean("key-changed"),
-				culture: Flag.string("culture").pipe(Flag.optional),
-				state: Flag.choice("state", LocalizationState.literals).pipe(Flag.optional),
-				kinds: Flag.choice("kind", TextOriginKind.literals).pipe(Flag.atMost(5)),
-				path: Flag.string("path").pipe(Flag.optional),
-				files: Flag.string("files").pipe(Flag.optional),
+				projectRoot: Argument.String("project-root"),
+				target: Flag.String("target"),
+				output: Flag.String("output"),
+				reader: Flag.String("reader").pipe(Flag.optional),
+				review: Flag.Literals("review", LocalizationReviewLens.literals).pipe(
+					Flag.optional
+				),
+				keyChanged: Flag.Boolean("key-changed").pipe(Flag.withDefault(false)),
+				culture: Flag.String("culture").pipe(Flag.optional),
+				state: Flag.Literals("state", LocalizationState.literals).pipe(Flag.optional),
+				kinds: Flag.Literals("kind", TextOriginKind.literals).pipe(Flag.atMost(5)),
+				path: Flag.String("path").pipe(Flag.optional),
+				files: Flag.String("files").pipe(Flag.optional),
 				...filterFlags()
 			},
 			({
@@ -251,17 +258,17 @@ export const localizationCommand = Command.make("loc").pipe(
 		Command.make(
 			"gate",
 			{
-				projectRoot: Argument.string("project-root"),
-				files: Flag.string("files"),
-				targets: Flag.string("target").pipe(Flag.atMost(50)),
-				failOn: Flag.choice("fail-on", LocalizationGateCheck.literals).pipe(
+				projectRoot: Argument.String("project-root"),
+				files: Flag.String("files"),
+				targets: Flag.String("target").pipe(Flag.atMost(50)),
+				failOn: Flag.Literals("fail-on", LocalizationGateCheck.literals).pipe(
 					Flag.atMost(LocalizationGateCheck.literals.length)
 				),
-				warnOn: Flag.choice("warn-on", LocalizationGateCheck.literals).pipe(
+				warnOn: Flag.Literals("warn-on", LocalizationGateCheck.literals).pipe(
 					Flag.atMost(LocalizationGateCheck.literals.length)
 				),
-				summary: Flag.boolean("summary"),
-				reader: Flag.string("reader").pipe(Flag.optional)
+				summary: Flag.Boolean("summary").pipe(Flag.withDefault(false)),
+				reader: Flag.String("reader").pipe(Flag.optional)
 			},
 			({ projectRoot, files, targets, failOn, warnOn, summary, reader }) =>
 				runLocalizationGate({
@@ -282,11 +289,13 @@ export const localizationCommand = Command.make("loc").pipe(
 		Command.make(
 			"status",
 			{
-				projectRoot: Argument.string("project-root"),
-				target: Flag.string("target"),
-				reader: Flag.string("reader").pipe(Flag.optional),
-				review: Flag.choice("review", LocalizationReviewLens.literals).pipe(Flag.optional),
-				keyChanged: Flag.boolean("key-changed"),
+				projectRoot: Argument.String("project-root"),
+				target: Flag.String("target"),
+				reader: Flag.String("reader").pipe(Flag.optional),
+				review: Flag.Literals("review", LocalizationReviewLens.literals).pipe(
+					Flag.optional
+				),
+				keyChanged: Flag.Boolean("key-changed").pipe(Flag.withDefault(false)),
 				...localizationFlags()
 			},
 			({

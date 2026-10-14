@@ -17,7 +17,7 @@ import type { CliCommand } from "../command-model.js";
 
 type LocalizationReviewCommand = Extract<CliCommand, { readonly _tag: "LocalizationReview" }>;
 
-class LocalizationReviewCommandError extends Schema.TaggedErrorClass<LocalizationReviewCommandError>()(
+class LocalizationReviewCommandError extends Schema.TaggedError<LocalizationReviewCommandError>()(
 	"LocalizationReviewCommandError",
 	{
 		code: Schema.Literals([

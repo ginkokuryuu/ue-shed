@@ -44,7 +44,7 @@ export const UnrealProjectLaunchResult = Schema.Struct({
 });
 export type UnrealProjectLaunchResult = typeof UnrealProjectLaunchResult.Type;
 
-export class UnrealProjectLaunchError extends Schema.TaggedErrorClass<UnrealProjectLaunchError>()(
+export class UnrealProjectLaunchError extends Schema.TaggedError<UnrealProjectLaunchError>()(
 	"UnrealProjectLaunchError",
 	{
 		code: Schema.Literals([

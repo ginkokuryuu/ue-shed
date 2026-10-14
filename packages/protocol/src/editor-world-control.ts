@@ -3,15 +3,15 @@ import { Schema } from "effect";
 const PackagePath = Schema.String.check(
 	Schema.isMinLength(1),
 	Schema.isMaxLength(1_024),
-	Schema.isPattern(/^\/[A-Za-z0-9_./-]+$/)
+	Schema.isPattern(/^\/[A-Za-z0-9_./-]+$/u)
 );
 
-const GameMapPath = PackagePath.check(Schema.isPattern(/^\/Game\/[A-Za-z0-9_./-]+$/));
+const GameMapPath = PackagePath.check(Schema.isPattern(/^\/Game\/[A-Za-z0-9_./-]+$/u));
 
 const OperationId = Schema.String.check(
 	Schema.isMinLength(1),
 	Schema.isMaxLength(128),
-	Schema.isPattern(/^[A-Za-z0-9][A-Za-z0-9._-]*$/)
+	Schema.isPattern(/^[A-Za-z0-9][A-Za-z0-9._-]*$/u)
 ).pipe(Schema.brand("EditorWorldOperationId"));
 
 export const EditorWorldControlContract = Schema.Struct({

@@ -1,5 +1,8 @@
 # `@ue-shed/project-custodian`
 
+The application must provide `effect@^4.0.0` as a peer dependency. Reuse one compatible
+Effect installation across the application and UE Shed libraries.
+
 Headless discovery, policy, sizing, and guarded cleanup for regeneratable Unreal project and engine
 storage. Scans and plans are read-only. Mutation requires a durable proposal containing exact target
 IDs, its generated approval phrase, a fresh disk revalidation, and a stopped Unreal Editor. Cleanup

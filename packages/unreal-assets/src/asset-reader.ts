@@ -130,30 +130,27 @@ export {
 } from "@ue-shed/protocol";
 export type { SavedProperty, SavedPropertyValue } from "@ue-shed/protocol";
 
-export class AssetReaderError extends Schema.TaggedErrorClass<AssetReaderError>()(
-	"AssetReaderError",
-	{
-		code: Schema.optional(Schema.String),
-		kind: Schema.Literals(["timeout", "process", "contract", "discovery", "resource_limit"]),
-		operation: Schema.Literals([
-			"authoring",
-			"blueprint",
-			"level_sequence",
-			"catalog",
-			"extract_text",
-			"extract_text_packages",
-			"extract_texture",
-			"inspect",
-			"discovery",
-			"scan",
-			"saved_world"
-		]),
-		message: Schema.String,
-		retrySafe: Schema.Boolean,
-		path: Schema.optional(Schema.String),
-		exitCode: Schema.optional(Schema.Number)
-	}
-) {}
+export class AssetReaderError extends Schema.TaggedError<AssetReaderError>()("AssetReaderError", {
+	code: Schema.optional(Schema.String),
+	kind: Schema.Literals(["timeout", "process", "contract", "discovery", "resource_limit"]),
+	operation: Schema.Literals([
+		"authoring",
+		"blueprint",
+		"level_sequence",
+		"catalog",
+		"extract_text",
+		"extract_text_packages",
+		"extract_texture",
+		"inspect",
+		"discovery",
+		"scan",
+		"saved_world"
+	]),
+	message: Schema.String,
+	retrySafe: Schema.Boolean,
+	path: Schema.optional(Schema.String),
+	exitCode: Schema.optional(Schema.Number)
+}) {}
 
 export interface AssetReaderOptions {
 	readonly assetPath: string;
@@ -802,11 +799,11 @@ export function assetReaderLayer(
 	);
 }
 
-const readerExecutable = Config.option(Config.string("UE_SHED_UASSET_EXECUTABLE"));
-const readerTimeout = Config.duration("UE_SHED_UASSET_TIMEOUT").pipe(
+const readerExecutable = Config.option(Config.String("UE_SHED_UASSET_EXECUTABLE"));
+const readerTimeout = Config.Duration("UE_SHED_UASSET_TIMEOUT").pipe(
 	Config.withDefault(Duration.millis(DEFAULT_TIMEOUT_MS))
 );
-const readerCatalogTimeout = Config.duration("UE_SHED_UASSET_CATALOG_TIMEOUT").pipe(
+const readerCatalogTimeout = Config.Duration("UE_SHED_UASSET_CATALOG_TIMEOUT").pipe(
 	Config.withDefault(Duration.millis(DEFAULT_CATALOG_TIMEOUT_MS))
 );
 

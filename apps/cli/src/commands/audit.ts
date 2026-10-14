@@ -1,12 +1,12 @@
-import { Argument, Command, Flag } from "effect/unstable/cli";
+import { Argument, Command, Flag } from "effect/cli";
 import { runAuditTextures } from "../workflows/audit.js";
 import { optionalFlag, readerFields } from "./options.js";
 
 const auditTexturesCommand = Command.make(
 	"textures",
 	{
-		projectRoot: Argument.string("project-root"),
-		ruleFile: Flag.string("rules"),
+		projectRoot: Argument.String("project-root"),
+		ruleFile: Flag.String("rules"),
 		reader: optionalFlag("reader")
 	},
 	({ projectRoot, ruleFile, reader }) =>

@@ -12,7 +12,7 @@ import { Clock, Context, Duration, Effect, Layer, Schedule, Schema } from "effec
 const coreObjectPath = "/Script/UEShedCore.Default__UEShedCoreLibrary";
 const capability = "editor.world-control.v1";
 
-export class EditorWorldControlError extends Schema.TaggedErrorClass<EditorWorldControlError>()(
+export class EditorWorldControlError extends Schema.TaggedError<EditorWorldControlError>()(
 	"EditorWorldControlError",
 	{
 		code: Schema.Literals([

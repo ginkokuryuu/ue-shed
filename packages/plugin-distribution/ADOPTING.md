@@ -1,7 +1,8 @@
 # Adopt plugin distribution into a trusted host
 
 Read [`adoption.manifest.json`](adoption.manifest.json) first. Install one exact synchronized UE Shed
-suite version and compose the package only in a trusted Node process.
+suite version and supply one application-owned `effect@^4.0.0` installation satisfying the package's
+peer dependency. Compose the package only in a trusted Node process.
 
 1. Choose a caller-owned absolute cache root and its retention policy.
 2. Choose source or a compiled variant explicitly. A compiled request must use the host editor's

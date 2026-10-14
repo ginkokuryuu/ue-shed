@@ -14,7 +14,10 @@ import { CliRuntime } from "./cli-runtime.js";
 it.effect("loc run --plan returns validated recipe writes without a commandlet or reader", () =>
 	Effect.gen(function* () {
 		const root = yield* Effect.promise(() => mkdtemp(join(tmpdir(), "ue-shed-loc-run-cli-")));
-		try {
+		yield* Effect.addFinalizer(() =>
+			Effect.promise(() => rm(root, { recursive: true, force: true }))
+		);
+		{
 			const project = join(root, "project");
 			const engine = join(root, "engine");
 			yield* Effect.promise(async () => {
@@ -55,8 +58,6 @@ it.effect("loc run --plan returns validated recipe writes without a commandlet o
 			expect(plan.files).toHaveLength(13);
 			expect(yield* Ref.get(errors)).toBe("");
 			expect(yield* Ref.get(exit)).toBe(0);
-		} finally {
-			yield* Effect.promise(() => rm(root, { recursive: true, force: true }));
 		}
 	})
 );

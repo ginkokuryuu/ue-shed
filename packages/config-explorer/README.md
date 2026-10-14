@@ -1,5 +1,8 @@
 # Config Explorer
 
+The application must provide `effect@^4.0.0` as a peer dependency. Reuse one compatible
+Effect installation across the application and UE Shed libraries.
+
 `@ue-shed/config-explorer` is the headless Config Explorer library. It explains the effective
 saved-source value of one Unreal `.ini` section/key for an explicit project and platform, with an
 ordered contribution timeline and complete layer coverage.

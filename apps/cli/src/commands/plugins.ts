@@ -1,4 +1,4 @@
-import { Argument, Command, Flag } from "effect/unstable/cli";
+import { Argument, Command, Flag } from "effect/cli";
 import { Effect, Option } from "effect";
 import {
 	EngineBuildId,
@@ -23,21 +23,21 @@ import {
 import { optionalFlag, optionalValue } from "./options.js";
 import { positiveIntegerFlag } from "./options.js";
 
-const pluginManifestArgument = Argument.string("manifest").pipe(Argument.optional);
+const pluginManifestArgument = Argument.String("manifest").pipe(Argument.optional);
 const pluginManifestFlag = optionalFlag("manifest");
 const pluginArtifactFlag = optionalFlag("artifact");
 const pluginProjectFlag = optionalFlag("project");
-const pluginReleaseFlag = Flag.string("release").pipe(Flag.withSchema(ReleaseVersion));
-const pluginUnrealFlag = Flag.string("unreal").pipe(Flag.withSchema(UnrealVersion), Flag.optional);
-const pluginBuildIdFlag = Flag.string("build-id").pipe(
+const pluginReleaseFlag = Flag.String("release").pipe(Flag.withSchema(ReleaseVersion));
+const pluginUnrealFlag = Flag.String("unreal").pipe(Flag.withSchema(UnrealVersion), Flag.optional);
+const pluginBuildIdFlag = Flag.String("build-id").pipe(
 	Flag.withSchema(EngineBuildId),
 	Flag.optional
 );
-const pluginEngineSourceCommitFlag = Flag.string("engine-source-commit").pipe(
+const pluginEngineSourceCommitFlag = Flag.String("engine-source-commit").pipe(
 	Flag.withSchema(GitCommit),
 	Flag.optional
 );
-const pluginVariantFlag = Flag.string("variant").pipe(
+const pluginVariantFlag = Flag.String("variant").pipe(
 	Flag.withSchema(PluginVariantIdentity),
 	Flag.optional
 );
@@ -115,9 +115,9 @@ const pluginsVerifyCommand = Command.make(
 const pluginsInstallCommand = Command.make(
 	"install",
 	{
-		project: Argument.string("project").pipe(Argument.optional),
+		project: Argument.String("project").pipe(Argument.optional),
 		projectFlag: pluginProjectFlag,
-		manifest: Flag.string("manifest"),
+		manifest: Flag.String("manifest"),
 		artifact: pluginArtifactFlag
 	},
 	({ project, projectFlag, manifest, artifact }) =>
@@ -140,27 +140,27 @@ const pluginsInstallCommand = Command.make(
 const pluginsBuildCommand = Command.make(
 	"build",
 	{
-		architecture: Flag.string("architecture").pipe(Flag.withDefault("x64")),
-		buildId: Flag.string("build-id"),
-		compiler: Flag.string("compiler"),
-		compilerVersion: Flag.string("compiler-version"),
-		engineRoot: Flag.string("engine"),
+		architecture: Flag.String("architecture").pipe(Flag.withDefault("x64")),
+		buildId: Flag.String("build-id"),
+		compiler: Flag.String("compiler"),
+		compilerVersion: Flag.String("compiler-version"),
+		engineRoot: Flag.String("engine"),
 		engineSourceCommit: pluginEngineSourceCommitFlag,
 		maximumBuildSeconds: positiveIntegerFlag(
 			"maximum-build-seconds",
 			"maximum build seconds must be positive"
 		).pipe(Flag.withDefault(7_200)),
-		outputDirectory: Flag.string("output"),
-		platform: Flag.string("platform").pipe(Flag.withDefault("Win64")),
-		plugins: Flag.string("plugin").pipe(Flag.atLeast(1)),
-		sourceArtifactDigest: Flag.string("source-artifact-digest"),
-		sourceArtifactPath: Flag.string("source-artifact"),
-		sourceManifestDigest: Flag.string("source-manifest-digest"),
-		sourceManifestPath: Flag.string("source-manifest"),
-		toolchain: Flag.string("toolchain"),
-		toolchainVersion: Flag.string("toolchain-version"),
+		outputDirectory: Flag.String("output"),
+		platform: Flag.String("platform").pipe(Flag.withDefault("Win64")),
+		plugins: Flag.String("plugin").pipe(Flag.atLeast(1)),
+		sourceArtifactDigest: Flag.String("source-artifact-digest"),
+		sourceArtifactPath: Flag.String("source-artifact"),
+		sourceManifestDigest: Flag.String("source-manifest-digest"),
+		sourceManifestPath: Flag.String("source-manifest"),
+		toolchain: Flag.String("toolchain"),
+		toolchainVersion: Flag.String("toolchain-version"),
 		targetTriple: optionalFlag("target-triple"),
-		unrealVersion: Flag.string("unreal")
+		unrealVersion: Flag.String("unreal")
 	},
 	(options) => {
 		const engineSourceCommit = optionalValue(options.engineSourceCommit);
@@ -192,24 +192,24 @@ const pluginsBuildCommand = Command.make(
 const pluginsCacheInstallCommand = Command.make(
 	"install",
 	{
-		architecture: Flag.string("architecture").pipe(
+		architecture: Flag.String("architecture").pipe(
 			Flag.withSchema(UnrealArchitecture),
 			Flag.withDefault(UnrealArchitecture.make("x64"))
 		),
 		artifactDigest: optionalFlag("artifact-digest"),
 		buildId: pluginBuildIdFlag,
-		cache: Flag.string("cache"),
-		cacheOnly: Flag.boolean("cache-only"),
+		cache: Flag.String("cache"),
+		cacheOnly: Flag.Boolean("cache-only").pipe(Flag.withDefault(false)),
 		engineSourceCommit: pluginEngineSourceCommitFlag,
-		kind: Flag.choice("kind", ["source", "compiled"]).pipe(Flag.withDefault("source")),
+		kind: Flag.Literals("kind", ["source", "compiled"]).pipe(Flag.withDefault("source")),
 		manifestDigest: optionalFlag("manifest-digest"),
-		platform: Flag.string("platform").pipe(
+		platform: Flag.String("platform").pipe(
 			Flag.withSchema(UnrealPlatform),
 			Flag.withDefault(UnrealPlatform.make("Win64"))
 		),
-		plugins: Flag.string("plugin").pipe(Flag.atLeast(1)),
+		plugins: Flag.String("plugin").pipe(Flag.atLeast(1)),
 		release: pluginReleaseFlag,
-		source: Flag.string("source").pipe(Flag.withDefault(".")),
+		source: Flag.String("source").pipe(Flag.withDefault(".")),
 		unreal: pluginUnrealFlag
 	},
 	({
@@ -293,13 +293,13 @@ const pluginsCacheInstallCommand = Command.make(
 		})
 ).pipe(Command.withDescription("Install an exact plugin release into a host cache."));
 
-const pluginsCacheListCommand = Command.make("list", { cache: Flag.string("cache") }, ({ cache }) =>
+const pluginsCacheListCommand = Command.make("list", { cache: Flag.String("cache") }, ({ cache }) =>
 	runPluginsCacheList({ _tag: "PluginsCacheList", cacheRoot: cache })
 ).pipe(Command.withDescription("List verified releases in a plugin cache."));
 
 const pluginsCacheVerifyCommand = Command.make(
 	"verify",
-	{ cache: Flag.string("cache"), release: pluginReleaseFlag, variant: pluginVariantFlag },
+	{ cache: Flag.String("cache"), release: pluginReleaseFlag, variant: pluginVariantFlag },
 	({ cache, release, variant }) =>
 		runPluginsCacheVerify({
 			_tag: "PluginsCacheVerify",
@@ -313,7 +313,7 @@ const pluginsCacheVerifyCommand = Command.make(
 
 const pluginsPruneCommand = Command.make(
 	"prune",
-	{ cache: Flag.string("cache"), release: pluginReleaseFlag, variant: pluginVariantFlag },
+	{ cache: Flag.String("cache"), release: pluginReleaseFlag, variant: pluginVariantFlag },
 	({ cache, release, variant }) =>
 		runPluginsPrune({
 			_tag: "PluginsPrune",

@@ -8,7 +8,7 @@ import {
 	type ReviewViewDefinition
 } from "./review-schema.js";
 
-export class ReviewViewDefinitionError extends Schema.TaggedErrorClass<ReviewViewDefinitionError>()(
+export class ReviewViewDefinitionError extends Schema.TaggedError<ReviewViewDefinitionError>()(
 	"ReviewViewDefinitionError",
 	{
 		message: Schema.String,

@@ -16,10 +16,11 @@
 	"packageGraph": {
 		"dependencies": {
 			"@ue-shed/protocol": "package.json#dependencies",
-			"effect": "package.json#dependencies",
 			"unreal-rc": "package.json#dependencies"
 		},
-		"peerDependencies": {},
+		"peerDependencies": {
+			"effect": "^4.0.0"
+		},
 		"runtimeProviders": [
 			{
 				"capability": "producer-capability-negotiation",

@@ -1,7 +1,7 @@
 import { investigationsCommand } from "./commands/investigation.js";
 import { NodeServices } from "@effect/platform-node";
 import { CURRENT_PROTOCOL_VERSION } from "@ue-shed/protocol";
-import { CliError, CliOutput, Command } from "effect/unstable/cli";
+import { CliError, CliOutput, Command } from "effect/cli";
 import { Cause, Console, Effect, Exit, Layer, Option } from "effect";
 import { CliCommandError, CliRuntime } from "./cli-runtime.js";
 import {

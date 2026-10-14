@@ -1,5 +1,8 @@
 # `@ue-shed/blueprints`
 
+The application must provide `effect@^4.0.0` as a peer dependency. Reuse one compatible
+Effect installation across the application and UE Shed libraries.
+
 Headless graph navigation, search, reference layout and display metadata for saved Blueprint
 schema-2 projections. The package has no DOM, Solid, StyleX, Electron, filesystem or Unreal dependency.
 The maintained viewer stays in UE Shed Workbench; any host can consume these ordinary pure functions.

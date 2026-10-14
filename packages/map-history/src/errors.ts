@@ -19,7 +19,7 @@ export const MapHistoryErrorKind = Schema.Literals([
 ]);
 export type MapHistoryErrorKind = Schema.Schema.Type<typeof MapHistoryErrorKind>;
 
-export class MapHistoryError extends Schema.TaggedErrorClass<MapHistoryError>()("MapHistoryError", {
+export class MapHistoryError extends Schema.TaggedError<MapHistoryError>()("MapHistoryError", {
 	kind: MapHistoryErrorKind,
 	message: Schema.NonEmptyString,
 	recovery: Schema.NonEmptyString,

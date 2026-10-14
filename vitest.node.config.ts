@@ -2,6 +2,7 @@ import { configDefaults, defineProject } from "vitest/config";
 
 export default defineProject({
 	test: {
+		maxWorkers: 4,
 		environment: "node",
 		exclude: [...configDefaults.exclude, "**/*.component.test.tsx", "apps/workbench/e2e/**"],
 		include: [

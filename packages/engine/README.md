@@ -1,5 +1,8 @@
 # `@ue-shed/engine`
 
+The application must provide `effect@^4.0.0` as a peer dependency. Reuse one compatible
+Effect installation across the application and UE Shed libraries.
+
 Headless Unreal Engine installation discovery, project launch, editor readiness, Play In Editor,
 and editor-world control. The package locates an engine from an explicit root or a `.uproject`
 association, launches without a shell, and negotiates separately advertised `UEShedCore`

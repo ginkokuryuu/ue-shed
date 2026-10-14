@@ -86,7 +86,7 @@ export const LocalizationRunRequest = Schema.Struct({
 	)
 });
 export type LocalizationRunRequest = typeof LocalizationRunRequest.Type;
-export class LocalizationOperationError extends Schema.TaggedErrorClass<LocalizationOperationError>()(
+export class LocalizationOperationError extends Schema.TaggedError<LocalizationOperationError>()(
 	"LocalizationOperationError",
 	{
 		code: Schema.Literals([

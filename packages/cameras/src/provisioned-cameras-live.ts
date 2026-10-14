@@ -14,7 +14,7 @@ const cameraLibraryPath = "/Script/UEShedCameras.Default__UEShedCameraLibrary";
 const positiveWidth = Schema.Int.check(Schema.isBetween({ minimum: 64, maximum: 2560 }));
 const positiveHeight = Schema.Int.check(Schema.isBetween({ minimum: 64, maximum: 1440 }));
 
-export class ProvisionedCameraError extends Schema.TaggedErrorClass<ProvisionedCameraError>()(
+export class ProvisionedCameraError extends Schema.TaggedError<ProvisionedCameraError>()(
 	"ProvisionedCameraError",
 	{
 		message: Schema.String,
@@ -71,7 +71,7 @@ export const ProvisionedCameraRequest = Schema.Struct({
 	expectedMapPath: Schema.String.check(
 		Schema.isMinLength(1),
 		Schema.isMaxLength(1_024),
-		Schema.isPattern(/^\/[A-Za-z0-9_./-]+$/)
+		Schema.isPattern(/^\/[A-Za-z0-9_./-]+$/u)
 	),
 	previewFps: Schema.Int.check(Schema.isBetween({ minimum: 1, maximum: 10 })),
 	/** Reveal child actors of editor-only owners in the previews, as renderer.editorPreviews does. */

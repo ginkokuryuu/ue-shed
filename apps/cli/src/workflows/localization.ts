@@ -210,7 +210,7 @@ export const runLocalizationStatus = Effect.fn("Cli.workflow.localization_status
 		)
 );
 
-class LocalizationExportError extends Schema.TaggedErrorClass<LocalizationExportError>()(
+class LocalizationExportError extends Schema.TaggedError<LocalizationExportError>()(
 	"LocalizationExportError",
 	{
 		code: Schema.Literals(["invalid_destination", "destination_exists", "unwritable"]),
