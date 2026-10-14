@@ -1504,7 +1504,7 @@ export function columnarTextCorpusQuery(
 					recovery:
 						"Load and join the selected target before querying its localization state."
 				});
-			return Array.from(matching(request), (row) => data.line(row));
+			return data.lines(matching(request));
 		},
 		export: (request) => {
 			const rows = matching(request),

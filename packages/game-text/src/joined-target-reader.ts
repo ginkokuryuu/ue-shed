@@ -223,6 +223,14 @@ function occurrenceUnitId(
 }
 import { relative, resolve } from "node:path";
 
+type EvidenceEntry = Effect.Success<
+	ReturnType<typeof decodeLocalizationSnapshot>
+>["entries"][number];
+/** The largest range decodeLocalizationSnapshot accepts. */
+const MAX_EVIDENCE_RUN = 10000;
+/** Prefetch runs read across gaps up to this many entries instead of starting a new run. */
+const MAX_EVIDENCE_GAP = 64;
+
 /** Bounded hydration uses input row references, retaining all original metadata and duplicates. */
 export const hydrateJoinedTarget = Effect.fn("JoinedTarget.page")(function* (
 	joined: JoinedTargetReader,
@@ -272,7 +280,38 @@ export const hydrateJoinedTarget = Effect.fn("JoinedTarget.page")(function* (
 		}
 		return value;
 	});
+	const prefetched = new Map<string, Map<number, EvidenceEntry>>();
+	// Multi-line pages decode each evidence file's rows in sorted runs, once per page; decoding
+	// row by row re-reads the file's metadata and string blocks for every entry of every culture.
+	const prefetch = Effect.fn("JoinedTarget.pagePrefetch")(function* (
+		name: string,
+		rows: readonly number[]
+	) {
+		const sorted = [...new Set(rows)].sort((a, b) => a - b),
+			byRow = new Map<number, EvidenceEntry>();
+		for (let index = 0; index < sorted.length; ) {
+			const first = sorted[index]!;
+			let last = index;
+			while (
+				last + 1 < sorted.length &&
+				sorted[last + 1]! - first < MAX_EVIDENCE_RUN &&
+				sorted[last + 1]! - sorted[last]! <= MAX_EVIDENCE_GAP
+			)
+				last++;
+			const run = yield* decodeLocalizationSnapshot(
+				yield* file(name),
+				first,
+				sorted[last]! - first + 1
+			);
+			for (let picked = index; picked <= last; picked++)
+				byRow.set(sorted[picked]!, run.entries[sorted[picked]! - first]!);
+			index = last + 1;
+		}
+		prefetched.set(name, byRow);
+	});
 	const entry = Effect.fn("JoinedTarget.pageEntry")(function* (name: string, row: number) {
+		const ready = prefetched.get(name)?.get(row);
+		if (ready) return ready;
 		const block = row,
 			key = `${name}:${block}`;
 		let page = entryPages.get(key);
@@ -327,6 +366,27 @@ export const hydrateJoinedTarget = Effect.fn("JoinedTarget.page")(function* (
 		])
 			values[field] = yield* u32(layer, `c${ci}.${field}`);
 		marks.push(values);
+	}
+	if (end - start > 1) {
+		const wanted = new Map<string, number[]>();
+		const want = (name: string, row: number) => {
+			const rows = wanted.get(name) ?? [];
+			rows.push(row);
+			wanted.set(name, rows);
+		};
+		for (let row = start; row < end; row++) {
+			for (let i = columns.manifest_start![row]!; i < columns.manifest_end![row]!; i++)
+				want(target.outputPaths.manifest!, manifestRows[i]!);
+			for (let ci = 0; ci < target.cultures.length; ci++) {
+				const culture = target.cultures[ci]!,
+					values = marks[ci]!;
+				if (values.archive![row])
+					want(target.outputPaths.archives[culture]!, values.archive![row]! - 1);
+				if (values.po![row])
+					want(target.outputPaths.portableObjects[culture]!, values.po![row]! - 1);
+			}
+		}
+		for (const [name, rows] of wanted) yield* prefetch(name, rows);
 	}
 	const lines: LocalizationLine[] = [];
 	for (let row = start; row < end; row++) {
