@@ -2,6 +2,7 @@ import { Effect, Schema } from "effect";
 import {
 	SavedAssetPackageTextRecord,
 	SavedAssetPackageTextEvent,
+	type SavedAssetMissingGatherableText,
 	type SavedAssetTextCoverageGap,
 	type SavedAssetTextOccurrence
 } from "@ue-shed/unreal-assets";
@@ -42,7 +43,11 @@ const stringFields = {
 	"occurrence.class": "paths",
 	"occurrence.row": "paths",
 	"gap.object": "paths",
-	"gap.property": "paths"
+	"gap.property": "paths",
+	"missing.namespace": "identity",
+	"missing.key": "identity",
+	"missing.source": "source",
+	"missing.site": "paths"
 } as const;
 const fieldDomains = new Map<string, string>(Object.entries(stringFields));
 const numberFields = [
@@ -53,6 +58,10 @@ const numberFields = [
 	"package.occurrence_start",
 	"package.gap_start",
 	...packageTextGapReasons.map((reason) => `package.gap${packageTextGapReasons.indexOf(reason)}`),
+	"package.gather",
+	"package.gather_sites",
+	"package.gather_missing",
+	"package.missing_start",
 	"occurrence.identity",
 	"occurrence.location",
 	"occurrence.editable",
@@ -75,7 +84,8 @@ export function packageTextColumns(records: readonly PackageTextStored[]) {
 	const string = (field: keyof typeof stringFields, value: string) =>
 		number(field, tables.get(stringFields[field])!.intern(value));
 	let occurrenceCount = 0,
-		gapCount = 0;
+		gapCount = 0,
+		missingCount = 0;
 	for (const stored of records) {
 		const record = stored.evidence;
 		string("package.path", stored.path);
@@ -92,6 +102,11 @@ export function packageTextColumns(records: readonly PackageTextStored[]) {
 		);
 		number("package.occurrence_start", occurrenceCount);
 		number("package.gap_start", gapCount);
+		number("package.missing_start", missingCount);
+		const gather = record.event === "text_package_record" ? record.gatherCoverage : undefined;
+		number("package.gather", Number(gather !== undefined));
+		number("package.gather_sites", gather?.runtimeSites ?? 0);
+		number("package.gather_missing", gather?.missing ?? 0);
 		for (const reason of packageTextGapReasons)
 			number(
 				`package.gap${packageTextGapReasons.indexOf(reason)}`,
@@ -145,9 +160,17 @@ export function packageTextColumns(records: readonly PackageTextStored[]) {
 			number("gap.reason", packageTextGapReasons.indexOf(sample.reason));
 			gapCount++;
 		}
+		for (const sample of gather?.missingSamples ?? []) {
+			string("missing.namespace", sample.namespace);
+			string("missing.key", sample.key);
+			string("missing.source", sample.source);
+			string("missing.site", sample.site);
+			missingCount++;
+		}
 	}
 	number("package.occurrence_start", occurrenceCount);
 	number("package.gap_start", gapCount);
+	number("package.missing_start", missingCount);
 	const columns: SnapshotColumn[] = [...tables.values()].flatMap((table) => [...table.finish()]);
 	for (const [name, rows] of values) {
 		const domain = fieldDomains.get(name);
@@ -285,6 +308,21 @@ export const decodePackageTextColumns = Effect.fn("PackageText.decodeColumns")(f
 						reason
 					});
 				}
+				const missingStart = value("package.missing_start", row),
+					missingEnd = value("package.missing_start", row + 1);
+				snapshotCheck(
+					missingStart <= missingEnd && missingEnd - missingStart <= 3,
+					"missing",
+					"Invalid sample range"
+				);
+				const missingSamples: SavedAssetMissingGatherableText[] = [];
+				for (let index = missingStart; index < missingEnd; index++)
+					missingSamples.push({
+						namespace: string("missing.namespace", index),
+						key: string("missing.key", index),
+						source: string("missing.source", index),
+						site: string("missing.site", index)
+					});
 				records.push({
 					path,
 					signature,
@@ -307,7 +345,16 @@ export const decodePackageTextColumns = Effect.fn("PackageText.decodeColumns")(f
 							),
 							feature_unavailable_for_engine_version: value("package.gap2", row),
 							property_decoder_rejected: value("package.gap3", row)
-						}
+						},
+						...(value("package.gather", row) === 1
+							? {
+									gatherCoverage: {
+										runtimeSites: value("package.gather_sites", row),
+										missing: value("package.gather_missing", row),
+										missingSamples
+									}
+								}
+							: undefined)
 					}
 				});
 			}

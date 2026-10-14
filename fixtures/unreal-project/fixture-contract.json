@@ -80,6 +80,10 @@
 			},
 			"equalSourceDistinctKeys": ["ConfirmAction", "ConfirmDeletion"],
 			"stringTableReference": "PromptContinue"
+		},
+		"displayNameEnum": {
+			"assetPath": "/Game/Fixture/Text/E_TextDisplayNames.E_TextDisplayNames",
+			"displayNames": ["Common Item", "Rare Item"]
 		}
 	},
 	"enhancedInput": {

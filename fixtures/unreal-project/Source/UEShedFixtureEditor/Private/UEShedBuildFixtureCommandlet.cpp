@@ -45,6 +45,8 @@
 #include "K2Node_Event.h"
 #include "Kismet2/BlueprintEditorUtils.h"
 #include "Kismet2/KismetEditorUtilities.h"
+#include "Kismet2/EnumEditorUtils.h"
+#include "Engine/UserDefinedEnum.h"
 #include "Internationalization/StringTable.h"
 #include "Internationalization/StringTableCore.h"
 #include "Internationalization/Text.h"
@@ -1154,7 +1156,37 @@ bool GenerateGameTextCorpus()
 		StringTable->GetStringTableId(), FTextKey(TEXT("PromptContinue")));
 	if (bTextAssetCreated) FAssetRegistryModule::AssetCreated(TextAsset);
 	TextAssetPackage->MarkPackageDirty();
-	return SaveAsset(TextAssetPackage, TextAsset);
+	if (!SaveAsset(TextAssetPackage, TextAsset)) return false;
+
+	// UserDefinedEnum display names are player-facing text stored in DisplayNameMap.
+	static const TCHAR* EnumPackageName = TEXT("/Game/Fixture/Text/E_TextDisplayNames");
+	static const TCHAR* EnumAssetName = TEXT("E_TextDisplayNames");
+	UPackage* EnumPackage = FindOrCreatePackage(EnumPackageName);
+	if (EnumPackage == nullptr) return false;
+	UUserDefinedEnum* Enum = FindObject<UUserDefinedEnum>(EnumPackage, EnumAssetName);
+	const bool bEnumCreated = Enum == nullptr;
+	if (bEnumCreated)
+	{
+		Enum = Cast<UUserDefinedEnum>(FEnumEditorUtils::CreateUserDefinedEnum(
+			EnumPackage, EnumAssetName, RF_Public | RF_Standalone | RF_Transactional));
+		if (Enum == nullptr) return false;
+	}
+	while (Enum->NumEnums() - 1 < 2) FEnumEditorUtils::AddNewEnumeratorForUserDefinedEnum(Enum);
+	if (!FEnumEditorUtils::SetEnumeratorDisplayName(Enum, 0, FText::FromString(TEXT("Common Item")))
+		|| !FEnumEditorUtils::SetEnumeratorDisplayName(Enum, 1, FText::FromString(TEXT("Rare Item"))))
+		return false;
+	if (bEnumCreated) FAssetRegistryModule::AssetCreated(Enum);
+	EnumPackage->MarkPackageDirty();
+	return SaveAsset(EnumPackage, Enum);
+}
+
+bool VerifyTextDisplayNameEnum()
+{
+	const UUserDefinedEnum* Enum = LoadObject<UUserDefinedEnum>(
+		nullptr, TEXT("/Game/Fixture/Text/E_TextDisplayNames.E_TextDisplayNames"));
+	return Enum != nullptr && Enum->NumEnums() - 1 == 2
+		&& Enum->GetDisplayNameTextByIndex(0).ToString() == TEXT("Common Item")
+		&& Enum->GetDisplayNameTextByIndex(1).ToString() == TEXT("Rare Item");
 }
 
 bool VerifyGameTextCorpus()
@@ -1181,7 +1213,8 @@ bool VerifyGameTextCorpus()
 		&& TextAsset->EqualSourceSecond.ToString() == TEXT("Confirm")
 		&& FTextInspector::GetKey(TextAsset->EqualSourceFirst)
 			!= FTextInspector::GetKey(TextAsset->EqualSourceSecond)
-		&& TextAsset->StringTableReference.IsFromStringTable();
+		&& TextAsset->StringTableReference.IsFromStringTable()
+		&& VerifyTextDisplayNameEnum();
 }
 
 TSharedRef<FJsonObject> TextEvidence(const FText& Text)

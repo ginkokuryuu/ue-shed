@@ -8,6 +8,7 @@ use uasset_inspection::blueprint::{
     BlueprintGraphProjection, is_control_rig_blueprint_package, project_blueprint_graphs,
     saved_blueprint_graph_node_paths,
 };
+use uasset_inspection::gather_coverage::{DecodedTextKeys, gather_coverage};
 use uasset_inspection::generic::{InspectionJsonError, PropertyValueOutput, write_inspection_json};
 use uasset_inspection::level_sequence::{LevelSequenceProjection, project_level_sequence};
 use uasset_inspection::projection::{
@@ -183,10 +184,12 @@ fn extract_text_from_package(path: &str, bytes: &[u8], package: &Package) -> Str
     let mut occurrences = Vec::new();
     let mut coverage_gaps = Vec::new();
     let mut diagnostics = Vec::new();
+    let mut decoded_keys = DecodedTextKeys::default();
     for export in &package.exports {
         match decode_export(export, &context) {
             Ok(Some(asset)) => {
                 let projection = project_text_asset(package, &asset);
+                decoded_keys.record(&projection.occurrences);
                 let current_items = occurrences.len().saturating_add(coverage_gaps.len());
                 let additional_items = projection
                     .occurrences
@@ -229,10 +232,12 @@ fn extract_text_from_package(path: &str, bytes: &[u8], package: &Package) -> Str
         path,
         &TextProjectionOutput {
             schema_version: 1,
-            status: if coverage_gaps.is_empty() {
-                projection_status(&diagnostics)
-            } else {
-                "partial"
+            // Matches native uasset-io: the package's gather table decides when it can be read.
+            status: match gather_coverage(bytes, package, path, &decoded_keys) {
+                Ok(Some(gather)) if gather.missing == 0 => "complete",
+                Ok(Some(_)) => "partial",
+                Ok(None) | Err(_) if coverage_gaps.is_empty() => projection_status(&diagnostics),
+                Ok(None) | Err(_) => "partial",
             },
             path,
             occurrences,

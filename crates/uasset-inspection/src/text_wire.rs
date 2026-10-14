@@ -79,6 +79,45 @@ pub enum TextCoverageGapReason {
     PropertyDecoderRejected,
 }
 
+pub use crate::gather_coverage::MAX_MISSING_GATHERABLE_TEXT_SAMPLES;
+
+/// The package's decoded text checked against its gatherable text table.
+#[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct SavedAssetGatherCoverage {
+    pub runtime_sites: u64,
+    pub missing: u64,
+    pub missing_samples: Vec<SavedAssetMissingGatherableText>,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
+pub struct SavedAssetMissingGatherableText {
+    pub namespace: String,
+    pub key: String,
+    pub source: String,
+    pub site: String,
+}
+
+pub fn gather_coverage(
+    coverage: crate::gather_coverage::GatherCoverage,
+) -> SavedAssetGatherCoverage {
+    SavedAssetGatherCoverage {
+        runtime_sites: coverage.runtime_sites,
+        missing: coverage.missing,
+        missing_samples: coverage
+            .missing_samples
+            .into_iter()
+            .map(|missing| SavedAssetMissingGatherableText {
+                namespace: missing.namespace,
+                key: missing.key,
+                source: missing.source,
+                site: missing.site_description,
+            })
+            .collect(),
+    }
+}
+
 pub fn text_occurrence(occurrence: crate::projection::TextOccurrence) -> SavedAssetTextOccurrence {
     SavedAssetTextOccurrence {
         source: occurrence.source,

@@ -268,7 +268,7 @@ export interface AssetReaderApi {
 	readonly extractProjectText: (
 		options: SavedAssetExtractionOptions
 	) => Stream.Stream<SavedAssetTextExtractionEvent, AssetReaderError>;
-	/** Requires the opt-in uasset-io v1.8 package-text capability. */
+	/** Requires the opt-in uasset-io v1.8 package-text capability; requests v1.10 gather coverage. */
 	readonly extractProjectTextPackages?: (
 		options: SavedAssetExtractionOptions
 	) => Stream.Stream<SavedAssetPackageTextEvent, AssetReaderError>;

@@ -356,6 +356,10 @@ pub struct SavedAssetPackageTextRecord {
     pub occurrences: Vec<SavedAssetTextOccurrence>,
     pub gap_counts: TextGapCounts,
     pub gap_samples: Vec<SavedAssetTextCoverageGap>,
+    /// v1.10: present when the package's gatherable text table was read. When present, status
+    /// reflects missing runtime gatherable text instead of decoder gaps.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub gather_coverage: Option<SavedAssetGatherCoverage>,
 }
 
 impl SavedAssetPackageTextRecord {
@@ -415,7 +419,8 @@ pub enum SavedAssetPackageTextEvent {
 }
 
 pub use uasset_inspection::text_wire::{
-    EditCapability, SavedAssetTextCoverageGap, SavedAssetTextOccurrence, TextCoverageGapReason,
+    EditCapability, SavedAssetGatherCoverage, SavedAssetMissingGatherableText,
+    SavedAssetTextCoverageGap, SavedAssetTextOccurrence, TextCoverageGapReason,
     TextExtractionIdentity, TextExtractionLocation, TextUnresolvedReason,
 };
 
@@ -502,6 +507,7 @@ mod package_text_tests {
             occurrences: Vec::new(),
             gap_counts: TextGapCounts::default(),
             gap_samples: Vec::new(),
+            gather_coverage: None,
         };
         for (index, reason) in [
             TextCoverageGapReason::PropertyDecoderRejected,

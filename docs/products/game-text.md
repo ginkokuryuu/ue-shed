@@ -99,6 +99,18 @@ properties. Unsupported evidence and diagnostics remain visible in search/focus 
 reports. A zero-finding report never implies complete project coverage unless its attached corpus
 coverage does.
 
+A package is partial when text Unreal gathers from it was not read. The reader compares the
+decoded lines with the package's saved gatherable text table, the list Unreal's asset gather reads,
+by namespace and key, ignoring editor-only sites. Undecodable properties that hold no gatherable
+text, such as native Niagara structs, remain counted as coverage gaps but no longer make a package
+partial. `missingGatherableText` counts the runtime entries that were not read, and each partial
+package lists up to three of them, with source text and Unreal site, as
+`gatherable_text_not_decoded` diagnostics. The table is used only where Unreal's gather would use
+it; Unreal saves no table for packages with Blueprint bytecode and loads them instead. Those
+packages, packages saved before the table existed, and unreadable tables keep the previous rule:
+any decode error or gap is partial. The table is written on every editor save, so no prior gather
+is needed.
+
 Saved-scan completeness is limited to the selected package inventory and supported decoders; it
 does not certify parity with a fresh Unreal gather. New C++/INI and code/CSV String Table text,
 reflected metadata, compiled Blueprint bytecode, custom gather callbacks and content outside the
@@ -111,9 +123,10 @@ The optional `packageCoverage` evidence also accepts `not_gatherable`: excluded 
 gather flag, saved gatherable-text summary and external-package relationships do not select the
 package. This status does not prove absence of text. Candidate-layer helpers report the excluded
 set with `package_not_gatherable` diagnostics; `loc status` includes an optional exclusion count
-and bounded package rows, and Game Text shows the reason in Read problems. Fixture audits retain
-the full reader's excluded gap locations separately, so `OpaqueValue.Value` is reported as
-excluded because Unreal does not gather it rather than as an inspected, empty package.
+and bounded package rows. Game Text shows Read problems only when gathered text may be missing and
+mentions excluded packages there as matching Unreal's own gather. Fixture audits check that
+excluding packages hides no coverage problem: the opaque `OpaqueValue.Value` package has no
+gatherable text, so the full reader reads it completely too.
 
 The compact corpus path is governed by Plan 033:
 

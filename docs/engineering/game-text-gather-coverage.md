@@ -11,7 +11,7 @@ coverage of the selected Unreal recipe, not just the saved-package parser.
 | ----------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | C++ and INI text                                      | No source macro or INI parser. New, changed and removed `LOCTEXT`, `NSLOCTEXT`, UI-command and localized log text cannot be discovered from those files.                                                                                                                                                        | The source commandlet parses its configured files, namespaces, macro wrappers and conditional/editor-only context.                                                                                                         |
 | Code-defined and CSV String Tables                    | Saved String Table assets are decoded. Code definitions, `LOCTABLE` entries and CSV files loaded by `LOCTABLE_FROMFILE_GAME` or `LOCTABLE_FROMFILE_ENGINE` are not independently read. References cannot manufacture a missing definition.                                                                      | The source commandlet collects definitions and loads the referenced CSV data.                                                                                                                                              |
-| Reflected metadata                                    | The text projection emits no lines for `DecodedAsset::Enum`; it does not evaluate configured metadata input keys, output namespaces and key patterns over reflected fields.                                                                                                                                     | Configured metadata gathering can collect enum names, display names, tooltips and other metadata. In 5.8, asset gathering can also use the metadata helper.                                                                |
+| Reflected metadata                                    | User-defined enum display names are read from saved enum assets. The scan does not evaluate configured metadata input keys, output namespaces and key patterns over reflected fields.                                                                                                                           | Configured metadata gathering can collect enum names, display names, tooltips and other metadata. In 5.8, asset gathering can also use the metadata helper.                                                                |
 | Blueprint script bytecode                             | Supported graph/pin text is read, but the scan does not run Unreal's script-bytecode gatherer. A literal in a compiled function or Level Blueprint can therefore be missing even when graph properties were decoded.                                                                                            | Unreal walks script text constants when loading the package. Saved gather caches cannot reliably replace this step for bytecode-bearing assets.                                                                            |
 | Custom gather callbacks and unsupported serialization | The parser reads supported saved representations; it does not execute project/plugin class or struct callbacks, load-time initialization or arbitrary native serialization. Unsupported text histories and version-gated containers can also hide text. Dialogue/voice workflows are outside the product scope. | Unreal loads the applicable classes/modules and invokes its reflection and type-specific gather behavior.                                                                                                                  |
 | Plugin and engine content roots                       | The default Project Index inventory enumerates the project's `Content` directory. It does not inventory `Plugins/<plugin>/Content`, installed plugin content or engine content as additional mounted roots. Explicit lower-level reads can differ from the default inventory.                                   | A configured gather can select assets through Unreal's mounted roots and Asset Registry.                                                                                                                                   |
@@ -26,10 +26,31 @@ unmatched line should not be assumed to be gathered-only.
 
 ## Coverage and diagnostics
 
-`complete` describes the selected saved-package scan and its modeled decoder gaps. It does not
-certify parity with every Unreal gather source. Known unsupported histories, rejected decoders,
-unavailable engine features and legacy containers produce coverage gaps. Excluded packages have
-`not_gatherable`, which does not prove the absence of text.
+`complete` means every runtime entry in the package's saved gatherable text table was decoded. The
+editor writes that table when it saves a package, and Unreal's asset gather reads it instead of the
+exports, so it is the engine-authored list of localizable text the package contributes. Entries are
+matched by namespace (without the package namespace marker) and key; editor-only sites are skipped
+as the default gather skips them. Known unsupported histories, rejected decoders, unavailable engine
+features and legacy containers still produce coverage gaps, but only a missing table entry makes a
+package partial.
+
+The table is only used when Unreal's gather would use it. The reader mirrors
+`UGatherTextFromAssetsCommandlet::CalculatePackageLocCacheState`: Unreal loads a package instead of
+reading its table when the package predates gather flagging or `GatheredTextEditorOnlyPackageLocId`,
+is an external actor package saved before `FixedLocalizationGatherForExternalActorPackage`, is an
+old dialogue wave, or is flagged `PKG_RequiresLocalizationGather` without a table. The last case is
+common: `SavePackage` writes no table for packages with script bytecode (every compiled Blueprint
+and Widget Blueprint), text keyed with a stale package localization ID, or text initialized from a
+string. Those packages, packages saved before the table existed, and unreadable tables keep the
+decode-error-or-gap rule. The table does not depend on running a gather; the editor writes it on
+every uncooked save. The project-level `SkipGatherCache` setting is not modelled.
+`complete` does not certify parity with every Unreal gather source.
+Excluded packages have `not_gatherable`, which does not prove the absence of text.
+
+The table is written with the package, so it matches the saved exports. Packages with bytecode
+have no table at all, so Blueprint text keeps the decoder-gap rule and bytecode text remains
+unread. An unread table entry is reported with its source string and site even though the reader
+could not place it.
 
 There are also blind spots outside those counters: source files are not scanned, default inventory
 omits other mounted content, compiled bytecode is not traversed, and custom callbacks are not run.
@@ -56,9 +77,9 @@ must run through their existing Unreal workflow and their generated evidence can
 The next coverage work should first expose these source boundaries in reports and compare the
 headless identity/source set with fresh 5.7 and 5.8 gather output. Extend the shared Project Index
 for mounted roots instead of adding another feature-owned enumerator. A bounded source/CSV reader
-would improve pre-gather review. Reading saved gatherable-text payloads would add engine-authored
-site/context evidence, but those caches can be stale and do not solve Blueprint bytecode. Bytecode
-and custom callbacks need dedicated support or an explicitly requested Unreal gather.
+would improve pre-gather review. Saved gatherable-text payloads now decide package coverage; they
+could also supply site context and translator notes for unread entries. Bytecode and custom
+callbacks need dedicated support or an explicitly requested Unreal gather.
 
 These are proposed follow-ups, not changes implemented by the performance work.
 

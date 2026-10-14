@@ -5,7 +5,6 @@ import { Effect, Schema } from "effect";
 import { describe, expect, it } from "vitest";
 import {
 	expectedLegacyOccurrences,
-	legacySerializedObjectPath,
 	legacyVersions,
 	readLegacyEvidence
 } from "../../../fixtures/legacy-unreal-project/evidence.js";
@@ -18,12 +17,9 @@ const generated = fileURLToPath(
 
 for (const version of legacyVersions) {
 	describe.skipIf(!executable)(`UE ${version} legacy game text corpus`, () => {
-		it("preserves Unreal text occurrences and reports the native map gap", async () => {
+		it("preserves Unreal text occurrences and keeps the native map gap out of coverage", async () => {
 			const root = join(generated, version);
 			const evidence = readLegacyEvidence(root);
-			const tablePath = legacySerializedObjectPath(
-				evidence.packages.find((asset) => asset.asset_name === "DT_LegacyText")!
-			);
 			const decodeOccurrence = Schema.decodeUnknownSync(SavedAssetTextOccurrence);
 			const expected = expectedLegacyOccurrences(evidence).map((occurrence) =>
 				decodeOccurrence(occurrence)
@@ -33,13 +29,14 @@ for (const version of legacyVersions) {
 					Effect.provide(assetReaderLayer({ executable: executable! }))
 				)
 			);
-			expect(corpus.status).toBe("partial");
+			// NativeVectors cannot be decoded, but it holds no text: every gathered line was read.
+			expect(corpus.status).toBe("complete");
 			expect(corpus.coverage).toMatchObject({
 				discoveredPackages: 3,
 				inspectedPackages: 3,
 				failedPackages: 0,
-				partialPackages: 1,
-				unsupportedTextProperties: 1,
+				partialPackages: 0,
+				unsupportedTextProperties: 0,
 				textOccurrences: expected.length
 			});
 			const occurrences = corpus.units.flatMap((unit) => unit.occurrences);
@@ -78,12 +75,7 @@ for (const version of legacyVersions) {
 			}));
 			expect(actual).toHaveLength(expected.length);
 			expect(actual).toEqual(expect.arrayContaining(expected));
-			expect(corpus.diagnostics).toContainEqual(
-				expect.objectContaining({
-					objectPath: tablePath,
-					propertyPath: "NativeVectors"
-				})
-			);
+			expect(corpus.diagnostics).toEqual([]);
 		});
 	});
 }

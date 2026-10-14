@@ -91,7 +91,8 @@ export const TextCorpusDiagnostic = Schema.Struct({
 		"package_inspection_failed",
 		"package_partially_decoded",
 		"unsupported_text_history",
-		"package_not_gatherable"
+		"package_not_gatherable",
+		"gatherable_text_not_decoded"
 	]),
 	message: Schema.String,
 	packageFile: Schema.String,
@@ -120,7 +121,11 @@ export const TextCorpus = Schema.Struct({
 		textOccurrences: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
 		resolvedOccurrences: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
 		unresolvedOccurrences: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
-		unsupportedTextProperties: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0))
+		unsupportedTextProperties: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
+		/** Runtime entries in partial packages' gather tables that no decoded line matched. */
+		missingGatherableText: Schema.optionalKey(
+			Schema.Int.check(Schema.isGreaterThanOrEqualTo(0))
+		)
 	}),
 	units: Schema.Array(TextUnit),
 	packageCoverage: Schema.optionalKey(Schema.Array(TextPackageCoverage)),
