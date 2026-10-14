@@ -167,6 +167,64 @@ describe("PerforceHistorySource", () => {
 		expect(calls[0]?.config).toMatch(/ue-shed-no-p4config$/u);
 	});
 
+	it("retries project discovery after it failed instead of caching the failure", async () => {
+		let infoCalls = 0;
+		const makeLayer: NonNullable<Parameters<typeof perforceHistorySourceLayer>[1]> = (
+			options
+		) => {
+			const executor = scriptedExecutor((invocation) => {
+				const args = commandArgs(invocation.args);
+				if (args.includes("set")) return { stdout: "P4USER=developer\n" };
+				if (args.includes("info"))
+					return ++infoCalls === 1
+						? {
+								exitCode: 1,
+								stderr: "Perforce client error:\n\tConnect to server failed; check $P4PORT.\n"
+							}
+						: {
+								stdout:
+									JSON.stringify({
+										code: "stat",
+										userName: "developer",
+										clientName: "*unknown*"
+									}) + "\n"
+							};
+				if (args.includes("clients"))
+					return {
+						stdout:
+							JSON.stringify({
+								code: "stat",
+								client: "example-client",
+								Root: "D:/Perforce/ExampleProject",
+								Owner: "developer"
+							}) + "\n"
+					};
+				return {
+					stdout:
+						JSON.stringify({
+							code: "stat",
+							depotFile: "//Depot/Main/Content/Maps/Example.umap",
+							clientFile: "//example-client/Content/Maps/Example.umap",
+							path: "D:/Perforce/ExampleProject/Content/Maps/Example.umap"
+						}) + "\n"
+				};
+			});
+			return P4.layer.pipe(Layer.provideMerge(Layer.merge(configLayer(options), executor)));
+		};
+		const context = await Effect.runPromise(
+			Effect.scoped(Layer.build(perforceHistorySourceLayer({}, makeLayer)))
+		);
+		const source = Context.get(context, PerforceHistorySource);
+		const resolveMap = source
+			.resolveLocalPath("D:/Perforce/ExampleProject/Content/Maps/Example.umap")
+			.pipe(Effect.provideService(PerforceProjectContext, "D:/Perforce/ExampleProject"));
+
+		expect((await Effect.runPromise(Effect.exit(resolveMap)))._tag).toBe("Failure");
+		const mapping = await Effect.runPromise(resolveMap);
+		expect(mapping.depotPath).toBe("//Depot/Main/Content/Maps/Example.umap");
+		expect(infoCalls).toBe(2);
+	});
+
 	it("translates p4client values at the acquisition boundary", async () => {
 		const source = makePerforceHistorySource(backend());
 

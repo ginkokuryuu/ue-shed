@@ -1,4 +1,4 @@
-import { Cache, Context, Effect, Layer, Option, Schema } from "effect";
+import { Cache, Context, Duration, Effect, Exit, Layer, Option, Schema } from "effect";
 import { P4, runOperation, type P4Service } from "p4client-ts";
 import type {
 	ListDepotFilesAtChangeOptions as P4ListDepotFilesAtChangeOptions,
@@ -601,7 +601,11 @@ export function perforceHistorySourceLayer(
 			const contexts = yield* Cache.makeWith(
 				(projectRoot: string | undefined) =>
 					optionsForProject(options, projectRoot, makeLayer),
-				{ capacity: 4 }
+				{
+					capacity: 4,
+					// A failed discovery, such as an unreachable server, is retried by the next request.
+					timeToLive: (exit) => (Exit.isSuccess(exit) ? Duration.infinity : Duration.zero)
+				}
 			);
 			const withClient = <A>(
 				projectRoot: string | undefined,
