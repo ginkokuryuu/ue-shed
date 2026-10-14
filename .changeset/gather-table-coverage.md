@@ -14,4 +14,7 @@ reported as coverage gaps without making the package partial. The table is used 
 gather would use it; Blueprints with bytecode, which are saved without one, keep the previous
 decoder-gap rule. uasset-io v1.10 adds `gatherCoverage` to package text records, Game Text adds
 `coverage.missingGatherableText` and `gatherable_text_not_decoded` diagnostics with the unread
-source text and Unreal site, and user-defined enum display names are now read as text.
+source text and Unreal site, and user-defined enum display names are now read as text. Entries
+match on namespace, key and source text, so an unread source variant under a decoded key stays
+missing, and authored bracketed namespaces are compared as Unreal saved them. UE 5.8 user-defined
+enums, which save an extra underlying-type byte, now decode instead of failing.
