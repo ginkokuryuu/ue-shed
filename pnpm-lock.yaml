@@ -995,8 +995,8 @@ importers:
         specifier: workspace:0.13.0
         version: link:../unreal-assets
       p4client-ts:
-        specifier: 0.12.1
-        version: 0.12.1
+        specifier: 0.13.0
+        version: 0.13.0(effect@4.0.4)
     devDependencies:
       '@effect/vitest':
         specifier: 'catalog:'
@@ -3805,9 +3805,11 @@ packages:
     resolution: {integrity: sha512-I4Prw6ivkd6p8PiYR1tXASOAOBzIJwu0TB7fqaX0c/8c3QAehNYmX57EijyGGGBt3c/BIowGwV03RVBtXvHEVg==}
     engines: {node: '>=18'}
 
-  p4client-ts@0.12.1:
-    resolution: {integrity: sha512-S/JBWvOZF/Ja3azR6hmteNpW4nVikX+kQBdz8e2XZyr6CBE63QmG5t4CJA0AbUpb6xqaVKFxHaRLU3u20t9bng==}
+  p4client-ts@0.13.0:
+    resolution: {integrity: sha512-upPG4Rq9xSfLoLp/38Akyw8JzLzXs5pCLX20+9TLrSJUpAW4Kik/FCx+VGYAusjiioptiFkQrfTH/4eb4VXi1A==}
     engines: {node: '>=18'}
+    peerDependencies:
+      effect: ^4.0.0
 
   package-manager-detector@1.8.0:
     resolution: {integrity: sha512-yQA4H19AmPEoMUeavPMDIe1higySl/gH/yaQrkT/s07Qp+7pp2hYz30N3z2l5BkjVkF9Ow6o0wjJamm2y7Sn0A==}
@@ -6293,9 +6295,9 @@ snapshots:
     dependencies:
       reusify: 1.1.0
 
-  fdir@6.5.0(picomatch@4.0.5):
+  fdir@6.5.0(picomatch@4.0.7):
     optionalDependencies:
-      picomatch: 4.0.5
+      picomatch: 4.0.7
 
   fill-range@7.1.1:
     dependencies:
@@ -6650,7 +6652,7 @@ snapshots:
 
   p-map@7.0.6: {}
 
-  p4client-ts@0.12.1:
+  p4client-ts@0.13.0(effect@4.0.4):
     dependencies:
       effect: 4.0.4
 
@@ -6948,8 +6950,8 @@ snapshots:
 
   tinyglobby@0.2.17:
     dependencies:
-      fdir: 6.5.0(picomatch@4.0.5)
-      picomatch: 4.0.5
+      fdir: 6.5.0(picomatch@4.0.7)
+      picomatch: 4.0.7
 
   tinypool@2.1.0: {}
 
@@ -7102,7 +7104,7 @@ snapshots:
   vite@8.1.4(@types/node@24.13.3)(esbuild@0.28.1)(tsx@4.23.1)(yaml@2.9.0):
     dependencies:
       lightningcss: 1.32.0
-      picomatch: 4.0.5
+      picomatch: 4.0.7
       postcss: 8.5.23
       rolldown: 1.1.5
       tinyglobby: 0.2.17

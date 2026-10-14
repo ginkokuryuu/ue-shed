@@ -91,6 +91,8 @@ should follow [Website and illustrated guides](engineering/website.md).
 
 ## Research
 
+- [p4client-ts 0.13 adoption (2026-10-14)](research/p4client-ts-0.13-consumer-trial-2026-10-14.md) —
+  Map History's native Effect adapter, upstream feedback and its resolution, and real-server checks.
 - [Map screenshot pipeline revisited (2026-10-13)](research/map-capture-screenshot-pipeline-2026-10-13.md) —
   UE 5.7/5.8 internals, adopter timings, warmup and master/block benchmarks, and derived-pyramid costs.
 - [Game Text pipeline performance (2026-10-13)](research/game-text-pipeline-performance-2026-10-13.md) —
