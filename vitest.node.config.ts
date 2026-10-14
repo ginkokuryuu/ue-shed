@@ -3,6 +3,9 @@ import { configDefaults, defineProject } from "vitest/config";
 export default defineProject({
 	test: {
 		maxWorkers: 4,
+		// Tests that build a Game Text index take 2-3 s alone but pass 5 s on a hosted runner
+		// running the whole suite in parallel; the slow ones already asked for 30 s one by one.
+		testTimeout: 30_000,
 		environment: "node",
 		exclude: [...configDefaults.exclude, "**/*.component.test.tsx", "apps/workbench/e2e/**"],
 		include: [

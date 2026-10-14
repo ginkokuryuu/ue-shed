@@ -152,28 +152,24 @@ const makeHost = Effect.fn("Test.GameText.productionHost")(function* (
 
 const request = { query: "", capability: "all" as const, pageSize: 10 };
 
-it.live(
-	"keeps the selected target as the primary view across catalog generations",
-	() =>
-		Effect.gen(function* () {
-			const test = yield* makeHost("pipeline");
-			const other = test.fixture.addTarget("Other");
-			yield* Effect.gen(function* () {
-				const host = yield* WorkbenchGameText;
-				yield* host.configuredRefresh();
-				yield* host.localizationTarget(other.name);
-				expect(test.modelOpens()).toBe(2);
-				yield* Ref.set(test.generation, 1);
-				expect((yield* host.configuredRefresh()).status).toBe("completed");
-				expect((yield* host.localizationTarget(other.name)).status).toBe("ready");
-				expect(test.modelOpens()).toBe(3);
-				expect(
-					yield* host.search({ ...request, localization: { target: other.name } })
-				).toMatchObject({ status: "ready", page: { total: 1 } });
-			}).pipe(Effect.provide(test.layer));
-		}),
-	// Index-building tests outrun the default timeout when the whole suite runs in parallel.
-	30_000
+it.live("keeps the selected target as the primary view across catalog generations", () =>
+	Effect.gen(function* () {
+		const test = yield* makeHost("pipeline");
+		const other = test.fixture.addTarget("Other");
+		yield* Effect.gen(function* () {
+			const host = yield* WorkbenchGameText;
+			yield* host.configuredRefresh();
+			yield* host.localizationTarget(other.name);
+			expect(test.modelOpens()).toBe(2);
+			yield* Ref.set(test.generation, 1);
+			expect((yield* host.configuredRefresh()).status).toBe("completed");
+			expect((yield* host.localizationTarget(other.name)).status).toBe("ready");
+			expect(test.modelOpens()).toBe(3);
+			expect(
+				yield* host.search({ ...request, localization: { target: other.name } })
+			).toMatchObject({ status: "ready", page: { total: 1 } });
+		}).pipe(Effect.provide(test.layer));
+	})
 );
 
 it.live(

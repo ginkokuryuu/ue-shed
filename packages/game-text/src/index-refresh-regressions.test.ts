@@ -161,9 +161,7 @@ it.live.each(["manifest", "archive", "po"] as const)(
 					expect(repaired.localizationJoin.lines).toEqual(pinned);
 				}
 			}).pipe(Effect.provide(fixture.layer()));
-		}),
-	// Index-building tests outrun the default timeout when the whole suite runs in parallel.
-	30_000
+		})
 );
 
 it.live("raw corpus retains invisible units and empty-source String Table evidence", () =>

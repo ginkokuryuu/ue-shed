@@ -364,7 +364,7 @@ describe("localization import cache and failures", () => {
 					first.files.find((old) => old.relativePath === file.relativePath)?.key
 			)
 		).toHaveLength(1);
-	}, 30_000);
+	});
 	it("keeps authored-file diagnostics and closes worker staging after a cold parser failure", async () => {
 		const root = resolve(temporary, "cold-failure");
 		await generateGameTextScale({ root, scale: 0.0001, seed: 57 });
