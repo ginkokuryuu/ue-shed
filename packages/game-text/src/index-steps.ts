@@ -48,6 +48,7 @@ import { SearchWorkerInput } from "./search-worker-protocol.js";
 import {
 	indexedTextCorpus,
 	indexedLocalizationJoin,
+	indexedLocalizationLinesRequest,
 	readIndexedLocalizationEvidence
 } from "./index-context.js";
 import { indexedLocalizationQuality } from "./localization-quality-index.js";
@@ -606,9 +607,8 @@ export const makeGameTextIndexSteps = (
 			const reusedColumns = projection.columns.size;
 			const reusedSources = Boolean(projection.sourceSeed);
 			const queryStarted = performance.now();
-			const query = yield* Effect.try({
-				try: () =>
-					instrumentIndexQuery(columnarTextCorpusQuery(joined, undefined, projection)),
+			const columnar = yield* Effect.try({
+				try: () => columnarTextCorpusQuery(joined, undefined, projection),
 				catch: (cause) =>
 					failure(
 						"query",
@@ -616,6 +616,7 @@ export const makeGameTextIndexSteps = (
 						"Clear the disposable Game Text index and refresh."
 					)
 			});
+			const query = instrumentIndexQuery(columnar);
 			const queryPreparationMs = performance.now() - queryStarted;
 			yield* Cache.set(projections, projectionKey, projection);
 			yield* Effect.annotateCurrentSpan({
@@ -680,13 +681,17 @@ export const makeGameTextIndexSteps = (
 				evidence: indexedEvidence,
 				corpus,
 				localizationJoin: indexedLocalizationJoin(joined, query),
+				// The scan checks exactly the join's lines, read as rows in the join's order.
 				localizationQuality: (options, ruleDocument) =>
-					indexedLocalizationQuality(
-						joined,
-						corpus,
-						indexedEvidence,
-						options,
-						ruleDocument
+					Effect.suspend(() =>
+						indexedLocalizationQuality(
+							joined,
+							corpus,
+							indexedEvidence,
+							columnar.localizationRows(indexedLocalizationLinesRequest(joined)),
+							options,
+							ruleDocument
+						)
 					)
 			};
 		}, normalizeFailure);

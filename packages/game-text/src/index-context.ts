@@ -67,6 +67,15 @@ export function indexedTextCorpus(joined: JoinedTargetReader, query: TextCorpusQ
 	};
 }
 
+/** The query whose lines are the indexed join's lines: every visible line of the target. */
+export function indexedLocalizationLinesRequest(joined: JoinedTargetReader) {
+	return {
+		query: "",
+		capability: "all" as const,
+		localization: { target: joined.meta.input.target.name }
+	};
+}
+
 export function indexedLocalizationJoin(
 	joined: JoinedTargetReader,
 	query: TextCorpusQuery
@@ -79,11 +88,7 @@ export function indexedLocalizationJoin(
 		nativeCulture: target.nativeCulture,
 		cultures: target.cultures,
 		get lines() {
-			return (lines ??= query.localizationLines({
-				query: "",
-				capability: "all",
-				localization: { target: target.name }
-			}));
+			return (lines ??= query.localizationLines(indexedLocalizationLinesRequest(joined)));
 		}
 	};
 }

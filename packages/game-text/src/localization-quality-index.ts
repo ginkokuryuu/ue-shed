@@ -128,10 +128,17 @@ function unitIndex(data: JoinedQueryData) {
 	};
 }
 
-/** Groups duplicate sources from line columns and shared strings, without hydrating lines. */
+/** Positions of rows outside the join. */
+const NOT_JOINED = 0xffffffff;
+
+/**
+ * Groups duplicate sources from line columns and shared strings, without hydrating lines. Only
+ * the join's rows count, and identities that compare equal keep the join's order.
+ */
 const duplicateSources = Effect.fn("GameText.localizationQuality.duplicates")(function* (
 	data: JoinedQueryData,
-	cultures: readonly CultureCode[]
+	cultures: readonly CultureCode[],
+	joinPosition: Uint32Array
 ) {
 	const column = (name: string) => runJoinedQuery(u32(data.joined.layer, name));
 	const namespaces = column("line.namespace"),
@@ -150,6 +157,7 @@ const duplicateSources = Effect.fn("GameText.localizationQuality.duplicates")(fu
 			namespace = data.strings(Array.from(namespaces.subarray(start, end)));
 		for (let row = start; row < end; row++) {
 			const index = row - start;
+			if (joinPosition[row] === NOT_JOINED) continue;
 			// The same conditions as `localizationDuplicateCandidate` on a hydrated line.
 			if (occurrenceEnd[row]! > occurrenceStart[row]! && key[index] === "") continue;
 			if (text[index]!.trim().length === 0) continue;
@@ -159,7 +167,8 @@ const duplicateSources = Effect.fn("GameText.localizationQuality.duplicates")(fu
 				LocalizationIdentity.make({
 					namespace: TextNamespace.make(namespace[index]!),
 					key: TextKey.make(key[index]!)
-				})
+				}),
+				joinPosition[row]!
 			);
 		}
 		yield* Effect.yieldNow;
@@ -172,11 +181,15 @@ const duplicateSources = Effect.fn("GameText.localizationQuality.duplicates")(fu
  * findings are kept as columns. Pages, focus and proposals re-check only the rows they show, with
  * the same line checks `checkLocalizationTarget` runs. The scan yields between pages, so a host
  * keeps serving other requests and can interrupt it.
+ *
+ * `joinRows` are the join's lines as rows of `joined`, in the join's order: the rows the query's
+ * `localizationLines` returns for the target. Only they are checked, as only they are in the join.
  */
 export const indexedLocalizationQuality = Effect.fn("GameText.localizationQuality")(function* (
 	joined: JoinedTargetReader,
 	corpus: Pick<TextCorpus, "status" | "coverage">,
 	evidence: LocalizationTargetEvidence,
+	joinRows: Uint32Array,
 	options: LocalizationCheckOptions = {},
 	ruleDocument?: GameTextRuleDocument
 ) {
@@ -193,14 +206,44 @@ export const indexedLocalizationQuality = Effect.fn("GameText.localizationQualit
 			? localizationPolicyRules(target.cultures, ruleDocument)
 			: undefined;
 	const keep = acceptedFindingFilter(options.review);
+	const count = data.joined.meta.count,
+		lineCount = joinRows.length;
+	const joinPosition = new Uint32Array(count).fill(NOT_JOINED);
+	for (let position = 0; position < lineCount; position++)
+		joinPosition[joinRows[position]!] = position;
 	const context: LocalizationLineCheckContext = {
 		target: target.name,
 		options,
 		enabled,
-		duplicates: yield* duplicateSources(data, target.cultures)
+		duplicates: yield* duplicateSources(data, target.cultures, joinPosition)
 	};
 	const units = unitIndex(data);
 	yield* Effect.yieldNow;
+
+	// Report order is line ID order, ties in join order. Decoding every line ID takes about 0.7 s
+	// at 583,507 lines, so it yields per page; the unit index above and the sort below take about
+	// 0.25 s and 0.1 s.
+	const ids: string[] = [];
+	for (let start = 0; start < lineCount; start += SCAN_PAGE_LINES) {
+		const end = Math.min(lineCount, start + SCAN_PAGE_LINES);
+		for (let position = start; position < end; position++)
+			ids[position] = data.lineId(joinRows[position]!);
+		yield* Effect.yieldNow;
+	}
+	const collator = new Intl.Collator();
+	// Stable, so lines whose IDs compare equal keep the join's order.
+	const order = Uint32Array.from(
+		Array.from({ length: lineCount }, (_, position) => position).sort((a, b) =>
+			collator.compare(ids[a]!, ids[b]!)
+		),
+		(position) => joinRows[position]!
+	);
+	// A suspended generator keeps its locals; release the IDs before the long scan.
+	ids.length = 0;
+	yield* Effect.yieldNow;
+	const rankOf = new Uint32Array(count);
+	for (let rank = 0; rank < lineCount; rank++) rankOf[order[rank]!] = rank;
+
 	/** One line's findings in report order, and its check diagnostics. */
 	const check = (line: LocalizationLine) => {
 		let lineUnits: readonly TextUnit[] | undefined;
@@ -232,28 +275,6 @@ export const indexedLocalizationQuality = Effect.fn("GameText.localizationQualit
 			diagnostics
 		};
 	};
-
-	// Report order is line ID order; the scan reads rows in storage order and reorders after.
-	// Decoding every line ID takes about 0.7 s at 583,507 lines, so it yields per page too.
-	// The unit index above and the sort below take about 0.25 s and 0.1 s.
-	const count = data.joined.meta.count;
-	const ids: string[] = [];
-	for (let start = 0; start < count; start += SCAN_PAGE_LINES) {
-		for (let row = start; row < Math.min(count, start + SCAN_PAGE_LINES); row++)
-			ids[row] = data.lineId(row);
-		yield* Effect.yieldNow;
-	}
-	const collator = new Intl.Collator();
-	const order = Uint32Array.from(
-		Array.from({ length: count }, (_, row) => row).sort((a, b) =>
-			collator.compare(ids[a]!, ids[b]!)
-		)
-	);
-	// A suspended generator keeps its locals; release the IDs before the long scan.
-	ids.length = 0;
-	yield* Effect.yieldNow;
-	const rank = new Uint32Array(count);
-	for (let index = 0; index < count; index++) rank[order[index]!] = index;
 
 	const cultureIndex = new Map(target.cultures.map((culture, index) => [culture, index]));
 	const filterIndex = new Map(
@@ -302,17 +323,15 @@ export const indexedLocalizationQuality = Effect.fn("GameText.localizationQualit
 	const storedFacts = u32Builder(),
 		storedFirst = u32Builder(),
 		storedSecond = u32Builder();
-	const rowStart = new Uint32Array(count + 1);
-	for (let start = 0; start < count; start += SCAN_PAGE_LINES) {
-		const rows = Array.from(
-			{ length: Math.min(count, start + SCAN_PAGE_LINES) - start },
-			(_, index) => start + index
-		);
+	const rankStart = new Uint32Array(lineCount),
+		rankSize = new Uint32Array(lineCount);
+	const checkRows = (rows: readonly number[]) => {
 		const lines = data.lines(rows);
 		for (let index = 0; index < rows.length; index++) {
-			const row = rows[index]!;
-			rowStart[row] = storedFacts.length;
+			const rank = rankOf[rows[index]!]!;
 			const { findings, diagnostics } = check(lines[index]!);
+			rankStart[rank] = storedFacts.length;
+			rankSize[rank] = findings.length;
 			for (const finding of findings) {
 				const [first, second] = localizationFindingHash(finding);
 				storedFacts.push(pack(finding));
@@ -321,29 +340,40 @@ export const indexedLocalizationQuality = Effect.fn("GameText.localizationQualit
 			}
 			for (let position = 0; position < diagnostics.length; position++) {
 				const diagnostic = diagnostics[position]!,
-					seen = rank[row]! * 2 ** 20 + position;
+					seen = rank * 2 ** 20 + position;
 				recordLimit("", diagnostic.code, seen);
 				recordLimit(diagnostic.culture, diagnostic.code, seen);
 			}
 		}
+	};
+	// The join's rows in storage order, so each page hydrates adjacent rows.
+	let page: number[] = [];
+	for (let row = 0; row < count; row++) {
+		if (joinPosition[row] === NOT_JOINED) continue;
+		page.push(row);
+		if (page.length < SCAN_PAGE_LINES) continue;
+		checkRows(page);
+		page = [];
 		yield* Effect.yieldNow;
 	}
-	rowStart[count] = storedFacts.length;
+	if (page.length) checkRows(page);
+	page = [];
 
 	const total = storedFacts.length;
 	const facts = new Uint32Array(total),
 		first = new Uint32Array(total),
 		second = new Uint32Array(total),
-		rowOf = new Uint32Array(total),
-		rowPosition = new Uint32Array(count);
+		rankAt = new Uint32Array(total),
+		rankPosition = new Uint32Array(lineCount);
 	let position = 0;
-	for (const row of order) {
-		rowPosition[row] = position;
-		for (let stored = rowStart[row]!; stored < rowStart[row + 1]!; stored++, position++) {
+	for (let rank = 0; rank < lineCount; rank++) {
+		rankPosition[rank] = position;
+		const end = rankStart[rank]! + rankSize[rank]!;
+		for (let stored = rankStart[rank]!; stored < end; stored++, position++) {
 			facts[position] = storedFacts.at(stored);
 			first[position] = storedFirst.at(stored);
 			second[position] = storedSecond.at(stored);
-			rowOf[position] = row;
+			rankAt[position] = rank;
 		}
 	}
 	const limits = new Map(
@@ -357,15 +387,15 @@ export const indexedLocalizationQuality = Effect.fn("GameText.localizationQualit
 
 	/** Re-checks the rows behind positions; each finding must hash as it did in the scan. */
 	const hydrate = (positions: readonly number[]) => {
-		const rows = [...new Set(positions.map((position) => rowOf[position]!))];
-		const lines = data.lines(rows);
+		const ranks = [...new Set(positions.map((position) => rankAt[position]!))];
+		const lines = data.lines(ranks.map((rank) => order[rank]!));
 		const checked = new Map(
-			rows.map((row, index) => [row, { line: lines[index]!, ...check(lines[index]!) }])
+			ranks.map((rank, index) => [rank, { line: lines[index]!, ...check(lines[index]!) }])
 		);
 		return positions.map((position) => {
-			const row = rowOf[position]!,
-				{ line, findings } = checked.get(row)!;
-			const finding = findings[position - rowPosition[row]!];
+			const rank = rankAt[position]!,
+				{ line, findings } = checked.get(rank)!;
+			const finding = findings[position - rankPosition[rank]!];
 			const hash = finding && localizationFindingHash(finding);
 			snapshotCheck(
 				finding !== undefined &&
@@ -389,13 +419,14 @@ export const indexedLocalizationQuality = Effect.fn("GameText.localizationQualit
 			let size = 0;
 			for (const raw of sliceRaw) size = Math.max(size, raw + 1);
 			lineOfRaw = new Uint32Array(size);
-			for (let row = 0; row < count; row++)
+			for (const row of joinRows)
 				for (let slice = starts[row]!; slice < starts[row + 1]!; slice++)
 					lineOfRaw[sliceRaw[slice]!] = row + 1;
 		}
 		const row = lineOfRaw[units.idRow(raw)];
 		return row ? data.line(row - 1) : undefined;
 	};
+
 	const findings: LocalizationFindingList = {
 		length: total,
 		culture: (position) => target.cultures[facts[position]! & 0xfff]!,

@@ -4,9 +4,11 @@ import { it } from "@effect/vitest";
 import { Cause, Effect, Exit, Fiber, Schema } from "effect";
 import { LocalizationReviewFile } from "@ue-shed/localization";
 import { expect } from "vitest";
+import type { GameTextIndexRefreshResult } from "./index-contract.js";
 import { GameTextIndexRefresh } from "./index-refresh.js";
 import { makeIndexRegressionFixture } from "./index-refresh-regressions.test-support.js";
 import { checkLocalizationTarget } from "./localization-checks.js";
+import type { LocalizationCheckOptions } from "./localization-quality-schema.js";
 import { localizationLineFingerprint } from "./localization-review.js";
 import {
 	WorkspaceQualityFilter,
@@ -231,6 +233,79 @@ it.live(
 			}).pipe(Effect.provide(fixture.layer()));
 		}).pipe(Effect.scoped),
 	120_000
+);
+
+/** Every filter, culture, page, export and focus of both workspaces, with and without the rules. */
+const expectSameQuality = Effect.fn("Test.GameText.sameQuality")(function* (
+	result: GameTextIndexRefreshResult,
+	optionSets: readonly LocalizationCheckOptions[] = [{}]
+) {
+	const join = result.localizationJoin;
+	for (const rules of [undefined, document])
+		for (const options of optionSets) {
+			const source = rules ? evaluateGameTextSourceQuality(result.corpus, rules) : undefined;
+			const legacy = localizationQualityWorkspace(
+				source,
+				checkLocalizationTarget(result.corpus, join, result.evidence, options, rules),
+				join
+			);
+			const indexed = localizationQualityWorkspaceOf(
+				source,
+				yield* result.localizationQuality!(options, rules)
+			);
+			for (const culture of [undefined, ...join.cultures])
+				for (const filter of WorkspaceQualityFilter.literals) {
+					const request: WorkspaceQualityRequest = {
+						target: join.target,
+						filter,
+						...(culture ? { culture } : undefined)
+					};
+					expect(indexed.search(request)).toEqual(legacy.search(request));
+					const exported = legacy.export(request);
+					expect(indexed.export(request)).toEqual(exported);
+					for (const { id } of exported.findings)
+						expect(indexed.focus({ ...request, id })).toEqual(
+							legacy.focus({ ...request, id })
+						);
+				}
+		}
+});
+
+it.live("rows the query hides are neither checked nor counted in the limits", () =>
+	Effect.gen(function* () {
+		const fixture = yield* makeIndexRegressionFixture();
+		// Blank sources are not visible lines; the last key exists only in the localization files.
+		// With the archives unreadable, every culture of every line would add a diagnostic.
+		const entries = [
+			{ key: "K", source: "Source", de: "Quelle" },
+			{ key: "Empty", source: "", de: "" },
+			{ key: "Blank", source: " \t ", de: " " },
+			{ key: "Unused", source: "", de: "" }
+		];
+		yield* Effect.promise(async () => {
+			await writeLocalization(fixture.projectRoot, entries);
+			for (const culture of ["en", "de"])
+				await writeFile(join(fixture.projectRoot, `${culture}.archive`), "not an archive");
+		});
+		fixture.update(
+			entries.slice(0, 3).map(({ key, source }, index) => occurrence(key, source, index))
+		);
+		yield* Effect.gen(function* () {
+			const result = yield* (yield* GameTextIndexRefresh).refresh(fixture.request);
+			const join = result.localizationJoin;
+			expect(join.lines.map((line) => line.identity?.key)).toEqual(["K"]);
+			const legacy = localizationQualityWorkspace(
+				undefined,
+				checkLocalizationTarget(result.corpus, join, result.evidence),
+				join
+			);
+			expect(legacy.search({ target: join.target, filter: "all" }).limits).toContainEqual({
+				code: "missing_archive",
+				count: 2
+			});
+			yield* expectSameQuality(result);
+		}).pipe(Effect.provide(fixture.layer()));
+	}).pipe(Effect.scoped)
 );
 
 it.live("a scan across many pages equals the in-memory checks", () =>

@@ -56,13 +56,24 @@ const terms = (value: string) => value.toLocaleLowerCase().trim().split(/\s+/u).
 const countedSignals = ["shared", "duplicate_source", "long", "unresolved", "conflicting"] as const;
 const origins = (mask: number) => TEXT_ORIGIN_KINDS.filter((_, bit) => mask & (1 << bit));
 
+/** The query over an index, with the line rows behind `localizationLines` for index scans. */
+export interface ColumnarTextCorpusQuery extends TextCorpusQuery {
+	/**
+	 * The joined rows `localizationLines` hydrates for this request, in its order, without
+	 * hydrating them. The array is shared with the query's cache; read it, never modify it.
+	 */
+	readonly localizationRows: (
+		request: Omit<TextCorpusSearchRequest, "cursor" | "pageSize">
+	) => Uint32Array;
+}
+
 /** The published numeric columns supply predicates; only selected rows hydrate public objects. */
 export function columnarTextCorpusQuery(
 	joined: JoinedTargetReader,
 	scannedAt?: string,
 	projection?: JoinedQueryProjection,
 	checkInterrupted?: () => void
-): TextCorpusQuery {
+): ColumnarTextCorpusQuery {
 	let visited = 0;
 	const checkpoint = () => {
 		if (checkInterrupted && (++visited & 255) === 0) checkInterrupted();
@@ -1473,6 +1484,16 @@ export function columnarTextCorpusQuery(
 	} else {
 		cachedSearch({ query: "", capability: "all", pageSize: 50 });
 	}
+	const localizationRows = (request: Request) => {
+		if (!request.localization)
+			throw new GameTextLocalizationError({
+				code: "invalid_selection",
+				message: "Localization evidence has not been supplied to this query.",
+				recovery:
+					"Load and join the selected target before querying its localization state."
+			});
+		return matching(request);
+	};
 	const findRaw = (id: string) => data.findId("raw", id);
 	const findLine = (id: string) => data.findId("line", id);
 	const rawLineRows = () => {
@@ -1496,16 +1517,8 @@ export function columnarTextCorpusQuery(
 			const row = findLine(id);
 			return row === undefined ? undefined : data.line(row);
 		},
-		localizationLines: (request) => {
-			if (!request.localization)
-				throw new GameTextLocalizationError({
-					code: "invalid_selection",
-					message: "Localization evidence has not been supplied to this query.",
-					recovery:
-						"Load and join the selected target before querying its localization state."
-				});
-			return data.lines(matching(request));
-		},
+		localizationRows,
+		localizationLines: (request) => data.lines(localizationRows(request)),
 		export: (request) => {
 			const rows = matching(request),
 				chosen = new Set<number>();

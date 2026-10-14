@@ -160,26 +160,40 @@ export function localizationDuplicateCandidate(line: LocalizationLine): boolean 
 	);
 }
 
-/** Groups candidate lines by source. Identities are sorted; the first five are kept. */
+/**
+ * Groups candidate lines by source. Identities are sorted; the first five are kept. Identities
+ * that compare equal keep their lines' join order: the order they are added in, unless the caller
+ * adds them in another order and passes each line's position in the join.
+ */
 export function localizationDuplicateSources() {
-	const groups = new Map<string, LocalizationIdentity[]>();
+	// Identity and join position, alternating; no object per line.
+	const groups = new Map<string, Array<LocalizationIdentity | number>>();
+	let added = 0;
 	return {
-		add(source: string, identity: LocalizationIdentity) {
+		add(source: string, identity: LocalizationIdentity, joinPosition = added) {
+			added++;
 			const group = groups.get(source);
-			if (group) group.push(identity);
-			else groups.set(source, [identity]);
+			if (group) group.push(identity, joinPosition);
+			else groups.set(source, [identity, joinPosition]);
 		},
 		finish(): ReadonlyMap<string, DuplicateSourceActual> {
 			const shared = new Map<string, DuplicateSourceActual>();
-			for (const [source, identities] of groups) {
-				if (identities.length < 2) continue;
-				identities.sort(
-					(a, b) => a.namespace.localeCompare(b.namespace) || a.key.localeCompare(b.key)
+			for (const [source, group] of groups) {
+				if (group.length < 4) continue;
+				// SAFETY: `add` is the only writer and pushes an identity, then its position.
+				const identities = Array.from({ length: group.length / 2 }, (_, index) => ({
+					identity: group[index * 2] as LocalizationIdentity,
+					position: group[index * 2 + 1] as number
+				})).sort(
+					(a, b) =>
+						a.identity.namespace.localeCompare(b.identity.namespace) ||
+						a.identity.key.localeCompare(b.identity.key) ||
+						a.position - b.position
 				);
 				shared.set(source, {
 					source,
 					identityCount: identities.length,
-					identities: identities.slice(0, 5)
+					identities: identities.slice(0, 5).map(({ identity }) => identity)
 				});
 			}
 			groups.clear();
