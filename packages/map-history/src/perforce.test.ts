@@ -1,12 +1,14 @@
-import { Context, Effect, Layer } from "effect";
+import { Context, Effect, Fiber, Layer } from "effect";
 import {
 	P4CommandError,
-	type P4CommandExecutor,
 	type P4ChangelistDescription,
-	type P4DepotPath,
-	type P4FileAction,
-	type P4LocalPath
+	type ListChangelistsOptions,
+	type ListDepotFilesAtChangeOptions,
+	P4DepotPath,
+	P4FileAction,
+	P4LocalPath
 } from "p4client-ts";
+import { createP4Client } from "p4client-ts/promise";
 import { describe, expect, it } from "vitest";
 import {
 	makePerforceHistorySource,
@@ -20,25 +22,25 @@ function backend() {
 	const description: P4ChangelistDescription = {
 		change: 42,
 		client: "workspace",
-		createdAt: "2026/07/28 12:00:00",
-		createdAtIso: "2026-07-28T12:00:00.000Z",
+		createdAt: "2026-07-28T12:00:00.000Z",
 		description: "Move actor",
 		files: [
 			{
-				// SAFETY: p4client-ts brands protocol strings but exposes no runtime constructors.
-				action: "edit" as P4FileAction,
-				// SAFETY: p4client-ts brands depot paths but exposes no runtime constructor.
-				depotFile: "//Project/Main/Content/Maps/L_Example.umap" as P4DepotPath,
+				action: P4FileAction.make("edit"),
+				depotFile: P4DepotPath.make("//Project/Main/Content/Maps/L_Example.umap"),
 				revision: 7,
+				digest: null,
+				fileSize: null,
 				type: "binary"
 			}
 		],
 		status: "submitted",
+		messages: [],
 		user: "artist"
 	};
 	return {
 		describeChangelist: () => Effect.succeed(description),
-		listDepotFilesAtChange: () => Effect.succeed({ hasMore: false, items: [] }),
+		listDepotFilesAtChange: () => Effect.succeed({ hasMore: false, items: [], messages: [] }),
 		listSubmittedChangelists: () =>
 			Effect.succeed({
 				hasMore: false,
@@ -46,21 +48,21 @@ function backend() {
 					{
 						change: 42,
 						client: "workspace",
-						createdAt: "2026/07/28 12:00:00",
-						createdAtIso: "2026-07-28T12:00:00.000Z",
+						createdAt: "2026-07-28T12:00:00.000Z",
 						description: "Move actor",
 						status: "submitted" as const,
+						isDefault: false,
 						user: "artist"
 					}
 				],
-				nextBeforeChange: null
+				nextCursor: null,
+				messages: []
 			}),
 		materializeDepotFiles: () =>
 			Effect.succeed({
-				// SAFETY: p4client-ts brands normalized local paths but exposes no runtime constructor.
-				directory: "C:/temp/history" as P4LocalPath,
+				directory: P4LocalPath.make("C:/temp/history"),
 				items: [],
-				totalCount: 0
+				messages: []
 			}),
 		resolveLocalPath: () =>
 			Effect.succeed({ depotPath: "//Project/Main/Content/Maps/L_Example.umap" })
@@ -99,45 +101,92 @@ describe("PerforceHistorySource", () => {
 
 	it("runs project-scoped commands with the matching client", async () => {
 		const calls: {
-			readonly args: readonly string[];
-			readonly client: string | undefined;
-			readonly config: string | undefined;
-			readonly cwd: string | undefined;
+			client: string | undefined;
+			config: string | undefined;
+			cwd: string | undefined;
 		}[] = [];
-		const executor: P4CommandExecutor = async (_command, args, options) => {
-			calls.push({
-				args,
-				client: options.env?.P4CLIENT,
-				config: options.env?.P4CONFIG,
-				cwd: options.cwd
-			});
-			const command = args.find(
-				(argument) => argument === "info" || argument === "clients" || argument === "where"
-			);
-			const stdout =
-				command === "info"
-					? "User name: developer\nClient name: configured-client\nClient host: DEV-WORKSTATION\n"
-					: command === "clients"
-						? `${JSON.stringify({ client: "example-client", Host: "DEV-WORKSTATION", Owner: "developer", Root: "D:\\Perforce\\ExampleProject" })}\n`
-						: `${JSON.stringify({ depotFile: "//Depot/Main/Content/Maps/Example.umap" })}\n`;
-			return { args: [...args], command: "p4", exitCode: 0, stderr: "", stdout };
+		const disposed: string[] = [];
+		const createClient: NonNullable<Parameters<typeof perforceHistorySourceLayer>[1]> = (
+			options
+		) => {
+			const client = createP4Client(options);
+			return {
+				...client,
+				resolveConnection: async () => ({
+					connection: {
+						port: "localhost:1666",
+						user: "developer",
+						client: "configured-client"
+					},
+					sources: {}
+				}),
+				getEnvironment: async () => ({
+					user: "developer",
+					client: "configured-client",
+					clientHost: "DEV-WORKSTATION",
+					port: null,
+					serverAddress: null,
+					serverVersion: null,
+					unicode: false,
+					caseInsensitive: false,
+					messages: []
+				}),
+				listWorkspaces: async () => ({
+					items: [
+						{
+							client: "example-client",
+							root: "D:/Perforce/ExampleProject",
+							owner: "developer",
+							host: null,
+							stream: null,
+							description: null,
+							accessedAt: null,
+							updatedAt: null
+						}
+					],
+					messages: []
+				}),
+				whereFiles: async () => {
+					calls.push({
+						client: options.connection?.client,
+						config: options.env?.P4CONFIG,
+						cwd: options.cwd
+					});
+					return {
+						items: [
+							{
+								depotFile: P4DepotPath.make(
+									"//Depot/Main/Content/Maps/Example.umap"
+								),
+								clientFile: null,
+								localFile: null,
+								isExcluded: false
+							}
+						],
+						messages: [],
+						failures: []
+					};
+				},
+				dispose: async () => {
+					disposed.push("disposed");
+					await client.dispose();
+				}
+			};
 		};
 		const context = await Effect.runPromise(
-			Effect.scoped(Layer.build(perforceHistorySourceLayer({ executor })))
+			Effect.scoped(Layer.build(perforceHistorySourceLayer({}, createClient)))
 		);
 		const source = Context.get(context, PerforceHistorySource);
-
 		const mapping = await Effect.runPromise(
 			source
 				.resolveLocalPath("D:/Perforce/ExampleProject/Content/Maps/Example.umap")
 				.pipe(Effect.provideService(PerforceProjectContext, "D:/Perforce/ExampleProject"))
 		);
-
 		expect(mapping.depotPath).toBe("//Depot/Main/Content/Maps/Example.umap");
-		const whereCall = calls.find((call) => call.args.includes("where"));
-		expect(whereCall?.cwd).toBe("D:/Perforce/ExampleProject");
-		expect(whereCall?.client).toBe("example-client");
-		expect(whereCall?.config).toMatch(/ue-shed-no-p4config$/u);
+		expect(calls[0]?.cwd).toBe("D:/Perforce/ExampleProject");
+		expect(calls[0]?.client).toBe("example-client");
+		expect(calls[0]?.config).toMatch(/ue-shed-no-p4config$/u);
+		expect(disposed).toHaveLength(2);
 	});
 
 	it("translates p4client values at the acquisition boundary", async () => {
@@ -169,17 +218,16 @@ describe("PerforceHistorySource", () => {
 			...backend(),
 			listSubmittedChangelists: () =>
 				Effect.fail(
-					new P4CommandError(
-						"Perforce password invalid or unset.",
-						{
-							args: ["changes"],
-							command: "p4",
-							exitCode: 1,
-							stderr: "Perforce password invalid or unset.",
-							stdout: ""
-						},
-						"authentication"
-					)
+					new P4CommandError({
+						message: "Perforce password invalid or unset.",
+						args: ["changes"],
+						command: "p4",
+						exitCode: 1,
+						stderr: "",
+						messages: [],
+						reason: "not_logged_in",
+						category: "authentication"
+					})
 				)
 		});
 
@@ -194,19 +242,23 @@ describe("PerforceHistorySource", () => {
 	it.each([
 		["permission", "perforce_authentication"],
 		["not_in_view", "ambiguous_depot_mapping"],
-		["user", "perforce_configuration"],
-		["charset", "perforce_configuration"],
-		["changelist", "perforce_command"]
+		["configuration", "perforce_configuration"],
+		["not_found", "perforce_command"]
 	] as const)("maps %s command failures to %s", async (category, kind) => {
 		const source = makePerforceHistorySource({
 			...backend(),
 			describeChangelist: () =>
 				Effect.fail(
-					new P4CommandError(
-						"Perforce rejected the command.",
-						{ args: ["describe"], command: "p4", exitCode: 0, stderr: "", stdout: "" },
+					new P4CommandError({
+						message: "Perforce rejected the command.",
+						args: ["describe"],
+						command: "p4",
+						exitCode: 1,
+						stderr: "",
+						messages: [],
+						reason: "unknown",
 						category
-					)
+					})
 				)
 		});
 
@@ -214,5 +266,144 @@ describe("PerforceHistorySource", () => {
 
 		expect(error.kind).toBe(kind);
 		expect(error.retrySafe).toBe(false);
+	});
+	it("preserves the inclusive pagination cursor and exact snapshot bounds", async () => {
+		let changes: ListChangelistsOptions | undefined;
+		let snapshot: ListDepotFilesAtChangeOptions | undefined;
+		const source = makePerforceHistorySource({
+			...backend(),
+			listSubmittedChangelists: (options) => {
+				changes = options;
+				return Effect.succeed({ items: [], messages: [], hasMore: true, nextCursor: 39 });
+			},
+			listDepotFilesAtChange: (options) => {
+				snapshot = options;
+				return Effect.succeed({ items: [], messages: [], hasMore: true });
+			}
+		});
+		const page = await Effect.runPromise(
+			source.listSubmittedChangelists({ beforeChange: 42, fileSpec: "//Depot/...", limit: 3 })
+		);
+		expect(changes).toEqual({
+			status: "submitted",
+			cursor: 42,
+			fileSpec: "//Depot/...",
+			limit: 3
+		});
+		expect(page.nextBeforeChange).toBe(39);
+		expect(page.hasMore).toBe(true);
+		expect(
+			await Effect.runPromise(
+				source.listDepotFilesAtChange({ depotPath: "//Depot/...", change: 42, maxFiles: 7 })
+			)
+		).toEqual({ files: [], hasMore: true });
+		expect(snapshot).toEqual({ file: "//Depot/...", change: 42, limit: 7 });
+	});
+
+	it("retains revision metadata when materialization returns only exact specs", async () => {
+		const file = {
+			action: "edit",
+			changelist: 42,
+			depotPath: "//Depot/map.umap",
+			revision: 7,
+			type: "binary"
+		};
+		const source = makePerforceHistorySource({
+			...backend(),
+			materializeDepotFiles: (options) =>
+				Effect.succeed({
+					directory: P4LocalPath.make("C:/temp/history"),
+					messages: [],
+					items: options.fileSpec.map((spec) => ({
+						file: { depotFile: spec.depotFile, revision: spec.revision },
+						localPath: P4LocalPath.make("C:/temp/history/Depot/map.umap")
+					}))
+				})
+		});
+		const result = await Effect.runPromise(
+			source.materializeDepotFiles({
+				directory: "C:/temp/history",
+				files: [file],
+				maxFiles: 1
+			})
+		);
+		expect(result.files[0]?.file).toEqual(file);
+		expect(result.totalCount).toBe(1);
+	});
+
+	it.each(["excluded", "overlapping", "unmapped"] as const)(
+		"rejects %s workspace mappings",
+		async (kind) => {
+			const createClient: NonNullable<Parameters<typeof perforceHistorySourceLayer>[1]> = (
+				options
+			) => {
+				const client = createP4Client(options);
+				const row = {
+					depotFile: P4DepotPath.make("//Depot/map.umap"),
+					clientFile: null,
+					localFile: null,
+					isExcluded: kind === "excluded"
+				};
+				return {
+					...client,
+					whereFiles: async () => ({
+						items:
+							kind === "unmapped" ? [] : kind === "overlapping" ? [row, row] : [row],
+						messages: [],
+						failures: []
+					})
+				};
+			};
+			const error = await Effect.runPromise(
+				Effect.gen(function* () {
+					const source = yield* PerforceHistorySource;
+					return yield* Effect.flip(source.resolveLocalPath("C:/workspace/map.umap"));
+				}).pipe(Effect.provide(perforceHistorySourceLayer({}, createClient)))
+			);
+			expect(error.kind).toBe("ambiguous_depot_mapping");
+		}
+	);
+
+	it("aborts the Promise command and disposes its runtime on interruption", async () => {
+		let start = () => {};
+		const started = new Promise<void>((resolve) => {
+			start = resolve;
+		});
+		let aborted = false;
+		let disposed = false;
+		const createClient: NonNullable<Parameters<typeof perforceHistorySourceLayer>[1]> = (
+			options
+		) => {
+			const client = createP4Client(options);
+			return {
+				...client,
+				whereFiles: (request) =>
+					new Promise((_resolve, reject) => {
+						request.signal?.addEventListener(
+							"abort",
+							() => {
+								aborted = true;
+								reject(request.signal?.reason);
+							},
+							{ once: true }
+						);
+						start();
+					}),
+				dispose: async () => {
+					disposed = true;
+					await client.dispose();
+				}
+			};
+		};
+		const fiber = Effect.runFork(
+			Effect.gen(function* () {
+				const source = yield* PerforceHistorySource;
+				return yield* source.resolveLocalPath("C:/workspace/map.umap");
+			}).pipe(Effect.provide(perforceHistorySourceLayer({}, createClient)))
+		);
+		await started;
+		await Effect.runPromise(Fiber.interrupt(fiber));
+		expect(aborted).toBe(true);
+		expect(disposed).toBe(true);
 	});
 });

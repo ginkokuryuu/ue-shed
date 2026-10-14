@@ -185,7 +185,7 @@ describe.skipIf(config === undefined)("real Perforce Map History conformance", (
 		expect(afterHave).toEqual(beforeHave);
 	});
 
-	it("attributes World Partition semantic and unclassified evidence without changing have-state", async () => {
+	it("attributes World Partition semantic evidence without changing have-state", async () => {
 		const value = requireConfig();
 		const beforeHave = await p4Have(value);
 		const history = await Effect.runPromise(
@@ -216,7 +216,7 @@ describe.skipIf(config === undefined)("real Perforce Map History conformance", (
 			["actor_label_changed"],
 			["actor_added"],
 			["actor_removed"],
-			[]
+			["actor_transform_changed", "actor_transform_changed"]
 		]);
 		for (const [index, revision] of history.revisions.entries()) {
 			const expected = expectedRevisions[index];
@@ -237,11 +237,9 @@ describe.skipIf(config === undefined)("real Perforce Map History conformance", (
 			expect(revision?.user).toBe("ue-shed-map-history");
 			expect(submittedAtSeconds(revision)).toBe(expected.submittedAtSeconds);
 		}
-		const unclassified = history.revisions.at(-1)?.unclassifiedPackageChanges;
-		expect(unclassified).toHaveLength(2);
-		expect(unclassified?.every((change) => change.reason === "projection_unchanged")).toBe(
-			true
-		);
+		// The saved-world projection now resolves these fixture rotation/scale edits.
+		// Both the original 0.12.1 adapter and 0.13 expose them as semantic changes.
+		expect(history.revisions.at(-1)?.unclassifiedPackageChanges).toEqual([]);
 		expect(history.completeness).toBe("complete");
 		expect(history.rangeStartSnapshot?.actors).toHaveLength(6);
 		expect(afterHave).toEqual(beforeHave);
