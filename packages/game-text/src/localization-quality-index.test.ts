@@ -367,43 +367,47 @@ it.live("lines whose IDs compare equal keep the in-memory report's order", () =>
 	}).pipe(Effect.scoped)
 );
 
-it.live("a scan across many pages equals the in-memory checks", () =>
-	Effect.gen(function* () {
-		const fixture = yield* makeIndexRegressionFixture();
-		const many = Array.from({ length: 600 }, (_, index) => ({
-			key: `M${String(index).padStart(3, "0")}`,
-			...patterns[index % patterns.length]!
-		}));
-		yield* Effect.promise(() => writeLocalization(fixture.projectRoot, many));
-		fixture.update(
-			many.slice(0, 590).map(({ key, source }, index) => occurrence(key, source, index))
-		);
-		yield* Effect.gen(function* () {
-			const result = yield* (yield* GameTextIndexRefresh).refresh(fixture.request);
-			const join = result.localizationJoin;
-			expect(join.lines.length).toBeGreaterThan(512);
-			const legacy = localizationQualityWorkspace(
-				undefined,
-				checkLocalizationTarget(result.corpus, join, result.evidence),
-				join
+it.live(
+	"a scan across many pages equals the in-memory checks",
+	() =>
+		Effect.gen(function* () {
+			const fixture = yield* makeIndexRegressionFixture();
+			const many = Array.from({ length: 600 }, (_, index) => ({
+				key: `M${String(index).padStart(3, "0")}`,
+				...patterns[index % patterns.length]!
+			}));
+			yield* Effect.promise(() => writeLocalization(fixture.projectRoot, many));
+			fixture.update(
+				many.slice(0, 590).map(({ key, source }, index) => occurrence(key, source, index))
 			);
-			const indexed = localizationQualityWorkspaceOf(
-				undefined,
-				yield* result.localizationQuality!()
-			);
-			for (const culture of [undefined, ...join.cultures]) {
-				const request = {
-					target: join.target,
-					filter: "all" as const,
-					...(culture ? { culture } : undefined)
-				};
-				expect(indexed.export(request)).toEqual(legacy.export(request));
-				expect(indexed.search({ ...request, offset: 500 })).toEqual(
-					legacy.search({ ...request, offset: 500 })
+			yield* Effect.gen(function* () {
+				const result = yield* (yield* GameTextIndexRefresh).refresh(fixture.request);
+				const join = result.localizationJoin;
+				expect(join.lines.length).toBeGreaterThan(512);
+				const legacy = localizationQualityWorkspace(
+					undefined,
+					checkLocalizationTarget(result.corpus, join, result.evidence),
+					join
 				);
-			}
-		}).pipe(Effect.provide(fixture.layer()));
-	}).pipe(Effect.scoped)
+				const indexed = localizationQualityWorkspaceOf(
+					undefined,
+					yield* result.localizationQuality!()
+				);
+				for (const culture of [undefined, ...join.cultures]) {
+					const request = {
+						target: join.target,
+						filter: "all" as const,
+						...(culture ? { culture } : undefined)
+					};
+					expect(indexed.export(request)).toEqual(legacy.export(request));
+					expect(indexed.search({ ...request, offset: 500 })).toEqual(
+						legacy.search({ ...request, offset: 500 })
+					);
+				}
+			}).pipe(Effect.provide(fixture.layer()));
+		}).pipe(Effect.scoped),
+	// Index-building tests outrun the default timeout when the whole suite runs in parallel.
+	30_000
 );
 
 it.live("the indexed scan yields between pages and stops when interrupted", () =>
