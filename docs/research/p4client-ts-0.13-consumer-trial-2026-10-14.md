@@ -1,11 +1,19 @@
-# p4client-ts 0.13 consumer trial
+# p4client-ts 0.13 adoption
+
+## Status
+
+Adopted. Map History's p4client-ts 0.13 migration from this trial was merged with main on
+`feat/p4client-ts-0.13` ("Adopt p4client-ts 0.13"). Main's Effect 4.0.4 upgrade (#76)
+superseded the trial's own Effect upgrade, so that merge kept main's Effect setup and only the
+Map History adapter, its tests and the deleted-revision regression from this trial. Until
+p4client-ts 0.13.0 is published, the dependency is a tarball packed from p4client-ts `01d6ab3`
+(SHA-256 `8b0b32c96448fc414c8e2627f782b56350ffe91df69b579c7cd57e18438dd781`). The sections
+below are the dated trial record.
 
 ## Replacement release candidate, 2026-10-14
 
-This section supersedes the earlier candidate's findings below. Work remains on
-`trial/p4client-ts-0.13`; main is unchanged and nothing has been pushed. The file
-specifier is unchanged, but the tarball and lockfile integrity were refreshed.
-Candidate SHA-256:
+This section supersedes the earlier candidate's findings below. It was recorded on
+`trial/p4client-ts-0.13` before main's Effect upgrade, using candidate SHA-256
 `597d18003e03880587d80cd0d447ff4c74ad59e48cb6e9e899d8e9ba2d634b07`.
 
 ### What changed

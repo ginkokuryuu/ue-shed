@@ -18,14 +18,10 @@ This module intentionally remains Perforce-specific. A downstream MB Map produce
 `@ue-shed/unreal-assets` directly and own its product contract/archive; only independently reusable
 identity, diff, or playback primitive gaps should be proposed upstream.
 
-This local trial branch uses the supplied p4client-ts 0.13 release candidate and stable Effect 4.0.4.
-See the [consumer trial notes](../../docs/research/p4client-ts-0.13-consumer-trial-2026-10-14.md)
-for verification, upstream feedback, and why this dependency configuration is not publishable.
-
-Install the published headless package with its exact compatible release dependencies:
+Install the headless package with its exact compatible release dependencies:
 
 ```powershell
-npm install --save-exact @ue-shed/map-history @ue-shed/protocol @ue-shed/unreal-assets "effect@^4.0.0" p4client-ts@0.12.1
+npm install --save-exact @ue-shed/map-history @ue-shed/protocol @ue-shed/unreal-assets "effect@^4.0.0" p4client-ts@0.13.0
 ```
 
 The root export owns Perforce acquisition and therefore requires a configured `p4` executable and
