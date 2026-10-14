@@ -44,13 +44,21 @@
 						"properties": {
 							"controllerObjectPath": {
 								"type": "string",
-								"minLength": 1
+								"allOf": [
+									{
+										"minLength": 1
+									}
+								]
 							},
 							"playerInputObjectPath": {
 								"anyOf": [
 									{
 										"type": "string",
-										"minLength": 1
+										"allOf": [
+											{
+												"minLength": 1
+											}
+										]
 									},
 									{
 										"type": "null"
@@ -59,8 +67,11 @@
 							},
 							"localPlayerIndex": {
 								"type": "integer",
-								"minimum": 0,
-								"maximum": 9007199254740991
+								"allOf": [
+									{
+										"minimum": 0
+									}
+								]
 							}
 						},
 						"required": [
@@ -78,7 +89,11 @@
 						"properties": {
 							"code": {
 								"type": "string",
-								"minLength": 1
+								"allOf": [
+									{
+										"minLength": 1
+									}
+								]
 							},
 							"message": {
 								"type": "string"

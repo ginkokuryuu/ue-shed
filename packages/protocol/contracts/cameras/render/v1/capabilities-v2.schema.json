@@ -77,18 +77,36 @@
 		},
 		"engineVersion": {
 			"type": "string",
-			"minLength": 1,
-			"maxLength": 1024
+			"allOf": [
+				{
+					"minLength": 1
+				},
+				{
+					"maxLength": 1024
+				}
+			]
 		},
 		"pluginVersion": {
 			"type": "string",
-			"minLength": 1,
-			"maxLength": 1024
+			"allOf": [
+				{
+					"minLength": 1
+				},
+				{
+					"maxLength": 1024
+				}
+			]
 		},
 		"projectName": {
 			"type": "string",
-			"minLength": 1,
-			"maxLength": 1024
+			"allOf": [
+				{
+					"minLength": 1
+				},
+				{
+					"maxLength": 1024
+				}
+			]
 		},
 		"renderers": {
 			"type": "array",
@@ -149,8 +167,12 @@
 					},
 					"maximumDimension": {
 						"type": "integer",
-						"minimum": 16,
-						"maximum": 16384
+						"allOf": [
+							{
+								"minimum": 16,
+								"maximum": 16384
+							}
+						]
 					}
 				},
 				"required": [
@@ -182,18 +204,30 @@
 		},
 		"maximumRetainedOperations": {
 			"type": "integer",
-			"minimum": 1,
-			"maximum": 64
+			"allOf": [
+				{
+					"minimum": 1,
+					"maximum": 64
+				}
+			]
 		},
 		"maximumRetainedSessions": {
 			"type": "integer",
-			"minimum": 1,
-			"maximum": 9
+			"allOf": [
+				{
+					"minimum": 1,
+					"maximum": 9
+				}
+			]
 		},
 		"retentionMs": {
 			"type": "integer",
-			"minimum": 1000,
-			"maximum": 120000
+			"allOf": [
+				{
+					"minimum": 1000,
+					"maximum": 120000
+				}
+			]
 		},
 		"highResolutionScreenshot": {
 			"type": "object",
@@ -204,8 +238,12 @@
 				},
 				"maximumWarmupFrames": {
 					"type": "integer",
-					"minimum": 1,
-					"maximum": 256
+					"allOf": [
+						{
+							"minimum": 1,
+							"maximum": 256
+						}
+					]
 				}
 			},
 			"required": ["version", "maximumWarmupFrames"],

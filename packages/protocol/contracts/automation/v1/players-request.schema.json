@@ -32,9 +32,17 @@
 				},
 				"worldObjectPath": {
 					"type": "string",
-					"minLength": 1,
-					"maxLength": 2048,
-					"pattern": "^\\/[^\\u0000-\\u001f]*$"
+					"allOf": [
+						{
+							"minLength": 1
+						},
+						{
+							"maxLength": 2048
+						},
+						{
+							"pattern": "^\\/[^\\u0000-\\u001f]*$"
+						}
+					]
 				}
 			},
 			"required": ["contract", "worldObjectPath"],

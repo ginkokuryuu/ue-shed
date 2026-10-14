@@ -9,7 +9,8 @@ Workbench unless a named verification failure leaves the public package contract
 1. Inspect the target's package manifest, Node version, Effect version, selected-project model, and
    saved-asset reader configuration. The Node entry supports Node 22.15+ in the 22.x line, or
    Node 23.8+ (including 24 and 26); Node 22.14 lacks the required built-in Zstd APIs.
-2. Install the exact `@ue-shed/game-text` version. Reuse a compatible existing
+2. Install the exact `@ue-shed/game-text` version and supply one application-owned
+   `effect@^4.0.0` installation satisfying its peer dependency. Reuse a compatible existing
    `@ue-shed/unreal-assets` and `@ue-shed/uasset` installation when present.
 3. In the target's trusted Node process, compose one scoped `AssetReader` layer and
    `TextCorpusServiceLive`. Do not create a sidecar server or a reader layer per asset.

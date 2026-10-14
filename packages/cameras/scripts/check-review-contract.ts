@@ -1,3 +1,5 @@
+import { assertJsonSchemaEquivalent } from "../../../scripts/canonical-json-schema.ts";
+import { makeWireJsonSchemaDocument } from "@ue-shed/protocol";
 import { MapCaptureSelection, MapCaptureReadiness } from "../src/map-capture-tools-schema.js";
 import "./check-render-contract.js";
 import "./check-authoring-contract.js";
@@ -138,10 +140,8 @@ for (const { file, schema } of invalidFixtures) {
 }
 
 // SAFETY: this repository fixture is decoded by the matching protocol schema below.
-const provisioningDocument = Schema.toJsonSchemaDocument(Schema.toType(ProvisionedCameraRequest), {
-	onExcessProperty: "error"
-});
-deepStrictEqual(
+const provisioningDocument = makeWireJsonSchemaDocument(ProvisionedCameraRequest);
+assertJsonSchemaEquivalent(
 	JSON.parse(
 		readFileSync(
 			join(provisioningFixturesDirectory, "../provision-request.schema.json"),

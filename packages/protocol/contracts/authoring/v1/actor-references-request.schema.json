@@ -32,31 +32,63 @@
 				},
 				"worldObjectPath": {
 					"type": "string",
-					"minLength": 1,
-					"maxLength": 2048,
-					"pattern": "^\\/[^\\u0000-\\u001f]*$"
+					"allOf": [
+						{
+							"minLength": 1
+						},
+						{
+							"maxLength": 2048
+						},
+						{
+							"pattern": "^\\/[^\\u0000-\\u001f]*$"
+						}
+					]
 				},
 				"tableObjectPath": {
 					"type": "string",
-					"minLength": 1,
-					"maxLength": 2048,
-					"pattern": "^\\/[^\\u0000-\\u001f]*$"
+					"allOf": [
+						{
+							"minLength": 1
+						},
+						{
+							"maxLength": 2048
+						},
+						{
+							"pattern": "^\\/[^\\u0000-\\u001f]*$"
+						}
+					]
 				},
 				"rowName": {
 					"type": "string",
-					"minLength": 1,
-					"maxLength": 1023,
-					"pattern": "^[^\\u0000-\\u001f]*$"
+					"allOf": [
+						{
+							"minLength": 1
+						},
+						{
+							"maxLength": 1023
+						},
+						{
+							"pattern": "^[^\\u0000-\\u001f]*$"
+						}
+					]
 				},
 				"maxActors": {
 					"type": "integer",
-					"minimum": 1,
-					"maximum": 100000
+					"allOf": [
+						{
+							"minimum": 1,
+							"maximum": 100000
+						}
+					]
 				},
 				"maxResults": {
 					"type": "integer",
-					"minimum": 1,
-					"maximum": 10000
+					"allOf": [
+						{
+							"minimum": 1,
+							"maximum": 10000
+						}
+					]
 				}
 			},
 			"required": [

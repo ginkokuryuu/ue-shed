@@ -51,7 +51,7 @@ export type MapCaptureWorldBounds = typeof MapCaptureWorldBounds.Type;
 
 export const MapCaptureProject = Schema.Struct({
 	id: SafeIdentifier,
-	mapPath: Schema.String.check(Schema.isPattern(/^\/[A-Za-z0-9_./-]+$/))
+	mapPath: Schema.String.check(Schema.isPattern(/^\/[A-Za-z0-9_./-]+$/u))
 });
 export type MapCaptureProject = typeof MapCaptureProject.Type;
 

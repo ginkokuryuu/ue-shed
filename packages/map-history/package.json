@@ -46,11 +46,14 @@
 	"dependencies": {
 		"@ue-shed/protocol": "workspace:0.13.0",
 		"@ue-shed/unreal-assets": "workspace:0.13.0",
-		"effect": "catalog:",
-		"p4client-ts": "file:C:/Users/denny/AppData/Local/Temp/p4-phase7/p4client-ts-0.13.0.tgz"
+		"p4client-ts": "file:D:/tmp/p4client-0.13/p4client-ts-0.13.0.tgz"
 	},
 	"devDependencies": {
-		"@effect/vitest": "catalog:"
+		"@effect/vitest": "catalog:",
+		"effect": "catalog:"
+	},
+	"peerDependencies": {
+		"effect": "^4.0.0"
 	},
 	"engines": {
 		"node": ">=22.14.0"

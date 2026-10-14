@@ -931,7 +931,7 @@ export function applyCameraArrangementCommand(
 	let cameras = current.cameras;
 	let retiredCameraIds = current.retiredCameraIds;
 	if (command.kind === "regenerate") {
-		if (command.cameras.some((camera) => retiredCameraIds.includes(camera.id)))
+		if (command.cameras.some((camera) => current.retiredCameraIds.includes(camera.id)))
 			throw arrangementFailure("invalid", "Retired identities cannot be reused.");
 		const proposal = previewArrangementRegeneration(current, command.cameras);
 		if (proposal.customized.some((id) => !command.discardCustomizedIds.includes(id)))

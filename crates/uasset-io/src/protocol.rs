@@ -814,7 +814,13 @@ fn validate_result_frame(result: &ResultFrame) -> Result<(), ProtocolError> {
         ResultFrame::ExtractTextPackages {
             event: crate::protocol_result::SavedAssetPackageTextEvent::Package { record },
         } => {
-            if record.schema_version != 1 || record.gap_samples.len() > 3 {
+            if record.schema_version != 1
+                || record.gap_samples.len() > 3
+                || record.gather_coverage.as_ref().is_some_and(|gather| {
+                    gather.missing_samples.len()
+                        > uasset_inspection::text_wire::MAX_MISSING_GATHERABLE_TEXT_SAMPLES
+                })
+            {
                 return Err(ProtocolError(
                     "invalid package-text version or sample bound".into(),
                 ));
@@ -1070,6 +1076,8 @@ mod tests {
         decode_request(include_bytes!("../../../packages/protocol/contracts/uasset-io/v1/fixtures/valid/extract-text-packages-request.json")).unwrap();
         decode_event(include_bytes!("../../../packages/protocol/contracts/uasset-io/v1/fixtures/valid/extract-text-packages-result-event.json")).unwrap();
         assert!(decode_event(include_bytes!("../../../packages/protocol/contracts/uasset-io/v1/fixtures/invalid/extract-text-packages-unbounded-samples.json")).is_err());
+        decode_event(include_bytes!("../../../packages/protocol/contracts/uasset-io/v1/fixtures/valid/extract-text-packages-gather-coverage-result-event.json")).unwrap();
+        assert!(decode_event(include_bytes!("../../../packages/protocol/contracts/uasset-io/v1/fixtures/invalid/extract-text-packages-unbounded-missing-samples.json")).is_err());
         decode_request(include_bytes!("../../../packages/protocol/contracts/uasset-io/v1/fixtures/valid/level-sequence-request.json")).unwrap();
         decode_event(include_bytes!("../../../packages/protocol/contracts/uasset-io/v1/fixtures/valid/level-sequence-result-event.json")).unwrap();
         decode_request(include_bytes!("../../../packages/protocol/contracts/uasset-io/v1/fixtures/valid/project-index-count-request.json")).unwrap();

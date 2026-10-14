@@ -439,15 +439,11 @@ export function makeCameraRenderer(
 								renderError("capture", request.sessionId, cause)
 							)
 						);
-			if (result.status === "failed") return yield* nativeError("capture", result);
 			if (result.status === "running")
-				return yield* new CameraRenderError({
-					code: "correlation_mismatch",
-					operation: "capture",
-					sessionId: request.sessionId,
-					message: "Frame polling ended before the capture completed.",
-					recovery: "Inspect the native session before retrying."
-				});
+				return yield* Effect.die(
+					new Error("Camera polling ended before a terminal status.")
+				);
+			if (result.status === "failed") return yield* nativeError("capture", result);
 			if (
 				!isDeepStrictEqual(result.evidence.camera, frame.camera) ||
 				!isDeepStrictEqual(result.evidence.policy, request.policy) ||

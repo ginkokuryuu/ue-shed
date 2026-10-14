@@ -5,8 +5,14 @@
 	"properties": {
 		"expectedProcessId": {
 			"type": "integer",
-			"exclusiveMinimum": 0,
-			"exclusiveMaximum": 4294967295
+			"allOf": [
+				{
+					"exclusiveMinimum": 0
+				},
+				{
+					"exclusiveMaximum": 4294967295
+				}
+			]
 		}
 	},
 	"required": ["expectedProcessId"],

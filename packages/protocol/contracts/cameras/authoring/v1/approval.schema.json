@@ -7,20 +7,30 @@
 			"properties": {
 				"operationId": {
 					"type": "string",
-					"pattern": "^[a-zA-Z0-9][a-zA-Z0-9._-]{0,127}$"
+					"allOf": [
+						{
+							"pattern": "^[a-zA-Z0-9][a-zA-Z0-9._-]{0,127}$"
+						}
+					]
 				},
 				"expectedRevision": {
-					"type": "integer",
-					"minimum": -9007199254740991,
-					"maximum": 9007199254740991
+					"type": "integer"
 				},
 				"destination": {
 					"type": "string",
-					"minLength": 1
+					"allOf": [
+						{
+							"minLength": 1
+						}
+					]
 				},
 				"cameraId": {
 					"type": "string",
-					"pattern": "^[a-zA-Z0-9][a-zA-Z0-9._-]{0,127}$"
+					"allOf": [
+						{
+							"pattern": "^[a-zA-Z0-9][a-zA-Z0-9._-]{0,127}$"
+						}
+					]
 				}
 			},
 			"required": ["operationId", "expectedRevision", "destination", "cameraId"],
@@ -31,32 +41,54 @@
 			"properties": {
 				"operationId": {
 					"type": "string",
-					"pattern": "^[a-zA-Z0-9][a-zA-Z0-9._-]{0,127}$"
+					"allOf": [
+						{
+							"pattern": "^[a-zA-Z0-9][a-zA-Z0-9._-]{0,127}$"
+						}
+					]
 				},
 				"expectedRevision": {
-					"type": "integer",
-					"minimum": -9007199254740991,
-					"maximum": 9007199254740991
+					"type": "integer"
 				},
 				"destination": {
 					"type": "string",
-					"minLength": 1
+					"allOf": [
+						{
+							"minLength": 1
+						}
+					]
 				},
 				"cameraIds": {
 					"type": "array",
 					"items": {
 						"type": "string",
-						"pattern": "^[a-zA-Z0-9][a-zA-Z0-9._-]{0,127}$"
+						"allOf": [
+							{
+								"pattern": "^[a-zA-Z0-9][a-zA-Z0-9._-]{0,127}$"
+							}
+						]
 					},
-					"minItems": 1,
-					"maxItems": 256
+					"allOf": [
+						{
+							"minItems": 1
+						},
+						{
+							"maxItems": 256
+						}
+					]
 				},
 				"removeRetiredViewIds": {
 					"type": "array",
 					"items": {
 						"type": "string",
-						"minLength": 1,
-						"pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$"
+						"allOf": [
+							{
+								"minLength": 1
+							},
+							{
+								"pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$"
+							}
+						]
 					}
 				}
 			},

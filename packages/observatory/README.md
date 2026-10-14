@@ -1,5 +1,8 @@
 # `@ue-shed/observatory`
 
+The application must provide `effect@^4.0.0` as a peer dependency. Reuse one compatible
+Effect installation across the application and UE Shed libraries.
+
 Actor discovery, stable identity, bounded snapshots and deltas, retained spatial projection, and
 focus operations. The first implemented slice powers Map Review's Live World Scout through validated
 Remote Control calls and a local binary transform stream.

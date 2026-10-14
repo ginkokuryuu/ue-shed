@@ -114,14 +114,25 @@ function fromEngineDiscovery(cause: EngineInstallationError): UnrealProjectLaunc
 
 const ModuleBuild = Schema.Struct({ BuildId: Schema.String });
 
+/** UE4 names editor binaries and module manifests `UE4Editor`; UE5 renamed them `UnrealEditor`. */
+export function unrealEditorBinaryName(version?: EngineVersion): "UE4Editor" | "UnrealEditor" {
+	return version?.major === 4 ? "UE4Editor" : "UnrealEditor";
+}
+
 /** Compare binary identities, not just the engine's major/minor version. */
 export const validateUnrealProjectBuildId = Effect.fn("UnrealProjectLauncher.validateBuildId")(
-	function* (engineRoot: string, projectDescriptor: string, platform = process.platform) {
+	function* (
+		engineRoot: string,
+		projectDescriptor: string,
+		platform = process.platform,
+		version?: EngineVersion
+	) {
 		const binaryPlatform =
 			platform === "win32" ? "Win64" : platform === "darwin" ? "Mac" : "Linux";
+		const manifest = `${unrealEditorBinaryName(version)}.modules`;
 		const paths = [
-			join(engineRoot, "Engine", "Binaries", binaryPlatform, "UnrealEditor.modules"),
-			join(dirname(projectDescriptor), "Binaries", binaryPlatform, "UnrealEditor.modules")
+			join(engineRoot, "Engine", "Binaries", binaryPlatform, manifest),
+			join(dirname(projectDescriptor), "Binaries", binaryPlatform, manifest)
 		];
 		const builds = yield* Effect.forEach(paths, (path) =>
 			Effect.tryPromise({
@@ -177,21 +188,16 @@ const PluginModuleBuild = Schema.Struct({
 /** Validate the engine plugins needed by the optional Remote Control connection before spawning. */
 export const validateUnrealRemoteControlBuild = Effect.fn(
 	"UnrealProjectLauncher.validateRemoteControl"
-)((engineRoot: string, platform = process.platform) =>
+)((engineRoot: string, platform = process.platform, version?: EngineVersion) =>
 	Effect.tryPromise({
 		try: async () => {
 			const binaryPlatform =
 				platform === "win32" ? "Win64" : platform === "darwin" ? "Mac" : "Linux";
+			const manifestName = `${unrealEditorBinaryName(version)}.modules`;
 			const engine = Schema.decodeUnknownSync(ModuleBuild)(
 				JSON.parse(
 					await readFile(
-						join(
-							engineRoot,
-							"Engine",
-							"Binaries",
-							binaryPlatform,
-							"UnrealEditor.modules"
-						),
+						join(engineRoot, "Engine", "Binaries", binaryPlatform, manifestName),
 						"utf8"
 					)
 				)
@@ -240,7 +246,7 @@ export const validateUnrealRemoteControlBuild = Effect.fn(
 				const binaries = join(dirname(descriptor), "Binaries", binaryPlatform);
 				try {
 					const manifest = Schema.decodeUnknownSync(PluginModuleBuild)(
-						JSON.parse(await readFile(join(binaries, "UnrealEditor.modules"), "utf8"))
+						JSON.parse(await readFile(join(binaries, manifestName), "utf8"))
 					);
 					if (manifest.BuildId !== engine.BuildId) {
 						stalePlugins.push(id);
@@ -317,22 +323,30 @@ export const validateUnrealRemoteControlBuild = Effect.fn(
 	})
 );
 
-export function unrealEditorExecutable(engineRoot: string, platform = process.platform): string {
+export function unrealEditorExecutable(
+	engineRoot: string,
+	platform = process.platform,
+	version?: EngineVersion
+): string {
+	const name = unrealEditorBinaryName(version);
 	if (platform === "win32") {
-		return join(engineRoot, "Engine", "Binaries", "Win64", "UnrealEditor.exe");
+		return join(engineRoot, "Engine", "Binaries", "Win64", `${name}.exe`);
 	}
 	if (platform === "darwin") {
-		return join(engineRoot, "Engine", "Binaries", "Mac", "UnrealEditor");
+		// Mac editors are app bundles; Epic's UAT runs `<Name>.app/Contents/MacOS/<Name>` too.
+		const bundle = join(engineRoot, "Engine", "Binaries", "Mac", `${name}.app`);
+		return join(bundle, "Contents", "MacOS", name);
 	}
-	return join(engineRoot, "Engine", "Binaries", "Linux", "UnrealEditor");
+	return join(engineRoot, "Engine", "Binaries", "Linux", name);
 }
 
+/** Commandlet binaries are console apps, so they stay outside a Mac app bundle. */
 export function unrealEditorCommandletExecutable(
 	engineRoot: string,
 	platform = process.platform,
 	version?: EngineVersion
 ): string {
-	const name = version?.major === 4 ? "UE4Editor-Cmd" : "UnrealEditor-Cmd";
+	const name = `${unrealEditorBinaryName(version)}-Cmd`;
 	if (platform === "win32") {
 		return join(engineRoot, "Engine", "Binaries", "Win64", `${name}.exe`);
 	}
@@ -453,7 +467,11 @@ export const UnrealProjectLauncherLive = Layer.effect(
 						: { explicitRoot: request.explicitEngineRoot })
 				})
 				.pipe(Effect.mapError(fromEngineDiscovery));
-			const executable = unrealEditorExecutable(installation.root);
+			const executable = unrealEditorExecutable(
+				installation.root,
+				process.platform,
+				installation.version
+			);
 			yield* Effect.tryPromise({
 				try: () => access(executable),
 				catch: () =>
@@ -464,12 +482,21 @@ export const UnrealProjectLauncherLive = Layer.effect(
 					)
 			});
 			const projectDescriptor = resolve(request.projectDescriptor);
-			yield* validateUnrealProjectBuildId(installation.root, projectDescriptor);
+			yield* validateUnrealProjectBuildId(
+				installation.root,
+				projectDescriptor,
+				process.platform,
+				installation.version
+			);
 			if (
 				request.mode.kind === "with_plugins" &&
 				request.mode.remoteControlHttpPort !== undefined
 			)
-				yield* validateUnrealRemoteControlBuild(installation.root);
+				yield* validateUnrealRemoteControlBuild(
+					installation.root,
+					process.platform,
+					installation.version
+				);
 			const pid = yield* processes.launch({
 				args: unrealProjectLaunchArguments(request),
 				cwd: dirname(projectDescriptor),

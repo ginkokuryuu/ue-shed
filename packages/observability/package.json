@@ -44,7 +44,6 @@
 		"typecheck": "tsc --noEmit"
 	},
 	"dependencies": {
-		"@effect/opentelemetry": "catalog:",
 		"@opentelemetry/api": "catalog:",
 		"@opentelemetry/api-logs": "catalog:",
 		"@opentelemetry/resources": "catalog:",
@@ -53,11 +52,16 @@
 		"@opentelemetry/sdk-trace-base": "catalog:",
 		"@opentelemetry/sdk-trace-node": "catalog:",
 		"@opentelemetry/sdk-trace-web": "catalog:",
-		"@opentelemetry/semantic-conventions": "catalog:",
-		"effect": "catalog:"
+		"@opentelemetry/semantic-conventions": "catalog:"
 	},
 	"devDependencies": {
-		"@effect/vitest": "catalog:"
+		"@effect/opentelemetry": "catalog:",
+		"@effect/vitest": "catalog:",
+		"effect": "catalog:"
+	},
+	"peerDependencies": {
+		"@effect/opentelemetry": "^4.0.0",
+		"effect": "^4.0.0"
 	},
 	"engines": {
 		"node": ">=22.14.0"

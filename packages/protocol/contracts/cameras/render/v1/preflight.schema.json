@@ -14,23 +14,47 @@
 				"properties": {
 					"code": {
 						"type": "string",
-						"minLength": 1,
-						"maxLength": 1024
+						"allOf": [
+							{
+								"minLength": 1
+							},
+							{
+								"maxLength": 1024
+							}
+						]
 					},
 					"path": {
 						"type": "string",
-						"minLength": 1,
-						"maxLength": 1024
+						"allOf": [
+							{
+								"minLength": 1
+							},
+							{
+								"maxLength": 1024
+							}
+						]
 					},
 					"message": {
 						"type": "string",
-						"minLength": 1,
-						"maxLength": 1024
+						"allOf": [
+							{
+								"minLength": 1
+							},
+							{
+								"maxLength": 1024
+							}
+						]
 					},
 					"recovery": {
 						"type": "string",
-						"minLength": 1,
-						"maxLength": 1024
+						"allOf": [
+							{
+								"minLength": 1
+							},
+							{
+								"maxLength": 1024
+							}
+						]
 					}
 				},
 				"required": ["code", "path", "message", "recovery"],

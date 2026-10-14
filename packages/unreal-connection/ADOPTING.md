@@ -4,8 +4,9 @@ Use [adoption.manifest.json](adoption.manifest.json) as the machine-readable pac
 native-provider, host-boundary, and conformance contract. Pin the package release declared by its
 `package.json`; this guide does not select a release version.
 
-Install exact releases of `@ue-shed/unreal-connection`, `@ue-shed/protocol`, and the Effect
-version declared by those packages. Use `@ue-shed/authoring` when the host needs UE Shed's draft,
+Install exact releases of `@ue-shed/unreal-connection` and `@ue-shed/protocol`. Supply one
+application-owned `effect@^4.0.0` installation satisfying their peer dependencies. Use
+`@ue-shed/authoring` when the host needs UE Shed's draft,
 conflict, and Apply planning rather than only the wire clients. Preserve your host's project
 selection, endpoint configuration, transport boundary, UI, and navigation. Do not import Workbench
 IPC, `window.ueShed`, Electron, or renderer implementation files.

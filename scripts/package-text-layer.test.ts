@@ -28,6 +28,8 @@ import {
 } from "./package-text-generated.ts";
 
 const executable = ensureUassetExecutable();
+// Generated-scale oracle cases take 2-5 s on hosted runners; main has timed out at the 5 s default.
+const generatedScaleTimeoutMs = 20_000;
 const header = (selected: boolean) => ({
 	packageFlags: selected ? 0x00040000 : 0,
 	gatherableTextDataCount: 0,
@@ -129,42 +131,50 @@ describe("package text layer", () => {
 			expect((await runIn(cache, textCorpusFromPackageTextLayer("."))).units).toEqual([]);
 		});
 	});
-	it("converts retained generated events, flags text packages and preserves the mapped layer oracle", async () => {
-		await withStore(async (cache) => {
-			const recipe = gameTextScaleRecipe(0.0001),
-				events = [...gameTextScaleEvents(recipe, 57)];
-			const project = join(cache, "input");
-			await mkdir(project);
-			await writeFile(
-				join(project, "saved-text.ndjson"),
-				events.map((event) => JSON.stringify(event)).join("\n") + "\n"
-			);
-			const directory = join(cache, "converted");
-			expect(
-				await convertGeneratedPackageText(project, directory, recipe.textPackages)
-			).toMatchObject({
-				packages: recipe.packages,
-				occurrences: recipe.occurrences,
-				gaps: recipe.gaps,
-				selectedPackages: recipe.textPackages
-			});
-			const inventory = await readGeneratedPackageInventory(directory);
-			await runIn(
-				cache,
-				importColdPackageTextLayer({
-					inventory,
-					recordDirectory: directory,
-					stagingRoot: join(cache, "staging")
-				})
-			);
-			expect(
+	it(
+		"converts retained generated events, flags text packages and preserves the mapped layer oracle",
+		async () => {
+			await withStore(async (cache) => {
+				const recipe = gameTextScaleRecipe(0.0001),
+					events = [...gameTextScaleEvents(recipe, 57)];
+				const project = join(cache, "input");
+				await mkdir(project);
+				await writeFile(
+					join(project, "saved-text.ndjson"),
+					events.map((event) => JSON.stringify(event)).join("\n") + "\n"
+				);
+				const directory = join(cache, "converted");
+				expect(
+					await convertGeneratedPackageText(project, directory, recipe.textPackages)
+				).toMatchObject({
+					packages: recipe.packages,
+					occurrences: recipe.occurrences,
+					gaps: recipe.gaps,
+					selectedPackages: recipe.textPackages
+				});
+				const inventory = await readGeneratedPackageInventory(directory);
 				await runIn(
 					cache,
-					comparePackageTextLayerWithEvents({ projectRoot: project, inventory, events })
-				)
-			).toMatchObject({ equal: true, differenceCount: 0 });
-		});
-	});
+					importColdPackageTextLayer({
+						inventory,
+						recordDirectory: directory,
+						stagingRoot: join(cache, "staging")
+					})
+				);
+				expect(
+					await runIn(
+						cache,
+						comparePackageTextLayerWithEvents({
+							projectRoot: project,
+							inventory,
+							events
+						})
+					)
+				).toMatchObject({ equal: true, differenceCount: 0 });
+			});
+		},
+		generatedScaleTimeoutMs
+	);
 	it("a cold package publication into an existing store reuses shared strings and preserves active layers", async () => {
 		await withStore(async (cache) => {
 			await runIn(
@@ -302,7 +312,8 @@ describe("package text layer", () => {
 					)
 				).toMatchObject({ equal: true, differenceCount: 0 });
 			});
-		}
+		},
+		generatedScaleTimeoutMs
 	);
 	it("refresh reads changed/new/renamed/flag-gained packages, drops removed/flag-lost ones, and reuses the rest", async () => {
 		await withStore(async (cache) => {

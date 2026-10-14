@@ -39,15 +39,37 @@
 					"type": "array",
 					"items": {
 						"type": "string",
-						"minLength": 1,
-						"maxLength": 1024
+						"allOf": [
+							{
+								"minLength": 1
+							},
+							{
+								"maxLength": 1024
+							},
+							{
+								"pattern": "^\\/[A-Za-z0-9_./-]+$"
+							}
+						]
 					},
-					"maxItems": 256
+					"allOf": [
+						{
+							"maxItems": 256
+						}
+					]
 				},
 				"mapPath": {
 					"type": "string",
-					"minLength": 1,
-					"maxLength": 1024
+					"allOf": [
+						{
+							"minLength": 1
+						},
+						{
+							"maxLength": 1024
+						},
+						{
+							"pattern": "^\\/[A-Za-z0-9_./-]+$"
+						}
+					]
 				},
 				"playSessionActive": {
 					"type": "boolean"
@@ -58,7 +80,11 @@
 		},
 		"projectRoot": {
 			"type": "string",
-			"minLength": 1
+			"allOf": [
+				{
+					"minLength": 1
+				}
+			]
 		}
 	},
 	"required": ["contract", "projectName", "snapshot"],

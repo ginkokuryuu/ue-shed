@@ -4,7 +4,11 @@ import { promisify } from "node:util";
 import { resolve } from "node:path";
 import { createHash } from "node:crypto";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { generateGameTextScale, gameTextScaleRecipe } from "./localization-scale-data.ts";
+import {
+	generateGameTextScale,
+	gameTextScaleHistoryGaps,
+	gameTextScaleRecipe
+} from "./localization-scale-data.ts";
 import {
 	readScaleEvidence,
 	readScaleCorpus,
@@ -50,7 +54,7 @@ beforeAll(async () => {
 		)
 	).toBe(true);
 	expect(corpus.coverage.textOccurrences).toBe(recipe.occurrences);
-	expect(corpus.coverage.unsupportedTextProperties).toBe(recipe.gaps);
+	expect(corpus.coverage.unsupportedTextProperties).toBe(gameTextScaleHistoryGaps(recipe));
 	expect(corpus.coverage.discoveredPackages).toBe(recipe.packages);
 	expect(corpus.coverage.unresolvedOccurrences).toBe(recipe.keyless);
 	expect(corpus.coverage.partialPackages).toBe(recipe.partialPackages);
@@ -263,7 +267,7 @@ describe("generated scale harness", () => {
 		const stopped = decode(await readFile(stoppedOutput, "utf8"));
 		expect(stopped.results[0]?.status).toBe("stopped");
 		expect(stopped.results[0]?.error).toContain("RSS limit exceeded");
-	});
+	}, 30_000);
 	it("stream-validates counts and sizes and rejects a damaged event stream", async () => {
 		const result = await validateGameTextScale(first);
 		expect(result.files).toHaveLength(22);

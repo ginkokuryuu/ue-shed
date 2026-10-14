@@ -10,7 +10,7 @@ export const CameraActorReference = Schema.Union([
 		kind: Schema.Literal("actor_guid"),
 		actorGuid: Schema.String.check(
 			Schema.isPattern(
-				/^(?!00000000-00000000-00000000-00000000$)[0-9a-fA-F]{8}(?:-[0-9a-fA-F]{8}){3}$/
+				/^(?!00000000-00000000-00000000-00000000$)[0-9a-fA-F]{8}(?:-[0-9a-fA-F]{8}){3}$/u
 			)
 		),
 		lastKnownActorPath: Schema.String.check(Schema.isMaxLength(4096))

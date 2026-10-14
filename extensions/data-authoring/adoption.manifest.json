@@ -52,6 +52,7 @@
 			"packages/protocol/src/editor-window-activation.ts",
 			"packages/protocol/src/editor-world-control.ts",
 			"packages/protocol/src/index.ts",
+			"packages/protocol/src/json-schema.ts",
 			"packages/protocol/src/saved-world.ts",
 			"packages/protocol/src/uasset-io.ts",
 			"packages/protocol/src/uasset-inspection.ts",

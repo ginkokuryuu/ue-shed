@@ -577,102 +577,102 @@ function makeSharedIndexNodeLayer(options: SharedIndexOptions) {
 							yield* publishRoot({ ...manifest, garbageUpperBytes: deadBytes });
 							return { compacted: false, deadBytes, totalBytes };
 						}
-						const fresh = yield* boundary("compaction", () =>
-							new SharedStringFiles(directory, []).open()
+						const fresh = yield* Effect.acquireRelease(
+							boundary("compaction", () =>
+								new SharedStringFiles(directory, []).open()
+							),
+							(candidate) =>
+								files === candidate
+									? Effect.void
+									: boundary("compaction.close", () => candidate.close()).pipe(
+											Effect.orDie
+										)
 						);
-						try {
-							const next = initial();
-							const mapping = yield* boundary("compaction.strings", async () => {
-								const map = new Uint32Array(files.count),
-									arena = new StringArena(totalBytes - deadBytes, files.count),
-									live = new Uint32Array(files.count),
-									owners = new Uint32Array(files.count);
-								const domains = [
-									...new Set(files.segments.flatMap((segment) => segment.domains))
-								];
-								let count = 0;
-								for (let segment = 0; segment < files.segments.length; segment++) {
-									const meta = files.segments[segment]!,
-										ownership = await files.ownership(segment);
-									for (let begin = 0; begin < meta.count; begin += 8192) {
-										const ids: number[] = [];
-										for (
-											let row = begin;
-											row < Math.min(meta.count, begin + 8192);
-											row++
-										) {
-											const id = meta.start + row;
-											if (usage[id >>> 3]! & (1 << (id & 7))) ids.push(id);
-										}
-										const strings = await files.bytes(ids);
-										for (let row = 0; row < ids.length; row++) {
-											const id = ids[row]!;
-											arena.add(strings[row]!);
-											live[count] = id;
-											owners[count++] = domains.indexOf(
-												meta.domains[ownership?.[id - meta.start] ?? 0]!
-											);
-										}
+
+						const next = initial();
+						const mapping = yield* boundary("compaction.strings", async () => {
+							const map = new Uint32Array(files.count),
+								arena = new StringArena(totalBytes - deadBytes, files.count),
+								live = new Uint32Array(files.count),
+								owners = new Uint32Array(files.count);
+							const domains = [
+								...new Set(files.segments.flatMap((segment) => segment.domains))
+							];
+							let count = 0;
+							for (let segment = 0; segment < files.segments.length; segment++) {
+								const meta = files.segments[segment]!,
+									ownership = await files.ownership(segment);
+								for (let begin = 0; begin < meta.count; begin += 8192) {
+									const ids: number[] = [];
+									for (
+										let row = begin;
+										row < Math.min(meta.count, begin + 8192);
+										row++
+									) {
+										const id = meta.start + row;
+										if (usage[id >>> 3]! & (1 << (id & 7))) ids.push(id);
+									}
+									const strings = await files.bytes(ids);
+									for (let row = 0; row < ids.length; row++) {
+										const id = ids[row]!;
+										arena.add(strings[row]!);
+										live[count] = id;
+										owners[count++] = domains.indexOf(
+											meta.domains[ownership?.[id - meta.start] ?? 0]!
+										);
 									}
 								}
-								const inverse = await fresh.merged(
-									arena.finish(),
-									owners.subarray(0, count),
-									domains
-								);
-								for (let row = 0; row < count; row++)
-									map[live[row]!] = inverse[row]!;
-								return map;
-							});
-							const layers: Record<string, SharedLayerRecord> = {};
-							for (const key of new Set(Object.values(manifest.active))) {
-								const layer = manifest.layers[key]!;
-								layers[key] = yield* boundary("compaction.layer", async () => {
-									const reader = await openSnapshotFile(
-										join(directory, layer.file),
-										{
-											onRead: (bytes) => {
-												fresh.readBytes += bytes;
-											}
-										}
-									);
-									try {
-										return await remapLayer(
-											directory,
-											reader,
-											mapping,
-											fresh,
-											layer,
-											next.generation
-										);
-									} finally {
-										await reader.close();
+							}
+							const inverse = await fresh.merged(
+								arena.finish(),
+								owners.subarray(0, count),
+								domains
+							);
+							for (let row = 0; row < count; row++) map[live[row]!] = inverse[row]!;
+							return map;
+						});
+						const layers: Record<string, SharedLayerRecord> = {};
+						for (const key of new Set(Object.values(manifest.active))) {
+							const layer = manifest.layers[key]!;
+							layers[key] = yield* boundary("compaction.layer", async () => {
+								const reader = await openSnapshotFile(join(directory, layer.file), {
+									onRead: (bytes) => {
+										fresh.readBytes += bytes;
 									}
 								});
-							}
-							uncertain = true;
-							yield* publishRoot({
-								...next,
-								active: manifest.active,
-								segments: [...fresh.segments],
-								layers
+								try {
+									return await remapLayer(
+										directory,
+										reader,
+										mapping,
+										fresh,
+										layer,
+										next.generation
+									);
+								} finally {
+									await reader.close();
+								}
 							});
-							uncertain = false;
-							yield* boundary("compaction.close", () => files.close());
-							retiredMetrics.readBytes += files.readBytes;
-							retiredMetrics.indexReadBytes += files.indexReadBytes;
-							retiredMetrics.appendedBytes += files.appendedBytes;
-							retiredMetrics.lookupStrings += files.lookupStrings;
-							retiredMetrics.reusedStrings += files.reusedStrings;
-							retiredMetrics.probePasses += files.probePasses;
-							files = fresh;
-							yield* retireSharedIndexFiles(directory, manifest);
-						} finally {
-							if (files !== fresh)
-								yield* boundary("compaction.close", () => fresh.close());
 						}
+						uncertain = true;
+						yield* publishRoot({
+							...next,
+							active: manifest.active,
+							segments: [...fresh.segments],
+							layers
+						});
+						uncertain = false;
+						yield* boundary("compaction.close", () => files.close());
+						retiredMetrics.readBytes += files.readBytes;
+						retiredMetrics.indexReadBytes += files.indexReadBytes;
+						retiredMetrics.appendedBytes += files.appendedBytes;
+						retiredMetrics.lookupStrings += files.lookupStrings;
+						retiredMetrics.reusedStrings += files.reusedStrings;
+						retiredMetrics.probePasses += files.probePasses;
+						files = fresh;
+						yield* retireSharedIndexFiles(directory, manifest);
 						return { compacted: true, deadBytes, totalBytes };
-					}).pipe(Effect.uninterruptible)
+					}).pipe(Effect.uninterruptible, Effect.scoped)
 				);
 				const compact = Effect.fn("SharedIndex.compactLocked")((force = false) =>
 					mutex.withPermits(1)(compactOne(force))
@@ -707,78 +707,77 @@ function makeSharedIndexNodeLayer(options: SharedIndexOptions) {
 										"Duplicate cold layer names"
 									);
 								});
-								const staging = yield* boundary("cold.sort", () =>
-									mkdtemp(join(directory, "sort-"))
+								const staging = yield* Effect.acquireRelease(
+									boundary("cold.sort", () => mkdtemp(join(directory, "sort-"))),
+									(staging) =>
+										boundary("cold.cleanup", () =>
+											rm(staging, { recursive: true, force: true })
+										).pipe(Effect.orDie)
 								);
-								try {
-									const maps = yield* boundary("cold.sort", () =>
-										sortColdStrings(entries, files, staging)
-									);
-									const prepared = yield* boundary("cold.layers", () =>
-										prepareColdLayers(
-											directory,
-											manifest.generation,
-											files.segments,
-											maps.reduce(
-												(total, mapping) =>
-													total +
-													[...mapping.maps.values()].reduce(
-														(bytes, ids) => bytes + ids.byteLength,
-														0
-													),
-												0
-											) >=
-												512 * 1024
-												? entries
-												: [],
-											maps
-										)
-									);
-									const layers = { ...manifest.layers },
-										active = { ...manifest.active };
-									for (let row = 0; row < entries.length; row++) {
-										const entry = entries[row]!;
-										const converted = prepared.get(row);
-										if (converted) {
-											files.readBytes += converted.readBytes;
-											files.timings.collectMs += converted.timings.collectMs!;
-											files.timings.reuseMs += converted.timings.reuseMs!;
-											files.timings.layerEncodeMs +=
-												converted.timings.layerEncodeMs!;
-											files.timings.layerVerifyMs +=
-												converted.timings.layerVerifyMs!;
-										}
-										layers[entry.key] =
-											converted?.record ??
-											(yield* boundary("cold.layer", () =>
-												convertLayer(
-													directory,
-													files,
-													entry.name,
-													entry.key,
-													manifest.generation,
-													entry.source,
-													undefined,
-													maps[row]!.maps,
-													maps[row]!.hashes
-												)
-											));
-										active[entry.name] = entry.key;
+
+								const maps = yield* boundary("cold.sort", () =>
+									sortColdStrings(entries, files, staging)
+								);
+								const prepared = yield* boundary("cold.layers", () =>
+									prepareColdLayers(
+										directory,
+										manifest.generation,
+										files.segments,
+										maps.reduce(
+											(total, mapping) =>
+												total +
+												[...mapping.maps.values()].reduce(
+													(bytes, ids) => bytes + ids.byteLength,
+													0
+												),
+											0
+										) >=
+											512 * 1024
+											? entries
+											: [],
+										maps
+									)
+								);
+								const layers = { ...manifest.layers },
+									active = { ...manifest.active };
+								for (let row = 0; row < entries.length; row++) {
+									const entry = entries[row]!;
+									const converted = prepared.get(row);
+									if (converted) {
+										files.readBytes += converted.readBytes;
+										files.timings.collectMs += converted.timings.collectMs!;
+										files.timings.reuseMs += converted.timings.reuseMs!;
+										files.timings.layerEncodeMs +=
+											converted.timings.layerEncodeMs!;
+										files.timings.layerVerifyMs +=
+											converted.timings.layerVerifyMs!;
 									}
-									for (const name of removedNames) delete active[name];
-									yield* publishRoot({
-										...manifest,
-										active,
-										layers,
-										segments: [...files.segments]
-									});
-									return entries.map((entry) => layers[entry.key]!);
-								} finally {
-									yield* boundary("cold.cleanup", () =>
-										rm(staging, { recursive: true, force: true })
-									);
+									layers[entry.key] =
+										converted?.record ??
+										(yield* boundary("cold.layer", () =>
+											convertLayer(
+												directory,
+												files,
+												entry.name,
+												entry.key,
+												manifest.generation,
+												entry.source,
+												undefined,
+												maps[row]!.maps,
+												maps[row]!.hashes
+											)
+										));
+									active[entry.name] = entry.key;
 								}
-							}).pipe(Effect.uninterruptible)
+								for (const name of removedNames) delete active[name];
+								yield* publishRoot({
+									...manifest,
+									active,
+									layers,
+									segments: [...files.segments]
+								});
+								return entries.map((entry) => layers[entry.key]!);
+							}).pipe(Effect.uninterruptible, Effect.scoped)
 						)
 				);
 				const publishBatch = Effect.fn("SharedIndex.publishBatch")(

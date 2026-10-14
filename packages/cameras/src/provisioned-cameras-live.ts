@@ -71,7 +71,7 @@ export const ProvisionedCameraRequest = Schema.Struct({
 	expectedMapPath: Schema.String.check(
 		Schema.isMinLength(1),
 		Schema.isMaxLength(1_024),
-		Schema.isPattern(/^\/[A-Za-z0-9_./-]+$/)
+		Schema.isPattern(/^\/[A-Za-z0-9_./-]+$/u)
 	),
 	previewFps: Schema.Int.check(Schema.isBetween({ minimum: 1, maximum: 10 })),
 	/** Reveal child actors of editor-only owners in the previews, as renderer.editorPreviews does. */

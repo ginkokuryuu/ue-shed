@@ -1,3 +1,4 @@
+import { makeWireJsonSchemaDocument } from "./json-schema.js";
 import { Schema } from "effect";
 
 export const AUTHORING_SNAPSHOT_CONTRACT_VERSION = { major: 2, minor: 3 } as const;
@@ -584,9 +585,7 @@ export const decodeAuthoringSaveRequest = Schema.decodeUnknownEffect(AuthoringSa
 export const decodeAuthoringSaveResult = Schema.decodeUnknownEffect(AuthoringSaveResult);
 
 export function makeAuthoringJsonSchema(contract: Schema.Top) {
-	const document = Schema.toJsonSchemaDocument(Schema.toType(contract), {
-		onExcessProperty: "error"
-	});
+	const document = makeWireJsonSchemaDocument(contract);
 	const definitions = { ...document.definitions };
 	if ("NonNegativeInt" in definitions) {
 		definitions.NonNegativeInt = {

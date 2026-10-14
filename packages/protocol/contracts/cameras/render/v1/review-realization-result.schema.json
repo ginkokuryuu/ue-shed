@@ -18,8 +18,12 @@
 						},
 						"fieldOfViewDegrees": {
 							"type": "number",
-							"minimum": 5,
-							"maximum": 170
+							"allOf": [
+								{
+									"minimum": 5,
+									"maximum": 170
+								}
+							]
 						},
 						"location": {
 							"type": "object",
@@ -82,13 +86,22 @@
 											"type": "object",
 											"properties": {
 												"actorGuid": {
-													"type": "string"
+													"type": "string",
+													"allOf": [
+														{
+															"pattern": "^(?!00000000-00000000-00000000-00000000$)[0-9a-fA-F]{8}(?:-[0-9a-fA-F]{8}){3}$"
+														}
+													]
 												},
 												"diagnosticLabel": {
 													"anyOf": [
 														{
 															"type": "string",
-															"minLength": 1
+															"allOf": [
+																{
+																	"minLength": 1
+																}
+															]
 														},
 														{
 															"type": "null"
@@ -103,9 +116,17 @@
 													"anyOf": [
 														{
 															"type": "string",
-															"minLength": 4,
-															"maxLength": 4096,
-															"pattern": "^\\/Game\\/"
+															"allOf": [
+																{
+																	"minLength": 7
+																},
+																{
+																	"maxLength": 4096
+																},
+																{
+																	"pattern": "^\\/Game\\/"
+																}
+															]
 														},
 														{
 															"type": "null"
@@ -121,15 +142,27 @@
 											"properties": {
 												"actorPath": {
 													"type": "string",
-													"minLength": 4,
-													"maxLength": 4096,
-													"pattern": "^\\/Game\\/"
+													"allOf": [
+														{
+															"minLength": 7
+														},
+														{
+															"maxLength": 4096
+														},
+														{
+															"pattern": "^\\/Game\\/"
+														}
+													]
 												},
 												"diagnosticLabel": {
 													"anyOf": [
 														{
 															"type": "string",
-															"minLength": 1
+															"allOf": [
+																{
+																	"minLength": 1
+																}
+															]
 														},
 														{
 															"type": "null"
@@ -148,7 +181,11 @@
 								},
 								"reason": {
 									"type": "string",
-									"minLength": 1
+									"allOf": [
+										{
+											"minLength": 1
+										}
+									]
 								}
 							},
 							"required": ["kind", "subject", "reason"],
@@ -158,13 +195,26 @@
 							"type": "object",
 							"properties": {
 								"actorGuid": {
-									"type": "string"
+									"type": "string",
+									"allOf": [
+										{
+											"pattern": "^(?!00000000-00000000-00000000-00000000$)[0-9a-fA-F]{8}(?:-[0-9a-fA-F]{8}){3}$"
+										}
+									]
 								},
 								"actorPath": {
 									"type": "string",
-									"minLength": 4,
-									"maxLength": 4096,
-									"pattern": "^\\/Game\\/"
+									"allOf": [
+										{
+											"minLength": 7
+										},
+										{
+											"maxLength": 4096
+										},
+										{
+											"pattern": "^\\/Game\\/"
+										}
+									]
 								},
 								"kind": {
 									"type": "string",
@@ -218,9 +268,17 @@
 							"properties": {
 								"actorPath": {
 									"type": "string",
-									"minLength": 4,
-									"maxLength": 4096,
-									"pattern": "^\\/Game\\/"
+									"allOf": [
+										{
+											"minLength": 7
+										},
+										{
+											"maxLength": 4096
+										},
+										{
+											"pattern": "^\\/Game\\/"
+										}
+									]
 								},
 								"kind": {
 									"type": "string",
@@ -296,15 +354,27 @@
 											"properties": {
 												"x": {
 													"type": "number",
-													"minimum": 0
+													"allOf": [
+														{
+															"minimum": 0
+														}
+													]
 												},
 												"y": {
 													"type": "number",
-													"minimum": 0
+													"allOf": [
+														{
+															"minimum": 0
+														}
+													]
 												},
 												"z": {
 													"type": "number",
-													"minimum": 0
+													"allOf": [
+														{
+															"minimum": 0
+														}
+													]
 												}
 											},
 											"required": ["x", "y", "z"],
@@ -353,15 +423,27 @@
 				},
 				"code": {
 					"type": "string",
-					"minLength": 1
+					"allOf": [
+						{
+							"minLength": 1
+						}
+					]
 				},
 				"message": {
 					"type": "string",
-					"minLength": 1
+					"allOf": [
+						{
+							"minLength": 1
+						}
+					]
 				},
 				"recovery": {
 					"type": "string",
-					"minLength": 1
+					"allOf": [
+						{
+							"minLength": 1
+						}
+					]
 				}
 			},
 			"required": ["status", "code", "message", "recovery"],

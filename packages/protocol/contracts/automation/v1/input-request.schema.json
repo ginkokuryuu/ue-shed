@@ -32,21 +32,45 @@
 				},
 				"worldObjectPath": {
 					"type": "string",
-					"minLength": 1,
-					"maxLength": 2048,
-					"pattern": "^\\/[^\\u0000-\\u001f]*$"
+					"allOf": [
+						{
+							"minLength": 1
+						},
+						{
+							"maxLength": 2048
+						},
+						{
+							"pattern": "^\\/[^\\u0000-\\u001f]*$"
+						}
+					]
 				},
 				"playerControllerObjectPath": {
 					"type": "string",
-					"minLength": 1,
-					"maxLength": 2048,
-					"pattern": "^\\/[^\\u0000-\\u001f]*$"
+					"allOf": [
+						{
+							"minLength": 1
+						},
+						{
+							"maxLength": 2048
+						},
+						{
+							"pattern": "^\\/[^\\u0000-\\u001f]*$"
+						}
+					]
 				},
 				"actionObjectPath": {
 					"type": "string",
-					"minLength": 1,
-					"maxLength": 2048,
-					"pattern": "^\\/[^\\u0000-\\u001f]*$"
+					"allOf": [
+						{
+							"minLength": 1
+						},
+						{
+							"maxLength": 2048
+						},
+						{
+							"pattern": "^\\/[^\\u0000-\\u001f]*$"
+						}
+					]
 				},
 				"value": {
 					"anyOf": [

@@ -11,7 +11,11 @@
 				},
 				"sessionId": {
 					"type": "string",
-					"pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$"
+					"allOf": [
+						{
+							"pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$"
+						}
+					]
 				},
 				"restoration": {
 					"type": "string",
@@ -65,23 +69,47 @@
 				},
 				"message": {
 					"type": "string",
-					"minLength": 1,
-					"maxLength": 1024
+					"allOf": [
+						{
+							"minLength": 1
+						},
+						{
+							"maxLength": 1024
+						}
+					]
 				},
 				"recovery": {
 					"type": "string",
-					"minLength": 1,
-					"maxLength": 1024
+					"allOf": [
+						{
+							"minLength": 1
+						},
+						{
+							"maxLength": 1024
+						}
+					]
 				},
 				"sessionId": {
 					"type": "string",
-					"minLength": 1,
-					"maxLength": 1024
+					"allOf": [
+						{
+							"minLength": 1
+						},
+						{
+							"maxLength": 1024
+						}
+					]
 				},
 				"operationId": {
 					"type": "string",
-					"minLength": 1,
-					"maxLength": 1024
+					"allOf": [
+						{
+							"minLength": 1
+						},
+						{
+							"maxLength": 1024
+						}
+					]
 				},
 				"issues": {
 					"type": "array",
@@ -90,23 +118,47 @@
 						"properties": {
 							"code": {
 								"type": "string",
-								"minLength": 1,
-								"maxLength": 1024
+								"allOf": [
+									{
+										"minLength": 1
+									},
+									{
+										"maxLength": 1024
+									}
+								]
 							},
 							"path": {
 								"type": "string",
-								"minLength": 1,
-								"maxLength": 1024
+								"allOf": [
+									{
+										"minLength": 1
+									},
+									{
+										"maxLength": 1024
+									}
+								]
 							},
 							"message": {
 								"type": "string",
-								"minLength": 1,
-								"maxLength": 1024
+								"allOf": [
+									{
+										"minLength": 1
+									},
+									{
+										"maxLength": 1024
+									}
+								]
 							},
 							"recovery": {
 								"type": "string",
-								"minLength": 1,
-								"maxLength": 1024
+								"allOf": [
+									{
+										"minLength": 1
+									},
+									{
+										"maxLength": 1024
+									}
+								]
 							}
 						},
 						"required": ["code", "path", "message", "recovery"],

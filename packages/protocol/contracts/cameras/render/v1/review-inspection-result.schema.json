@@ -24,13 +24,22 @@
 											"type": "object",
 											"properties": {
 												"actorGuid": {
-													"type": "string"
+													"type": "string",
+													"allOf": [
+														{
+															"pattern": "^(?!00000000-00000000-00000000-00000000$)[0-9a-fA-F]{8}(?:-[0-9a-fA-F]{8}){3}$"
+														}
+													]
 												},
 												"diagnosticLabel": {
 													"anyOf": [
 														{
 															"type": "string",
-															"minLength": 1
+															"allOf": [
+																{
+																	"minLength": 1
+																}
+															]
 														},
 														{
 															"type": "null"
@@ -45,9 +54,17 @@
 													"anyOf": [
 														{
 															"type": "string",
-															"minLength": 4,
-															"maxLength": 4096,
-															"pattern": "^\\/Game\\/"
+															"allOf": [
+																{
+																	"minLength": 7
+																},
+																{
+																	"maxLength": 4096
+																},
+																{
+																	"pattern": "^\\/Game\\/"
+																}
+															]
 														},
 														{
 															"type": "null"
@@ -63,15 +80,27 @@
 											"properties": {
 												"actorPath": {
 													"type": "string",
-													"minLength": 4,
-													"maxLength": 4096,
-													"pattern": "^\\/Game\\/"
+													"allOf": [
+														{
+															"minLength": 7
+														},
+														{
+															"maxLength": 4096
+														},
+														{
+															"pattern": "^\\/Game\\/"
+														}
+													]
 												},
 												"diagnosticLabel": {
 													"anyOf": [
 														{
 															"type": "string",
-															"minLength": 1
+															"allOf": [
+																{
+																	"minLength": 1
+																}
+															]
 														},
 														{
 															"type": "null"
@@ -90,7 +119,11 @@
 								},
 								"reason": {
 									"type": "string",
-									"minLength": 1
+									"allOf": [
+										{
+											"minLength": 1
+										}
+									]
 								}
 							},
 							"required": ["kind", "subject", "reason"],
@@ -100,13 +133,26 @@
 							"type": "object",
 							"properties": {
 								"actorGuid": {
-									"type": "string"
+									"type": "string",
+									"allOf": [
+										{
+											"pattern": "^(?!00000000-00000000-00000000-00000000$)[0-9a-fA-F]{8}(?:-[0-9a-fA-F]{8}){3}$"
+										}
+									]
 								},
 								"actorPath": {
 									"type": "string",
-									"minLength": 4,
-									"maxLength": 4096,
-									"pattern": "^\\/Game\\/"
+									"allOf": [
+										{
+											"minLength": 7
+										},
+										{
+											"maxLength": 4096
+										},
+										{
+											"pattern": "^\\/Game\\/"
+										}
+									]
 								},
 								"kind": {
 									"type": "string",
@@ -160,9 +206,17 @@
 							"properties": {
 								"actorPath": {
 									"type": "string",
-									"minLength": 4,
-									"maxLength": 4096,
-									"pattern": "^\\/Game\\/"
+									"allOf": [
+										{
+											"minLength": 7
+										},
+										{
+											"maxLength": 4096
+										},
+										{
+											"pattern": "^\\/Game\\/"
+										}
+									]
 								},
 								"kind": {
 									"type": "string",
@@ -238,15 +292,27 @@
 											"properties": {
 												"x": {
 													"type": "number",
-													"minimum": 0
+													"allOf": [
+														{
+															"minimum": 0
+														}
+													]
 												},
 												"y": {
 													"type": "number",
-													"minimum": 0
+													"allOf": [
+														{
+															"minimum": 0
+														}
+													]
 												},
 												"z": {
 													"type": "number",
-													"minimum": 0
+													"allOf": [
+														{
+															"minimum": 0
+														}
+													]
 												}
 											},
 											"required": ["x", "y", "z"],
@@ -350,7 +416,11 @@
 								},
 								"message": {
 									"type": "string",
-									"minLength": 1
+									"allOf": [
+										{
+											"minLength": 1
+										}
+									]
 								},
 								"status": {
 									"type": "string",
@@ -373,9 +443,17 @@
 											"type": "array",
 											"items": {
 												"type": "string",
-												"maxLength": 1024
+												"allOf": [
+													{
+														"maxLength": 1024
+													}
+												]
 											},
-											"maxItems": 8
+											"allOf": [
+												{
+													"maxItems": 8
+												}
+											]
 										},
 										{
 											"type": "null"
@@ -384,7 +462,11 @@
 								},
 								"reason": {
 									"type": "string",
-									"minLength": 1
+									"allOf": [
+										{
+											"minLength": 1
+										}
+									]
 								},
 								"status": {
 									"type": "string",
@@ -399,15 +481,27 @@
 							"properties": {
 								"assessmentDurationMs": {
 									"type": "number",
-									"minimum": 0
+									"allOf": [
+										{
+											"minimum": 0
+										}
+									]
 								},
 								"limitations": {
 									"type": "array",
 									"items": {
 										"type": "string",
-										"maxLength": 1024
+										"allOf": [
+											{
+												"maxLength": 1024
+											}
+										]
 									},
-									"maxItems": 8
+									"allOf": [
+										{
+											"maxItems": 8
+										}
+									]
 								},
 								"method": {
 									"type": "object",
@@ -418,8 +512,11 @@
 										},
 										"version": {
 											"type": "integer",
-											"maximum": 9007199254740991,
-											"exclusiveMinimum": 0
+											"allOf": [
+												{
+													"exclusiveMinimum": 0
+												}
+											]
 										}
 									},
 									"required": ["method", "version"],
@@ -432,23 +529,39 @@
 										"properties": {
 											"confidence": {
 												"type": "number",
-												"minimum": 0,
-												"maximum": 1
+												"allOf": [
+													{
+														"minimum": 0,
+														"maximum": 1
+													}
+												]
 											},
 											"locator": {
 												"type": "object",
 												"properties": {
 													"actorPath": {
 														"type": "string",
-														"minLength": 4,
-														"maxLength": 4096,
-														"pattern": "^\\/Game\\/"
+														"allOf": [
+															{
+																"minLength": 7
+															},
+															{
+																"maxLength": 4096
+															},
+															{
+																"pattern": "^\\/Game\\/"
+															}
+														]
 													},
 													"diagnosticLabel": {
 														"anyOf": [
 															{
 																"type": "string",
-																"minLength": 1
+																"allOf": [
+																	{
+																		"minLength": 1
+																	}
+																]
 															},
 															{
 																"type": "null"
@@ -465,18 +578,29 @@
 											},
 											"reason": {
 												"type": "string",
-												"maxLength": 1024
+												"allOf": [
+													{
+														"maxLength": 1024
+													}
+												]
 											}
 										},
 										"required": ["confidence", "locator", "reason"],
 										"additionalProperties": false
 									},
-									"maxItems": 32
+									"allOf": [
+										{
+											"maxItems": 32
+										}
+									]
 								},
 								"sampleCount": {
 									"type": "integer",
-									"minimum": 0,
-									"maximum": 9007199254740991
+									"allOf": [
+										{
+											"minimum": 0
+										}
+									]
 								},
 								"status": {
 									"type": "string",
@@ -484,8 +608,12 @@
 								},
 								"visibleFraction": {
 									"type": "number",
-									"minimum": 0,
-									"maximum": 1
+									"allOf": [
+										{
+											"minimum": 0,
+											"maximum": 1
+										}
+									]
 								}
 							},
 							"required": [
@@ -507,15 +635,27 @@
 									"properties": {
 										"code": {
 											"type": "string",
-											"minLength": 1
+											"allOf": [
+												{
+													"minLength": 1
+												}
+											]
 										},
 										"message": {
 											"type": "string",
-											"minLength": 1
+											"allOf": [
+												{
+													"minLength": 1
+												}
+											]
 										},
 										"recovery": {
 											"type": "string",
-											"minLength": 1
+											"allOf": [
+												{
+													"minLength": 1
+												}
+											]
 										},
 										"retrySafe": {
 											"type": "boolean"
@@ -562,15 +702,27 @@
 														"properties": {
 															"actorPath": {
 																"type": "string",
-																"minLength": 4,
-																"maxLength": 4096,
-																"pattern": "^\\/Game\\/"
+																"allOf": [
+																	{
+																		"minLength": 7
+																	},
+																	{
+																		"maxLength": 4096
+																	},
+																	{
+																		"pattern": "^\\/Game\\/"
+																	}
+																]
 															},
 															"diagnosticLabel": {
 																"anyOf": [
 																	{
 																		"type": "string",
-																		"minLength": 1
+																		"allOf": [
+																			{
+																				"minLength": 1
+																			}
+																		]
 																	},
 																	{
 																		"type": "null"
@@ -601,15 +753,27 @@
 														"properties": {
 															"actorPath": {
 																"type": "string",
-																"minLength": 4,
-																"maxLength": 4096,
-																"pattern": "^\\/Game\\/"
+																"allOf": [
+																	{
+																		"minLength": 7
+																	},
+																	{
+																		"maxLength": 4096
+																	},
+																	{
+																		"pattern": "^\\/Game\\/"
+																	}
+																]
 															},
 															"diagnosticLabel": {
 																"anyOf": [
 																	{
 																		"type": "string",
-																		"minLength": 1
+																		"allOf": [
+																			{
+																				"minLength": 1
+																			}
+																		]
 																	},
 																	{
 																		"type": "null"
@@ -634,8 +798,14 @@
 											}
 										]
 									},
-									"minItems": 1,
-									"maxItems": 32
+									"allOf": [
+										{
+											"minItems": 1
+										},
+										{
+											"maxItems": 32
+										}
+									]
 								},
 								"restoration": {
 									"type": "object",
@@ -672,15 +842,27 @@
 									"properties": {
 										"code": {
 											"type": "string",
-											"minLength": 1
+											"allOf": [
+												{
+													"minLength": 1
+												}
+											]
 										},
 										"message": {
 											"type": "string",
-											"minLength": 1
+											"allOf": [
+												{
+													"minLength": 1
+												}
+											]
 										},
 										"recovery": {
 											"type": "string",
-											"minLength": 1
+											"allOf": [
+												{
+													"minLength": 1
+												}
+											]
 										},
 										"retrySafe": {
 											"type": "boolean"
@@ -701,15 +883,27 @@
 														"properties": {
 															"actorPath": {
 																"type": "string",
-																"minLength": 4,
-																"maxLength": 4096,
-																"pattern": "^\\/Game\\/"
+																"allOf": [
+																	{
+																		"minLength": 7
+																	},
+																	{
+																		"maxLength": 4096
+																	},
+																	{
+																		"pattern": "^\\/Game\\/"
+																	}
+																]
 															},
 															"diagnosticLabel": {
 																"anyOf": [
 																	{
 																		"type": "string",
-																		"minLength": 1
+																		"allOf": [
+																			{
+																				"minLength": 1
+																			}
+																		]
 																	},
 																	{
 																		"type": "null"
@@ -740,15 +934,27 @@
 														"properties": {
 															"actorPath": {
 																"type": "string",
-																"minLength": 4,
-																"maxLength": 4096,
-																"pattern": "^\\/Game\\/"
+																"allOf": [
+																	{
+																		"minLength": 7
+																	},
+																	{
+																		"maxLength": 4096
+																	},
+																	{
+																		"pattern": "^\\/Game\\/"
+																	}
+																]
 															},
 															"diagnosticLabel": {
 																"anyOf": [
 																	{
 																		"type": "string",
-																		"minLength": 1
+																		"allOf": [
+																			{
+																				"minLength": 1
+																			}
+																		]
 																	},
 																	{
 																		"type": "null"
@@ -773,7 +979,11 @@
 											}
 										]
 									},
-									"maxItems": 32
+									"allOf": [
+										{
+											"maxItems": 32
+										}
+									]
 								},
 								"restoration": {
 									"anyOf": [
@@ -797,15 +1007,27 @@
 											"properties": {
 												"code": {
 													"type": "string",
-													"minLength": 1
+													"allOf": [
+														{
+															"minLength": 1
+														}
+													]
 												},
 												"message": {
 													"type": "string",
-													"minLength": 1
+													"allOf": [
+														{
+															"minLength": 1
+														}
+													]
 												},
 												"recovery": {
 													"type": "string",
-													"minLength": 1
+													"allOf": [
+														{
+															"minLength": 1
+														}
+													]
 												},
 												"status": {
 													"type": "string",
@@ -846,32 +1068,56 @@
 						},
 						"sessionId": {
 							"type": "string",
-							"pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$"
+							"allOf": [
+								{
+									"pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$"
+								}
+							]
 						},
 						"operationId": {
 							"type": "string",
-							"pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$"
+							"allOf": [
+								{
+									"pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$"
+								}
+							]
 						},
 						"artifact": {
 							"type": "object",
 							"properties": {
 								"relativePath": {
-									"type": "string"
+									"type": "string",
+									"allOf": [
+										{
+											"pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,127}\\/[A-Za-z0-9][A-Za-z0-9._-]{0,127}\\.png$"
+										}
+									]
 								},
 								"bytes": {
 									"type": "integer",
-									"maximum": 9007199254740991,
-									"exclusiveMinimum": 0
+									"allOf": [
+										{
+											"exclusiveMinimum": 0
+										}
+									]
 								},
 								"width": {
 									"type": "integer",
-									"minimum": 16,
-									"maximum": 16384
+									"allOf": [
+										{
+											"minimum": 16,
+											"maximum": 16384
+										}
+									]
 								},
 								"height": {
 									"type": "integer",
-									"minimum": 16,
-									"maximum": 16384
+									"allOf": [
+										{
+											"minimum": 16,
+											"maximum": 16384
+										}
+									]
 								}
 							},
 							"required": ["relativePath", "bytes", "width", "height"],
@@ -896,8 +1142,14 @@
 															},
 															"actorPath": {
 																"type": "string",
-																"pattern": "^\\/Game\\/",
-																"maxLength": 4096
+																"allOf": [
+																	{
+																		"pattern": "^\\/Game\\/"
+																	},
+																	{
+																		"maxLength": 4096
+																	}
+																]
 															}
 														},
 														"required": ["kind", "actorPath"],
@@ -911,11 +1163,20 @@
 																"enum": ["actor_guid"]
 															},
 															"actorGuid": {
-																"type": "string"
+																"type": "string",
+																"allOf": [
+																	{
+																		"pattern": "^(?!00000000-00000000-00000000-00000000$)[0-9a-fA-F]{8}(?:-[0-9a-fA-F]{8}){3}$"
+																	}
+																]
 															},
 															"lastKnownActorPath": {
 																"type": "string",
-																"maxLength": 4096
+																"allOf": [
+																	{
+																		"maxLength": 4096
+																	}
+																]
 															}
 														},
 														"required": [
@@ -952,8 +1213,12 @@
 									"properties": {
 										"revealedChildActors": {
 											"type": "integer",
-											"minimum": 0,
-											"maximum": 1000000
+											"allOf": [
+												{
+													"minimum": 0,
+													"maximum": 1000000
+												}
+											]
 										}
 									},
 									"required": ["revealedChildActors"],
@@ -1018,8 +1283,12 @@
 														},
 														"horizontalFieldOfView": {
 															"type": "number",
-															"minimum": 5,
-															"maximum": 170
+															"allOf": [
+																{
+																	"minimum": 5,
+																	"maximum": 170
+																}
+															]
 														}
 													},
 													"required": ["kind", "horizontalFieldOfView"],
@@ -1034,8 +1303,14 @@
 														},
 														"width": {
 															"type": "number",
-															"exclusiveMinimum": 0,
-															"maximum": 1000000000
+															"allOf": [
+																{
+																	"exclusiveMinimum": 0
+																},
+																{
+																	"maximum": 1000000000
+																}
+															]
 														}
 													},
 													"required": ["kind", "width"],
@@ -1052,13 +1327,21 @@
 									"properties": {
 										"width": {
 											"type": "integer",
-											"minimum": 16,
-											"maximum": 16384
+											"allOf": [
+												{
+													"minimum": 16,
+													"maximum": 16384
+												}
+											]
 										},
 										"height": {
 											"type": "integer",
-											"minimum": 16,
-											"maximum": 16384
+											"allOf": [
+												{
+													"minimum": 16,
+													"maximum": 16384
+												}
+											]
 										}
 									},
 									"required": ["width", "height"],
@@ -1088,8 +1371,14 @@
 																			},
 																			"actorPath": {
 																				"type": "string",
-																				"pattern": "^\\/Game\\/",
-																				"maxLength": 4096
+																				"allOf": [
+																					{
+																						"pattern": "^\\/Game\\/"
+																					},
+																					{
+																						"maxLength": 4096
+																					}
+																				]
 																			}
 																		},
 																		"required": [
@@ -1108,11 +1397,20 @@
 																				]
 																			},
 																			"actorGuid": {
-																				"type": "string"
+																				"type": "string",
+																				"allOf": [
+																					{
+																						"pattern": "^(?!00000000-00000000-00000000-00000000$)[0-9a-fA-F]{8}(?:-[0-9a-fA-F]{8}){3}$"
+																					}
+																				]
 																			},
 																			"lastKnownActorPath": {
 																				"type": "string",
-																				"maxLength": 4096
+																				"allOf": [
+																					{
+																						"maxLength": 4096
+																					}
+																				]
 																			}
 																		},
 																		"required": [
@@ -1126,13 +1424,21 @@
 															},
 															"label": {
 																"type": "string",
-																"maxLength": 256
+																"allOf": [
+																	{
+																		"maxLength": 256
+																	}
+																]
 															}
 														},
 														"required": ["locator", "label"],
 														"additionalProperties": false
 													},
-													"maxItems": 256
+													"allOf": [
+														{
+															"maxItems": 256
+														}
+													]
 												},
 												"protect": {
 													"type": "array",
@@ -1152,8 +1458,14 @@
 																			},
 																			"actorPath": {
 																				"type": "string",
-																				"pattern": "^\\/Game\\/",
-																				"maxLength": 4096
+																				"allOf": [
+																					{
+																						"pattern": "^\\/Game\\/"
+																					},
+																					{
+																						"maxLength": 4096
+																					}
+																				]
 																			}
 																		},
 																		"required": [
@@ -1172,11 +1484,20 @@
 																				]
 																			},
 																			"actorGuid": {
-																				"type": "string"
+																				"type": "string",
+																				"allOf": [
+																					{
+																						"pattern": "^(?!00000000-00000000-00000000-00000000$)[0-9a-fA-F]{8}(?:-[0-9a-fA-F]{8}){3}$"
+																					}
+																				]
 																			},
 																			"lastKnownActorPath": {
 																				"type": "string",
-																				"maxLength": 4096
+																				"allOf": [
+																					{
+																						"maxLength": 4096
+																					}
+																				]
 																			}
 																		},
 																		"required": [
@@ -1190,13 +1511,21 @@
 															},
 															"label": {
 																"type": "string",
-																"maxLength": 256
+																"allOf": [
+																	{
+																		"maxLength": 256
+																	}
+																]
 															}
 														},
 														"required": ["locator", "label"],
 														"additionalProperties": false
 													},
-													"maxItems": 256
+													"allOf": [
+														{
+															"maxItems": 256
+														}
+													]
 												}
 											},
 											"required": ["hide", "protect"],
@@ -1234,8 +1563,12 @@
 														},
 														"screenshotWarmupFrames": {
 															"type": "integer",
-															"minimum": 1,
-															"maximum": 256
+															"allOf": [
+																{
+																	"minimum": 1,
+																	"maximum": 256
+																}
+															]
 														}
 													},
 													"required": [
@@ -1266,8 +1599,12 @@
 														},
 														"lodDistanceScale": {
 															"type": "number",
-															"minimum": 0.1,
-															"maximum": 100
+															"allOf": [
+																{
+																	"minimum": 0.1,
+																	"maximum": 100
+																}
+															]
 														},
 														"fog": {
 															"type": "boolean"
@@ -1312,8 +1649,12 @@
 														},
 														"ev100": {
 															"type": "number",
-															"minimum": -20,
-															"maximum": 30
+															"allOf": [
+																{
+																	"minimum": -20,
+																	"maximum": 30
+																}
+															]
 														},
 														"compensation": {
 															"type": "string",
@@ -1382,8 +1723,12 @@
 																				},
 																				"horizontalFieldOfView": {
 																					"type": "number",
-																					"minimum": 5,
-																					"maximum": 170
+																					"allOf": [
+																						{
+																							"minimum": 5,
+																							"maximum": 170
+																						}
+																					]
 																				}
 																			},
 																			"required": [
@@ -1403,8 +1748,14 @@
 																				},
 																				"width": {
 																					"type": "number",
-																					"exclusiveMinimum": 0,
-																					"maximum": 1000000000
+																					"allOf": [
+																						{
+																							"exclusiveMinimum": 0
+																						},
+																						{
+																							"maximum": 1000000000
+																						}
+																					]
 																				}
 																			},
 																			"required": [
@@ -1428,13 +1779,21 @@
 															"properties": {
 																"width": {
 																	"type": "integer",
-																	"minimum": 16,
-																	"maximum": 16384
+																	"allOf": [
+																		{
+																			"minimum": 16,
+																			"maximum": 16384
+																		}
+																	]
 																},
 																"height": {
 																	"type": "integer",
-																	"minimum": 16,
-																	"maximum": 16384
+																	"allOf": [
+																		{
+																			"minimum": 16,
+																			"maximum": 16384
+																		}
+																	]
 																}
 															},
 															"required": ["width", "height"],
@@ -1442,8 +1801,12 @@
 														},
 														"minimumFrames": {
 															"type": "integer",
-															"minimum": 1,
-															"maximum": 4096
+															"allOf": [
+																{
+																	"minimum": 1,
+																	"maximum": 4096
+																}
+															]
 														}
 													},
 													"required": [
@@ -1461,13 +1824,21 @@
 											"properties": {
 												"minimumFrames": {
 													"type": "integer",
-													"minimum": 1,
-													"maximum": 4096
+													"allOf": [
+														{
+															"minimum": 1,
+															"maximum": 4096
+														}
+													]
 												},
 												"timeoutMs": {
 													"type": "integer",
-													"minimum": 1000,
-													"maximum": 900000
+													"allOf": [
+														{
+															"minimum": 1000,
+															"maximum": 900000
+														}
+													]
 												},
 												"initialView": {
 													"type": "object",
@@ -1524,8 +1895,12 @@
 																				},
 																				"horizontalFieldOfView": {
 																					"type": "number",
-																					"minimum": 5,
-																					"maximum": 170
+																					"allOf": [
+																						{
+																							"minimum": 5,
+																							"maximum": 170
+																						}
+																					]
 																				}
 																			},
 																			"required": [
@@ -1545,8 +1920,14 @@
 																				},
 																				"width": {
 																					"type": "number",
-																					"exclusiveMinimum": 0,
-																					"maximum": 1000000000
+																					"allOf": [
+																						{
+																							"exclusiveMinimum": 0
+																						},
+																						{
+																							"maximum": 1000000000
+																						}
+																					]
 																				}
 																			},
 																			"required": [
@@ -1570,13 +1951,21 @@
 															"properties": {
 																"width": {
 																	"type": "integer",
-																	"minimum": 16,
-																	"maximum": 16384
+																	"allOf": [
+																		{
+																			"minimum": 16,
+																			"maximum": 16384
+																		}
+																	]
 																},
 																"height": {
 																	"type": "integer",
-																	"minimum": 16,
-																	"maximum": 16384
+																	"allOf": [
+																		{
+																			"minimum": 16,
+																			"maximum": 16384
+																		}
+																	]
 																}
 															},
 															"required": ["width", "height"],
@@ -1584,8 +1973,12 @@
 														},
 														"minimumFrames": {
 															"type": "integer",
-															"minimum": 1,
-															"maximum": 4096
+															"allOf": [
+																{
+																	"minimum": 1,
+																	"maximum": 4096
+																}
+															]
 														}
 													},
 													"required": ["camera", "size", "minimumFrames"],
@@ -1624,26 +2017,42 @@
 																},
 																"maximumRegions": {
 																	"type": "integer",
-																	"minimum": 1,
-																	"maximum": 64
+																	"allOf": [
+																		{
+																			"minimum": 1,
+																			"maximum": 64
+																		}
+																	]
 																},
 																"extent": {
 																	"type": "object",
 																	"properties": {
 																		"x": {
 																			"type": "number",
-																			"minimum": 0,
-																			"maximum": 10000000
+																			"allOf": [
+																				{
+																					"minimum": 0,
+																					"maximum": 10000000
+																				}
+																			]
 																		},
 																		"y": {
 																			"type": "number",
-																			"minimum": 0,
-																			"maximum": 10000000
+																			"allOf": [
+																				{
+																					"minimum": 0,
+																					"maximum": 10000000
+																				}
+																			]
 																		},
 																		"z": {
 																			"type": "number",
-																			"minimum": 0,
-																			"maximum": 10000000
+																			"allOf": [
+																				{
+																					"minimum": 0,
+																					"maximum": 10000000
+																				}
+																			]
 																		}
 																	},
 																	"required": ["x", "y", "z"],
@@ -1666,7 +2075,14 @@
 														"properties": {
 															"assetPath": {
 																"type": "string",
-																"maxLength": 1024
+																"allOf": [
+																	{
+																		"pattern": "^\\/[A-Za-z0-9_./-]+$"
+																	},
+																	{
+																		"maxLength": 1024
+																	}
+																]
 															},
 															"loaded": {
 																"type": "boolean"
@@ -1682,7 +2098,11 @@
 														],
 														"additionalProperties": false
 													},
-													"maxItems": 64
+													"allOf": [
+														{
+															"maxItems": 64
+														}
+													]
 												}
 											},
 											"required": ["geometry", "dataLayers"],
@@ -1717,20 +2137,34 @@
 										},
 										"regionsHeld": {
 											"type": "integer",
-											"minimum": 0,
-											"maximum": 64
+											"allOf": [
+												{
+													"minimum": 0,
+													"maximum": 64
+												}
+											]
 										},
 										"dataLayersApplied": {
 											"type": "integer",
-											"minimum": 0,
-											"maximum": 64
+											"allOf": [
+												{
+													"minimum": 0,
+													"maximum": 64
+												}
+											]
 										},
 										"limitations": {
 											"type": "array",
 											"items": {
 												"type": "string",
-												"minLength": 1,
-												"maxLength": 1024
+												"allOf": [
+													{
+														"minLength": 1
+													},
+													{
+														"maxLength": 1024
+													}
+												]
 											}
 										}
 									},
@@ -1747,12 +2181,20 @@
 									"properties": {
 										"renderedFrames": {
 											"type": "integer",
-											"minimum": 0,
-											"maximum": 1000000
+											"allOf": [
+												{
+													"minimum": 0,
+													"maximum": 1000000
+												}
+											]
 										},
 										"elapsedMs": {
 											"type": "number",
-											"minimum": 0
+											"allOf": [
+												{
+													"minimum": 0
+												}
+											]
 										},
 										"convergence": {
 											"type": "string",
@@ -1764,13 +2206,25 @@
 								},
 								"engineVersion": {
 									"type": "string",
-									"minLength": 1,
-									"maxLength": 1024
+									"allOf": [
+										{
+											"minLength": 1
+										},
+										{
+											"maxLength": 1024
+										}
+									]
 								},
 								"pluginVersion": {
 									"type": "string",
-									"minLength": 1,
-									"maxLength": 1024
+									"allOf": [
+										{
+											"minLength": 1
+										},
+										{
+											"maxLength": 1024
+										}
+									]
 								}
 							},
 							"required": [
@@ -1801,14 +2255,24 @@
 							},
 							"stagingPath": {
 								"type": "string",
-								"minLength": 1
+								"allOf": [
+									{
+										"minLength": 1
+									}
+								]
 							}
 						},
 						"required": ["variant", "stagingPath"],
 						"additionalProperties": false
 					},
-					"minItems": 1,
-					"maxItems": 2
+					"allOf": [
+						{
+							"minItems": 1
+						},
+						{
+							"maxItems": 2
+						}
+					]
 				}
 			},
 			"required": [
@@ -1829,15 +2293,27 @@
 				},
 				"code": {
 					"type": "string",
-					"minLength": 1
+					"allOf": [
+						{
+							"minLength": 1
+						}
+					]
 				},
 				"message": {
 					"type": "string",
-					"minLength": 1
+					"allOf": [
+						{
+							"minLength": 1
+						}
+					]
 				},
 				"recovery": {
 					"type": "string",
-					"minLength": 1
+					"allOf": [
+						{
+							"minLength": 1
+						}
+					]
 				}
 			},
 			"required": ["status", "code", "message", "recovery"],

@@ -85,7 +85,8 @@ const neutralSchema: JsonSchema.JsonSchema = JSON.parse(
 const decodeNeutralEvidence = Schema.decodeUnknownSync(
 	Schema.make<Schema.Codec<unknown>>(
 		SchemaRepresentation.fromJsonSchemaDocument(
-			JsonSchema.fromSchemaDraft2020_12(neutralSchema)
+			JsonSchema.fromSchemaDraft2020_12(neutralSchema),
+			{ patterns: "apply" }
 		).ast
 	),
 	{ onExcessProperty: "error" }

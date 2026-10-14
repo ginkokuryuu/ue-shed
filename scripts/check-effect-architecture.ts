@@ -471,7 +471,26 @@ export async function checkCatalogUsage(root: string) {
 			const dependencies = manifest[section];
 			if (dependencies === undefined || !isJsonObject(dependencies)) continue;
 			for (const [dependency, version] of Object.entries(dependencies)) {
-				if (catalogOwned.has(dependency) && version !== "catalog:") {
+				const publishedEffect =
+					manifest.private !== true &&
+					(dependency === "effect" || dependency.startsWith("@effect/"));
+				if (publishedEffect && section !== "devDependencies") {
+					if (section !== "peerDependencies" || version !== "^4.0.0") {
+						failures.push(
+							`${relative(root, manifestPath)}: ${dependency} must be a ^4.0.0 peer dependency`
+						);
+					}
+					const development = manifest.devDependencies;
+					if (
+						development === undefined ||
+						!isJsonObject(development) ||
+						development[dependency] !== "catalog:"
+					) {
+						failures.push(
+							`${relative(root, manifestPath)}: devDependencies.${dependency} must use catalog:`
+						);
+					}
+				} else if (catalogOwned.has(dependency) && version !== "catalog:") {
 					failures.push(
 						`${relative(root, manifestPath)}: ${section}.${dependency} must use catalog:`
 					);

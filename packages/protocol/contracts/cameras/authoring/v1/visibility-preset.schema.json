@@ -9,19 +9,35 @@
 		},
 		"id": {
 			"type": "string",
-			"pattern": "^[a-zA-Z0-9][a-zA-Z0-9._-]{0,127}$"
+			"allOf": [
+				{
+					"pattern": "^[a-zA-Z0-9][a-zA-Z0-9._-]{0,127}$"
+				}
+			]
 		},
 		"name": {
 			"type": "string",
-			"minLength": 1
+			"allOf": [
+				{
+					"minLength": 1
+				}
+			]
 		},
 		"projectName": {
 			"type": "string",
-			"minLength": 1
+			"allOf": [
+				{
+					"minLength": 1
+				}
+			]
 		},
 		"mapPath": {
 			"type": "string",
-			"pattern": "^\\/Game\\/"
+			"allOf": [
+				{
+					"pattern": "^\\/Game\\/"
+				}
+			]
 		},
 		"actors": {
 			"type": "object",
@@ -42,8 +58,14 @@
 											},
 											"actorPath": {
 												"type": "string",
-												"pattern": "^\\/Game\\/",
-												"maxLength": 4096
+												"allOf": [
+													{
+														"pattern": "^\\/Game\\/"
+													},
+													{
+														"maxLength": 4096
+													}
+												]
 											}
 										},
 										"required": ["kind", "actorPath"],
@@ -57,11 +79,20 @@
 												"enum": ["actor_guid"]
 											},
 											"actorGuid": {
-												"type": "string"
+												"type": "string",
+												"allOf": [
+													{
+														"pattern": "^(?!00000000-00000000-00000000-00000000$)[0-9a-fA-F]{8}(?:-[0-9a-fA-F]{8}){3}$"
+													}
+												]
 											},
 											"lastKnownActorPath": {
 												"type": "string",
-												"maxLength": 4096
+												"allOf": [
+													{
+														"maxLength": 4096
+													}
+												]
 											}
 										},
 										"required": ["kind", "actorGuid", "lastKnownActorPath"],
@@ -71,13 +102,21 @@
 							},
 							"label": {
 								"type": "string",
-								"maxLength": 256
+								"allOf": [
+									{
+										"maxLength": 256
+									}
+								]
 							}
 						},
 						"required": ["locator", "label"],
 						"additionalProperties": false
 					},
-					"maxItems": 256
+					"allOf": [
+						{
+							"maxItems": 256
+						}
+					]
 				},
 				"protect": {
 					"type": "array",
@@ -95,8 +134,14 @@
 											},
 											"actorPath": {
 												"type": "string",
-												"pattern": "^\\/Game\\/",
-												"maxLength": 4096
+												"allOf": [
+													{
+														"pattern": "^\\/Game\\/"
+													},
+													{
+														"maxLength": 4096
+													}
+												]
 											}
 										},
 										"required": ["kind", "actorPath"],
@@ -110,11 +155,20 @@
 												"enum": ["actor_guid"]
 											},
 											"actorGuid": {
-												"type": "string"
+												"type": "string",
+												"allOf": [
+													{
+														"pattern": "^(?!00000000-00000000-00000000-00000000$)[0-9a-fA-F]{8}(?:-[0-9a-fA-F]{8}){3}$"
+													}
+												]
 											},
 											"lastKnownActorPath": {
 												"type": "string",
-												"maxLength": 4096
+												"allOf": [
+													{
+														"maxLength": 4096
+													}
+												]
 											}
 										},
 										"required": ["kind", "actorGuid", "lastKnownActorPath"],
@@ -124,13 +178,21 @@
 							},
 							"label": {
 								"type": "string",
-								"maxLength": 256
+								"allOf": [
+									{
+										"maxLength": 256
+									}
+								]
 							}
 						},
 						"required": ["locator", "label"],
 						"additionalProperties": false
 					},
-					"maxItems": 256
+					"allOf": [
+						{
+							"maxItems": 256
+						}
+					]
 				}
 			},
 			"required": ["hide", "protect"],

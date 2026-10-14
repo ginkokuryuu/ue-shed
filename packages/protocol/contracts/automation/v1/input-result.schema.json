@@ -50,7 +50,11 @@
 						"properties": {
 							"code": {
 								"type": "string",
-								"minLength": 1
+								"allOf": [
+									{
+										"minLength": 1
+									}
+								]
 							},
 							"message": {
 								"type": "string"

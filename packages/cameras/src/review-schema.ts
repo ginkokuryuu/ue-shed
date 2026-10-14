@@ -23,7 +23,7 @@ const PositiveInteger = Schema.Int.check(Schema.isGreaterThan(0));
 const Fraction = Schema.Finite.check(Schema.isBetween({ minimum: 0, maximum: 1 }));
 
 export const ReviewSubjectActorPath = Schema.String.check(
-	Schema.isMinLength(7),
+	Schema.isMinCodePoints(7),
 	Schema.isMaxLength(4_096),
 	Schema.isStartingWith("/Game/")
 );
@@ -36,14 +36,14 @@ export type ReviewSubjectActorPath = Schema.Schema.Type<typeof ReviewSubjectActo
  */
 export const ReviewSubjectActorGuid = Schema.String.check(
 	Schema.isPattern(
-		/^(?!00000000-00000000-00000000-00000000$)[0-9a-fA-F]{8}(?:-[0-9a-fA-F]{8}){3}$/
+		/^(?!00000000-00000000-00000000-00000000$)[0-9a-fA-F]{8}(?:-[0-9a-fA-F]{8}){3}$/u
 	)
 ).pipe(Schema.brand("ReviewSubjectActorGuid"));
 export type ReviewSubjectActorGuid = Schema.Schema.Type<typeof ReviewSubjectActorGuid>;
 
 export const ReviewCaptureOperationId = Schema.String.check(
 	Schema.isPattern(
-		/^(?!00000000-0000-0000-0000-000000000000$)[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/
+		/^(?!00000000-0000-0000-0000-000000000000$)[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/u
 	)
 );
 export type ReviewCaptureOperationId = Schema.Schema.Type<typeof ReviewCaptureOperationId>;
@@ -83,7 +83,7 @@ export type CaptureRunId = Schema.Schema.Type<typeof CaptureRunId>;
 
 const FramingCandidateIdentifier = NonEmptyString.check(
 	Schema.isMaxLength(384),
-	Schema.isPattern(/^[A-Za-z0-9][A-Za-z0-9._/-]*$/)
+	Schema.isPattern(/^[A-Za-z0-9][A-Za-z0-9._/-]*$/u)
 );
 
 export const FramingCandidateId = FramingCandidateIdentifier.pipe(

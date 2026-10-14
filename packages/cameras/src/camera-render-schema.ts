@@ -4,7 +4,7 @@ import { CameraVisibilityList, CameraVisibilityDiagnostic } from "./camera-visib
 const Text = Schema.String.check(Schema.isMinLength(1), Schema.isMaxLength(1024));
 const Id = Schema.String.check(Schema.isPattern(/^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/u));
 const AssetPath = Schema.String.check(
-	Schema.isPattern(/^\/[A-Za-z0-9_./-]+$/),
+	Schema.isPattern(/^\/[A-Za-z0-9_./-]+$/u),
 	Schema.isMaxLength(1024)
 );
 const integer = (minimum: number, maximum: number) =>
@@ -319,7 +319,7 @@ export const CameraFrameResult = Schema.Struct({
 	artifact: Schema.Struct({
 		relativePath: Schema.String.check(
 			Schema.isPattern(
-				/^[A-Za-z0-9][A-Za-z0-9._-]{0,127}\/[A-Za-z0-9][A-Za-z0-9._-]{0,127}\.png$/
+				/^[A-Za-z0-9][A-Za-z0-9._-]{0,127}\/[A-Za-z0-9][A-Za-z0-9._-]{0,127}\.png$/u
 			)
 		),
 		bytes: Schema.Int.check(Schema.isGreaterThan(0)),

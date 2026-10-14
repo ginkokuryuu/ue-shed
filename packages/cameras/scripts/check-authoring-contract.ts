@@ -1,7 +1,7 @@
+import { assertJsonSchemaEquivalent } from "../../../scripts/canonical-json-schema.ts";
+import { makeWireJsonSchemaDocument } from "@ue-shed/protocol";
 import { CameraVisibilityPreset } from "../src/camera-visibility.js";
-import { deepStrictEqual } from "node:assert/strict";
 import { readFileSync, writeFileSync } from "node:fs";
-import { Schema } from "effect";
 import { CameraBridgeRequest, CameraBridgeResponse } from "../src/camera-authoring-bridge.js";
 import { CameraArrangement, CameraArrangementCommand } from "../src/camera-arrangement.js";
 import { CameraArrangementRecipe } from "../src/camera-arrangement.js";
@@ -21,9 +21,7 @@ const contracts = {
 	document: CameraAuthoringDocument
 };
 for (const [name, schema] of Object.entries(contracts)) {
-	const document = Schema.toJsonSchemaDocument(Schema.toType(schema), {
-		onExcessProperty: "error"
-	});
+	const document = makeWireJsonSchemaDocument(schema);
 	const generated = {
 		$schema: "https://json-schema.org/draft/2020-12/schema",
 		$id: `https://ue-shed.dev/contracts/cameras/authoring/v1/${name}.schema.json`,
@@ -38,7 +36,7 @@ for (const [name, schema] of Object.entries(contracts)) {
 			),
 			`${JSON.stringify(generated, null, "\t")}\n`
 		);
-	deepStrictEqual(
+	assertJsonSchemaEquivalent(
 		JSON.parse(
 			readFileSync(
 				new URL(

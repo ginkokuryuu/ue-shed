@@ -1,3 +1,4 @@
+import { canonicalJsonSchemaReferences } from "./json-schema.js";
 import { deepStrictEqual } from "node:assert";
 import { readFile } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
@@ -40,7 +41,10 @@ describe("uasset IO protocol v1", () => {
 					"utf8"
 				)
 			);
-			deepStrictEqual(checkedIn, makeUAssetIoJsonSchema(contract));
+			deepStrictEqual(
+				canonicalJsonSchemaReferences(checkedIn),
+				canonicalJsonSchemaReferences(makeUAssetIoJsonSchema(contract))
+			);
 		}
 	});
 
@@ -51,6 +55,7 @@ describe("uasset IO protocol v1", () => {
 					"valid/scan-request.json",
 					"valid/extract-text-packages-request.json",
 					"valid/extract-text-packages-result-event.json",
+					"valid/extract-text-packages-gather-coverage-result-event.json",
 					"valid/blueprint-request.json",
 					"valid/level-sequence-request.json",
 					"valid/accepted-event.json",
@@ -99,6 +104,7 @@ describe("uasset IO protocol v1", () => {
 					"invalid/request-wrong-major.json",
 					"invalid/extract-text-packages-request-old-minor.json",
 					"invalid/extract-text-packages-unbounded-samples.json",
+					"invalid/extract-text-packages-unbounded-missing-samples.json",
 					"invalid/event-unknown-kind.json",
 					"invalid/level-sequence-version.json",
 					"invalid/negative-instanced-size.json",

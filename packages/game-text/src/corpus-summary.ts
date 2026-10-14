@@ -13,7 +13,8 @@ export const TextCorpusDiagnosticSummary = Schema.Struct({
 		package_inspection_failed: Count,
 		package_partially_decoded: Count,
 		unsupported_text_history: Count,
-		package_not_gatherable: Schema.optionalKey(Count)
+		package_not_gatherable: Schema.optionalKey(Count),
+		gatherable_text_not_decoded: Schema.optionalKey(Count)
 	}),
 	diagnosticsOmitted: Count
 });
@@ -66,9 +67,11 @@ export function textCorpusDiagnosticSummary(
 		unsupported_text_history: 0
 	};
 	for (const diagnostic of diagnostics) {
-		if (diagnostic.code === "package_not_gatherable")
-			diagnosticCounts.package_not_gatherable =
-				(diagnosticCounts.package_not_gatherable ?? 0) + 1;
+		if (
+			diagnostic.code === "package_not_gatherable" ||
+			diagnostic.code === "gatherable_text_not_decoded"
+		)
+			diagnosticCounts[diagnostic.code] = (diagnosticCounts[diagnostic.code] ?? 0) + 1;
 		else diagnosticCounts[diagnostic.code] += 1;
 	}
 	return {

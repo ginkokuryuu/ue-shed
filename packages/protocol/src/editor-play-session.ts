@@ -1,3 +1,4 @@
+import { makeWireJsonSchemaDocument } from "./json-schema.js";
 import { Schema } from "effect";
 
 export const EditorPlaySessionContract = Schema.Struct({
@@ -74,9 +75,7 @@ export const decodeEditorPlaySessionCommandResponse = Schema.decodeUnknownEffect
 );
 
 export function makeEditorPlaySessionJsonSchema(contract: Schema.Top) {
-	const document = Schema.toJsonSchemaDocument(Schema.toType(contract), {
-		onExcessProperty: "error"
-	});
+	const document = makeWireJsonSchemaDocument(contract);
 	return {
 		$schema: "https://json-schema.org/draft/2020-12/schema",
 		$defs: document.definitions,

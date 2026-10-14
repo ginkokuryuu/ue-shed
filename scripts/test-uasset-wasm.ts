@@ -37,7 +37,8 @@ const decodeSequence = Schema.decodeUnknownSync(
 	// JSON Schema contains pure value checks, with no Effect service requirements.
 	Schema.make<Schema.Codec<unknown>>(
 		SchemaRepresentation.fromJsonSchemaDocument(
-			JsonSchema.fromSchemaDraft2020_12(sequenceSchema)
+			JsonSchema.fromSchemaDraft2020_12(sequenceSchema),
+			{ patterns: "apply" }
 		).ast
 	),
 	{ onExcessProperty: "error" }
@@ -87,7 +88,8 @@ const authoringSchema: JsonSchema.JsonSchema = JSON.parse(
 const decodeAuthoringTable = Schema.decodeUnknownSync(
 	Schema.make<Schema.Codec<unknown>>(
 		SchemaRepresentation.fromJsonSchemaDocument(
-			JsonSchema.fromSchemaDraft2020_12(authoringSchema)
+			JsonSchema.fromSchemaDraft2020_12(authoringSchema),
+			{ patterns: "apply" }
 		).ast
 	),
 	{ onExcessProperty: "error" }
@@ -99,6 +101,7 @@ const projectionFixtures: ReadonlyArray<{
 }> = [
 	...legacyFixtures.map((fixture) => ({ ...fixture, kind: "text" as const })),
 	{ path: join(fixtureRoot, "Content/Fixture/Text/DA_TextOccurrences.uasset"), kind: "text" },
+	{ path: join(fixtureRoot, "Content/Fixture/Text/E_TextDisplayNames.uasset"), kind: "text" },
 	{
 		path: join(
 			fixtureRoot,
@@ -377,7 +380,8 @@ const animationSchema: JsonSchema.JsonSchema = JSON.parse(
 const decodeAnimation = Schema.decodeUnknownSync(
 	Schema.make<Schema.Codec<unknown>>(
 		SchemaRepresentation.fromJsonSchemaDocument(
-			JsonSchema.fromSchemaDraft2020_12(animationSchema)
+			JsonSchema.fromSchemaDraft2020_12(animationSchema),
+			{ patterns: "apply" }
 		).ast
 	),
 	{ onExcessProperty: "error" }

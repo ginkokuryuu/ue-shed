@@ -15,8 +15,14 @@
 				},
 				"processId": {
 					"type": "integer",
-					"exclusiveMinimum": 0,
-					"exclusiveMaximum": 4294967295
+					"allOf": [
+						{
+							"exclusiveMinimum": 0
+						},
+						{
+							"exclusiveMaximum": 4294967295
+						}
+					]
 				},
 				"message": {
 					"type": "string"
@@ -29,13 +35,20 @@
 				},
 				"activeLeases": {
 					"type": "integer",
-					"minimum": 0,
-					"maximum": 8
+					"allOf": [
+						{
+							"minimum": 0,
+							"maximum": 8
+						}
+					]
 				},
 				"maxLeases": {
 					"type": "integer",
-					"maximum": 9007199254740991,
-					"exclusiveMinimum": 0
+					"allOf": [
+						{
+							"exclusiveMinimum": 0
+						}
+					]
 				},
 				"exemptionActive": {
 					"type": "boolean"
@@ -48,18 +61,30 @@
 				},
 				"minTtlMs": {
 					"type": "integer",
-					"minimum": 2000,
-					"maximum": 30000
+					"allOf": [
+						{
+							"minimum": 2000,
+							"maximum": 30000
+						}
+					]
 				},
 				"defaultTtlMs": {
 					"type": "integer",
-					"minimum": 2000,
-					"maximum": 30000
+					"allOf": [
+						{
+							"minimum": 2000,
+							"maximum": 30000
+						}
+					]
 				},
 				"maxTtlMs": {
 					"type": "integer",
-					"minimum": 2000,
-					"maximum": 30000
+					"allOf": [
+						{
+							"minimum": 2000,
+							"maximum": 30000
+						}
+					]
 				}
 			},
 			"required": [
@@ -93,8 +118,14 @@
 				},
 				"processId": {
 					"type": "integer",
-					"exclusiveMinimum": 0,
-					"exclusiveMaximum": 4294967295
+					"allOf": [
+						{
+							"exclusiveMinimum": 0
+						},
+						{
+							"exclusiveMaximum": 4294967295
+						}
+					]
 				},
 				"message": {
 					"type": "string"
@@ -123,8 +154,14 @@
 				},
 				"processId": {
 					"type": "integer",
-					"exclusiveMinimum": 0,
-					"exclusiveMaximum": 4294967295
+					"allOf": [
+						{
+							"exclusiveMinimum": 0
+						},
+						{
+							"exclusiveMaximum": 4294967295
+						}
+					]
 				},
 				"message": {
 					"type": "string"

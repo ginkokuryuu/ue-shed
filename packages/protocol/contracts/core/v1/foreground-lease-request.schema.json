@@ -11,18 +11,34 @@
 				},
 				"expectedProcessId": {
 					"type": "integer",
-					"exclusiveMinimum": 0,
-					"exclusiveMaximum": 4294967295
+					"allOf": [
+						{
+							"exclusiveMinimum": 0
+						},
+						{
+							"exclusiveMaximum": 4294967295
+						}
+					]
 				},
 				"clientProcessId": {
 					"type": "integer",
-					"exclusiveMinimum": 0,
-					"exclusiveMaximum": 4294967295
+					"allOf": [
+						{
+							"exclusiveMinimum": 0
+						},
+						{
+							"exclusiveMaximum": 4294967295
+						}
+					]
 				},
 				"ttlMs": {
 					"type": "integer",
-					"minimum": 2000,
-					"maximum": 30000
+					"allOf": [
+						{
+							"minimum": 2000,
+							"maximum": 30000
+						}
+					]
 				}
 			},
 			"required": ["operation", "expectedProcessId", "clientProcessId"],
@@ -37,22 +53,42 @@
 				},
 				"expectedProcessId": {
 					"type": "integer",
-					"exclusiveMinimum": 0,
-					"exclusiveMaximum": 4294967295
+					"allOf": [
+						{
+							"exclusiveMinimum": 0
+						},
+						{
+							"exclusiveMaximum": 4294967295
+						}
+					]
 				},
 				"clientProcessId": {
 					"type": "integer",
-					"exclusiveMinimum": 0,
-					"exclusiveMaximum": 4294967295
+					"allOf": [
+						{
+							"exclusiveMinimum": 0
+						},
+						{
+							"exclusiveMaximum": 4294967295
+						}
+					]
 				},
 				"leaseId": {
 					"type": "string",
-					"pattern": "^[0-9a-f]{32}$"
+					"allOf": [
+						{
+							"pattern": "^[0-9a-f]{32}$"
+						}
+					]
 				},
 				"ttlMs": {
 					"type": "integer",
-					"minimum": 2000,
-					"maximum": 30000
+					"allOf": [
+						{
+							"minimum": 2000,
+							"maximum": 30000
+						}
+					]
 				}
 			},
 			"required": ["operation", "expectedProcessId", "clientProcessId", "leaseId"],
@@ -67,17 +103,33 @@
 				},
 				"expectedProcessId": {
 					"type": "integer",
-					"exclusiveMinimum": 0,
-					"exclusiveMaximum": 4294967295
+					"allOf": [
+						{
+							"exclusiveMinimum": 0
+						},
+						{
+							"exclusiveMaximum": 4294967295
+						}
+					]
 				},
 				"clientProcessId": {
 					"type": "integer",
-					"exclusiveMinimum": 0,
-					"exclusiveMaximum": 4294967295
+					"allOf": [
+						{
+							"exclusiveMinimum": 0
+						},
+						{
+							"exclusiveMaximum": 4294967295
+						}
+					]
 				},
 				"leaseId": {
 					"type": "string",
-					"pattern": "^[0-9a-f]{32}$"
+					"allOf": [
+						{
+							"pattern": "^[0-9a-f]{32}$"
+						}
+					]
 				}
 			},
 			"required": ["operation", "expectedProcessId", "clientProcessId", "leaseId"],

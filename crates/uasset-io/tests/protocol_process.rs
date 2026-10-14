@@ -33,6 +33,37 @@ fn header_gather_evidence_is_negotiated_and_legacy_output_stays_unchanged() {
     }
 }
 
+#[test]
+fn package_text_gather_coverage_is_negotiated() {
+    let project_root =
+        std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../fixtures/unreal-project");
+    for minor in [8, 9, 10] {
+        let mut request = base_request(serde_json::json!({
+            "kind": "extract_text_packages",
+            "paths": ["Content/Fixture/Text/DA_TextOccurrences.uasset"],
+            "projectRoot": project_root.to_string_lossy()
+        }));
+        request["contract"]["version"]["minor"] = minor.into();
+        let (success, events, stderr) = run_request(request);
+        assert!(success, "package text failed: {stderr}");
+        assert_valid_events(&events);
+        let record = &events
+            .iter()
+            .find(|event| event["result"]["event"]["event"] == "text_package_record")
+            .unwrap()["result"]["event"];
+        assert_eq!(record["status"], "complete");
+        let gather = record.get("gatherCoverage");
+        if minor < 10 {
+            assert!(gather.is_none());
+        } else {
+            let gather = gather.unwrap();
+            assert_eq!(gather["runtimeSites"], 4);
+            assert_eq!(gather["missing"], 0);
+            assert_eq!(gather["missingSamples"], serde_json::json!([]));
+        }
+    }
+}
+
 fn run_request(request: Value) -> (bool, Vec<Value>, String) {
     let mut child = Command::new(env!("CARGO_BIN_EXE_uasset"))
         .arg("protocol")

@@ -1,5 +1,8 @@
 # @ue-shed/world
 
+The application must provide `effect@^4.0.0` as a peer dependency. Reuse one compatible
+Effect installation across the application and UE Shed libraries.
+
 Prepare an Unreal editor world for bounded work without loading the whole map. Discover unloaded
 actors through their descriptors, select an actor plus surrounding context or explicit area bounds,
 and hold loading references for an Effect scope. Requires matching `UEShedCore` and `UEShedWorld`

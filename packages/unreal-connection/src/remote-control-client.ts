@@ -98,13 +98,13 @@ export function makeRemoteControlClient(options: {
 						try: () =>
 							new UnrealRC({
 								transport: "http",
+								// This adapter validates ResultJson; the upstream schema strips named return fields.
+								validateResponses: false,
 								http: {
 									baseUrl: endpoint,
 									requestTimeoutMs: Duration.toMillis(timeout)
 								},
-								retry: false,
-								// This adapter validates the complete function envelope below.
-								validateResponses: false
+								retry: false
 							}),
 						catch: (cause) => transportError(request, cause)
 					}),

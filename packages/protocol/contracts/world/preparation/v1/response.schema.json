@@ -14,17 +14,33 @@
 					"properties": {
 						"worldId": {
 							"type": "string",
-							"pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$"
+							"allOf": [
+								{
+									"pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$"
+								}
+							]
 						},
 						"mapPath": {
 							"type": "string",
-							"minLength": 1,
-							"maxLength": 1024
+							"allOf": [
+								{
+									"minLength": 1
+								},
+								{
+									"maxLength": 1024
+								}
+							]
 						},
 						"projectName": {
 							"type": "string",
-							"minLength": 1,
-							"maxLength": 1024
+							"allOf": [
+								{
+									"minLength": 1
+								},
+								{
+									"maxLength": 1024
+								}
+							]
 						},
 						"partitioned": {
 							"type": "boolean"
@@ -58,17 +74,33 @@
 					"properties": {
 						"worldId": {
 							"type": "string",
-							"pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$"
+							"allOf": [
+								{
+									"pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$"
+								}
+							]
 						},
 						"mapPath": {
 							"type": "string",
-							"minLength": 1,
-							"maxLength": 1024
+							"allOf": [
+								{
+									"minLength": 1
+								},
+								{
+									"maxLength": 1024
+								}
+							]
 						},
 						"projectName": {
 							"type": "string",
-							"minLength": 1,
-							"maxLength": 1024
+							"allOf": [
+								{
+									"minLength": 1
+								},
+								{
+									"maxLength": 1024
+								}
+							]
 						},
 						"partitioned": {
 							"type": "boolean"
@@ -88,12 +120,20 @@
 				},
 				"leaseId": {
 					"type": "string",
-					"pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$"
+					"allOf": [
+						{
+							"pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$"
+						}
+					]
 				},
 				"revision": {
 					"type": "integer",
-					"minimum": 0,
-					"maximum": 1000000
+					"allOf": [
+						{
+							"minimum": 0,
+							"maximum": 1000000
+						}
+					]
 				},
 				"regions": {
 					"type": "array",
@@ -121,18 +161,30 @@
 								"properties": {
 									"x": {
 										"type": "number",
-										"minimum": 0,
-										"maximum": 10000000
+										"allOf": [
+											{
+												"minimum": 0,
+												"maximum": 10000000
+											}
+										]
 									},
 									"y": {
 										"type": "number",
-										"minimum": 0,
-										"maximum": 10000000
+										"allOf": [
+											{
+												"minimum": 0,
+												"maximum": 10000000
+											}
+										]
 									},
 									"z": {
 										"type": "number",
-										"minimum": 0,
-										"maximum": 10000000
+										"allOf": [
+											{
+												"minimum": 0,
+												"maximum": 10000000
+											}
+										]
 									}
 								},
 								"required": ["x", "y", "z"],
@@ -142,7 +194,11 @@
 						"required": ["center", "extent"],
 						"additionalProperties": false
 					},
-					"maxItems": 64
+					"allOf": [
+						{
+							"maxItems": 64
+						}
+					]
 				},
 				"actors": {
 					"type": "array",
@@ -151,20 +207,36 @@
 						"properties": {
 							"actorGuid": {
 								"type": "string",
-								"pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+								"allOf": [
+									{
+										"pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+									}
+								]
 							},
 							"containerId": {
 								"type": "string",
-								"minLength": 1,
-								"maxLength": 1024
+								"allOf": [
+									{
+										"minLength": 1
+									},
+									{
+										"maxLength": 1024
+									}
+								]
 							},
 							"label": {
 								"type": "string"
 							},
 							"classPath": {
 								"type": "string",
-								"minLength": 1,
-								"maxLength": 1024
+								"allOf": [
+									{
+										"minLength": 1
+									},
+									{
+										"maxLength": 1024
+									}
+								]
 							},
 							"region": {
 								"anyOf": [
@@ -192,15 +264,27 @@
 												"properties": {
 													"x": {
 														"type": "number",
-														"minimum": 0
+														"allOf": [
+															{
+																"minimum": 0
+															}
+														]
 													},
 													"y": {
 														"type": "number",
-														"minimum": 0
+														"allOf": [
+															{
+																"minimum": 0
+															}
+														]
 													},
 													"z": {
 														"type": "number",
-														"minimum": 0
+														"allOf": [
+															{
+																"minimum": 0
+															}
+														]
 													}
 												},
 												"required": ["x", "y", "z"],
@@ -245,7 +329,11 @@
 						],
 						"additionalProperties": false
 					},
-					"maxItems": 100000
+					"allOf": [
+						{
+							"maxItems": 100000
+						}
+					]
 				},
 				"issues": {
 					"type": "array",
@@ -254,24 +342,46 @@
 						"properties": {
 							"code": {
 								"type": "string",
-								"minLength": 1,
-								"maxLength": 1024
+								"allOf": [
+									{
+										"minLength": 1
+									},
+									{
+										"maxLength": 1024
+									}
+								]
 							},
 							"subject": {
 								"type": "string",
-								"minLength": 1,
-								"maxLength": 1024
+								"allOf": [
+									{
+										"minLength": 1
+									},
+									{
+										"maxLength": 1024
+									}
+								]
 							},
 							"message": {
 								"type": "string",
-								"minLength": 1,
-								"maxLength": 1024
+								"allOf": [
+									{
+										"minLength": 1
+									},
+									{
+										"maxLength": 1024
+									}
+								]
 							}
 						},
 						"required": ["code", "subject", "message"],
 						"additionalProperties": false
 					},
-					"maxItems": 128
+					"allOf": [
+						{
+							"maxItems": 128
+						}
+					]
 				},
 				"renderReadiness": {
 					"type": "string",
@@ -299,18 +409,36 @@
 				},
 				"code": {
 					"type": "string",
-					"minLength": 1,
-					"maxLength": 1024
+					"allOf": [
+						{
+							"minLength": 1
+						},
+						{
+							"maxLength": 1024
+						}
+					]
 				},
 				"message": {
 					"type": "string",
-					"minLength": 1,
-					"maxLength": 1024
+					"allOf": [
+						{
+							"minLength": 1
+						},
+						{
+							"maxLength": 1024
+						}
+					]
 				},
 				"recovery": {
 					"type": "string",
-					"minLength": 1,
-					"maxLength": 1024
+					"allOf": [
+						{
+							"minLength": 1
+						},
+						{
+							"maxLength": 1024
+						}
+					]
 				}
 			},
 			"required": ["status", "code", "message", "recovery"],

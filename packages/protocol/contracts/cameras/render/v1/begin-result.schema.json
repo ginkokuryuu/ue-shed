@@ -11,7 +11,11 @@
 				},
 				"sessionId": {
 					"type": "string",
-					"pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$"
+					"allOf": [
+						{
+							"pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$"
+						}
+					]
 				},
 				"resolvedPolicy": {
 					"type": "object",
@@ -35,8 +39,14 @@
 															},
 															"actorPath": {
 																"type": "string",
-																"pattern": "^\\/Game\\/",
-																"maxLength": 4096
+																"allOf": [
+																	{
+																		"pattern": "^\\/Game\\/"
+																	},
+																	{
+																		"maxLength": 4096
+																	}
+																]
 															}
 														},
 														"required": ["kind", "actorPath"],
@@ -50,11 +60,20 @@
 																"enum": ["actor_guid"]
 															},
 															"actorGuid": {
-																"type": "string"
+																"type": "string",
+																"allOf": [
+																	{
+																		"pattern": "^(?!00000000-00000000-00000000-00000000$)[0-9a-fA-F]{8}(?:-[0-9a-fA-F]{8}){3}$"
+																	}
+																]
 															},
 															"lastKnownActorPath": {
 																"type": "string",
-																"maxLength": 4096
+																"allOf": [
+																	{
+																		"maxLength": 4096
+																	}
+																]
 															}
 														},
 														"required": [
@@ -68,13 +87,21 @@
 											},
 											"label": {
 												"type": "string",
-												"maxLength": 256
+												"allOf": [
+													{
+														"maxLength": 256
+													}
+												]
 											}
 										},
 										"required": ["locator", "label"],
 										"additionalProperties": false
 									},
-									"maxItems": 256
+									"allOf": [
+										{
+											"maxItems": 256
+										}
+									]
 								},
 								"protect": {
 									"type": "array",
@@ -92,8 +119,14 @@
 															},
 															"actorPath": {
 																"type": "string",
-																"pattern": "^\\/Game\\/",
-																"maxLength": 4096
+																"allOf": [
+																	{
+																		"pattern": "^\\/Game\\/"
+																	},
+																	{
+																		"maxLength": 4096
+																	}
+																]
 															}
 														},
 														"required": ["kind", "actorPath"],
@@ -107,11 +140,20 @@
 																"enum": ["actor_guid"]
 															},
 															"actorGuid": {
-																"type": "string"
+																"type": "string",
+																"allOf": [
+																	{
+																		"pattern": "^(?!00000000-00000000-00000000-00000000$)[0-9a-fA-F]{8}(?:-[0-9a-fA-F]{8}){3}$"
+																	}
+																]
 															},
 															"lastKnownActorPath": {
 																"type": "string",
-																"maxLength": 4096
+																"allOf": [
+																	{
+																		"maxLength": 4096
+																	}
+																]
 															}
 														},
 														"required": [
@@ -125,13 +167,21 @@
 											},
 											"label": {
 												"type": "string",
-												"maxLength": 256
+												"allOf": [
+													{
+														"maxLength": 256
+													}
+												]
 											}
 										},
 										"required": ["locator", "label"],
 										"additionalProperties": false
 									},
-									"maxItems": 256
+									"allOf": [
+										{
+											"maxItems": 256
+										}
+									]
 								}
 							},
 							"required": ["hide", "protect"],
@@ -169,8 +219,12 @@
 										},
 										"screenshotWarmupFrames": {
 											"type": "integer",
-											"minimum": 1,
-											"maximum": 256
+											"allOf": [
+												{
+													"minimum": 1,
+													"maximum": 256
+												}
+											]
 										}
 									},
 									"required": [
@@ -201,8 +255,12 @@
 										},
 										"lodDistanceScale": {
 											"type": "number",
-											"minimum": 0.1,
-											"maximum": 100
+											"allOf": [
+												{
+													"minimum": 0.1,
+													"maximum": 100
+												}
+											]
 										},
 										"fog": {
 											"type": "boolean"
@@ -247,8 +305,12 @@
 										},
 										"ev100": {
 											"type": "number",
-											"minimum": -20,
-											"maximum": 30
+											"allOf": [
+												{
+													"minimum": -20,
+													"maximum": 30
+												}
+											]
 										},
 										"compensation": {
 											"type": "string",
@@ -311,8 +373,12 @@
 																},
 																"horizontalFieldOfView": {
 																	"type": "number",
-																	"minimum": 5,
-																	"maximum": 170
+																	"allOf": [
+																		{
+																			"minimum": 5,
+																			"maximum": 170
+																		}
+																	]
 																}
 															},
 															"required": [
@@ -330,8 +396,14 @@
 																},
 																"width": {
 																	"type": "number",
-																	"exclusiveMinimum": 0,
-																	"maximum": 1000000000
+																	"allOf": [
+																		{
+																			"exclusiveMinimum": 0
+																		},
+																		{
+																			"maximum": 1000000000
+																		}
+																	]
 																}
 															},
 															"required": ["kind", "width"],
@@ -348,13 +420,21 @@
 											"properties": {
 												"width": {
 													"type": "integer",
-													"minimum": 16,
-													"maximum": 16384
+													"allOf": [
+														{
+															"minimum": 16,
+															"maximum": 16384
+														}
+													]
 												},
 												"height": {
 													"type": "integer",
-													"minimum": 16,
-													"maximum": 16384
+													"allOf": [
+														{
+															"minimum": 16,
+															"maximum": 16384
+														}
+													]
 												}
 											},
 											"required": ["width", "height"],
@@ -362,8 +442,12 @@
 										},
 										"minimumFrames": {
 											"type": "integer",
-											"minimum": 1,
-											"maximum": 4096
+											"allOf": [
+												{
+													"minimum": 1,
+													"maximum": 4096
+												}
+											]
 										}
 									},
 									"required": [
@@ -381,13 +465,21 @@
 							"properties": {
 								"minimumFrames": {
 									"type": "integer",
-									"minimum": 1,
-									"maximum": 4096
+									"allOf": [
+										{
+											"minimum": 1,
+											"maximum": 4096
+										}
+									]
 								},
 								"timeoutMs": {
 									"type": "integer",
-									"minimum": 1000,
-									"maximum": 900000
+									"allOf": [
+										{
+											"minimum": 1000,
+											"maximum": 900000
+										}
+									]
 								},
 								"initialView": {
 									"type": "object",
@@ -438,8 +530,12 @@
 																},
 																"horizontalFieldOfView": {
 																	"type": "number",
-																	"minimum": 5,
-																	"maximum": 170
+																	"allOf": [
+																		{
+																			"minimum": 5,
+																			"maximum": 170
+																		}
+																	]
 																}
 															},
 															"required": [
@@ -457,8 +553,14 @@
 																},
 																"width": {
 																	"type": "number",
-																	"exclusiveMinimum": 0,
-																	"maximum": 1000000000
+																	"allOf": [
+																		{
+																			"exclusiveMinimum": 0
+																		},
+																		{
+																			"maximum": 1000000000
+																		}
+																	]
 																}
 															},
 															"required": ["kind", "width"],
@@ -475,13 +577,21 @@
 											"properties": {
 												"width": {
 													"type": "integer",
-													"minimum": 16,
-													"maximum": 16384
+													"allOf": [
+														{
+															"minimum": 16,
+															"maximum": 16384
+														}
+													]
 												},
 												"height": {
 													"type": "integer",
-													"minimum": 16,
-													"maximum": 16384
+													"allOf": [
+														{
+															"minimum": 16,
+															"maximum": 16384
+														}
+													]
 												}
 											},
 											"required": ["width", "height"],
@@ -489,8 +599,12 @@
 										},
 										"minimumFrames": {
 											"type": "integer",
-											"minimum": 1,
-											"maximum": 4096
+											"allOf": [
+												{
+													"minimum": 1,
+													"maximum": 4096
+												}
+											]
 										}
 									},
 									"required": ["camera", "size", "minimumFrames"],
@@ -529,26 +643,42 @@
 												},
 												"maximumRegions": {
 													"type": "integer",
-													"minimum": 1,
-													"maximum": 64
+													"allOf": [
+														{
+															"minimum": 1,
+															"maximum": 64
+														}
+													]
 												},
 												"extent": {
 													"type": "object",
 													"properties": {
 														"x": {
 															"type": "number",
-															"minimum": 0,
-															"maximum": 10000000
+															"allOf": [
+																{
+																	"minimum": 0,
+																	"maximum": 10000000
+																}
+															]
 														},
 														"y": {
 															"type": "number",
-															"minimum": 0,
-															"maximum": 10000000
+															"allOf": [
+																{
+																	"minimum": 0,
+																	"maximum": 10000000
+																}
+															]
 														},
 														"z": {
 															"type": "number",
-															"minimum": 0,
-															"maximum": 10000000
+															"allOf": [
+																{
+																	"minimum": 0,
+																	"maximum": 10000000
+																}
+															]
 														}
 													},
 													"required": ["x", "y", "z"],
@@ -567,7 +697,14 @@
 										"properties": {
 											"assetPath": {
 												"type": "string",
-												"maxLength": 1024
+												"allOf": [
+													{
+														"pattern": "^\\/[A-Za-z0-9_./-]+$"
+													},
+													{
+														"maxLength": 1024
+													}
+												]
 											},
 											"loaded": {
 												"type": "boolean"
@@ -579,7 +716,11 @@
 										"required": ["assetPath", "loaded", "visible"],
 										"additionalProperties": false
 									},
-									"maxItems": 64
+									"allOf": [
+										{
+											"maxItems": 64
+										}
+									]
 								}
 							},
 							"required": ["geometry", "dataLayers"],
@@ -637,23 +778,47 @@
 				},
 				"message": {
 					"type": "string",
-					"minLength": 1,
-					"maxLength": 1024
+					"allOf": [
+						{
+							"minLength": 1
+						},
+						{
+							"maxLength": 1024
+						}
+					]
 				},
 				"recovery": {
 					"type": "string",
-					"minLength": 1,
-					"maxLength": 1024
+					"allOf": [
+						{
+							"minLength": 1
+						},
+						{
+							"maxLength": 1024
+						}
+					]
 				},
 				"sessionId": {
 					"type": "string",
-					"minLength": 1,
-					"maxLength": 1024
+					"allOf": [
+						{
+							"minLength": 1
+						},
+						{
+							"maxLength": 1024
+						}
+					]
 				},
 				"operationId": {
 					"type": "string",
-					"minLength": 1,
-					"maxLength": 1024
+					"allOf": [
+						{
+							"minLength": 1
+						},
+						{
+							"maxLength": 1024
+						}
+					]
 				},
 				"issues": {
 					"type": "array",
@@ -662,23 +827,47 @@
 						"properties": {
 							"code": {
 								"type": "string",
-								"minLength": 1,
-								"maxLength": 1024
+								"allOf": [
+									{
+										"minLength": 1
+									},
+									{
+										"maxLength": 1024
+									}
+								]
 							},
 							"path": {
 								"type": "string",
-								"minLength": 1,
-								"maxLength": 1024
+								"allOf": [
+									{
+										"minLength": 1
+									},
+									{
+										"maxLength": 1024
+									}
+								]
 							},
 							"message": {
 								"type": "string",
-								"minLength": 1,
-								"maxLength": 1024
+								"allOf": [
+									{
+										"minLength": 1
+									},
+									{
+										"maxLength": 1024
+									}
+								]
 							},
 							"recovery": {
 								"type": "string",
-								"minLength": 1,
-								"maxLength": 1024
+								"allOf": [
+									{
+										"minLength": 1
+									},
+									{
+										"maxLength": 1024
+									}
+								]
 							}
 						},
 						"required": ["code", "path", "message", "recovery"],
