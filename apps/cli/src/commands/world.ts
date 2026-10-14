@@ -1,14 +1,14 @@
 import { readFile, stat } from "node:fs/promises";
 import { Effect, Layer, Schema } from "effect";
-import { Argument, Command, Flag } from "effect/unstable/cli";
+import { Argument, Command, Flag } from "effect/cli";
 import { printJson } from "../cli-runtime.js";
 import { observeCliOperation } from "../cli-operation.js";
 
 const request = Command.make(
 	"request",
 	{
-		requestPath: Argument.string("request-json"),
-		endpoint: Flag.string("endpoint")
+		requestPath: Argument.String("request-json"),
+		endpoint: Flag.String("endpoint")
 	},
 	(args) =>
 		observeCliOperation(

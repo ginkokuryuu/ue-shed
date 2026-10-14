@@ -3,7 +3,7 @@ import { dirname, resolve } from "node:path";
 import { Effect, Schema } from "effect";
 import { GAME_TEXT_RULES_RELATIVE_PATH, STARTER_GAME_TEXT_RULES } from "./starter-rules.js";
 
-export class TextRulesFileError extends Schema.TaggedErrorClass<TextRulesFileError>()(
+export class TextRulesFileError extends Schema.TaggedError<TextRulesFileError>()(
 	"TextRulesFileError",
 	{
 		code: Schema.Literals(["already_exists", "write_failed", "invalid_project"]),

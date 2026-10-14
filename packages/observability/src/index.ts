@@ -8,7 +8,7 @@ export const TelemetryMode = Schema.Literals(["disabled", "console"]);
 export type TelemetryMode = typeof TelemetryMode.Type;
 
 export * from "./metrics.js";
-const telemetryModeConfig = Config.literals(["disabled", "console"], "UE_SHED_TELEMETRY_MODE").pipe(
+const telemetryModeConfig = Config.Literals(["disabled", "console"], "UE_SHED_TELEMETRY_MODE").pipe(
 	Config.withDefault("disabled")
 );
 

@@ -1,5 +1,8 @@
 # `@ue-shed/game-text`
 
+The application must provide `effect@^4.0.0` as a peer dependency. Reuse one compatible
+Effect installation across the application and UE Shed libraries.
+
 Headless saved-package corpus discovery and search for player-facing Unreal Engine text. The
 package keeps Unreal namespace/key identity distinct from occurrence identity, reports scan
 coverage, and returns bounded search and focus results. Saved packages are evidence only; this
@@ -17,7 +20,7 @@ including Node 24 and 26. Earlier runtimes lack the built-in Zstd APIs used by t
 Pin the package and the host's Effect runtime exactly:
 
 ```sh
-npm install --save-exact @ue-shed/game-text effect@4.0.0-beta.98
+npm install --save-exact @ue-shed/game-text "effect@^4.0.0"
 ```
 
 `@ue-shed/unreal-assets` is a normal package dependency. It remains a separate artifact and is not

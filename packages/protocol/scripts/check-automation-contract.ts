@@ -1,4 +1,5 @@
-import { deepStrictEqual } from "node:assert";
+import { Schema } from "effect";
+import { assertJsonSchemaEquivalent as deepStrictEqual } from "../../../scripts/canonical-json-schema.ts";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { dirname } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -36,7 +37,9 @@ for (const [domain, name, contract] of contracts) {
 		await mkdir(dirname(path), { recursive: true });
 		await writeFile(path, JSON.stringify(runtime, null, 2) + "\n", "utf8");
 	} else {
-		const authoritative: unknown = JSON.parse(await readFile(path, "utf8"));
+		const authoritative = Schema.decodeUnknownSync(Schema.Record(Schema.String, Schema.Json))(
+			JSON.parse(await readFile(path, "utf8"))
+		);
 		deepStrictEqual(authoritative, runtime, `${domain}/${name} contract drifted`);
 	}
 }

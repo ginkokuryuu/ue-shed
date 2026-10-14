@@ -1,4 +1,4 @@
-import { Argument, Command, Flag } from "effect/unstable/cli";
+import { Argument, Command, Flag } from "effect/cli";
 import { Effect } from "effect";
 import { CliCommandError } from "../cli-runtime.js";
 import { runMapHistory } from "../workflows/map.js";
@@ -7,11 +7,11 @@ import { optionalFlag, optionalValue, positiveIntegerFlag } from "./options.js";
 const mapHistoryCommand = Command.make(
 	"history",
 	{
-		projectRoot: Argument.string("project-root"),
-		mapPath: Argument.string("map-path"),
-		since: Flag.string("since"),
+		projectRoot: Argument.String("project-root"),
+		mapPath: Argument.String("map-path"),
+		since: Flag.String("since"),
 		until: optionalFlag("until"),
-		mode: Flag.choice("mode", ["deep", "fast"]).pipe(Flag.optional),
+		mode: Flag.Literals("mode", ["deep", "fast"]).pipe(Flag.optional),
 		actorGuid: optionalFlag("actor-guid"),
 		actorPackage: optionalFlag("actor-package"),
 		actorPath: optionalFlag("actor-path"),

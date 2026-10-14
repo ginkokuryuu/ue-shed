@@ -1,5 +1,8 @@
 # `@ue-shed/niagara`
 
+The application must provide `effect@^4.0.0` as a peer dependency. Reuse one compatible
+Effect installation across the application and UE Shed libraries.
+
 Headless Niagara preview capture and portable evidence publication.
 
 The package launches the separately installed `UEShedNiagara` Editor commandlet through a

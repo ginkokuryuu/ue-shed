@@ -1,5 +1,5 @@
 import { CustodianTargetId } from "@ue-shed/project-custodian";
-import { Argument, Command, Flag } from "effect/unstable/cli";
+import { Argument, Command, Flag } from "effect/cli";
 import {
 	runCustodianApply,
 	runCustodianPlan,
@@ -7,7 +7,7 @@ import {
 	runCustodianReport
 } from "../workflows/custodian.js";
 
-const report = Command.make("report", { root: Argument.string("root") }, ({ root }) =>
+const report = Command.make("report", { root: Argument.String("root") }, ({ root }) =>
 	runCustodianReport({ _tag: "CustodianReport", root })
 ).pipe(
 	Command.withDescription(
@@ -18,8 +18,8 @@ const report = Command.make("report", { root: Argument.string("root") }, ({ root
 const plan = Command.make(
 	"plan",
 	{
-		root: Argument.string("root"),
-		ignorePressure: Flag.boolean("ignore-pressure")
+		root: Argument.String("root"),
+		ignorePressure: Flag.Boolean("ignore-pressure").pipe(Flag.withDefault(false))
 	},
 	({ root, ignorePressure }) => runCustodianPlan({ _tag: "CustodianPlan", root, ignorePressure })
 ).pipe(
@@ -31,11 +31,11 @@ const plan = Command.make(
 const prepare = Command.make(
 	"prepare",
 	{
-		root: Argument.string("root"),
-		ignorePressure: Flag.boolean("ignore-pressure"),
-		mode: Flag.choice("mode", ["trash", "permanent"]).pipe(Flag.withDefault("trash")),
-		outputDirectory: Flag.string("output"),
-		targetIds: Flag.string("target").pipe(Flag.atLeast(1))
+		root: Argument.String("root"),
+		ignorePressure: Flag.Boolean("ignore-pressure").pipe(Flag.withDefault(false)),
+		mode: Flag.Literals("mode", ["trash", "permanent"]).pipe(Flag.withDefault("trash")),
+		outputDirectory: Flag.String("output"),
+		targetIds: Flag.String("target").pipe(Flag.atLeast(1))
 	},
 	({ root, ignorePressure, mode, outputDirectory, targetIds }) =>
 		runCustodianPrepare({
@@ -55,8 +55,8 @@ const prepare = Command.make(
 const apply = Command.make(
 	"apply",
 	{
-		proposalPath: Argument.string("proposal"),
-		approvalPhrase: Flag.string("approve")
+		proposalPath: Argument.String("proposal"),
+		approvalPhrase: Flag.String("approve")
 	},
 	({ proposalPath, approvalPhrase }) =>
 		runCustodianApply({ _tag: "CustodianApply", proposalPath, approvalPhrase })

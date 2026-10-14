@@ -38,8 +38,11 @@
 		"prepack": "pnpm run build",
 		"typecheck": "tsc --noEmit"
 	},
-	"dependencies": {
+	"devDependencies": {
 		"effect": "catalog:"
+	},
+	"peerDependencies": {
+		"effect": "^4.0.0"
 	},
 	"engines": {
 		"node": ">=22.14.0"

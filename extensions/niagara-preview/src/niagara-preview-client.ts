@@ -60,7 +60,7 @@ export const decodeNiagaraPreviewFrameResult =
 	Schema.decodeUnknownEffect(NiagaraPreviewFrameResult);
 export const decodeNiagaraCatalogueResult = Schema.decodeUnknownEffect(NiagaraCatalogueResult);
 
-export class NiagaraPreviewClientError extends Schema.TaggedErrorClass<NiagaraPreviewClientError>()(
+export class NiagaraPreviewClientError extends Schema.TaggedError<NiagaraPreviewClientError>()(
 	"NiagaraPreview.ClientError",
 	{
 		cause: Schema.Defect(),

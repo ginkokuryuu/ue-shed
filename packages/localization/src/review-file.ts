@@ -82,7 +82,7 @@ export const LocalizationReviewFile = Schema.Struct({
 });
 export type LocalizationReviewFile = typeof LocalizationReviewFile.Type;
 
-export class LocalizationReviewFileError extends Schema.TaggedErrorClass<LocalizationReviewFileError>()(
+export class LocalizationReviewFileError extends Schema.TaggedError<LocalizationReviewFileError>()(
 	"LocalizationReviewFileError",
 	{
 		code: Schema.Literals(["invalid_review_file", "duplicate_review_record", "wrong_target"]),

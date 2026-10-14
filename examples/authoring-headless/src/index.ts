@@ -8,10 +8,10 @@ import { application } from "./application.js";
 
 const configurationLive = Layer.unwrap(
 	Effect.gen(function* () {
-		const projectRoot = yield* Config.string("UE_SHED_PROJECT_ROOT");
-		const authoringAsset = yield* Config.string("UE_SHED_AUTHORING_ASSET");
+		const projectRoot = yield* Config.String("UE_SHED_PROJECT_ROOT");
+		const authoringAsset = yield* Config.String("UE_SHED_AUTHORING_ASSET");
 		const remoteControlEndpoint = yield* Config.option(
-			Config.string("UE_SHED_REMOTE_CONTROL_ENDPOINT")
+			Config.String("UE_SHED_REMOTE_CONTROL_ENDPOINT")
 		);
 		return shedHostConfigurationLayer({
 			authoringAsset: { path: authoringAsset, status: "configured" },

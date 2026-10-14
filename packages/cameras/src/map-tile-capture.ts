@@ -59,7 +59,7 @@ const maximumTilesPerRequest = 64;
 const litCameraTilesPerBatch = 4;
 const maximumEnumeratedTiles = 1_000_000;
 
-export class MapCaptureRunError extends Schema.TaggedErrorClass<MapCaptureRunError>()(
+export class MapCaptureRunError extends Schema.TaggedError<MapCaptureRunError>()(
 	"MapCaptureRunError",
 	{
 		message: Schema.String,

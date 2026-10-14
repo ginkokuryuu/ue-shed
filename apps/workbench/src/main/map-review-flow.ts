@@ -11,7 +11,7 @@ import type {
  * Workbench implementation authority and is not imported by the production composition root.
  */
 
-export class MapReviewFlowExecutionError extends Schema.TaggedErrorClass<MapReviewFlowExecutionError>()(
+export class MapReviewFlowExecutionError extends Schema.TaggedError<MapReviewFlowExecutionError>()(
 	"MapReviewFlowExecutionError",
 	{
 		message: Schema.NonEmptyString,

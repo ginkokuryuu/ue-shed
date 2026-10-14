@@ -97,17 +97,17 @@ function decodeDocument<Input>(input: Input) {
 	});
 }
 
-export class InvalidSessionIdError extends Schema.TaggedErrorClass<InvalidSessionIdError>()(
+export class InvalidSessionIdError extends Schema.TaggedError<InvalidSessionIdError>()(
 	"InvalidSessionIdError",
 	{ sessionId: Schema.String, message: Schema.String, recovery: Schema.String }
 ) {}
 
-export class SessionNotFoundError extends Schema.TaggedErrorClass<SessionNotFoundError>()(
+export class SessionNotFoundError extends Schema.TaggedError<SessionNotFoundError>()(
 	"SessionNotFoundError",
 	{ sessionId: Schema.String, message: Schema.String, recovery: Schema.String }
 ) {}
 
-export class SessionCorruptError extends Schema.TaggedErrorClass<SessionCorruptError>()(
+export class SessionCorruptError extends Schema.TaggedError<SessionCorruptError>()(
 	"SessionCorruptError",
 	{
 		sessionId: Schema.String,
@@ -117,7 +117,7 @@ export class SessionCorruptError extends Schema.TaggedErrorClass<SessionCorruptE
 	}
 ) {}
 
-export class AuthoringSessionStorageError extends Schema.TaggedErrorClass<AuthoringSessionStorageError>()(
+export class AuthoringSessionStorageError extends Schema.TaggedError<AuthoringSessionStorageError>()(
 	"AuthoringSessionStorageError",
 	{
 		operation: Schema.String,
@@ -127,7 +127,7 @@ export class AuthoringSessionStorageError extends Schema.TaggedErrorClass<Author
 	}
 ) {}
 
-export class AuthoringSessionTransitionError extends Schema.TaggedErrorClass<AuthoringSessionTransitionError>()(
+export class AuthoringSessionTransitionError extends Schema.TaggedError<AuthoringSessionTransitionError>()(
 	"AuthoringSessionTransitionError",
 	{ sessionId: Schema.String, message: Schema.String, recovery: Schema.String }
 ) {}
@@ -140,7 +140,7 @@ export type AuthoringSessionServiceError =
 	| AuthoringSessionTransitionError
 	| DraftIntentError;
 
-export class AuthoringSessionLiveError extends Schema.TaggedErrorClass<AuthoringSessionLiveError>()(
+export class AuthoringSessionLiveError extends Schema.TaggedError<AuthoringSessionLiveError>()(
 	"AuthoringSessionLiveError",
 	{
 		message: Schema.String,

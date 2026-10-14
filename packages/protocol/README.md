@@ -1,10 +1,13 @@
 # `@ue-shed/protocol`
 
+The application must provide `effect@^4.0.0` as a peer dependency. Reuse one compatible
+Effect installation across the application and UE Shed libraries.
+
 Runtime schemas, branded identifiers, compatibility values, and versioned wire contracts shared by
 UE Shed clients and Unreal companion plugins.
 
 ```sh
-npm install --save-exact @ue-shed/protocol effect@4.0.0-beta.98
+npm install --save-exact @ue-shed/protocol "effect@^4.0.0"
 ```
 
 The package supports Node.js 22.14 or newer and exposes one stable JavaScript entry point:

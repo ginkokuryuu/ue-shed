@@ -1,13 +1,13 @@
-import { mkdtemp, rm, readFile, writeFile } from "node:fs/promises";
+import { mkdtemp, rm, readFile, writeFile, readdir } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fork, spawn } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { createHash } from "node:crypto";
 import { Effect } from "effect";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { encodeStringBlock, decodeStringBlock } from "./snapshot-format.js";
-import { maximumSharedSegments } from "./shared-string-file.js";
+import { maximumSharedSegments, SharedStringFiles } from "./shared-string-file.js";
 import { snapshotColumnsSource } from "./snapshot-file.js";
 import {
 	SharedIndex,
@@ -470,6 +470,81 @@ describe("shared project string index", () => {
 				})
 			)
 		);
+	});
+	it("closes candidate segment readers when compaction publication fails", async () => {
+		let failPublication = false;
+		const { run } = await setup({
+			beforeRename: async (kind) => {
+				if (failPublication && kind === "manifest") throw new Error("publication failed");
+			}
+		});
+		await run(
+			Effect.scoped(
+				Effect.gen(function* () {
+					const writer = yield* (yield* SharedIndex).writer();
+					yield* writer.publish("po", "original", source(["one", "two"]));
+				})
+			)
+		);
+		failPublication = true;
+		const opened = vi.spyOn(SharedStringFiles.prototype, "open");
+		let candidate: SharedStringFiles | undefined;
+		try {
+			const result = await run(
+				Effect.scoped(
+					Effect.gen(function* () {
+						const writer = yield* (yield* SharedIndex).writer();
+						return yield* writer.compact(true).pipe(Effect.result);
+					})
+				)
+			);
+			expect(result._tag).toBe("Failure");
+			const last = opened.mock.contexts.at(-1);
+			if (!(last instanceof SharedStringFiles))
+				throw new Error("Expected candidate segment readers.");
+			candidate = last;
+			await expect(candidate.domain("source")).rejects.toThrow(
+				"Shared string scope is closed"
+			);
+		} finally {
+			await candidate?.close();
+			opened.mockRestore();
+		}
+	});
+	it("removes cold-import staging when root publication fails", async () => {
+		let failPublication = false;
+		const { run, options } = await setup({
+			beforeRename: async (kind) => {
+				if (failPublication && kind === "manifest") throw new Error("publication failed");
+			}
+		});
+		await run(
+			Effect.scoped(
+				Effect.gen(function* () {
+					const writer = yield* (yield* SharedIndex).writer();
+					yield* writer.publish("po", "original", source(["one", "two"]));
+				})
+			)
+		);
+		failPublication = true;
+		const result = await run(
+			Effect.scoped(
+				Effect.gen(function* () {
+					const writer = yield* (yield* SharedIndex).writer();
+					return yield* writer
+						.publishCold([
+							{ name: "changed", key: "candidate", source: source(["changed"]) }
+						])
+						.pipe(Effect.result);
+				})
+			)
+		);
+		expect(result._tag).toBe("Failure");
+		expect(
+			(await readdir(sharedIndexDirectory(options))).filter((name) =>
+				name.startsWith("sort-")
+			)
+		).toEqual([]);
 	});
 	it("reuses a content key independently of the manifest layer and rejects concurrent writers", async () => {
 		const { run } = await setup();

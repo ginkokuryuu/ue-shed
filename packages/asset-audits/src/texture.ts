@@ -36,7 +36,7 @@ interface ExtractionProgress {
 	readonly totalAssets: number;
 }
 
-export class TextureAuditScanError extends Schema.TaggedErrorClass<TextureAuditScanError>()(
+export class TextureAuditScanError extends Schema.TaggedError<TextureAuditScanError>()(
 	"TextureAuditScanError",
 	TextureAuditPublicError.fields
 ) {}

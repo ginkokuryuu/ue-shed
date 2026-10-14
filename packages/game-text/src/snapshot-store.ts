@@ -61,7 +61,7 @@ const StoreConfiguration = Schema.Struct({
 	projectKey: Schema.NonEmptyString.check(Schema.isMaxLength(4096)),
 	targetKey: Schema.NonEmptyString.check(Schema.isMaxLength(4096))
 });
-export class SnapshotStoreError extends Schema.TaggedErrorClass<SnapshotStoreError>()(
+export class SnapshotStoreError extends Schema.TaggedError<SnapshotStoreError>()(
 	"SnapshotStoreError",
 	{
 		operation: Schema.String,

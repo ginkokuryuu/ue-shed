@@ -204,15 +204,43 @@ test("requires every Context service to name operations and provide a layer stra
 test("requires catalog-owned dependencies to use catalog protocol", async () => {
 	await writeFile(
 		join(root, "pnpm-workspace.yaml"),
-		`catalog:\n  "@effect/opentelemetry": "4.0.0-beta.98"\n  "@effect/vitest": "4.0.0-beta.98"\n  "@opentelemetry/api": "^1.9.0"\n  "@opentelemetry/api-logs": "^0.205.0"\n  "@opentelemetry/resources": "^2.2.0"\n  "@opentelemetry/sdk-logs": "^0.205.0"\n  "@opentelemetry/sdk-metrics": "^2.2.0"\n  "@opentelemetry/sdk-trace-base": "^2.2.0"\n  "@opentelemetry/sdk-trace-node": "^2.2.0"\n  "@opentelemetry/sdk-trace-web": "^2.2.0"\n  "@opentelemetry/semantic-conventions": "^1.38.0"\n  "@stylexjs/rollup-plugin": "^0.19.0"\n  "@stylexjs/stylex": "^0.19.0"\n  effect: "4.0.0-beta.98"\n  solid-js: "^1.9.14"\n  vite-plugin-solid: "^2.11.12"\n`
+		`catalog:\n  "@effect/opentelemetry": "4.0.4"\n  "@effect/vitest": "4.0.4"\n  "@opentelemetry/api": "^1.9.0"\n  "@opentelemetry/api-logs": "^0.205.0"\n  "@opentelemetry/resources": "^2.2.0"\n  "@opentelemetry/sdk-logs": "^0.205.0"\n  "@opentelemetry/sdk-metrics": "^2.2.0"\n  "@opentelemetry/sdk-trace-base": "^2.2.0"\n  "@opentelemetry/sdk-trace-node": "^2.2.0"\n  "@opentelemetry/sdk-trace-web": "^2.2.0"\n  "@opentelemetry/semantic-conventions": "^1.38.0"\n  "@stylexjs/rollup-plugin": "^0.19.0"\n  "@stylexjs/stylex": "^0.19.0"\n  effect: "4.0.4"\n  solid-js: "^1.9.14"\n  vite-plugin-solid: "^2.11.12"\n`
 	);
-	await writeFile(join(root, "pnpm-lock.yaml"), "effect@4.0.0-beta.98:\n");
+	await writeFile(join(root, "pnpm-lock.yaml"), "effect@4.0.4:\n");
 	await writeFile(
 		join(root, "package.json"),
-		JSON.stringify({ dependencies: { effect: "^3.22.0" } })
+		JSON.stringify({ private: true, dependencies: { effect: "^3.22.0" } })
 	);
 	const failures = await checkCatalogUsage(root);
 	assert.deepEqual(failures, ["package.json: dependencies.effect must use catalog:"]);
+	const publicManifest = {
+		peerDependencies: { effect: "^4.0.0", "@effect/opentelemetry": "^4.0.0" },
+		devDependencies: { effect: "catalog:", "@effect/opentelemetry": "catalog:" }
+	};
+	await writeFile(join(root, "package.json"), JSON.stringify(publicManifest));
+	assert.deepEqual(await checkCatalogUsage(root), []);
+	await writeFile(
+		join(root, "package.json"),
+		JSON.stringify({ ...publicManifest, peerDependencies: { effect: "catalog:" } })
+	);
+	assert.deepEqual(await checkCatalogUsage(root), [
+		"package.json: effect must be a ^4.0.0 peer dependency"
+	]);
+	await writeFile(
+		join(root, "package.json"),
+		JSON.stringify({ ...publicManifest, devDependencies: {} })
+	);
+	assert.deepEqual(await checkCatalogUsage(root), [
+		"package.json: devDependencies.effect must use catalog:",
+		"package.json: devDependencies.@effect/opentelemetry must use catalog:"
+	]);
+	await writeFile(
+		join(root, "package.json"),
+		JSON.stringify({ ...publicManifest, dependencies: { effect: "catalog:" } })
+	);
+	assert.deepEqual(await checkCatalogUsage(root), [
+		"package.json: effect must be a ^4.0.0 peer dependency"
+	]);
 });
 
 async function withWorkbenchFixture(

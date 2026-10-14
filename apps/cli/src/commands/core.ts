@@ -1,5 +1,5 @@
 import { optionalFlag, optionalValue } from "./options.js";
-import { Command } from "effect/unstable/cli";
+import { Command } from "effect/cli";
 import { runDoctor, runVersion, runProducerDoctor } from "../core-workflows.js";
 
 export const versionCommand = Command.make("version", {}, runVersion).pipe(

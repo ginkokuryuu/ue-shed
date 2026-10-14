@@ -22,7 +22,7 @@ import type { ScenarioDocument, ScenarioRun } from "./schema.js";
 
 const coreObjectPath = "/Script/UEShedCore.Default__UEShedCoreLibrary";
 
-export class ScenarioRunnerError extends Schema.TaggedErrorClass<ScenarioRunnerError>()(
+export class ScenarioRunnerError extends Schema.TaggedError<ScenarioRunnerError>()(
 	"ScenarioRunnerError",
 	{
 		code: Schema.Literals([
@@ -72,7 +72,7 @@ export class ScenarioRunner extends Context.Service<ScenarioRunner, ScenarioRunn
 	"@ue-shed/scenarios/ScenarioRunner"
 ) {}
 
-class PollPending extends Schema.TaggedErrorClass<PollPending>()("ScenarioRunner.PollPending", {
+class PollPending extends Schema.TaggedError<PollPending>()("ScenarioRunner.PollPending", {
 	operation: Schema.String
 }) {}
 

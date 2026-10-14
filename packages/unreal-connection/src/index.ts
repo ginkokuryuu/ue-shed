@@ -45,7 +45,7 @@ const requiredCapabilities = [
 	"authoring.save.v1"
 ] as const;
 
-export class UnrealConnectionError extends Schema.TaggedErrorClass<UnrealConnectionError>()(
+export class UnrealConnectionError extends Schema.TaggedError<UnrealConnectionError>()(
 	"UnrealConnectionError",
 	{
 		endpoint: Schema.String,
@@ -58,7 +58,7 @@ export class UnrealConnectionError extends Schema.TaggedErrorClass<UnrealConnect
 	}
 ) {}
 
-export class UnrealCapabilityError extends Schema.TaggedErrorClass<UnrealCapabilityError>()(
+export class UnrealCapabilityError extends Schema.TaggedError<UnrealCapabilityError>()(
 	"UnrealCapabilityError",
 	{ capability: Schema.String, message: Schema.String }
 ) {}

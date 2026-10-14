@@ -42,7 +42,7 @@ import {
 	type WorkbenchTaskProgress as WorkbenchTaskProgressValue
 } from "../shared/project-workspace-contract.js";
 
-export class WorkbenchRendererError extends Schema.TaggedErrorClass<WorkbenchRendererError>()(
+export class WorkbenchRendererError extends Schema.TaggedError<WorkbenchRendererError>()(
 	"WorkbenchRendererError",
 	{
 		cause: Schema.Defect(),

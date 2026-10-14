@@ -63,7 +63,7 @@ export interface CameraFeedMetrics {
 	readonly transportErrors: number;
 }
 
-export class CameraFeedError extends Schema.TaggedErrorClass<CameraFeedError>()("CameraFeedError", {
+export class CameraFeedError extends Schema.TaggedError<CameraFeedError>()("CameraFeedError", {
 	message: Schema.String,
 	operation: Schema.Literal("listen"),
 	pipeName: Schema.String,
@@ -421,7 +421,7 @@ export function makeCameraFeedTestLayer(
 	});
 }
 
-export class CameraControlError extends Schema.TaggedErrorClass<CameraControlError>()(
+export class CameraControlError extends Schema.TaggedError<CameraControlError>()(
 	"CameraControlError",
 	{
 		endpoint: Schema.String,

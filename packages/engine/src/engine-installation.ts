@@ -41,7 +41,7 @@ export interface EngineInstallationRequest {
 	readonly explicitRoot?: string;
 }
 
-export class EngineInstallationError extends Schema.TaggedErrorClass<EngineInstallationError>()(
+export class EngineInstallationError extends Schema.TaggedError<EngineInstallationError>()(
 	"EngineInstallationError",
 	{
 		code: Schema.Literals([
@@ -326,8 +326,8 @@ function discoverStandardInstallations(options: {
 	);
 }
 
-const programFiles = Config.string("ProgramFiles").pipe(Config.withDefault("C:\\Program Files"));
-const programData = Config.string("ProgramData").pipe(Config.withDefault("C:\\ProgramData"));
+const programFiles = Config.String("ProgramFiles").pipe(Config.withDefault("C:\\Program Files"));
+const programData = Config.String("ProgramData").pipe(Config.withDefault("C:\\ProgramData"));
 
 export const EngineInstallationDiscoveryLive = Layer.effect(
 	EngineInstallationDiscovery,

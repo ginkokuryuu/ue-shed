@@ -1,4 +1,4 @@
-import { Argument, Command, Flag } from "effect/unstable/cli";
+import { Argument, Command, Flag } from "effect/cli";
 import { Option } from "effect";
 import {
 	runProjectIndexCount,
@@ -11,8 +11,8 @@ import {
 import { optionalFlag, optionalValue, positiveIntegerFlag, readerFields } from "./options.js";
 
 const target = {
-	projectRoot: Argument.string("project-root"),
-	cacheRoot: Argument.string("cache-root"),
+	projectRoot: Argument.String("project-root"),
+	cacheRoot: Argument.String("cache-root"),
 	reader: optionalFlag("reader")
 };
 
@@ -62,13 +62,13 @@ const query = Command.make(
 	"query",
 	{
 		...pageOptions,
-		kind: Argument.choice("kind", [
+		kind: Argument.Literals("kind", [
 			"exact-class",
 			"class-prefix",
 			"class-name-suffix",
 			"serialized-name"
 		]),
-		values: Argument.string("value").pipe(Argument.variadic({ min: 1 }))
+		values: Argument.String("value").pipe(Argument.variadic({ min: 1 }))
 	},
 	({ cursor, kind, limit, values, ...value }) => {
 		const cursorValue = optionalValue(cursor);
@@ -87,10 +87,10 @@ const count = Command.make(
 	"count",
 	{
 		...target,
-		exactClasses: Flag.string("exact-class").pipe(Flag.atMost(64)),
-		classPrefixes: Flag.string("class-prefix").pipe(Flag.atMost(64)),
-		classNameSuffixes: Flag.string("class-name-suffix").pipe(Flag.atMost(64)),
-		serializedNames: Flag.string("serialized-name").pipe(Flag.atMost(64))
+		exactClasses: Flag.String("exact-class").pipe(Flag.atMost(64)),
+		classPrefixes: Flag.String("class-prefix").pipe(Flag.atMost(64)),
+		classNameSuffixes: Flag.String("class-name-suffix").pipe(Flag.atMost(64)),
+		serializedNames: Flag.String("serialized-name").pipe(Flag.atMost(64))
 	},
 	({ exactClasses, classPrefixes, classNameSuffixes, serializedNames, ...value }) =>
 		runProjectIndexCount({

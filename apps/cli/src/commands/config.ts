@@ -1,18 +1,18 @@
-import { Argument, Command, Flag } from "effect/unstable/cli";
+import { Argument, Command, Flag } from "effect/cli";
 import { runConfigCompare, runConfigExplain } from "../workflows/config.js";
 import { optionalFlag, optionalValue } from "./options.js";
 
 const common = {
-	project: Argument.string("project"),
-	section: Argument.string("section"),
-	key: Argument.string("key"),
+	project: Argument.String("project"),
+	section: Argument.String("section"),
+	key: Argument.String("key"),
 	engineRoot: optionalFlag("engine-root"),
 	family: optionalFlag("family")
 };
 
 const explain = Command.make(
 	"explain",
-	{ ...common, platform: Flag.string("platform") },
+	{ ...common, platform: Flag.String("platform") },
 	({ engineRoot, family, ...value }) => {
 		const selectedEngine = optionalValue(engineRoot);
 		const selectedFamily = optionalValue(family);
@@ -33,8 +33,8 @@ const compare = Command.make(
 	"compare",
 	{
 		...common,
-		leftPlatform: Flag.string("left-platform"),
-		rightPlatform: Flag.string("right-platform")
+		leftPlatform: Flag.String("left-platform"),
+		rightPlatform: Flag.String("right-platform")
 	},
 	({ engineRoot, family, ...value }) => {
 		const selectedEngine = optionalValue(engineRoot);

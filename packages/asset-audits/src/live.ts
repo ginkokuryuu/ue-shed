@@ -9,7 +9,7 @@ import { decodeTexturePreviewResult, type TexturePreviewResult } from "./schema.
 const coreObjectPath = "/Script/UEShedCore.Default__UEShedCoreLibrary";
 const previewCapability = "asset-audits.texture-preview.v1";
 
-export class LiveTexturePreviewError extends Schema.TaggedErrorClass<LiveTexturePreviewError>()(
+export class LiveTexturePreviewError extends Schema.TaggedError<LiveTexturePreviewError>()(
 	"LiveTexturePreviewError",
 	{
 		endpoint: Schema.String,

@@ -7,7 +7,7 @@ import type {
 } from "@ue-shed/scenarios/browser";
 import { Effect, Schema, Stream } from "effect";
 
-export class ScenarioStudioClientError extends Schema.TaggedErrorClass<ScenarioStudioClientError>()(
+export class ScenarioStudioClientError extends Schema.TaggedError<ScenarioStudioClientError>()(
 	"ScenarioStudioClientError",
 	{
 		cause: Schema.Defect(),

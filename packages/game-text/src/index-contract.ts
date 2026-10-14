@@ -19,7 +19,7 @@ import type { GameTextRuleDocument } from "./quality-rules-v2.js";
 import { LocalizationKeyChangePair } from "./localization-key-changes.js";
 import type { refreshJoinedTarget } from "./joined-target.js";
 import type { GameTextProjectIndex } from "./index-steps.js";
-export class GameTextIndexError extends Schema.TaggedErrorClass<GameTextIndexError>()(
+export class GameTextIndexError extends Schema.TaggedError<GameTextIndexError>()(
 	"GameTextIndexError",
 	{
 		operation: Schema.String,

@@ -10,7 +10,7 @@ import { RemoteControlClient } from "@ue-shed/unreal-connection";
 import { Context, Effect, Layer, Schema } from "effect";
 import { isLoopbackEndpoint } from "./loopback-endpoint.js";
 
-export class EditorWindowActivationError extends Schema.TaggedErrorClass<EditorWindowActivationError>()(
+export class EditorWindowActivationError extends Schema.TaggedError<EditorWindowActivationError>()(
 	"EditorWindowActivationError",
 	{ message: Schema.String, recovery: Schema.String, operation: Schema.String }
 ) {}

@@ -50,7 +50,7 @@ import type {
 	WorkbenchOperationFilesResult
 } from "@ue-shed/game-text/browser";
 
-export class GameTextClientError extends Schema.TaggedErrorClass<GameTextClientError>()(
+export class GameTextClientError extends Schema.TaggedError<GameTextClientError>()(
 	"GameTextClientError",
 	{
 		cause: Schema.Defect(),
