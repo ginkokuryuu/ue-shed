@@ -57,6 +57,11 @@ export const querySignals = [
 	"evidence_only"
 ] as const satisfies readonly TextReviewSignal[];
 
+/** The largest page hydrateJoinedTarget accepts. */
+const MAX_HYDRATED_PAGE_LINES = 10000;
+/** Bulk reads hydrate across gaps up to this many rows instead of starting a new page. */
+const MAX_BRIDGED_ROW_GAP = 64;
+
 const displayedLines = (joined: JoinedTargetReader) =>
 	runJoinedQuery(
 		Cache.make({
@@ -513,6 +518,32 @@ export class JoinedQueryData {
 	}
 	line(row: number): Effect.Success<ReturnType<typeof hydrateJoinedTarget>>["lines"][number] {
 		return runJoinedQuery(Cache.get(this.displayedLines, row));
+	}
+	/** Bulk reads hydrate rows in storage order, in pages of adjacent rows, then return them in
+	 * the requested (display) order. One page per row costs minutes on a large target because
+	 * every page re-reads shared string blocks. Bypasses the displayed-line cache, which only
+	 * serves paged browsing. */
+	lines(rows: ArrayLike<number>): ReturnType<JoinedQueryData["line"]>[] {
+		const sorted = Uint32Array.from(new Set(Array.from(rows))).sort();
+		const byRow = new Map<number, ReturnType<JoinedQueryData["line"]>>();
+		for (let index = 0; index < sorted.length; ) {
+			const start = sorted[index]!;
+			let last = index;
+			// A page may span small gaps: reading a few unrequested rows beats another page.
+			while (
+				last + 1 < sorted.length &&
+				sorted[last + 1]! - start < MAX_HYDRATED_PAGE_LINES &&
+				sorted[last + 1]! - sorted[last]! <= MAX_BRIDGED_ROW_GAP
+			)
+				last++;
+			const page = runJoinedQuery(
+				Effect.scoped(hydrateJoinedTarget(this.joined, start, sorted[last]! - start + 1))
+			);
+			for (let picked = index; picked <= last; picked++)
+				byRow.set(sorted[picked]!, page.lines[sorted[picked]! - start]!);
+			index = last + 1;
+		}
+		return Array.from(rows, (row) => byRow.get(row)!);
 	}
 	fileColumn(name: string, field: string): Uint32Array {
 		const key = `layer:${this.joined.meta.dependencies[name]}\0entry.${field}`;

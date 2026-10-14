@@ -17,6 +17,7 @@
   10× runs; the attempted CLI cold build failed its 900-second cap. Phase 7's browse layout is wired
   to the index; its generated-scale desktop measurements and tour remain incomplete. Reader v1.8
   and gather rule v1.9 are unchanged. See the latest evidence below; no full-gate pass is claimed.
+  Phase 8, moving localization quality checks onto the index, is in progress.
 - **Priority**: P1
 - **Effort**: XL
 - **Risk**: HIGH. This replaces how every Game Text and localization host holds its data, and adds
@@ -264,6 +265,49 @@ same index. No separate reader is added.
 - Update Showcase Demo 3 with what a project of this size looks like, and record a captioned tour on
   the generated project for `docs/showcase.md` and the site. Never use a studio project; showcase
   content is studio-agnostic.
+
+## Phase 8: Quality checks read the index
+
+Phase 6 moved browse, search, counts and status onto the index; localization quality did not move.
+`checkLocalizationTarget` still takes a whole corpus and a whole join, and hosts pass the legacy
+projections (`indexedTextCorpus`, `indexedLocalizationJoin`), which rebuild every unit and line as
+objects. The Quality checks tab is the pre-index pipeline with a decoding step in front.
+
+Measured on a released 237,921-key, 10-culture project (read-only, Node 24, 24 GiB heap so the
+run could finish; the default heap crashes): 13 minutes, a 9.4 GB peak V8 heap, and 9.2 GB still
+retained after collection because the workspace caches everything. It returns 3,210,355 findings;
+1,921,590 are missing translator notes and 1,249,240 are duplicate sources, each repeated once per
+culture. Sampled live heap at the end: 48% validating the finished report (Effect Schema rebuilds
+every finding), 30% hydrating all lines, 13% building a summary and hashed ID per finding, 7% the
+legacy unit list. CPU: 31% garbage collection, about 21% string decoding; the check rules
+themselves do not appear in the profile.
+
+- **One line at a time.** Extract the per-line body of `checkLocalizationTarget` (built-ins,
+  policy rules, accepted-finding filter) into a pure function. `checkLocalizationTarget` keeps its
+  contract and calls it per line; the indexed scan calls the same function, so the rules cannot
+  drift.
+- **Scan in pages.** Duplicate sources are grouped from the line columns and shared strings, without
+  hydrating lines. Lines are then hydrated in bounded pages of adjacent rows, checked, and dropped.
+  A line's units are found by ID through a hash index on the unit ID column, never a unit list.
+- **Findings as columns.** The scan keeps per-finding culture, check, rule, fix eligibility and a
+  64-bit content hash, plus per-row ranges in line-ID order. Counts, totals and fix counts scan these
+  arrays. Pages, focus and proposals re-run the line check for only the rows they return.
+- **Finding IDs** are a fast hash of the finding's line, culture, rule, check and canonical actual
+  value, so they are cheap, identical on both paths and survive a rescan of unchanged text.
+- **One workspace.** `search`, `export`, `focus` and `changes` are written once over a finding list;
+  the legacy workspace and the indexed workspace only supply the list.
+- **Oracle.** On every fixture and generated index, the indexed workspace's pages, counts, limits,
+  rules, focus results and proposals equal the legacy workspace built from the legacy projections of
+  the same index. Any difference is a STOP.
+- **Hosts.** An opened index offers `localizationQuality(options, ruleDocument)`; hosts never read
+  the joined reader. Adapters without an index omit it, and hosts then check the in-memory join.
+  The CLI keeps the full report for `loc check` until its output streams.
+- **Scale.** Add a quality stage to the scale harness with the peak heap target below.
+
+Not in this phase, each needing its own decision: reporting source-level checks once per line
+rather than per culture (changes the report contract and how accepting a finding works), source
+rules (`evaluateGameTextSourceQuality` still reads the legacy unit list when a rule document
+exists), and the CLI's full report.
 
 ## Acceptance targets
 
@@ -1432,3 +1476,129 @@ The full local packed-package rerun remains unavailable because
 this resumed Windows session cannot traverse the Rust/WASM tool links and temporary consumer
 dependency links. Hosted portable checks on `8ad4fb57` pass; the fresh CI result for this correction
 is tracked on PR #62.
+
+### Phase 8: quality checks over the index
+
+The released project from the Phase 8 context, read-only, Node 24.21, through a desktop host's
+Quality checks route with the "all" filter. Before is the in-memory path with a 24 GiB heap so it
+could finish; after is the indexed path on Node's default heap.
+
+|                               | In-memory checks | Indexed checks                             |
+| ----------------------------- | ---------------: | ------------------------------------------ |
+| Time to the first page        |            778 s | 360 s                                      |
+| Peak V8 heap (sampled)        |           9.4 GB | 343 MB, including 140 MB before it         |
+| V8 heap kept after collection |           9.2 GB | 158 MB                                     |
+| Peak process memory           |    11.1 GB (RSS) | 2.4 GB private, 0.8 GB of it index buffers |
+| Findings                      |        3,210,355 | 3,210,355; every check's count equal       |
+
+Once built, a culture switch takes 0.17 s, one check's filter 1.3 s, a page at offset 3,000,000
+0.13 s, and focus 0.01–0.02 s. Proposals take 10.4 s: they re-check 1,832 scattered rows one page
+each. The heap profile at the end holds 23 MB of live samples, against 12.1 GB before.
+
+CPU after: garbage collection 6% (31% before), the Effect runtime inside line hydration 12%, shared
+string decoding about 20%; the check rules themselves stay near 1%.
+
+Verification: the oracle test compares every filter, culture, page, export, proposal and focus,
+with and without accepted findings, on an index fixture that produces every check, both rule kinds
+and source findings. The full `@ue-shed/game-text` suite (379) and the Workbench Game Text host tests
+pass, as does `pnpm run check:precommit`. Two worker tests in `index-steps.test.ts` needed a 30 s
+timeout: any additional test file reorders the parallel run and pushes their worker start-up past
+the 5 s default.
+
+Open:
+
+- Peak heap is 343 MB sampled, 140 MB of it before the query. The owner does not hold quality
+  checks to the 128 MiB target; it is not pursued here.
+- The scan holds the host's main thread for its 6 minutes; it should move off the main thread.
+- Hydration runs through Effect per entry and Schema-decodes every evidence entry the index wrote.
+- Proposals should hydrate their rows in adjacent pages.
+
+### Phase 8 follow-up: scan pages, stalls and hydration
+
+Recorded 2026-10-14 on Windows, Node 24.21.0 and the default heap, on the generated 1× project
+(583,507 lines, 10 cultures) with the retained Phase 1 inputs and Phase 4 package records. The
+scale harness has a quality stage: `--select quality` opens the generated target's index through
+the production refresh layer and runs its `localizationQuality` with the review file, as Workbench
+does. A 10 ms interval timer runs during the scan; its gaps are the event-loop stalls. Every run
+returns 2,027,740 findings. The first run built the index in 81 s; later runs open it in 2.5 s.
+
+A CPU profile of the 2048-line scan put 69% of it in line hydration. Effect.fn's stack capture
+and span for every evidence entry and occurrence took 23% of the scan, schema decoding about 17%
+(`decodeLocalizationSnapshot` decoded each entry, then hydration decoded it again), and shared
+string lookups 26%. The checks, without the units they hydrate, took about 6%.
+
+Hydration now reads a page's columns, evidence entries and strings once, then builds its lines in
+a plain synchronous loop. `decodeLocalizationSnapshot` rebuilds entries without decoding each one:
+the importer validates Unreal's files against the same schemas when it writes the index, and
+section checksums guard the index's bytes. At 2048-line pages:
+
+| Hydration                                   |      Scan | Peak V8 heap |
+| ------------------------------------------- | --------: | -----------: |
+| Before                                      | 201–208 s |  350–443 MiB |
+| Synchronous loop, entries decoded twice     |     144 s |      338 MiB |
+| Synchronous loop, decoded once              |     142 s |      301 MiB |
+| Synchronous loop, no per-entry decode (now) | 104–107 s |  241–246 MiB |
+
+Page sizes before and after that change, which also added the setup yields below; one run each
+unless a range is given:
+
+| Lines per page        | Scan before / after | Stall p95 before / after | Longest stall before / after |
+| --------------------- | ------------------: | -----------------------: | ---------------------------: |
+| 2048                  |     201–208 / 104 s |              2.5 / 1.1 s |              4.1–5.0 / 2.6 s |
+| 1024                  |         217 / 108 s |             1.4 / 0.56 s |                  2.6 / 1.4 s |
+| 512                   |         228 / 112 s |            0.71 / 0.30 s |                  1.7 / 1.0 s |
+| **256 (now)**         |     236 / 114–118 s |       0.35 / 0.16–0.17 s |            1.3 / 0.48–0.71 s |
+| 2048, yield every 256 |         191 / 104 s |             1.7 / 0.56 s |                  3.1 / 2.0 s |
+
+The scan now checks 256 lines per page. It is the only size that keeps the longest stall well
+under a second. It costs 10% against 2048-line pages with the new hydration (114 s against 104 s)
+and is 43% faster than before. Yielding every 256 lines inside 2048-line pages does not help:
+hydrating the page is one synchronous block. The setup before the first page also yields now;
+decoding every line ID took 0.7 s and the unit index 0.25 s in one block. With 256-line pages the
+median gap is 15 ms. The longest stalls are one-time column loads early in the scan; after them,
+pages stay under 0.4 s. Peak V8 heap during the scan is 209–234 MiB. Heap kept after collection is
+52 MiB, 46 MiB of it the opened index; the findings columns are array buffers.
+
+Measured, not changed:
+
+- Per-page column reads. Each page still makes hundreds of Effect.fn calls to read its columns:
+  about 80 line and culture columns, nine occurrence columns per package shard it touches, and
+  each evidence file's runs. Their overhead is 15% of the 256-line profile and most of what small
+  pages cost. A per-reader cache of these columns would remove most of it.
+- Shared string lookups take 37% of the 256-line profile. `bytesSync` rebuilds the segment start
+  list and a block key for every ID.
+- Units hydrated for the checks take 19%, and finding hashes (`canonicalJson`) 7%.
+
+Verification: `pnpm exec vitest run packages/game-text` passes 388 tests (4 skipped), including a
+new oracle test whose 600-key target spans three pages and fails if a page boundary drops a line.
+The Workbench Game Text host tests (28 in three files), the harness tests (18), the localization
+import oracle (50) and `pnpm run check:precommit` pass. No 10× run was made and Unreal was not run.
+
+### Phase 8 review fixes
+
+Three findings from the PR review, each with a test that failed before its fix:
+
+- **Selection cancels the shared scan.** Publishing another target now clears the quality cache and
+  interrupts its scan. An abandoned scan used to keep checking, and pinning, the previous target
+  until another quality request replaced it. A Workbench host test reproduces it.
+- **Only the join's lines.** The scan reads the rows the query's `localizationLines` returns for
+  the target, in that order; it had checked every joined row. Lines without visible source add
+  check diagnostics before the blank-source guard, so with unreadable archives the oracle case's
+  `missing_archive` limit read 8 instead of 2. Duplicate sources and a unit's line use the same
+  rows, and ties in line-ID order and among duplicate identities keep the join's order.
+- **Line IDs equal under collation.** Distinct IDs can compare equal, as keys `é` and `e` with a
+  combining accent do; the report then interleaves their findings by culture and check. Each run
+  of such lines is one block: the scan checks and stores the block's findings in report order, and
+  hydrating a finding re-checks its block. Nearly every block is one line and takes the same path
+  as before.
+
+The same 1× project, Node 24.21 and the default heap; two runs. The first run's open stage rebuilt
+the cache after the merge with main (33.6 s); the second opened it warm (2.3 s). The scans took
+115.4 s and 114.3 s (114–118 s before) and returned the same 2,027,740 findings. Stalls: median
+16 ms, p95 0.17 s and 0.16 s, longest 0.47 s and 0.50 s, 546 and 541 over 100 ms (533–548 in the
+recorded runs). Peak V8 heap during the scan was 234 MiB and 237 MiB (209–234 MiB before); 57 MiB
+and 54 MiB were kept after collection (52 MiB before). About 2.4 MiB of that comes from main: the
+heap kept after opening the index is 48.4 MiB, against 46.0 MiB in the recorded run.
+
+Verification: `pnpm exec vitest run packages/game-text` passes 394 tests (4 skipped), the
+Workbench Game Text host tests 29 in three files, and `pnpm run check:precommit` passes.

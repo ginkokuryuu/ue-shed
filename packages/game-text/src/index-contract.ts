@@ -13,6 +13,9 @@ import type { JoinedTargetReader } from "./joined-target-reader.js";
 import type { TextCorpusQuery } from "./query.js";
 import type { TextCorpus, TextCorpusSearchRequest, TextCorpusSearchPage } from "./schema.js";
 import type { LocalizationJoin } from "./localization-schema.js";
+import type { LocalizationCheckOptions } from "./localization-quality-schema.js";
+import type { LocalizationQuality } from "./localization-workspace.js";
+import type { GameTextRuleDocument } from "./quality-rules-v2.js";
 import { LocalizationKeyChangePair } from "./localization-key-changes.js";
 import type { refreshJoinedTarget } from "./joined-target.js";
 import type { GameTextProjectIndex } from "./index-steps.js";
@@ -80,6 +83,17 @@ export interface GameTextIndexRefreshResult {
 	readonly localizationJoin: LocalizationJoin;
 	readonly evidence: LocalizationTargetEvidence;
 	readonly review: LocalizationReviewSnapshot;
+	/**
+	 * Localization quality checked over the index in bounded pages, with findings kept as columns.
+	 * The scan yields between pages and can be interrupted. Absent on adapters without an index;
+	 * hosts then check `localizationJoin` in memory.
+	 */
+	readonly localizationQuality?:
+		| ((
+				options?: LocalizationCheckOptions,
+				ruleDocument?: GameTextRuleDocument
+		  ) => Effect.Effect<LocalizationQuality>)
+		| undefined;
 }
 
 export type IndexFailure = SnapshotStoreError | SnapshotFormatError | GameTextIndexError;

@@ -400,9 +400,14 @@ export class SharedStringFiles {
 		);
 		return payload;
 	}
-	/** Bounded A64 reads share caches, verification and the generation's existing handles. */
+	/** Bounded A64 reads share caches, verification and the generation's existing handles.
+	 * Reads go in ID order so each block decodes once per call; in request order a large
+	 * lookup evicts and re-decompresses the same blocks from the bounded caches. */
 	stringsSync(ids: readonly number[]): string[] {
-		return ids.map((id) => decodeWtf8(this.bytesSync(id)));
+		const values: string[] = Array.from({ length: ids.length });
+		const order = Array.from(ids.keys()).sort((a, b) => ids[a]! - ids[b]!);
+		for (const index of order) values[index] = decodeWtf8(this.bytesSync(ids[index]!));
+		return values;
 	}
 	/** A selected UTF-8 value for byte predicates; backed by the bounded decoded-block cache. */
 	bytesSync(id: number): Buffer {

@@ -59,6 +59,21 @@ and their 1,326,060 entries also exceed the per-file entry cap. No override or r
 today's object model. The Phase 1 plan records this historical failure separately from the 10×
 pipeline's current **not run** status. Existing 1× results stand; none exceeded the new hard caps.
 
+`--select quality` (Plan 057 Phase 8) replaces those four stages with two over the index. `open`
+opens the generated target's index the way hosts do, through the production refresh layer, with
+the converted package records (`--mode package --select convert` below) standing in for the
+native reader. An empty `--cache` is built first, so the first run's `open` is a cold build; later
+runs reuse it. `quality` runs the opened index's `localizationQuality` with the review file, as
+Workbench does. A 10 ms interval timer runs during the scan: counts record its gaps as
+`stallP50Ms`, `stallP95Ms` and `stallMaxMs`, the three longest with when they ended, the number
+over 100 ms, and the finding count. Each stage's retained memory is measured after a collection,
+with the findings still held. `--profile` writes a CPU profile beside the output. The same caps,
+fresh child and 10× refusal apply; this child also loads `tsx` to read the package records.
+
+```powershell
+node scripts/benchmark-game-text-scale.ts --project test-results/game-text-scale/project-1x --select quality --cache test-results/game-text-scale/quality-cache-1x --records test-results/game-text-scale/phase4-records-1x --output test-results/game-text-scale/quality-1x.json
+```
+
 `localization-join-oracle.test-support.ts` is Phase 5's semantic comparator. It compares all join
 fields by stable line ID, reports a bounded readable list and uncapped counts, and documents
 which arrays are sets, multisets or ordered values. It accepts already decoded `LocalizationJoin`

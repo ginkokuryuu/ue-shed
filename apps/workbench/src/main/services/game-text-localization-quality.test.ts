@@ -1,13 +1,15 @@
 import { it } from "@effect/vitest";
-import { Effect, Layer, Ref, Schema } from "effect";
+import { Deferred, Effect, Fiber, Layer, Ref, Schema } from "effect";
 import { expect } from "vitest";
-import { makeLocalizationEvidenceTestLayer } from "@ue-shed/localization";
+import { LocalizationTarget, makeLocalizationEvidenceTestLayer } from "@ue-shed/localization";
 import { corpus, evidence, cultureCode } from "./game-text-localization.test-support.js";
-import { GameTextRuleDocument } from "@ue-shed/game-text";
+import { GameTextIndexSteps, GameTextRuleDocument } from "@ue-shed/game-text";
 import {
 	makeGameTextLocalizationOracle as makeGameTextLocalization,
+	oracleGameTextIndexLayer,
 	oracleProjectIndex
 } from "./game-text-index.test-support.js";
+import { makeGameTextLocalization as indexedGameTextLocalization } from "./game-text-localization.js";
 import { ElectronDialog } from "../adapters/electron-dialog.js";
 import { LocalFiles, makeLocalFilesTestLayer } from "../adapters/local-files.js";
 
@@ -46,6 +48,7 @@ const fixture = {
 		]
 	})
 };
+const other = Schema.decodeUnknownSync(LocalizationTarget)({ ...files.target, name: "Other" });
 const reader = makeLocalizationEvidenceTestLayer({
 	discover: () =>
 		Effect.succeed({ schemaVersion: 1, targets: [fixture.files.target], diagnostics: [] }),
@@ -162,6 +165,67 @@ it.effect(
 			expect(csv.endsWith("\r\n")).toBe(true);
 			expect(csv).toContain('"New words","Changed words"');
 		}).pipe(Effect.provide(Layer.mergeAll(reader, makeLocalFilesTestLayer())))
+);
+
+it.effect("selecting another target interrupts the previous target's abandoned scan", () =>
+	Effect.gen(function* () {
+		const started = yield* Deferred.make<void>();
+		const finalized = yield* Deferred.make<void>();
+		const turns = Effect.forEach(Array.from({ length: 20 }), () => Effect.yieldNow, {
+			discard: true
+		});
+		// Every opened target's scan announces itself, then never finishes.
+		const steps = Layer.effect(
+			GameTextIndexSteps,
+			Effect.gen(function* () {
+				const oracle = yield* GameTextIndexSteps;
+				return GameTextIndexSteps.of({
+					...oracle,
+					openTarget: (target) =>
+						oracle.openTarget(target).pipe(
+							Effect.map((result) =>
+								Object.assign(result, {
+									localizationQuality: () =>
+										Deferred.succeed(started, undefined).pipe(
+											Effect.andThen(Effect.never),
+											Effect.ensuring(Deferred.succeed(finalized, undefined))
+										)
+								})
+							)
+						)
+				});
+			})
+		).pipe(Layer.provide(oracleGameTextIndexLayer(() => Effect.succeed(fixture.text))));
+		const host = yield* indexedGameTextLocalization(
+			() => Effect.succeed(fixture.text),
+			() => Effect.succeed(oracleProjectIndex("C:/Project"))
+		).pipe(Effect.provide(steps));
+		expect(yield* host.select(fixture.join.target)).toMatchObject({ status: "ready" });
+		const request = yield* Effect.forkChild(
+			host.qualitySearch({ target: fixture.join.target, filter: "all" })
+		);
+		yield* Deferred.await(started);
+		yield* Fiber.interrupt(request);
+		yield* turns;
+		// The scan outlives the request that started it while its target stays selected.
+		expect(yield* Deferred.isDone(finalized)).toBe(false);
+		expect(yield* host.select(other.name)).toMatchObject({ status: "ready" });
+		yield* turns;
+		expect(yield* Deferred.isDone(finalized)).toBe(true);
+	}).pipe(
+		Effect.provide(
+			makeLocalizationEvidenceTestLayer({
+				discover: () =>
+					Effect.succeed({
+						schemaVersion: 1,
+						targets: [fixture.files.target, other],
+						diagnostics: []
+					}),
+				read: ({ target }) => Effect.succeed({ ...fixture.files, target }),
+				targets: () => Effect.die("Not used")
+			})
+		)
+	)
 );
 
 it.effect("keeps no-target projects free of quality and report authority", () =>

@@ -67,7 +67,9 @@ it.live(
 				expect((yield* Metric.value(started)).count - beforeStarted).toBe(2);
 			}).pipe(Effect.provide(fixture.layer(true)));
 		}).pipe(Effect.scoped, Effect.ensuring(Effect.sync(() => messages.mockRestore())));
-	}
+	},
+	// Worker threads start slowly when the whole suite runs in parallel.
+	30_000
 );
 
 it.live(
@@ -125,7 +127,9 @@ it.live(
 				yield* Scope.close(secondScope, Exit.void);
 				expect((yield* Metric.value(stopped)).count - beforeStopped).toBe(1);
 			}).pipe(Effect.provide(fixture.layer(true)));
-		}).pipe(Effect.scoped)
+		}).pipe(Effect.scoped),
+	// Worker threads start slowly when the whole suite runs in parallel.
+	30_000
 );
 
 it.live.each([

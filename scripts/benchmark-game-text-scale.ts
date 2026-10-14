@@ -27,7 +27,7 @@ const Memory = Schema.Struct({
 	rss: Schema.Number,
 	arrayBuffers: Schema.Number
 });
-const Stage = Schema.Literals(["evidence", "corpus", "join", "status"]);
+const Stage = Schema.Literals(["evidence", "corpus", "join", "status", "open", "quality"]);
 const Message = Schema.Struct({
 	kind: Schema.Literals(["start", "sample", "complete", "failure", "done"]),
 	stage: Stage,
@@ -44,6 +44,10 @@ const { values } = parseArgs({
 		project: { type: "string" },
 		heaps: { type: "string", default: "default" },
 		output: { type: "string" },
+		select: { type: "string", default: "pipeline" },
+		cache: { type: "string" },
+		records: { type: "string" },
+		profile: { type: "boolean", default: false },
 		worker: { type: "boolean", default: false },
 		"max-rss-gib": { type: "string", default: String(maximumRssBytes / 2 ** 30) },
 		"stage-timeout-seconds": { type: "string", default: String(maximumStageSeconds) }
@@ -52,6 +56,13 @@ const { values } = parseArgs({
 if (values.project === undefined)
 	throw new Error("Provide --project with a generated project directory.");
 const project = repositoryPath(values.project);
+const select = Schema.decodeUnknownSync(Schema.Literals(["pipeline", "quality"]))(values.select);
+if (select === "quality" && (values.cache === undefined || values.records === undefined))
+	throw new Error(
+		"The quality stage needs --cache (index cache) and --records (package records)."
+	);
+const cache = values.cache === undefined ? undefined : repositoryPath(values.cache);
+const records = values.records === undefined ? undefined : repositoryPath(values.records);
 if ((await readScaleRecipe(project)).scale >= 10)
 	throw new Error(
 		"10× pipeline not run: unsafe in-memory workload. Use validate:game-text-scale."
@@ -99,7 +110,7 @@ if (values.worker) {
 		send("complete", { retained: memory() });
 		return value;
 	}
-	try {
+	async function pipelineStages() {
 		const evidence = await measure("evidence", () => readScaleEvidence(project));
 		const corpus = await measure("corpus", () => readScaleCorpus(project));
 		const joined = await measure("join", () => joinScaleTarget(project, corpus, evidence));
@@ -123,6 +134,30 @@ if (values.worker) {
 				)
 			}
 		});
+	}
+	/** The index hosts open, then the quality scan they run over it, timed and probed apart. */
+	async function qualityStages() {
+		const { openScaleIndex, scaleQuality } = await import("./game-text-scale-quality.ts");
+		// Reuses the index in --cache, or builds it there when the cache is empty.
+		const index = await measure("open", () => openScaleIndex(project, cache!, records!));
+		try {
+			const { quality: _, ...scan } = await measure("quality", () =>
+				scaleQuality(index.result)
+			);
+			send("done", {
+				counts: {
+					heapLimitBytes: getHeapStatistics().heap_size_limit,
+					lines: index.lines,
+					...scan
+				}
+			});
+		} finally {
+			await index.close();
+		}
+	}
+	try {
+		if (select === "quality") await qualityStages();
+		else await pipelineStages();
 	} catch (cause) {
 		send("sample");
 		globalThis.gc?.();
@@ -158,12 +193,19 @@ if (values.worker) {
 				{
 					schemaVersion: 1,
 					node: process.version,
+					select,
 					sampleIntervalMs: 25,
 					rssPollIntervalMs: 1000,
 					maxRssBytes: maxRss,
 					stageTimeoutSeconds: timeout / 1000,
 					sampling:
 						"Heap: 25 ms timer/checkpoints plus V8 pre-GC trace peaks (including synchronous stages). RSS: timer and independent parent OS poll. Array buffers: timer/checkpoint lower bound during synchronous stages. Final GC per stage. Peaks include retained inputs from prior stages.",
+					...(select === "quality"
+						? {
+								stallProbe:
+									"Quality stage: gaps between ticks of a 10 ms interval timer during the scan, as counts stallP50Ms, stallP95Ms and stallMaxMs."
+							}
+						: undefined),
 					results
 				},
 				null,
@@ -189,16 +231,33 @@ if (values.worker) {
 		results.push(result);
 		const environment = { ...process.env };
 		delete environment.NODE_OPTIONS;
-		const child = fork(fileURLToPath(import.meta.url), ["--worker", "--project", project], {
-			execArgv: [
-				"--expose-gc",
-				"--trace-gc-nvp",
-				...(heap === "default" ? [] : [`--max-old-space-size=${heap}`])
+		const child = fork(
+			fileURLToPath(import.meta.url),
+			[
+				"--worker",
+				"--project",
+				project,
+				"--select",
+				select,
+				...(cache === undefined ? [] : ["--cache", cache]),
+				...(records === undefined ? [] : ["--records", records])
 			],
-			env: environment,
-			detached: process.platform !== "win32",
-			stdio: ["ignore", "pipe", "pipe", "ipc"]
-		});
+			{
+				execArgv: [
+					// The quality stage reads retained package records with the package's helpers.
+					...(select === "quality" ? ["--import", "tsx"] : []),
+					"--expose-gc",
+					"--trace-gc-nvp",
+					...(heap === "default" ? [] : [`--max-old-space-size=${heap}`]),
+					...(values.profile
+						? ["--cpu-prof", `--cpu-prof-dir=${resolve(output, "..")}`]
+						: [])
+				],
+				env: environment,
+				detached: process.platform !== "win32",
+				stdio: ["ignore", "pipe", "pipe", "ipc"]
+			}
+		);
 		let stage = "startup";
 		let stageStarted = performance.now();
 		let stderr = "";
