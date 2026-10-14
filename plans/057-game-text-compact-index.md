@@ -1573,3 +1573,30 @@ Verification: `pnpm exec vitest run packages/game-text` passes 388 tests (4 skip
 new oracle test whose 600-key target spans three pages and fails if a page boundary drops a line.
 The Workbench Game Text host tests (28 in three files), the harness tests (18), the localization
 import oracle (50) and `pnpm run check:precommit` pass. No 10× run was made and Unreal was not run.
+
+### Phase 8 review fixes
+
+Three findings from the PR review, each with a test that failed before its fix:
+
+- **Selection cancels the shared scan.** Publishing another target now clears the quality cache and
+  interrupts its scan. An abandoned scan used to keep checking, and pinning, the previous target
+  until another quality request replaced it. A Workbench host test reproduces it.
+- **Only the join's lines.** The scan reads the rows the query's `localizationLines` returns for
+  the target, in that order; it had checked every joined row. Lines without visible source add
+  check diagnostics before the blank-source guard, so with unreadable archives the oracle case's
+  `missing_archive` limit read 8 instead of 2. Duplicate sources and a unit's line use the same
+  rows, and ties in line-ID order and among duplicate identities keep the join's order.
+- **Line IDs equal under collation.** Distinct IDs can compare equal, as keys `é` and `e` with a
+  combining accent do; the report then interleaves their findings by culture and check. Each run
+  of such lines is one block: the scan checks and stores the block's findings in report order, and
+  hydrating a finding re-checks its block. Nearly every block is one line and takes the same path
+  as before.
+
+The same 1× project, Node 24.21 and the default heap; one run. Its open stage rebuilt the cache
+after the merge with main (33.6 s). The scan took 115.4 s (114–118 s before) and returned the same
+2,027,740 findings. Stalls: median 16 ms, p95 0.17 s, longest 0.47 s, 546 over 100 ms (537 in the
+recorded run). Peak V8 heap during the scan was 245 MiB (209–234 MiB before); 59 MiB was kept
+after collection.
+
+Verification: `pnpm exec vitest run packages/game-text` passes 394 tests (4 skipped), the
+Workbench Game Text host tests 29 in three files, and `pnpm run check:precommit` passes.

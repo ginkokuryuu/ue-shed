@@ -308,6 +308,65 @@ it.live("rows the query hides are neither checked nor counted in the limits", ()
 	}).pipe(Effect.scoped)
 );
 
+it.live("lines whose IDs compare equal keep the in-memory report's order", () =>
+	Effect.gen(function* () {
+		const fixture = yield* makeIndexRegressionFixture();
+		// Canonically equivalent keys: distinct identities that collation cannot tell apart.
+		const entries = [
+			{ key: "\u00e9", source: "Source", de: "Quelltext" },
+			{ key: "e\u0301", source: "Source", de: "Quelltexte" },
+			{ key: "f", source: "Exit", de: "Beenden" }
+		];
+		yield* Effect.promise(() => writeLocalization(fixture.projectRoot, entries));
+		fixture.update(entries.map(({ key, source }, index) => occurrence(key, source, index * 4)));
+		yield* Effect.gen(function* () {
+			const result = yield* (yield* GameTextIndexRefresh).refresh(fixture.request);
+			const join = result.localizationJoin;
+			expect(join.lines[0]!.id).not.toBe(join.lines[1]!.id);
+			expect(join.lines[0]!.id.localeCompare(join.lines[1]!.id)).toBe(0);
+			// One accepted finding on each line; the other line's text has another fingerprint.
+			const accept = (key: string, check: string) => {
+				const line = join.lines.find((item) => item.identity?.key === key)!;
+				return {
+					check,
+					culture: "de",
+					namespace: "UI",
+					key,
+					fingerprint: localizationLineFingerprint(
+						line,
+						line.cultures.find((culture) => culture.culture === "de")!
+					),
+					by: "Reviewer",
+					at: "2026-10-14T00:00:00Z"
+				};
+			};
+			const review = Schema.decodeUnknownSync(LocalizationReviewFile)({
+				schemaVersion: 1,
+				target: join.target,
+				records: [],
+				acceptedFindings: [
+					accept("\u00e9", "translation.limit"),
+					accept("e\u0301", "localization.duplicate_source")
+				]
+			});
+			const total = (options: LocalizationCheckOptions) =>
+				localizationQualityWorkspace(
+					undefined,
+					checkLocalizationTarget(
+						result.corpus,
+						join,
+						result.evidence,
+						options,
+						document
+					),
+					join
+				).search({ target: join.target, filter: "all" }).total;
+			expect(total({ review })).toBe(total({}) - 2);
+			yield* expectSameQuality(result, [{}, { review }]);
+		}).pipe(Effect.provide(fixture.layer()));
+	}).pipe(Effect.scoped)
+);
+
 it.live("a scan across many pages equals the in-memory checks", () =>
 	Effect.gen(function* () {
 		const fixture = yield* makeIndexRegressionFixture();

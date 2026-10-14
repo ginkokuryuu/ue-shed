@@ -232,44 +232,77 @@ export const indexedLocalizationQuality = Effect.fn("GameText.localizationQualit
 	}
 	const collator = new Intl.Collator();
 	// Stable, so lines whose IDs compare equal keep the join's order.
-	const order = Uint32Array.from(
-		Array.from({ length: lineCount }, (_, position) => position).sort((a, b) =>
-			collator.compare(ids[a]!, ids[b]!)
-		),
-		(position) => joinRows[position]!
+	const sorted = Array.from({ length: lineCount }, (_, position) => position).sort((a, b) =>
+		collator.compare(ids[a]!, ids[b]!)
 	);
+	yield* Effect.yieldNow;
+	/** Rows by rank in report order. */
+	const order = Uint32Array.from(sorted, (position) => joinRows[position]!);
+	/**
+	 * Lines whose ID compares equal to the previous line's, as canonically equivalent keys do.
+	 * The report interleaves such lines by culture and check, so each run of them is one block,
+	 * checked and stored together and known by its first rank. Nearly every block is one line.
+	 */
+	const tied = new Uint8Array(lineCount);
+	for (let start = 1; start < lineCount; start += SCAN_PAGE_LINES * 16) {
+		const end = Math.min(lineCount, start + SCAN_PAGE_LINES * 16);
+		for (let rank = start; rank < end; rank++)
+			if (collator.compare(ids[sorted[rank - 1]!]!, ids[sorted[rank]!]!) === 0)
+				tied[rank] = 1;
+		yield* Effect.yieldNow;
+	}
 	// A suspended generator keeps its locals; release the IDs before the long scan.
 	ids.length = 0;
-	yield* Effect.yieldNow;
+	sorted.length = 0;
 	const rankOf = new Uint32Array(count);
 	for (let rank = 0; rank < lineCount; rank++) rankOf[order[rank]!] = rank;
+	const blockEnd = (first: number) => {
+		let end = first + 1;
+		while (end < lineCount && tied[end]) end++;
+		return end;
+	};
+	const lineOf = (lines: readonly LocalizationLine[], finding: Finding) =>
+		lines.length === 1 ? lines[0]! : lines.find((line) => line.id === finding.lineId)!;
 
-	/** One line's findings in report order, and its check diagnostics. */
-	const check = (line: LocalizationLine) => {
-		let lineUnits: readonly TextUnit[] | undefined;
-		const unitsOf = () => (lineUnits ??= localizationLineUnits(line, units.forLine(line)));
-		const builtIns: LocalizationQualityFinding[] = [],
-			diagnostics: LocalizationCheckDiagnostic[] = [];
-		checkLocalizationLine(line, unitsOf, context, {
-			findings: builtIns,
-			checkDiagnostics: diagnostics,
-			changes: []
+	/**
+	 * One block's findings in report order, and each line's check diagnostics. As the report does,
+	 * built-ins sort first and policy findings follow rule by rule over the lines; accepted findings
+	 * then leave and the rest sort as reported. Both sorts are stable.
+	 */
+	const check = (lines: readonly LocalizationLine[]) => {
+		const unitsOf = lines.map((line) => {
+			let lineUnits: readonly TextUnit[] | undefined;
+			return () => (lineUnits ??= localizationLineUnits(line, units.forLine(line)));
 		});
+		const builtIns: LocalizationQualityFinding[] = [],
+			diagnostics: LocalizationCheckDiagnostic[][] = [];
+		for (let index = 0; index < lines.length; index++) {
+			const lineDiagnostics: LocalizationCheckDiagnostic[] = [];
+			checkLocalizationLine(lines[index]!, unitsOf[index]!, context, {
+				findings: builtIns,
+				checkDiagnostics: lineDiagnostics,
+				changes: []
+			});
+			diagnostics.push(lineDiagnostics);
+		}
 		const policyFindings: LocalizationPolicyFinding[] = [];
 		for (const rule of policy?.rules ?? [])
-			localizationLinePolicyFindings(
-				line,
-				unitsOf,
-				rule,
-				target.name,
-				options,
-				policyFindings
-			);
+			for (let index = 0; index < lines.length; index++)
+				localizationLinePolicyFindings(
+					lines[index]!,
+					unitsOf[index]!,
+					rule,
+					target.name,
+					options,
+					policyFindings
+				);
 		const findings: Finding[] = [
 			...builtIns.sort(compareLocalizationFindings),
 			...policyFindings
 		];
-		const visible = keep ? findings.filter((finding) => keep(line, finding)) : findings;
+		const visible = keep
+			? findings.filter((finding) => keep(lineOf(lines, finding), finding))
+			: findings;
 		return {
 			findings: visible.sort(compareReportedLocalizationFindings),
 			diagnostics
@@ -320,60 +353,87 @@ export const indexedLocalizationQuality = Effect.fn("GameText.localizationQualit
 		}
 	};
 
+	/** The blocks starting at these ranks, hydrated in one page: their lines in rank order. */
+	const blockLines = (firsts: readonly number[]) => {
+		const rows: number[] = [];
+		for (const first of firsts)
+			for (let rank = first, end = blockEnd(first); rank < end; rank++)
+				rows.push(order[rank]!);
+		const lines = data.lines(rows);
+		let next = 0;
+		return firsts.map((first) => {
+			const size = blockEnd(first) - first;
+			return size === 1 ? [lines[next++]!] : lines.slice(next, (next += size));
+		});
+	};
 	const storedFacts = u32Builder(),
 		storedFirst = u32Builder(),
 		storedSecond = u32Builder();
-	const rankStart = new Uint32Array(lineCount),
-		rankSize = new Uint32Array(lineCount);
-	const checkRows = (rows: readonly number[]) => {
-		const lines = data.lines(rows);
-		for (let index = 0; index < rows.length; index++) {
-			const rank = rankOf[rows[index]!]!;
-			const { findings, diagnostics } = check(lines[index]!);
-			rankStart[rank] = storedFacts.length;
-			rankSize[rank] = findings.length;
+	const blockStart = new Uint32Array(lineCount),
+		blockSize = new Uint32Array(lineCount);
+	const checkBlocks = (firsts: readonly number[]) => {
+		const blocks = blockLines(firsts);
+		for (let block = 0; block < firsts.length; block++) {
+			const lines = blocks[block]!,
+				rank = firsts[block]!;
+			const { findings, diagnostics } = check(lines);
+			blockStart[rank] = storedFacts.length;
+			blockSize[rank] = findings.length;
 			for (const finding of findings) {
 				const [first, second] = localizationFindingHash(finding);
 				storedFacts.push(pack(finding));
 				storedFirst.push(first);
 				storedSecond.push(second);
 			}
-			for (let position = 0; position < diagnostics.length; position++) {
-				const diagnostic = diagnostics[position]!,
-					seen = rank * 2 ** 20 + position;
-				recordLimit("", diagnostic.code, seen);
-				recordLimit(diagnostic.culture, diagnostic.code, seen);
-			}
+			for (let index = 0; index < lines.length; index++)
+				for (let position = 0; position < diagnostics[index]!.length; position++) {
+					const diagnostic = diagnostics[index]![position]!,
+						seen = (rank + index) * 2 ** 20 + position;
+					recordLimit("", diagnostic.code, seen);
+					recordLimit(diagnostic.culture, diagnostic.code, seen);
+				}
 		}
 	};
-	// The join's rows in storage order, so each page hydrates adjacent rows.
+	// One-line blocks in storage order, so each page hydrates adjacent rows.
 	let page: number[] = [];
 	for (let row = 0; row < count; row++) {
 		if (joinPosition[row] === NOT_JOINED) continue;
-		page.push(row);
+		const rank = rankOf[row]!;
+		if (tied[rank] || (rank + 1 < lineCount && tied[rank + 1])) continue;
+		page.push(rank);
 		if (page.length < SCAN_PAGE_LINES) continue;
-		checkRows(page);
+		checkBlocks(page);
 		page = [];
 		yield* Effect.yieldNow;
 	}
-	if (page.length) checkRows(page);
+	// Then the rare blocks of several lines.
+	for (let rank = 0; rank + 1 < lineCount; rank++) {
+		if (tied[rank] || !tied[rank + 1]) continue;
+		page.push(rank);
+		if (page.length < SCAN_PAGE_LINES) continue;
+		checkBlocks(page);
+		page = [];
+		yield* Effect.yieldNow;
+	}
+	if (page.length) checkBlocks(page);
 	page = [];
 
 	const total = storedFacts.length;
 	const facts = new Uint32Array(total),
 		first = new Uint32Array(total),
 		second = new Uint32Array(total),
-		rankAt = new Uint32Array(total),
-		rankPosition = new Uint32Array(lineCount);
+		blockOf = new Uint32Array(total),
+		blockPosition = new Uint32Array(lineCount);
 	let position = 0;
 	for (let rank = 0; rank < lineCount; rank++) {
-		rankPosition[rank] = position;
-		const end = rankStart[rank]! + rankSize[rank]!;
-		for (let stored = rankStart[rank]!; stored < end; stored++, position++) {
+		if (tied[rank]) continue;
+		blockPosition[rank] = position;
+		const end = blockStart[rank]! + blockSize[rank]!;
+		for (let stored = blockStart[rank]!; stored < end; stored++, position++) {
 			facts[position] = storedFacts.at(stored);
 			first[position] = storedFirst.at(stored);
 			second[position] = storedSecond.at(stored);
-			rankAt[position] = rank;
+			blockOf[position] = rank;
 		}
 	}
 	const limits = new Map(
@@ -385,17 +445,20 @@ export const indexedLocalizationQuality = Effect.fn("GameText.localizationQualit
 		])
 	);
 
-	/** Re-checks the rows behind positions; each finding must hash as it did in the scan. */
+	/** Re-checks the blocks behind positions; each finding must hash as it did in the scan. */
 	const hydrate = (positions: readonly number[]) => {
-		const ranks = [...new Set(positions.map((position) => rankAt[position]!))];
-		const lines = data.lines(ranks.map((rank) => order[rank]!));
+		const firsts = [...new Set(positions.map((position) => blockOf[position]!))];
+		const blocks = blockLines(firsts);
 		const checked = new Map(
-			ranks.map((rank, index) => [rank, { line: lines[index]!, ...check(lines[index]!) }])
+			firsts.map((rank, block) => [
+				rank,
+				{ lines: blocks[block]!, findings: check(blocks[block]!).findings }
+			])
 		);
 		return positions.map((position) => {
-			const rank = rankAt[position]!,
-				{ line, findings } = checked.get(rank)!;
-			const finding = findings[position - rankPosition[rank]!];
+			const block = blockOf[position]!,
+				{ lines, findings } = checked.get(block)!;
+			const finding = findings[position - blockPosition[block]!];
 			const hash = finding && localizationFindingHash(finding);
 			snapshotCheck(
 				finding !== undefined &&
@@ -405,7 +468,7 @@ export const indexedLocalizationQuality = Effect.fn("GameText.localizationQualit
 				"quality.findings",
 				"A line no longer yields the finding its index recorded"
 			);
-			return workspaceQualityItem(finding, line);
+			return workspaceQualityItem(finding, lineOf(lines, finding));
 		});
 	};
 	let lineOfRaw: Uint32Array | undefined;
@@ -426,7 +489,6 @@ export const indexedLocalizationQuality = Effect.fn("GameText.localizationQualit
 		const row = lineOfRaw[units.idRow(raw)];
 		return row ? data.line(row - 1) : undefined;
 	};
-
 	const findings: LocalizationFindingList = {
 		length: total,
 		culture: (position) => target.cultures[facts[position]! & 0xfff]!,
