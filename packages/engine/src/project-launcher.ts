@@ -333,11 +333,14 @@ export function unrealEditorExecutable(
 		return join(engineRoot, "Engine", "Binaries", "Win64", `${name}.exe`);
 	}
 	if (platform === "darwin") {
-		return join(engineRoot, "Engine", "Binaries", "Mac", name);
+		// Mac editors are app bundles; Epic's UAT runs `<Name>.app/Contents/MacOS/<Name>` too.
+		const bundle = join(engineRoot, "Engine", "Binaries", "Mac", `${name}.app`);
+		return join(bundle, "Contents", "MacOS", name);
 	}
 	return join(engineRoot, "Engine", "Binaries", "Linux", name);
 }
 
+/** Commandlet binaries are console apps, so they stay outside a Mac app bundle. */
 export function unrealEditorCommandletExecutable(
 	engineRoot: string,
 	platform = process.platform,

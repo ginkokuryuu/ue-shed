@@ -37,17 +37,13 @@ interface TestInstallation {
 function installationFixture(): Effect.Effect<TestInstallation> {
 	return Effect.gen(function* () {
 		const root = yield* Effect.promise(() => mkdtemp(join(tmpdir(), "ue-shed-supervised-")));
-		const executable = join(
-			root,
-			"Engine",
-			"Binaries",
+		const binaries = join(root, "Engine", "Binaries");
+		const executable =
 			process.platform === "win32"
-				? "Win64"
+				? join(binaries, "Win64", "UnrealEditor.exe")
 				: process.platform === "darwin"
-					? "Mac"
-					: "Linux",
-			process.platform === "win32" ? "UnrealEditor.exe" : "UnrealEditor"
-		);
+					? join(binaries, "Mac", "UnrealEditor.app", "Contents", "MacOS", "UnrealEditor")
+					: join(binaries, "Linux", "UnrealEditor");
 		const projectDescriptor = join(root, "Fixture.uproject");
 		const pluginDescriptor = join(root, "Plugins", "Fixture", "Fixture.uplugin");
 		yield* Effect.promise(() => mkdir(dirname(executable), { recursive: true }));
