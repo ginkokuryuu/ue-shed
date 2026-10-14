@@ -230,8 +230,16 @@ type EvidenceEntry = Effect.Success<
 const MAX_EVIDENCE_RUN = 10000;
 /** Prefetch runs read across gaps up to this many entries instead of starting a new run. */
 const MAX_EVIDENCE_GAP = 64;
+interface EvidenceEntryOf {
+	readonly manifest: ManifestEntry;
+	readonly archive: ArchiveEntry;
+	readonly po: POEntry;
+}
+const OCCURRENCE_FIELDS = ["namespace", "key", "object", "property", "row", "identity", "location"];
 
-/** Bounded hydration uses input row references, retaining all original metadata and duplicates. */
+/** Bounded hydration uses input row references, retaining all original metadata and duplicates.
+ * Columns, evidence entries and strings are read once per page; the loop over lines is plain
+ * synchronous code, so a large page pays no Effect or schema overhead per entry. */
 export const hydrateJoinedTarget = Effect.fn("JoinedTarget.page")(function* (
 	joined: JoinedTargetReader,
 	start = 0,
@@ -267,88 +275,11 @@ export const hydrateJoinedTarget = Effect.fn("JoinedTarget.page")(function* (
 	for (const field of ["namespace", "key", "source"])
 		decoded[field] = yield* reader.strings(Array.from(columns[field]!.subarray(start, end)));
 	const opened = new Map<string, ColumnReader>();
-	const occurrenceShards = new Map<number, Record<string, Uint32Array>>();
-	const entryPages = new Map<
-		string,
-		Awaited<Effect.Success<ReturnType<typeof decodeLocalizationSnapshot>>>
-	>();
 	const file = Effect.fn("JoinedTarget.pageFile")(function* (name: string) {
 		let value = opened.get(name);
 		if (!value) {
 			value = yield* reader.layer(meta.dependencies[name]!);
 			opened.set(name, value);
-		}
-		return value;
-	});
-	const prefetched = new Map<string, Map<number, EvidenceEntry>>();
-	// Multi-line pages decode each evidence file's rows in sorted runs, once per page; decoding
-	// row by row re-reads the file's metadata and string blocks for every entry of every culture.
-	const prefetch = Effect.fn("JoinedTarget.pagePrefetch")(function* (
-		name: string,
-		rows: readonly number[]
-	) {
-		const sorted = [...new Set(rows)].sort((a, b) => a - b),
-			byRow = new Map<number, EvidenceEntry>();
-		for (let index = 0; index < sorted.length; ) {
-			const first = sorted[index]!;
-			let last = index;
-			while (
-				last + 1 < sorted.length &&
-				sorted[last + 1]! - first < MAX_EVIDENCE_RUN &&
-				sorted[last + 1]! - sorted[last]! <= MAX_EVIDENCE_GAP
-			)
-				last++;
-			const run = yield* decodeLocalizationSnapshot(
-				yield* file(name),
-				first,
-				sorted[last]! - first + 1
-			);
-			for (let picked = index; picked <= last; picked++)
-				byRow.set(sorted[picked]!, run.entries[sorted[picked]! - first]!);
-			index = last + 1;
-		}
-		prefetched.set(name, byRow);
-	});
-	const entry = Effect.fn("JoinedTarget.pageEntry")(function* (name: string, row: number) {
-		const ready = prefetched.get(name)?.get(row);
-		if (ready) return ready;
-		const block = row,
-			key = `${name}:${block}`;
-		let page = entryPages.get(key);
-		if (!page) {
-			page = yield* decodeLocalizationSnapshot(yield* file(name), block, 1);
-			if (entryPages.size >= 128) entryPages.delete(entryPages.keys().next().value!);
-		} else entryPages.delete(key);
-		entryPages.set(key, page);
-		return page.entries[0];
-	});
-	const occurrences = Effect.fn("JoinedTarget.pageOccurrences")(function* (shard: number) {
-		let values = occurrenceShards.get(shard);
-		if (!values) {
-			values = {};
-			for (const field of [
-				"namespace",
-				"key",
-				"object",
-				"property",
-				"row",
-				"identity",
-				"location"
-			])
-				values[field] = yield* column(shard, `occurrence.${field}`);
-			values.starts = yield* column(shard, "package.occurrence_start");
-			values.paths = yield* column(shard, "package.path");
-			occurrenceShards.set(shard, values);
-		}
-		return values;
-	});
-	const packageColumns = new Map<string, Uint32Array>();
-	const column = Effect.fn("JoinedTarget.pageColumn")(function* (shard: number, name: string) {
-		const cacheKey = `${shard}:${name}`;
-		let value = packageColumns.get(cacheKey);
-		if (!value) {
-			value = yield* u32(yield* file(meta.packageNames[shard]!), name);
-			packageColumns.set(cacheKey, value);
 		}
 		return value;
 	});
@@ -367,66 +298,151 @@ export const hydrateJoinedTarget = Effect.fn("JoinedTarget.page")(function* (
 			values[field] = yield* u32(layer, `c${ci}.${field}`);
 		marks.push(values);
 	}
-	if (end - start > 1) {
-		const wanted = new Map<string, number[]>();
-		const want = (name: string, row: number) => {
-			const rows = wanted.get(name) ?? [];
-			rows.push(row);
-			wanted.set(name, rows);
-		};
-		for (let row = start; row < end; row++) {
-			for (let i = columns.manifest_start![row]!; i < columns.manifest_end![row]!; i++)
-				want(target.outputPaths.manifest!, manifestRows[i]!);
-			for (let ci = 0; ci < target.cultures.length; ci++) {
-				const culture = target.cultures[ci]!,
-					values = marks[ci]!;
-				if (values.archive![row])
-					want(target.outputPaths.archives[culture]!, values.archive![row]! - 1);
-				if (values.po![row])
-					want(target.outputPaths.portableObjects[culture]!, values.po![row]! - 1);
-			}
-		}
-		for (const [name, rows] of wanted) yield* prefetch(name, rows);
-	}
-	const lines: LocalizationLine[] = [];
+
+	// Each evidence file's entries decode in sorted runs, once per page: decoding entry by entry
+	// re-reads the file's metadata and string blocks for every entry of every culture.
+	const wanted = new Map<string, number[]>();
+	const want = (name: string, row: number) => {
+		const rows = wanted.get(name) ?? [];
+		rows.push(row);
+		wanted.set(name, rows);
+	};
 	for (let row = start; row < end; row++) {
-		const unitIds = new Set<string>();
+		for (let i = columns.manifest_start![row]!; i < columns.manifest_end![row]!; i++)
+			want(target.outputPaths.manifest!, manifestRows[i]!);
+		for (let ci = 0; ci < target.cultures.length; ci++) {
+			const culture = target.cultures[ci]!,
+				values = marks[ci]!;
+			if (values.archive![row])
+				want(target.outputPaths.archives[culture]!, values.archive![row]! - 1);
+			if (values.po![row])
+				want(target.outputPaths.portableObjects[culture]!, values.po![row]! - 1);
+		}
+	}
+	const evidence = new Map<string, { format: string; rows: Map<number, EvidenceEntry> }>();
+	for (const [name, rows] of wanted) {
+		const sorted = [...new Set(rows)].sort((a, b) => a - b),
+			byRow = new Map<number, EvidenceEntry>();
+		let format = "";
+		for (let index = 0; index < sorted.length; ) {
+			const first = sorted[index]!;
+			let last = index;
+			while (
+				last + 1 < sorted.length &&
+				sorted[last + 1]! - first < MAX_EVIDENCE_RUN &&
+				sorted[last + 1]! - sorted[last]! <= MAX_EVIDENCE_GAP
+			)
+				last++;
+			const run = yield* decodeLocalizationSnapshot(
+				yield* file(name),
+				first,
+				sorted[last]! - first + 1
+			);
+			format = run.format;
+			for (let picked = index; picked <= last; picked++)
+				byRow.set(sorted[picked]!, run.entries[sorted[picked]! - first]!);
+			index = last + 1;
+		}
+		evidence.set(name, { format, rows: byRow });
+	}
+	/** A prefetched entry of a file in the given format. */
+	const entry = <F extends keyof EvidenceEntryOf>(
+		name: string,
+		row: number,
+		format: F
+	): EvidenceEntryOf[F] => {
+		const read = evidence.get(name),
+			value = read?.rows.get(row);
+		snapshotCheck(
+			read?.format === format && value !== undefined,
+			"join.page",
+			"Missing or mismatched evidence entry"
+		);
+		// SAFETY: decodeLocalizationSnapshot builds every entry of a file in that file's format,
+		// which the check above matched.
+		return value as EvidenceEntryOf[F];
+	};
+
+	// Package shards' occurrence columns, and the strings that name units, read once per page.
+	const shards = new Map<number, Record<string, Uint32Array>>();
+	const located: { readonly input: Record<string, Uint32Array>; readonly row: number }[] = [];
+	for (let row = start; row < end; row++)
 		for (let i = columns.occ_start![row]!; i < columns.occ_end![row]!; i++) {
 			const global = occurrenceRows[i]!;
 			let shard = 0;
 			while (meta.packageStarts[shard + 1]! <= global) shard++;
-			const occurrence = global - meta.packageStarts[shard]!;
-			const numbers: Record<string, number> = {},
-				values: Record<string, string> = {};
-			const input = yield* occurrences(shard);
-			for (const field of ["namespace", "key", "identity", "location"])
-				numbers[field] = input[field]![occurrence]!;
-			if (numbers.identity! < 2) {
-				const [namespace, key] = yield* reader.strings([numbers.namespace!, numbers.key!]);
-				if (key !== "") {
-					unitIds.add(
-						`${numbers.identity === 0 ? "unreal" : "string-table"}:${encodeURIComponent(namespace!)}:${encodeURIComponent(key!)}`
-					);
-					continue;
-				}
+			let input = shards.get(shard);
+			if (!input) {
+				const packageFile = yield* file(meta.packageNames[shard]!);
+				input = {};
+				for (const field of OCCURRENCE_FIELDS)
+					input[field] = yield* u32(packageFile, `occurrence.${field}`);
+				input.starts = yield* u32(packageFile, "package.occurrence_start");
+				input.paths = yield* u32(packageFile, "package.path");
+				shards.set(shard, input);
 			}
-			for (const field of ["object", "property", "row"])
-				numbers[field] = input[field]![occurrence]!;
-			const starts = input.starts!;
-			let low = 0,
-				high = starts.length - 1;
-			while (low < high) {
-				const mid = (low + high + 1) >>> 1;
-				if (starts[mid]! <= occurrence) low = mid;
-				else high = mid - 1;
-			}
-			numbers.package = input.paths![low]!;
-			const fields = ["object", "property", "row", "package"];
-			const strings = yield* reader.strings(fields.map((field) => numbers[field]!));
-			for (let i = 0; i < fields.length; i++) values[fields[i]!] = strings[i]!;
-			values.key = "";
-			unitIds.add(occurrenceUnitId(values, numbers, meta.input.projectRoot));
+			located.push({ input, row: global - meta.packageStarts[shard]! });
 		}
+	// Keyed Unreal and String Table occurrences name their unit by namespace and key; the rest
+	// by object, property, row and package path.
+	const keyIds: number[] = [];
+	for (const { input, row } of located)
+		if (input.identity![row]! < 2) keyIds.push(input.namespace![row]!, input.key![row]!);
+	const keyStrings = yield* reader.strings(keyIds);
+	const unitOf: string[] = [],
+		pathIds: number[] = [],
+		pathOccurrences: number[] = [];
+	for (let index = 0, keyed = 0; index < located.length; index++) {
+		const { input, row } = located[index]!,
+			identity = input.identity![row]!;
+		if (identity < 2) {
+			const namespace = keyStrings[keyed++]!,
+				key = keyStrings[keyed++]!;
+			if (key !== "") {
+				unitOf.push(
+					`${identity === 0 ? "unreal" : "string-table"}:${encodeURIComponent(namespace)}:${encodeURIComponent(key)}`
+				);
+				continue;
+			}
+		}
+		const starts = input.starts!;
+		let low = 0,
+			high = starts.length - 1;
+		while (low < high) {
+			const mid = (low + high + 1) >>> 1;
+			if (starts[mid]! <= row) low = mid;
+			else high = mid - 1;
+		}
+		pathIds.push(
+			input.object![row]!,
+			input.property![row]!,
+			input.row![row]!,
+			input.paths![low]!
+		);
+		pathOccurrences.push(index);
+		unitOf.push("");
+	}
+	const pathStrings = yield* reader.strings(pathIds);
+	for (let index = 0; index < pathOccurrences.length; index++) {
+		const { input, row } = located[pathOccurrences[index]!]!;
+		unitOf[pathOccurrences[index]!] = occurrenceUnitId(
+			{
+				object: pathStrings[index * 4]!,
+				property: pathStrings[index * 4 + 1]!,
+				row: pathStrings[index * 4 + 2]!,
+				package: pathStrings[index * 4 + 3]!,
+				key: ""
+			},
+			{ identity: input.identity![row]!, location: input.location![row]! },
+			meta.input.projectRoot
+		);
+	}
+
+	const lines: LocalizationLine[] = [];
+	for (let row = start, occurrence = 0; row < end; row++) {
+		const unitIds = new Set<string>();
+		for (let i = columns.occ_start![row]!; i < columns.occ_end![row]!; i++)
+			unitIds.add(unitOf[occurrence++]!);
 		const identity =
 			unitIds.size && decoded.key![row - start] === ""
 				? null
@@ -440,27 +456,18 @@ export const hydrateJoinedTarget = Effect.fn("JoinedTarget.page")(function* (
 				: JSON.stringify([identity.namespace, identity.key]);
 		const id = LocalizationLineId.make(`${target.name}:${key}`);
 		const manifest: ManifestEntry[] = [];
-		for (let i = columns.manifest_start![row]!; i < columns.manifest_end![row]!; i++) {
-			manifest.push(
-				yield* Schema.decodeUnknownEffect(ManifestEntry)(
-					yield* entry(target.outputPaths.manifest!, manifestRows[i]!)
-				)
-			);
-		}
+		for (let i = columns.manifest_start![row]!; i < columns.manifest_end![row]!; i++)
+			manifest.push(entry(target.outputPaths.manifest!, manifestRows[i]!, "manifest"));
 		const cultures: LocalizationLine["cultures"][number][] = [];
 		for (let ci = 0; ci < target.cultures.length; ci++) {
 			const culture = target.cultures[ci]!,
 				values = marks[ci]!;
-			let archive: ArchiveEntry | null = null,
-				po: POEntry | null = null;
-			if (values.archive![row])
-				archive = yield* Schema.decodeUnknownEffect(ArchiveEntry)(
-					yield* entry(target.outputPaths.archives[culture]!, values.archive![row]! - 1)
-				);
-			if (values.po![row])
-				po = yield* Schema.decodeUnknownEffect(POEntry)(
-					yield* entry(target.outputPaths.portableObjects[culture]!, values.po![row]! - 1)
-				);
+			const archive = values.archive![row]
+				? entry(target.outputPaths.archives[culture]!, values.archive![row]! - 1, "archive")
+				: null;
+			const po = values.po![row]
+				? entry(target.outputPaths.portableObjects[culture]!, values.po![row]! - 1, "po")
+				: null;
 			const state = localizationStates[values.state![row]!];
 			snapshotCheck(state !== undefined, "join.state", "Invalid culture state");
 			const facts = localizationStates.filter(
