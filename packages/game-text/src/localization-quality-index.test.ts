@@ -1,7 +1,7 @@
 import { writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { it } from "@effect/vitest";
-import { Effect, Schema } from "effect";
+import { Cause, Effect, Exit, Fiber, Schema } from "effect";
 import { LocalizationReviewFile } from "@ue-shed/localization";
 import { expect } from "vitest";
 import { GameTextIndexRefresh } from "./index-refresh.js";
@@ -88,50 +88,47 @@ const document = Schema.decodeUnknownSync(GameTextRuleDocument)({
 	]
 });
 
+/** Writes the target's manifest, archives and PO files for these keys. */
+async function writeLocalization(projectRoot: string, entries: typeof keys) {
+	const manifest = {
+		FormatVersion: 1,
+		Namespace: "UI",
+		Children: entries.map(({ key, source }, index) => ({
+			Source: { Text: source },
+			Keys: [{ Key: key, Path: `/Game/Text/Table.Table.Label${index}` }]
+		}))
+	};
+	const archive = (culture: "en" | "de") => ({
+		FormatVersion: 2,
+		Namespace: "UI",
+		Children: entries.map(({ key, source, de }) => ({
+			Key: key,
+			Source: { Text: source },
+			Translation: { Text: culture === "en" ? source : de }
+		}))
+	});
+	// German ships the escape from its archive: Unreal's PO import would unescape it.
+	const portable = (culture: "en" | "de") =>
+		entries
+			.filter(({ source }) => culture === "en" || source !== "Line one")
+			.map(
+				({ key, source, de }) =>
+					`msgctxt "UI,${key}"\nmsgid "${po(source)}"\nmsgstr "${po(culture === "en" ? source : de)}"\n`
+			)
+			.join("\n");
+	await writeFile(join(projectRoot, "Review.manifest"), JSON.stringify(manifest));
+	for (const culture of ["en", "de"] as const) {
+		await writeFile(join(projectRoot, `${culture}.archive`), JSON.stringify(archive(culture)));
+		await writeFile(join(projectRoot, `${culture}.po`), portable(culture));
+	}
+}
+
 it.live(
 	"indexed quality pages, focus and proposals equal the in-memory workspace",
 	() =>
 		Effect.gen(function* () {
 			const fixture = yield* makeIndexRegressionFixture();
-			yield* Effect.promise(async () => {
-				const manifest = {
-					FormatVersion: 1,
-					Namespace: "UI",
-					Children: keys.map(({ key, source }, index) => ({
-						Source: { Text: source },
-						Keys: [{ Key: key, Path: `/Game/Text/Table.Table.Label${index}` }]
-					}))
-				};
-				const archive = (culture: "en" | "de") => ({
-					FormatVersion: 2,
-					Namespace: "UI",
-					Children: keys.map(({ key, source, de }) => ({
-						Key: key,
-						Source: { Text: source },
-						Translation: { Text: culture === "en" ? source : de }
-					}))
-				});
-				// German ships the escape from its archive: Unreal's PO import would unescape it.
-				const portable = (culture: "en" | "de") =>
-					keys
-						.filter(({ source }) => culture === "en" || source !== "Line one")
-						.map(
-							({ key, source, de }) =>
-								`msgctxt "UI,${key}"\nmsgid "${po(source)}"\nmsgstr "${po(culture === "en" ? source : de)}"\n`
-						)
-						.join("\n");
-				await writeFile(
-					join(fixture.projectRoot, "Review.manifest"),
-					JSON.stringify(manifest)
-				);
-				for (const culture of ["en", "de"] as const) {
-					await writeFile(
-						join(fixture.projectRoot, `${culture}.archive`),
-						JSON.stringify(archive(culture))
-					);
-					await writeFile(join(fixture.projectRoot, `${culture}.po`), portable(culture));
-				}
-			});
+			yield* Effect.promise(() => writeLocalization(fixture.projectRoot, keys));
 			fixture.update([
 				...gathered.map(({ key, source }, index) => occurrence(key, source, index)),
 				// A second location for one key, an ungathered key and a culture-invariant text.
@@ -193,7 +190,7 @@ it.live(
 					);
 					const indexed = localizationQualityWorkspaceOf(
 						source,
-						result.localizationQuality!(options, document)
+						yield* result.localizationQuality!(options, document)
 					);
 					const all = legacy.search({ target: join.target, filter: "all" });
 					for (const filter of WorkspaceQualityFilter.literals)
@@ -234,4 +231,71 @@ it.live(
 			}).pipe(Effect.provide(fixture.layer()));
 		}).pipe(Effect.scoped),
 	120_000
+);
+
+it.live("the indexed scan yields between pages and stops when interrupted", () =>
+	Effect.gen(function* () {
+		const fixture = yield* makeIndexRegressionFixture();
+		yield* Effect.gen(function* () {
+			const result = yield* (yield* GameTextIndexRefresh).refresh(fixture.request);
+			let turns = 0,
+				done = false;
+			const other = yield* Effect.forkChild(
+				Effect.whileLoop({
+					while: () => !done,
+					body: () => Effect.sync(() => turns++).pipe(Effect.andThen(Effect.yieldNow)),
+					step: () => undefined
+				})
+			);
+			const quality = yield* result.localizationQuality!();
+			done = true;
+			yield* Fiber.join(other);
+			expect(quality.findings.length).toBeGreaterThan(0);
+			// Another fiber ran while the scan was in progress.
+			expect(turns).toBeGreaterThan(1);
+			const scan = yield* Effect.forkChild(result.localizationQuality!());
+			yield* Fiber.interrupt(scan);
+			const exit = yield* Fiber.await(scan);
+			expect(Exit.isFailure(exit) && Cause.hasInterruptsOnly(exit.cause)).toBe(true);
+		}).pipe(Effect.provide(fixture.layer()));
+	}).pipe(Effect.scoped)
+);
+
+it.live("proposals past the first 100 count the rest without reading their lines", () =>
+	Effect.gen(function* () {
+		const fixture = yield* makeIndexRegressionFixture();
+		const fixable = Array.from({ length: 130 }, (_, index) => ({
+			key: `F${String(index).padStart(3, "0")}`,
+			source: "Hello {PlayerName}",
+			de: "Hallo {Name}"
+		}));
+		yield* Effect.promise(() => writeLocalization(fixture.projectRoot, fixable));
+		fixture.update(fixable.map(({ key, source }, index) => occurrence(key, source, index)));
+		yield* Effect.gen(function* () {
+			const result = yield* (yield* GameTextIndexRefresh).refresh(fixture.request);
+			const join = result.localizationJoin;
+			const legacy = localizationQualityWorkspace(
+				undefined,
+				checkLocalizationTarget(result.corpus, join, result.evidence),
+				join
+			);
+			const indexed = localizationQualityWorkspaceOf(
+				undefined,
+				yield* result.localizationQuality!()
+			);
+			for (const request of [
+				{ target: join.target, filter: "all" as const },
+				{
+					target: join.target,
+					filter: "format_arguments" as const,
+					culture: join.cultures[1]!
+				}
+			]) {
+				const proposed = indexed.changes(request);
+				expect(proposed).toEqual(legacy.changes(request));
+				expect(proposed.status === "ready" && proposed.document.changes.length).toBe(100);
+				expect(proposed.status === "ready" && proposed.remaining).toBe(30);
+			}
+		}).pipe(Effect.provide(fixture.layer()));
+	}).pipe(Effect.scoped)
 );

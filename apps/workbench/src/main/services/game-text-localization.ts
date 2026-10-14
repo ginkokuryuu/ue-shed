@@ -63,7 +63,7 @@ import {
 	type LocalizationTargetEvidence,
 	type LocalizationTarget
 } from "@ue-shed/localization";
-import { Effect, Ref, Result, type Scope } from "effect";
+import { Cause, Effect, Exit, Fiber, Ref, Result, Semaphore, type Scope } from "effect";
 import type { ElectronDialogApi } from "../adapters/electron-dialog.js";
 import type { LocalFilesApi } from "../adapters/local-files.js";
 
@@ -120,10 +120,17 @@ export const makeGameTextLocalization = Effect.fn("Workbench.GameText.localizati
 		| {
 				join: LocalizationJoin;
 				document: GameTextRuleDocument | undefined;
-				model: ReturnType<typeof localizationQualityWorkspaceOf>;
+				scan: Fiber.Fiber<ReturnType<typeof localizationQualityWorkspaceOf>>;
 		  }
 		| undefined
 	>(undefined);
+	// Quality scans run in the service's scope, so a request that leaves does not stop them.
+	const serviceScope = yield* Effect.scope;
+	const qualityLock = yield* Semaphore.make(1);
+	const clearQuality = Effect.fn("Workbench.GameText.localization.clearQuality")(function* () {
+		const previous = yield* Ref.getAndSet(qualityCache, undefined);
+		if (previous) yield* Fiber.interrupt(previous.scan).pipe(Effect.forkIn(serviceScope));
+	});
 	const discovery = yield* Ref.make<
 		| {
 				readonly corpus: TextCorpus;
@@ -209,7 +216,7 @@ export const makeGameTextLocalization = Effect.fn("Workbench.GameText.localizati
 		yield* Ref.update(revision, (value) => value + 1);
 		yield* Ref.set(discovery, undefined);
 		yield* Ref.set(selected, undefined);
-		yield* Ref.set(qualityCache, undefined);
+		yield* clearQuality();
 		yield* Ref.set(baseline, undefined);
 		// On an unchanged package revision, retain the old target's pin until its replacement
 		// acquires the same immutable worker. It is unavailable through `selected` meanwhile.
@@ -402,26 +409,47 @@ export const makeGameTextLocalization = Effect.fn("Workbench.GameText.localizati
 		if (!retained || (request.culture && !retained.join.cultures.includes(request.culture)))
 			return undefined;
 		const document = yield* rules();
-		const cached = yield* Ref.get(qualityCache);
-		if (cached?.join === retained.join && cached.document === document) return cached.model;
-		const options = retained.review ? { review: retained.review.file } : {};
-		// Indexed targets check page by page and keep findings as columns.
-		const model = localizationQualityWorkspaceOf(
-			document ? evaluateGameTextSourceQuality(retained.corpus, document) : undefined,
-			retained.quality?.(options, document) ??
-				localizationQuality(
-					checkLocalizationTarget(
-						retained.corpus,
-						retained.join,
-						retained.evidence,
-						options,
-						document
-					),
-					retained.join
-				)
+		// One scan per selection and rules document, shared by every request that needs it.
+		const scan = yield* qualityLock.withPermits(1)(
+			Effect.gen(function* () {
+				const cached = yield* Ref.get(qualityCache);
+				if (cached?.join === retained.join && cached.document === document)
+					return cached.scan;
+				yield* clearQuality();
+				const options = retained.review ? { review: retained.review.file } : {};
+				const scan = yield* Effect.scoped(
+					Effect.gen(function* () {
+						// The scan pins the index itself while it reads.
+						yield* retained.borrow;
+						const source = document
+							? evaluateGameTextSourceQuality(retained.corpus, document)
+							: undefined;
+						// Indexed targets check page by page, yielding between pages.
+						return localizationQualityWorkspaceOf(
+							source,
+							retained.quality
+								? yield* retained.quality(options, document)
+								: localizationQuality(
+										checkLocalizationTarget(
+											retained.corpus,
+											retained.join,
+											retained.evidence,
+											options,
+											document
+										),
+										retained.join
+									)
+						);
+					})
+				).pipe(Effect.forkIn(serviceScope));
+				yield* Ref.set(qualityCache, { join: retained.join, document, scan });
+				return scan;
+			})
 		);
-		yield* Ref.set(qualityCache, { join: retained.join, document, model });
-		return model;
+		const exit = yield* Fiber.await(scan);
+		// A newer selection, rescan or rules change interrupted it; the caller asks again.
+		if (Exit.isFailure(exit) && Cause.hasInterruptsOnly(exit.cause)) return undefined;
+		return yield* exit;
 	});
 	const qualitySearch = Effect.fn("Workbench.GameText.localization.qualitySearch")(function* (
 		request: WorkspaceQualityRequest
@@ -811,7 +839,7 @@ export const makeGameTextLocalization = Effect.fn("Workbench.GameText.localizati
 				)
 			);
 		yield* Ref.set(selected, undefined);
-		yield* Ref.set(qualityCache, undefined);
+		yield* clearQuality();
 		yield* select(request.target);
 		yield* Effect.annotateCurrentSpan({ changes: request.changes.length });
 		return { status: "written" as const, relativePath: written.success.relativePath };

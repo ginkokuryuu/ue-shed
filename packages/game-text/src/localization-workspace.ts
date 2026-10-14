@@ -670,26 +670,35 @@ export function localizationQualityWorkspaceOf(
 			const changes: LocalizationChange[] = [];
 			const seen = new Set<string>();
 			let remaining = 0,
-				bytes = 0;
-			for (const { finding } of itemsAt(matched(request, eligibleAt))) {
-				const change = eligibleLocalizationChange(finding);
-				if (!change) continue;
-				const key = JSON.stringify([
-					change.target,
-					change.culture,
-					change.namespace,
-					change.key
-				]);
-				if (seen.has(key)) continue;
-				seen.add(key);
-				const size = new TextEncoder().encode(JSON.stringify(change)).length;
-				if (changes.length === 100 || bytes + size > 1_000_000) {
-					remaining++;
-					continue;
+				bytes = 0,
+				read = 0;
+			const eligible = matched(request, eligibleAt);
+			// Only format-argument findings suggest changes: one per line and culture, and a line's
+			// identity is unique, so changes past the first 100 are counted without reading lines.
+			while (read < eligible.length && changes.length < 100) {
+				const batch = itemsAt(eligible.slice(read, read + 128));
+				read += batch.length;
+				for (const { finding } of batch) {
+					const change = eligibleLocalizationChange(finding);
+					if (!change) continue;
+					const key = JSON.stringify([
+						change.target,
+						change.culture,
+						change.namespace,
+						change.key
+					]);
+					if (seen.has(key)) continue;
+					seen.add(key);
+					const size = new TextEncoder().encode(JSON.stringify(change)).length;
+					if (changes.length === 100 || bytes + size > 1_000_000) {
+						remaining++;
+						continue;
+					}
+					changes.push(change);
+					bytes += size;
 				}
-				changes.push(change);
-				bytes += size;
 			}
+			remaining += eligible.length - read;
 			// File authority stays in the host. A proposal records complete change identities, without filesystem paths.
 			return {
 				status: "ready",

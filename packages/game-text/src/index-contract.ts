@@ -85,13 +85,14 @@ export interface GameTextIndexRefreshResult {
 	readonly review: LocalizationReviewSnapshot;
 	/**
 	 * Localization quality checked over the index in bounded pages, with findings kept as columns.
-	 * Absent on adapters without an index; hosts then check `localizationJoin` in memory.
+	 * The scan yields between pages and can be interrupted. Absent on adapters without an index;
+	 * hosts then check `localizationJoin` in memory.
 	 */
 	readonly localizationQuality?:
 		| ((
 				options?: LocalizationCheckOptions,
 				ruleDocument?: GameTextRuleDocument
-		  ) => LocalizationQuality)
+		  ) => Effect.Effect<LocalizationQuality>)
 		| undefined;
 }
 

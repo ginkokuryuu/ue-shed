@@ -1,3 +1,4 @@
+import { Effect } from "effect";
 import {
 	LocalizationIdentity,
 	TextKey,
@@ -123,7 +124,10 @@ function unitIndex(data: JoinedQueryData) {
 }
 
 /** Groups duplicate sources from line columns and shared strings, without hydrating lines. */
-function duplicateSources(data: JoinedQueryData, cultures: readonly CultureCode[]) {
+const duplicateSources = Effect.fn("GameText.localizationQuality.duplicates")(function* (
+	data: JoinedQueryData,
+	cultures: readonly CultureCode[]
+) {
 	const column = (name: string) => runJoinedQuery(u32(data.joined.layer, name));
 	const namespaces = column("line.namespace"),
 		keys = column("line.key"),
@@ -153,22 +157,24 @@ function duplicateSources(data: JoinedQueryData, cultures: readonly CultureCode[
 				})
 			);
 		}
+		yield* Effect.yieldNow;
 	}
 	return groups.finish();
-}
+});
 
 /**
  * Localization quality over a joined index. Lines are checked in bounded pages and dropped;
  * findings are kept as columns. Pages, focus and proposals re-check only the rows they show, with
- * the same line checks `checkLocalizationTarget` runs.
+ * the same line checks `checkLocalizationTarget` runs. The scan yields between pages, so a host
+ * keeps serving other requests and can interrupt it.
  */
-export function indexedLocalizationQuality(
+export const indexedLocalizationQuality = Effect.fn("GameText.localizationQuality")(function* (
 	joined: JoinedTargetReader,
 	corpus: Pick<TextCorpus, "status" | "coverage">,
 	evidence: LocalizationTargetEvidence,
 	options: LocalizationCheckOptions = {},
 	ruleDocument?: GameTextRuleDocument
-): LocalizationQuality {
+) {
 	const data = new JoinedQueryData(joined);
 	const target = data.joined.meta.input.target;
 	const join = {
@@ -186,7 +192,7 @@ export function indexedLocalizationQuality(
 		target: target.name,
 		options,
 		enabled,
-		duplicates: duplicateSources(data, target.cultures)
+		duplicates: yield* duplicateSources(data, target.cultures)
 	};
 	const units = unitIndex(data);
 	/** One line's findings in report order, and its check diagnostics. */
@@ -232,6 +238,7 @@ export function indexedLocalizationQuality(
 			)
 		);
 	})();
+	yield* Effect.yieldNow;
 	const rank = new Uint32Array(count);
 	for (let index = 0; index < count; index++) rank[order[index]!] = index;
 
@@ -306,6 +313,7 @@ export function indexedLocalizationQuality(
 				recordLimit(diagnostic.culture, diagnostic.code, seen);
 			}
 		}
+		yield* Effect.yieldNow;
 	}
 	rowStart[count] = storedFacts.length;
 
@@ -418,5 +426,5 @@ export function indexedLocalizationQuality(
 			coverage: corpus.coverage,
 			lineOfUnit
 		}
-	};
-}
+	} satisfies LocalizationQuality;
+});
