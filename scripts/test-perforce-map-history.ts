@@ -112,41 +112,63 @@ export interface PerforceMapHistoryFixture {
 	stop: () => Promise<void>;
 }
 
+interface PinnedBinaryPair {
+	directory: string;
+	p4: PinnedBinary;
+	p4d: PinnedBinary;
+}
+
+// Each pin matches the SHA256SUMS that Perforce publishes in the release directory.
 const platformBinaries = {
-	darwin: {
-		directory: "bin.darwin90x86_64",
-		p4: {
-			name: "p4",
-			sha256: "a539b30d5b6ee80685bfb691b17e6c1ef50bfcaa9f1c6c7034301f423ab1224f"
-		},
-		p4d: {
-			name: "p4d",
-			sha256: "cfc32bbbe57476fcdd4ff9d0f49ae429e91d46751a16c99dd5ec4c7123882474"
-		}
-	},
 	linux: {
 		directory: "bin.linux26x86_64",
 		p4: {
 			name: "p4",
-			sha256: "a539b30d5b6ee80685bfb691b17e6c1ef50bfcaa9f1c6c7034301f423ab1224f"
+			sha256: "bfbb838cc5794a6a678df65e52841004ca7e192119a1c108adac3d47f6ccb4fc"
 		},
 		p4d: {
 			name: "p4d",
-			sha256: "cfc32bbbe57476fcdd4ff9d0f49ae429e91d46751a16c99dd5ec4c7123882474"
+			sha256: "e2c1e11865774782eb37483c0a6f6ebdfc09d9dca6f44880ae59059cdf7b1847"
 		}
 	},
 	win32: {
 		directory: "bin.ntx64",
 		p4: {
 			name: "p4.exe",
-			sha256: "1fe2730acda5df7dee244aa4d22d6dfe3698176a2d127eb801ba94a9cf41d9b4"
+			sha256: "f7962fec744cfc809f53338a19ebc9bb718bf76fb349a9eb0229f301f4b202a3"
 		},
 		p4d: {
 			name: "p4d.exe",
-			sha256: "025b87752de37047ed1398f31b88c6f6c6d62086e74ca6600fc1617fd24f22e1"
+			sha256: "eee7ac13927872282bcb3e4b037af960f2ec0905a1e6747cb343e77ac1e7091d"
 		}
 	}
-};
+} satisfies Partial<Record<NodeJS.Platform, PinnedBinaryPair>>;
+
+// Perforce publishes a separate macOS directory per architecture.
+const macosBinaries = {
+	arm64: {
+		directory: "bin.macosx12arm64",
+		p4: {
+			name: "p4",
+			sha256: "9ab9a5e0ed867c1fd6f271fd99cf69cc27d1e072b3559643dabf15d48efb29f5"
+		},
+		p4d: {
+			name: "p4d",
+			sha256: "fd125175d1a2f5e22f97aa842a65a81d5dedfd417b98cac7833f3b7302ffe3ba"
+		}
+	},
+	x64: {
+		directory: "bin.macosx1015x86_64",
+		p4: {
+			name: "p4",
+			sha256: "3386398f9714d8aaf05ba633d1c68396880a1fc14e45a9444020f306d307d6dd"
+		},
+		p4d: {
+			name: "p4d",
+			sha256: "2044e69cf81e6991dfa0a2c0b590e9e082ead2d345d6c05cf3446678e5ce3022"
+		}
+	}
+} satisfies Partial<Record<NodeJS.Architecture, PinnedBinaryPair>>;
 
 function assert(condition: boolean, message: string): asserts condition {
 	if (!condition) throw new Error(message);
@@ -221,6 +243,25 @@ async function cachePinnedBinary(directory: string, binary: PinnedBinary): Promi
 	return destination;
 }
 
+function pinnedBinaryPair(): PinnedBinaryPair {
+	switch (process.platform) {
+		case "darwin":
+			if (process.arch === "arm64") return macosBinaries.arm64;
+			if (process.arch === "x64") return macosBinaries.x64;
+			throw new Error(
+				`No pinned Perforce binary pair is configured for macOS on ${process.arch}. Set both explicit binary paths.`
+			);
+		case "linux":
+			return platformBinaries.linux;
+		case "win32":
+			return platformBinaries.win32;
+		default:
+			throw new Error(
+				`No pinned Perforce binary pair is configured for ${process.platform}. Set both explicit binary paths.`
+			);
+	}
+}
+
 async function resolveBinaries(): Promise<{ p4: string; p4d: string }> {
 	const configuredP4 = process.env.UE_SHED_PERFORCE_MAP_HISTORY_P4_EXECUTABLE;
 	const configuredP4d = process.env.UE_SHED_PERFORCE_MAP_HISTORY_P4D_EXECUTABLE;
@@ -233,15 +274,10 @@ async function resolveBinaries(): Promise<{ p4: string; p4d: string }> {
 		report("RUN ", "using explicitly configured isolated p4 and p4d binaries");
 		return { p4: configuredP4, p4d: configuredP4d };
 	}
-	// SAFETY: unsupported Node platforms intentionally resolve to undefined and are rejected below.
-	const platform = platformBinaries[process.platform as keyof typeof platformBinaries];
-	assert(
-		platform !== undefined,
-		`No pinned Perforce binary pair is configured for ${process.platform}. Set both explicit binary paths.`
-	);
+	const pair = pinnedBinaryPair();
 	return {
-		p4: await cachePinnedBinary(platform.directory, platform.p4),
-		p4d: await cachePinnedBinary(platform.directory, platform.p4d)
+		p4: await cachePinnedBinary(pair.directory, pair.p4),
+		p4d: await cachePinnedBinary(pair.directory, pair.p4d)
 	};
 }
 

@@ -8188,6 +8188,49 @@
 				}
 			]
 		},
+		"SavedAssetMissingGatherableText": {
+			"type": "object",
+			"properties": {
+				"namespace": {
+					"type": "string"
+				},
+				"key": {
+					"type": "string"
+				},
+				"source": {
+					"type": "string"
+				},
+				"site": {
+					"type": "string"
+				}
+			},
+			"required": ["namespace", "key", "source", "site"],
+			"additionalProperties": false
+		},
+		"SavedAssetGatherCoverage": {
+			"type": "object",
+			"properties": {
+				"runtimeSites": {
+					"$ref": "#/$defs/UAssetInspectionNonNegativeInt"
+				},
+				"missing": {
+					"$ref": "#/$defs/UAssetInspectionNonNegativeInt"
+				},
+				"missingSamples": {
+					"type": "array",
+					"items": {
+						"$ref": "#/$defs/SavedAssetMissingGatherableText"
+					},
+					"allOf": [
+						{
+							"maxItems": 3
+						}
+					]
+				}
+			},
+			"required": ["runtimeSites", "missing", "missingSamples"],
+			"additionalProperties": false
+		},
 		"SavedAssetPackageTextRecord": {
 			"type": "object",
 			"properties": {
@@ -8252,6 +8295,9 @@
 							"maxItems": 3
 						}
 					]
+				},
+				"gatherCoverage": {
+					"$ref": "#/$defs/SavedAssetGatherCoverage"
 				}
 			},
 			"required": [

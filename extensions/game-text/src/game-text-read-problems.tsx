@@ -12,32 +12,27 @@ const diagnosticLabels = {
 	package_inspection_failed: "Asset could not be read",
 	package_partially_decoded: "Asset not fully read",
 	unsupported_text_history: "Text field not decoded",
-	package_not_gatherable: "Excluded because Unreal does not gather it"
+	package_not_gatherable: "Excluded because Unreal does not gather it",
+	gatherable_text_not_decoded: "Gathered text not read"
 };
 
-/** Scan-wide coverage stays available from either view without a summary strip. */
+/**
+ * Scan-wide coverage stays available from either view without a summary strip. It only appears
+ * when text Unreal gathers may be missing: excluded assets match Unreal's gather, and properties
+ * that hold no gatherable text are not a coverage problem.
+ */
 export function ReadProblems(props: { readonly summary: TextCorpusQuerySummary }) {
 	const id = createUniqueId();
 	const unread = () =>
 		props.summary.coverage.partialPackages + props.summary.coverage.failedPackages;
+	const missing = () => props.summary.coverage.missingGatherableText ?? 0;
 	const excluded = () => props.summary.notGatherablePackages ?? 0;
-	const label = () => {
-		if (unread() > 0) return textCountLabel(unread(), "asset") + " not fully read";
-		if (excluded() > 0) return textCountLabel(excluded(), "asset") + " excluded from gather";
-		const unsupported = props.summary.coverage.unsupportedTextProperties;
-		return unsupported > 0
-			? textCountLabel(unsupported, "text field") + " not decoded"
-			: "Read problems";
-	};
+	const label = () =>
+		missing() > 0
+			? textCountLabel(missing(), "line") + " not read"
+			: textCountLabel(unread(), "asset") + " not fully read";
 	return (
-		<Show
-			when={
-				props.summary.status === "partial" ||
-				excluded() > 0 ||
-				props.summary.diagnosticCount > 0 ||
-				props.summary.coverage.unsupportedTextProperties > 0
-			}
-		>
+		<Show when={props.summary.status === "partial"}>
 			{" · "}
 			<AnchoredPopover
 				id={id}
@@ -49,7 +44,7 @@ export function ReadProblems(props: { readonly summary: TextCorpusQuerySummary }
 						{...triggerProps}
 						type="button"
 						aria-label="Read problems"
-						title="Inspect excluded assets, incomplete reads and text fields that could not be decoded."
+						title="Inspect text Unreal gathers that the scan could not read."
 						{...stylex.attrs(styles.readProblemsTrigger)}
 					>
 						{label()}
@@ -57,15 +52,15 @@ export function ReadProblems(props: { readonly summary: TextCorpusQuerySummary }
 				)}
 			>
 				<p {...stylex.attrs(styles.problemMessage)}>
-					{props.summary.status === "partial"
-						? "Only part of the project's saved text was read. " +
-							"Writing checks cover the lines that were read."
-						: "Saved text was read with warnings."}
+					{missing() > 0
+						? "Some text Unreal gathers from the project's saved assets was not read. "
+						: "Some of the project's saved text may not have been read. "}
+					Writing checks cover the lines that were read.
 				</p>
-				<Show when={excluded() > 0}>
-					<p {...stylex.attrs(styles.problemMessage)}>
-						{textCountLabel(excluded(), "asset")} excluded because Unreal does not
-						gather them. Their text payloads were not inspected.
+				<Show when={missing() > 0}>
+					<p {...stylex.attrs(styles.problemMessage, styles.warning)}>
+						{textCountLabel(missing(), "line")} listed in the assets' gather data could
+						not be read.
 					</p>
 				</Show>
 				<p {...stylex.attrs(styles.problemMessage)}>
@@ -75,13 +70,10 @@ export function ReadProblems(props: { readonly summary: TextCorpusQuerySummary }
 					{textCountLabel(props.summary.coverage.failedPackages, "asset")} could not be
 					read
 				</p>
-				<Show when={props.summary.coverage.unsupportedTextProperties > 0}>
-					<p {...stylex.attrs(styles.problemMessage, styles.warning)}>
-						{textCountLabel(
-							props.summary.coverage.unsupportedTextProperties,
-							"text field"
-						)}{" "}
-						could not be decoded. Some lines may be missing.
+				<Show when={excluded() > 0}>
+					<p {...stylex.attrs(styles.problemMessage)}>
+						{textCountLabel(excluded(), "asset")} skipped because Unreal does not gather
+						them either.
 					</p>
 				</Show>
 				<p {...stylex.attrs(styles.problemMessage)}>

@@ -7,6 +7,7 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::mpsc;
 
 use serde::{Deserialize, Serialize};
+use uasset_inspection::gather_coverage::{DecodedTextKeys, GatherCoverage, gather_coverage};
 use uasset_inspection::projection::{
     TextAssetProjection, TextureRecord, project_text_asset, project_texture_asset,
     text_feature_version_gap,
@@ -16,7 +17,9 @@ use uasset_inspection::saved_world::{
     resolve_saved_world_actors,
 };
 use uasset_inspection::saved_world_wire::saved_world_actor;
-use uasset_inspection::text_wire::{text_coverage_gap, text_occurrence};
+use uasset_inspection::text_wire::{
+    gather_coverage as gather_coverage_record, text_coverage_gap, text_occurrence,
+};
 use uasset_inspection::texture_wire::texture_record;
 use uasset_parser::asset::{AssetDecodeContext, AssetErrorKind, decode_export};
 use uasset_parser::package::{
@@ -921,7 +924,9 @@ fn project_one_path(
         occurrences: Vec::new(),
         gap_counts: TextGapCounts::default(),
         gap_samples: Vec::new(),
+        gather_coverage: None,
     };
+    let mut decoded_keys = DecodedTextKeys::default();
     for export in &package.exports {
         checkpoint(cancellation, "parsing")?;
         if matches!(kind, ProjectionKind::Texture)
@@ -937,6 +942,7 @@ fn project_one_path(
                 ProjectionKind::Text | ProjectionKind::TextPackages => {
                     let projection = project_text_asset(&package, &asset);
                     checkpoint(cancellation, "inspection")?;
+                    decoded_keys.record(&projection.occurrences);
                     occurrence_count += projection.occurrences.len() as u64;
                     coverage_gap_count += projection.coverage_gaps.len() as u64;
                     if matches!(kind, ProjectionKind::TextPackages) {
@@ -984,7 +990,18 @@ fn project_one_path(
         }
     }
     checkpoint(cancellation, "inspection")?;
-    let partial = !diagnostics.is_empty() || coverage_gap_count != 0;
+    // Undecoded properties rarely hold text. When the package's own gather table can be read,
+    // text coverage is partial only if a runtime entry from that table was not decoded.
+    let gather = matches!(kind, ProjectionKind::Text | ProjectionKind::TextPackages)
+        .then(|| {
+            gather_coverage(&bytes, &package, &path_string, &decoded_keys)
+                .ok()
+                .flatten()
+        })
+        .flatten();
+    let partial =
+        text_coverage_partial(gather.as_ref(), !diagnostics.is_empty(), coverage_gap_count);
+    record.gather_coverage = gather.map(gather_coverage_record);
     match kind {
         ProjectionKind::TextPackages => {
             record.status = if partial {
@@ -2178,6 +2195,19 @@ fn read_saved_world_package(
     })
 }
 
+/// With a readable gather table, only missing runtime gatherable text is partial. Packages saved
+/// before the table existed, or whose table cannot be read, keep the decode-error-or-gap rule.
+fn text_coverage_partial(
+    gather: Option<&GatherCoverage>,
+    decode_errors: bool,
+    coverage_gaps: u64,
+) -> bool {
+    match gather {
+        Some(gather) => gather.missing != 0,
+        None => decode_errors || coverage_gaps != 0,
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::{saved_world_with_cancellation, scan_header_cache_needs_write};
@@ -2294,6 +2324,89 @@ mod tests {
         assert_eq!(parallel.code, serial.code);
         assert_eq!(parallel.message, serial.message);
         assert_eq!(parallel.code, "invalid_request");
+    }
+
+    #[test]
+    fn package_text_status_follows_gatherable_text_instead_of_decoder_gaps() {
+        use crate::protocol_result::{
+            ProjectionStatus, ResultFrame, SavedAssetPackageTextEvent,
+            SavedAssetTextExtractionEvent,
+        };
+        for engine in ["4.27", "5.3"] {
+            let project_root = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+                .join("../../fixtures/legacy-unreal-project/Generated")
+                .join(engine);
+            for kind in ["extract_text_packages", "extract_text"] {
+                let request: Request = serde_json::from_value(serde_json::json!({
+                    "contract": { "name": "uasset-io", "version": { "major": 1, "minor": 10 } },
+                    "limits": {},
+                    "operation": {
+                        "kind": kind,
+                        "projectRoot": project_root.to_string_lossy(),
+                        "paths": ["Content/Legacy/DT_LegacyText.uasset"]
+                    },
+                    "requestId": "gather-status"
+                }))
+                .expect("fixture text request");
+                let output =
+                    super::extract_text_with_cancellation(&request, &CancellationToken::new())
+                        .unwrap();
+                // NativeVectors cannot be decoded, but every gatherable line was.
+                let status = output.results.iter().find_map(|result| match result {
+                    ResultFrame::ExtractTextPackages {
+                        event: SavedAssetPackageTextEvent::Package { record },
+                    } => {
+                        assert_eq!(
+                            record
+                                .gap_counts
+                                .legacy_container_element_without_type_information,
+                            1
+                        );
+                        let gather = record.gather_coverage.as_ref().expect("gather coverage");
+                        assert_eq!((gather.runtime_sites, gather.missing), (8, 0));
+                        Some(record.status.clone())
+                    }
+                    ResultFrame::ExtractText {
+                        event: SavedAssetTextExtractionEvent::TextPackage { status, .. },
+                    } => Some(status.clone()),
+                    _ => None,
+                });
+                assert_eq!(status, Some(ProjectionStatus::Complete), "{engine} {kind}");
+            }
+        }
+    }
+
+    #[test]
+    fn text_status_falls_back_to_decoder_evidence_without_a_gather_table() {
+        use uasset_inspection::gather_coverage::{
+            DecodedTextKeys, GatherCoverage, gather_coverage,
+        };
+        let checked = GatherCoverage {
+            runtime_sites: 2,
+            ..GatherCoverage::default()
+        };
+        assert!(!super::text_coverage_partial(Some(&checked), true, 50));
+        let missing = GatherCoverage {
+            missing: 1,
+            ..checked
+        };
+        assert!(super::text_coverage_partial(Some(&missing), false, 0));
+        assert!(super::text_coverage_partial(None, false, 1));
+        assert!(super::text_coverage_partial(None, true, 0));
+        assert!(!super::text_coverage_partial(None, false, 0));
+        // Packages saved before VER_UE4_SERIALIZE_TEXT_IN_PACKAGES have no table to compare.
+        let (bytes, mut package) = crate::test_support::legacy_text_package(0);
+        package.summary.gatherable_text_data = None;
+        assert_eq!(
+            gather_coverage(
+                &bytes,
+                &package,
+                "Legacy.uasset",
+                &DecodedTextKeys::default()
+            )
+            .unwrap(),
+            None
+        );
     }
 
     #[test]

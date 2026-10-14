@@ -52,7 +52,15 @@ describe("package text records", () => {
 		const packages = records.filter((event) => event.event === "text_package_record");
 		expect(packages).toHaveLength(recipe.packages);
 		expect(packages.every((record) => record.gapSamples.length <= 3)).toBe(true);
-		expect(compact.coverage.unsupportedTextProperties).toBe(recipe.gaps);
+		// Synthetic gaps mark their packages partial, so their histories count as unread text fields.
+		expect(compact.coverage.unsupportedTextProperties).toBe(
+			events.filter(
+				(event) =>
+					event.event === "text_coverage_gap" &&
+					event.coverage_gap.reason === "unsupported_text_history"
+			).length
+		);
+		expect(compact.coverage.partialPackages).toBe(recipe.partialPackages);
 	});
 
 	it("keeps the first sample and prioritizes later unsupported histories", () => {
@@ -213,7 +221,10 @@ describe("package text records", () => {
 		if (field === "occurrenceId") Object.assign(occurrence, { id: "Changed" });
 		if (field === "multiplicity")
 			Object.assign(unit, { occurrences: [...unit.occurrences, occurrence] });
-		if (field === "gaps") Object.assign(actual.coverage, { unsupportedTextProperties: 0 });
+		if (field === "gaps")
+			Object.assign(actual.coverage, {
+				unsupportedTextProperties: actual.coverage.unsupportedTextProperties + 1
+			});
 		if (field === "diagnostics") Object.assign(actual, { diagnostics: [] });
 		if (field === "packageCoverage") Object.assign(actual, { packageCoverage: [] });
 		expect(compareTextCorpora(expected, actual).equal).toBe(false);

@@ -35,6 +35,8 @@ export const PackageTextInventoryEntry = Schema.Struct({
 	headerData: ProjectIndexHeader.fields.headerData
 });
 export type PackageTextInventoryEntry = typeof PackageTextInventoryEntry.Type;
+/** Bump when package text columns change; older shards are read again instead of decoded. */
+export const PACKAGE_TEXT_FORMAT = "package-text-v2";
 export const PACKAGE_TEXT_SHARDS = 256;
 export function packageTextShard(path: string) {
 	let hash = 2166136261;
@@ -65,7 +67,7 @@ export function packageTextSelection(
 		() => []
 	);
 	const hashes = Array.from({ length: PACKAGE_TEXT_SHARDS }, () =>
-		createHash("sha256").update("package-text-v1")
+		createHash("sha256").update(PACKAGE_TEXT_FORMAT)
 	);
 	let previous: string | undefined;
 	for (const entry of inventory) {
@@ -93,7 +95,7 @@ export function packageTextSelection(
 	return buckets.map((entries, shard) => ({
 		name: shardName(shard),
 		entries,
-		key: `package-text-v1:${shard}:${hashes[shard]!.digest("hex")}`
+		key: `${PACKAGE_TEXT_FORMAT}:${shard}:${hashes[shard]!.digest("hex")}`
 	}));
 }
 
@@ -350,8 +352,9 @@ export const refreshPackageTextLayer = Effect.fn("PackageText.refresh")(function
 			: undefined;
 	let readPackages = 0;
 	for (const shard of changed) {
+		// A shard written in an older column format is read again rather than decoded.
 		const old =
-			reader && manifest.active[shard.name]
+			reader && manifest.active[shard.name]?.startsWith(`${PACKAGE_TEXT_FORMAT}:`)
 				? yield* decodePackageTextColumns(yield* reader.layer(shard.name))
 				: [];
 		const byPath = new Map(old.map((record) => [record.path, record]));

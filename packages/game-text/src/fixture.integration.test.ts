@@ -24,13 +24,14 @@ describe.skipIf(!executable)("game text fixture corpus", () => {
 			// fixture contributes one localized pin label, while the richer review Blueprint adds
 			// saved variable/component categories, including Review|Settings. The StringTable reference contributes
 			// one additional unit and occurrence with its table/key identity. The localization target's
-			// String Table, DataTable and data asset add twenty-two localized units and occurrences.
-			discoveredPackages: 83,
-			inspectedPackages: 83,
+			// String Table, DataTable and data asset add twenty-two localized units and occurrences, and
+			// the user-defined enum adds its two display names.
+			discoveredPackages: 84,
+			inspectedPackages: 84,
 			failedPackages: 0,
-			textUnits: 62,
-			textOccurrences: 71,
-			resolvedOccurrences: 71,
+			textUnits: 64,
+			textOccurrences: 73,
+			resolvedOccurrences: 73,
 			unsupportedTextProperties: 0
 		});
 		const holdMatches = searchTextCorpus(corpus, "Hold to skip");

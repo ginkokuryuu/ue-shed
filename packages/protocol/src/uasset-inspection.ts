@@ -316,7 +316,8 @@ export const SavedAssetInspection = Schema.Struct({
 					Schema.Struct({
 						name: Schema.String,
 						value: Schema.Int,
-						display_name: Schema.optional(Schema.String)
+						// The saved inspection writes null; generic inspection omits the key.
+						display_name: Schema.optionalKey(Schema.NullOr(Schema.String))
 					})
 				),
 				row_count: NonNegativeInt
@@ -330,8 +331,8 @@ export const SavedAssetInspection = Schema.Struct({
 					Schema.Struct({
 						name: Schema.String,
 						type: Schema.String,
-						referenced_path: Schema.optional(Schema.String),
-						display_name: Schema.optional(Schema.String)
+						referenced_path: Schema.optionalKey(Schema.NullOr(Schema.String)),
+						display_name: Schema.optionalKey(Schema.NullOr(Schema.String))
 					})
 				),
 				properties: Schema.Array(SavedProperty).pipe(
@@ -633,7 +634,27 @@ export type SavedAssetTextExtractionEvent = Schema.Schema.Type<
 	typeof SavedAssetTextExtractionEvent
 >;
 
-/** v1.8 opt-in package evidence. Sampling matches the legacy corpus fold exactly. */
+export const SavedAssetMissingGatherableText = Schema.Struct({
+	namespace: Schema.String,
+	key: Schema.String,
+	source: Schema.String,
+	site: Schema.String
+}).annotate({ identifier: "SavedAssetMissingGatherableText" });
+export type SavedAssetMissingGatherableText = typeof SavedAssetMissingGatherableText.Type;
+
+/** v1.10: decoded text checked against the package's own gatherable text table. */
+export const SavedAssetGatherCoverage = Schema.Struct({
+	runtimeSites: NonNegativeInt,
+	missing: NonNegativeInt,
+	missingSamples: Schema.Array(SavedAssetMissingGatherableText).check(Schema.isMaxLength(3))
+}).annotate({ identifier: "SavedAssetGatherCoverage" });
+export type SavedAssetGatherCoverage = typeof SavedAssetGatherCoverage.Type;
+
+/**
+ * v1.8 opt-in package evidence. Sampling matches the legacy corpus fold exactly. From v1.10,
+ * `gatherCoverage` is present when the package's gather table was read; status then reflects
+ * missing runtime gatherable text rather than decoder gaps.
+ */
 export const SavedAssetPackageTextRecord = Schema.Struct({
 	event: Schema.Literal("text_package_record"),
 	fileBytes: NonNegativeInt,
@@ -648,7 +669,8 @@ export const SavedAssetPackageTextRecord = Schema.Struct({
 		feature_unavailable_for_engine_version: NonNegativeInt,
 		property_decoder_rejected: NonNegativeInt
 	}),
-	gapSamples: Schema.Array(SavedAssetTextCoverageGap).check(Schema.isMaxLength(3))
+	gapSamples: Schema.Array(SavedAssetTextCoverageGap).check(Schema.isMaxLength(3)),
+	gatherCoverage: Schema.optionalKey(SavedAssetGatherCoverage)
 }).annotate({ identifier: "SavedAssetPackageTextRecord" });
 export type SavedAssetPackageTextRecord = typeof SavedAssetPackageTextRecord.Type;
 

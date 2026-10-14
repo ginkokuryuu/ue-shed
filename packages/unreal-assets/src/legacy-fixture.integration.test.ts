@@ -209,11 +209,8 @@ for (const version of legacyVersions) {
 			]);
 			const packages = events.filter((event) => event.event === "text_package");
 			expect(packages).toHaveLength(3);
-			for (const event of packages) {
-				expect(event.status).toBe(
-					event.path.endsWith("DT_LegacyText.uasset") ? "partial" : "complete"
-				);
-			}
+			// The native map gap is reported, but every line in the gather table was decoded.
+			for (const event of packages) expect(event.status).toBe("complete");
 		});
 	});
 }

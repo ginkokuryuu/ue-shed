@@ -77,6 +77,22 @@ existing shapes. Saved scans request this minor through `headerData: true`; publ
 queries request minor 9. A missing optional field is an upgrade requirement before pruning,
 not evidence that the package contains no text. The package-record operation remains minor 8.
 
+Minor version 1.10 adds optional `gatherCoverage` to `text_package_record`. The worker reads the
+package summary's gatherable text table (the text Unreal's localization gather collects from that
+package) and checks each runtime, non-editor-only site against the decoded occurrences by
+namespace and key. `runtimeSites` counts those sites, `missing` counts sites no occurrence matched,
+and `missingSamples` keeps the first three with their source string and Unreal site description.
+Whenever the worker reads the table, `status` is `partial` only if `missing` is non-zero:
+undecodable properties that hold no gatherable text no longer make a package partial, and
+`gapCounts` and `gapSamples` remain detail. The worker reads the table only when Unreal's asset gather
+would (`CalculatePackageLocCacheState`); packages Unreal loads instead, such as Blueprints with
+bytecode, which are saved without a table, keep the decode-error-or-gap rule, as do packages
+saved before the table existed and unreadable tables. The worker decides status before negotiation and
+strips `gatherCoverage` below minor 10, so a minor 8 or 9 record can be `complete` with non-zero
+gaps, and a missing field does not say which rule applied. The status rule also applies to
+`text_package` events and terminal partial outcomes; the gather table cannot see Blueprint script
+bytecode text, so `complete` still does not certify parity with a fresh gather.
+
 Result frames use an explicit result kind. Generic inspection, authoring, scan, compact text,
 compact texture, Blueprint graph, and saved-world values each have a named schema; there is no
 untyped result field.

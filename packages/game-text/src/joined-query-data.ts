@@ -1,4 +1,9 @@
-import { SavedAssetPackageTextEvent } from "@ue-shed/unreal-assets";
+import {
+	SavedAssetPackageTextEvent,
+	type SavedAssetMissingGatherableText,
+	type SavedAssetPackageTextRecord,
+	type SavedAssetTextCoverageGap
+} from "@ue-shed/unreal-assets";
 import { decodeWtf8, encodeWtf8 } from "./wtf8.js";
 import { relative, resolve } from "node:path";
 import { Cache, Effect, Schema } from "effect";
@@ -686,26 +691,75 @@ export class JoinedQueryData {
 			})
 		};
 	}
+	/** Rebuilds the stored coverage evidence of one inspected package, without its occurrences. */
+	private packageRecord(shard: number, row: number, path: string): SavedAssetPackageTextRecord {
+		const record = emptyPackageTextRecord(path);
+		const gapCounts = { ...record.gapCounts };
+		for (let index = 0; index < packageTextGapReasons.length; index++)
+			gapCounts[packageTextGapReasons[index]!] = this.packageColumn(
+				shard,
+				`package.gap${index}`
+			)[row]!;
+		const gapStarts = this.packageColumn(shard, "package.gap_start");
+		const gapSamples: SavedAssetTextCoverageGap[] = [];
+		for (let gap = gapStarts[row]!; gap < gapStarts[row + 1]!; gap++) {
+			const values = this.strings([
+				this.packageColumn(shard, "gap.object")[gap]!,
+				this.packageColumn(shard, "gap.property")[gap]!
+			]);
+			gapSamples.push({
+				reason: packageTextGapReasons[this.packageColumn(shard, "gap.reason")[gap]!]!,
+				object_path: values[0]!,
+				property_path: values[1]!
+			});
+		}
+		const missingStarts = this.packageColumn(shard, "package.missing_start");
+		const missingSamples: SavedAssetMissingGatherableText[] = [];
+		for (let index = missingStarts[row]!; index < missingStarts[row + 1]!; index++) {
+			const [namespace, key, source, site] = this.strings([
+				this.packageColumn(shard, "missing.namespace")[index]!,
+				this.packageColumn(shard, "missing.key")[index]!,
+				this.packageColumn(shard, "missing.source")[index]!,
+				this.packageColumn(shard, "missing.site")[index]!
+			]);
+			missingSamples.push({ namespace: namespace!, key: key!, source: source!, site: site! });
+		}
+		return {
+			...record,
+			status: this.packageColumn(shard, "package.status")[row] === 1 ? "partial" : "complete",
+			decodeErrors: this.packageColumn(shard, "package.decode_errors")[row]!,
+			gapCounts,
+			gapSamples,
+			...(this.packageColumn(shard, "package.gather")[row] === 1
+				? {
+						gatherCoverage: {
+							runtimeSites: this.packageColumn(shard, "package.gather_sites")[row]!,
+							missing: this.packageColumn(shard, "package.gather_missing")[row]!,
+							missingSamples
+						}
+					}
+				: undefined)
+		};
+	}
 	metadata() {
 		let discoveredPackages = 0,
 			inspectedPackages = 0,
 			partialPackages = 0,
 			failedPackages = 0,
 			unsupportedTextProperties = 0,
+			missingGatherableText = 0,
 			diagnosticCount = 0,
 			notGatherablePackages = 0,
 			resolvedOccurrences = 0;
 		for (let shard = 0; shard < this.joined.meta.packageNames.length; shard++) {
 			const statuses = this.packageColumn(shard, "package.status");
-			const gaps = packageTextGapReasons.map((_, index) =>
-				this.packageColumn(shard, `package.gap${index}`)
-			);
+			const histories = this.packageColumn(shard, "package.gap0");
+			const missing = this.packageColumn(shard, "package.gather_missing");
 			const starts = this.packageColumn(shard, "package.gap_start");
+			const missingStarts = this.packageColumn(shard, "package.missing_start");
 			const reasons = this.packageColumn(shard, "gap.reason");
 			discoveredPackages += statuses.length;
 			for (let row = 0; row < statuses.length; row++) {
-				const total = gaps.reduce((sum, column) => sum + column[row]!, 0);
-				unsupportedTextProperties += total;
 				if (statuses[row]! < 2) inspectedPackages++;
 				if (statuses[row] === 3) {
 					failedPackages++;
@@ -715,13 +769,15 @@ export class JoinedQueryData {
 					notGatherablePackages++;
 					diagnosticCount++;
 				}
-				if (statuses[row] === 1 || total > 0) {
-					partialPackages++;
-					diagnosticCount++;
-				}
-				if (total > 0)
-					for (let gap = starts[row]!; gap < starts[row + 1]!; gap++)
-						if (reasons[gap] === 0) diagnosticCount++;
+				// Gaps in complete packages are detail; the reader's status decides coverage.
+				if (statuses[row] !== 1) continue;
+				partialPackages++;
+				diagnosticCount++;
+				unsupportedTextProperties += histories[row]!;
+				missingGatherableText += missing[row]!;
+				diagnosticCount += missingStarts[row + 1]! - missingStarts[row]!;
+				for (let gap = starts[row]!; gap < starts[row + 1]!; gap++)
+					if (reasons[gap] === 0) diagnosticCount++;
 			}
 			const identities = this.packageColumn(shard, "occurrence.identity"),
 				keys = this.packageColumn(shard, "occurrence.key");
@@ -731,9 +787,7 @@ export class JoinedQueryData {
 		const textOccurrences = this.column("query.raw.members").length;
 		return {
 			status:
-				partialPackages || failedPackages || unsupportedTextProperties
-					? ("partial" as const)
-					: ("complete" as const),
+				partialPackages || failedPackages ? ("partial" as const) : ("complete" as const),
 			diagnosticCount,
 			notGatherablePackages,
 			coverage: {
@@ -745,7 +799,8 @@ export class JoinedQueryData {
 				textOccurrences,
 				resolvedOccurrences,
 				unresolvedOccurrences: textOccurrences - resolvedOccurrences,
-				unsupportedTextProperties
+				unsupportedTextProperties,
+				...(missingGatherableText > 0 ? { missingGatherableText } : undefined)
 			}
 		};
 	}
@@ -776,11 +831,7 @@ export class JoinedQueryData {
 				? "not_gatherable"
 				: status === 3
 					? "failed"
-					: status === 1 ||
-						  packageTextGapReasons.some(
-								(_, index) =>
-									this.packageColumn(shard, `package.gap${index}`)[row]! > 0
-						  )
+					: status === 1
 						? "partial"
 						: "complete";
 		};
@@ -794,11 +845,18 @@ export class JoinedQueryData {
 					(diagnosticCounts.package_not_gatherable ?? 0) + 1;
 			} else counts[status]++;
 			if (status === "failed") diagnosticCounts.package_inspection_failed++;
-			if (status === "partial") diagnosticCounts.package_partially_decoded++;
+			if (status !== "partial") continue;
+			diagnosticCounts.package_partially_decoded++;
 			const gaps = this.packageColumn(shard, "package.gap_start"),
-				reasons = this.packageColumn(shard, "gap.reason");
+				reasons = this.packageColumn(shard, "gap.reason"),
+				missing = this.packageColumn(shard, "package.missing_start");
 			for (let gap = gaps[row]!; gap < gaps[row + 1]!; gap++)
 				if (reasons[gap] === 0) diagnosticCounts.unsupported_text_history++;
+			if (missing[row + 1]! > missing[row]!)
+				diagnosticCounts.gatherable_text_not_decoded =
+					(diagnosticCounts.gatherable_text_not_decoded ?? 0) +
+					missing[row + 1]! -
+					missing[row]!;
 		}
 		const path = (shard: number, row: number) =>
 			relative(
@@ -846,49 +904,19 @@ export class JoinedQueryData {
 							]
 						}).diagnostics.slice(0, MAX_CORPUS_REPORT_ITEMS - diagnostics.length)
 					);
-				} else {
-					const record = emptyPackageTextRecord(
-						resolve(this.joined.meta.input.projectRoot, packageFile)
-					);
-					const gapCounts = { ...record.gapCounts },
-						gapSamples = [];
-					for (let index = 0; index < packageTextGapReasons.length; index++)
-						gapCounts[packageTextGapReasons[index]!] = this.packageColumn(
-							shard,
-							`package.gap${index}`
-						)[row]!;
-					const gaps = this.packageColumn(shard, "package.gap_start");
-					for (let gap = gaps[row]!; gap < gaps[row + 1]!; gap++) {
-						const values = this.strings([
-							this.packageColumn(shard, "gap.object")[gap]!,
-							this.packageColumn(shard, "gap.property")[gap]!
-						]);
-						gapSamples.push({
-							reason: packageTextGapReasons[
-								this.packageColumn(shard, "gap.reason")[gap]!
-							]!,
-							object_path: values[0]!,
-							property_path: values[1]!
-						});
-					}
+				} else
 					diagnostics.push(
 						...textCorpusFromExtractionEvents({
 							projectRoot: this.joined.meta.input.projectRoot,
 							events: [
-								{
-									...record,
-									status: "partial",
-									gapCounts,
-									gapSamples,
-									decodeErrors: this.packageColumn(
-										shard,
-										"package.decode_errors"
-									)[row]!
-								}
+								this.packageRecord(
+									shard,
+									row,
+									resolve(this.joined.meta.input.projectRoot, packageFile)
+								)
 							]
 						}).diagnostics.slice(0, MAX_CORPUS_REPORT_ITEMS - diagnostics.length)
 					);
-				}
 			}
 		const diagnosticCount = Object.values(diagnosticCounts).reduce(
 			(sum, count) => sum + count,
@@ -970,42 +998,9 @@ export class JoinedQueryData {
 			seen.add(key);
 			const projectRoot = this.joined.meta.input.projectRoot;
 			const path = this.strings([this.packageColumn(shard, "package.path")[packageRow]!])[0]!;
-			const record = emptyPackageTextRecord(resolve(projectRoot, path));
-			const gapCounts = { ...record.gapCounts };
-			for (let index = 0; index < packageTextGapReasons.length; index++)
-				gapCounts[packageTextGapReasons[index]!] = this.packageColumn(
-					shard,
-					`package.gap${index}`
-				)[packageRow]!;
-			const gapStarts = this.packageColumn(shard, "package.gap_start");
-			const gapSamples = [];
-			for (let gap = gapStarts[packageRow]!; gap < gapStarts[packageRow + 1]!; gap++) {
-				const values = this.strings([
-					this.packageColumn(shard, "gap.object")[gap]!,
-					this.packageColumn(shard, "gap.property")[gap]!
-				]);
-				gapSamples.push({
-					reason: packageTextGapReasons[this.packageColumn(shard, "gap.reason")[gap]!]!,
-					object_path: values[0]!,
-					property_path: values[1]!
-				});
-			}
 			const corpus = textCorpusFromExtractionEvents({
 				projectRoot,
-				events: [
-					{
-						...record,
-						status:
-							this.packageColumn(shard, "package.status")[packageRow] === 1
-								? "partial"
-								: "complete",
-						decodeErrors: this.packageColumn(shard, "package.decode_errors")[
-							packageRow
-						]!,
-						gapCounts,
-						gapSamples
-					}
-				]
+				events: [this.packageRecord(shard, packageRow, resolve(projectRoot, path))]
 			});
 			for (const diagnostic of corpus.diagnostics)
 				result.set(

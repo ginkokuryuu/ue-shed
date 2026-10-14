@@ -543,6 +543,21 @@ impl PackageSummary {
                 .any(|version| version.key == FORTNITE_MAIN && version.version >= 260)
     }
 
+    /// UE 5.8 `UEnum::Serialize` writes a `uint8 UnderlyingType` after `CppForm`.
+    #[must_use]
+    pub fn has_enum_underlying_type(&self) -> bool {
+        // UE 5.8 FortniteMainBranchObjectVersions.inl, EnumUnderlyingType (255).
+        const FORTNITE_MAIN: Guid = Guid {
+            a: 0x601D_1886,
+            b: 0xAC64_4F84,
+            c: 0xAA16_D3DE,
+            d: 0x0DEA_C7D6,
+        };
+        self.custom_versions
+            .iter()
+            .any(|version| version.key == FORTNITE_MAIN && version.version >= 255)
+    }
+
     /// Parses and validates a classic package summary.
     ///
     /// # Errors

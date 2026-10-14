@@ -97,6 +97,12 @@ type FixtureContract = {
 			readonly equalSourceDistinctKeys: readonly string[];
 			readonly stringTableReference: string;
 		};
+		readonly displayNameEnum: {
+			readonly assetPath: string;
+			readonly namespace: string;
+			readonly keys: readonly string[];
+			readonly displayNames: readonly string[];
+		};
 	};
 	readonly enhancedInput: {
 		readonly contentRoot: string;
@@ -428,9 +434,17 @@ describe("generic Unreal fixture contract", () => {
 		});
 		expect(contract.gameText.occurrenceAsset.sharedIdentity.occurrences).toBe(2);
 		expect(new Set(contract.gameText.occurrenceAsset.equalSourceDistinctKeys).size).toBe(2);
+		// The commandlet's -VerifyOnly pass loads this enum, so the saved asset must be committed.
+		expect(contract.gameText.displayNameEnum).toEqual({
+			assetPath: "/Game/Fixture/Text/E_TextDisplayNames.E_TextDisplayNames",
+			namespace: "Fixture.Enum",
+			keys: ["CommonItem", "RareItem"],
+			displayNames: ["Common Item", "Rare Item"]
+		});
 		for (const assetPath of [
 			contract.gameText.stringTable.assetPath,
-			contract.gameText.occurrenceAsset.assetPath
+			contract.gameText.occurrenceAsset.assetPath,
+			contract.gameText.displayNameEnum.assetPath
 		]) {
 			expect(assetPath.startsWith(`${contract.gameText.contentRoot}/`)).toBe(true);
 			expect(existsSync(generatedAssetPath(assetPath)), assetPath).toBe(true);
