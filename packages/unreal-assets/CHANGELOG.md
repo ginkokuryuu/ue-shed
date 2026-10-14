@@ -1,5 +1,34 @@
 # @ue-shed/unreal-assets
 
+## 0.14.0
+
+### Minor Changes
+
+- 8f9bcf1: Saved text coverage now follows the package's own gatherable text table, the list Unreal's asset
+  gather reads. A package is partial only when a runtime entry from that table was not decoded;
+  undecodable properties that hold no gatherable text (native Niagara structs, for example) remain
+  reported as coverage gaps without making the package partial. The table is used only where Unreal's
+  gather would use it; Blueprints with bytecode, which are saved without one, keep the previous
+  decoder-gap rule. uasset-io v1.10 adds `gatherCoverage` to package text records, Game Text adds
+  `coverage.missingGatherableText` and `gatherable_text_not_decoded` diagnostics with the unread
+  source text and Unreal site, and user-defined enum display names are now read as text. Entries
+  match on namespace, key and source text, so an unread source variant under a decoded key stays
+  missing, and authored bracketed namespaces are compared as Unreal saved them. UE 5.8 user-defined
+  enums, which save an extra underlying-type byte, now decode instead of failing.
+
+### Patch Changes
+
+- d8eca33: Upgrade Effect and its integrations to stable 4.0.4. Update renamed schema and configuration APIs,
+  JSON Schema validation, synchronous cache queries, retained resource cleanup, and Remote Control
+  response handling while preserving authoritative wire contracts and existing workflow behavior.
+  Published libraries now require the application to provide `effect@^4.0.0` as a peer dependency,
+  and `@ue-shed/observability` also requires `@effect/opentelemetry@^4.0.0`. Install these in the
+  application (or reuse compatible existing versions) so UE Shed shares the application's Effect
+  runtime. Workspace development and tests remain pinned to Effect 4.0.4 through the catalog.
+- Updated dependencies [8f9bcf1]
+- Updated dependencies [d8eca33]
+    - @ue-shed/protocol@0.14.0
+
 ## 0.13.0
 
 ### Patch Changes

@@ -1,5 +1,29 @@
 # @ue-shed/engine
 
+## 0.14.0
+
+### Patch Changes
+
+- d8eca33: Upgrade Effect and its integrations to stable 4.0.4. Update renamed schema and configuration APIs,
+  JSON Schema validation, synchronous cache queries, retained resource cleanup, and Remote Control
+  response handling while preserving authoritative wire contracts and existing workflow behavior.
+  Published libraries now require the application to provide `effect@^4.0.0` as a peer dependency,
+  and `@ue-shed/observability` also requires `@effect/opentelemetry@^4.0.0`. Install these in the
+  application (or reuse compatible existing versions) so UE Shed shares the application's Effect
+  runtime. Workspace development and tests remain pinned to Effect 4.0.4 through the catalog.
+- e96a922: Launch UE4 projects. The project launcher and supervised editor sessions now use `UE4Editor`
+  binaries and `UE4Editor.modules` manifests for 4.x engines instead of always expecting
+  `UnrealEditor`, so 4.27 launches no longer fail with `editor_missing` or report the Remote Control
+  check as unverifiable. `unrealEditorExecutable`, `validateUnrealProjectBuildId`, and
+  `validateUnrealRemoteControlBuild` take an optional `EngineVersion`; omitting it keeps UE5 naming.
+  On macOS, `unrealEditorExecutable` now returns the binary inside the editor's app bundle
+  (`UE4Editor.app/Contents/MacOS/UE4Editor` or `UnrealEditor.app/Contents/MacOS/UnrealEditor`)
+  instead of a bare path that Unreal installations don't have.
+- Updated dependencies [8f9bcf1]
+- Updated dependencies [d8eca33]
+    - @ue-shed/protocol@0.14.0
+    - @ue-shed/unreal-connection@0.14.0
+
 ## 0.13.0
 
 ### Patch Changes

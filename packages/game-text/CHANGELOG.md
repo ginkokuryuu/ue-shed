@@ -1,5 +1,66 @@
 # @ue-shed/game-text
 
+## 0.14.0
+
+### Minor Changes
+
+- 8f9bcf1: Saved text coverage now follows the package's own gatherable text table, the list Unreal's asset
+  gather reads. A package is partial only when a runtime entry from that table was not decoded;
+  undecodable properties that hold no gatherable text (native Niagara structs, for example) remain
+  reported as coverage gaps without making the package partial. The table is used only where Unreal's
+  gather would use it; Blueprints with bytecode, which are saved without one, keep the previous
+  decoder-gap rule. uasset-io v1.10 adds `gatherCoverage` to package text records, Game Text adds
+  `coverage.missingGatherableText` and `gatherable_text_not_decoded` diagnostics with the unread
+  source text and Unreal site, and user-defined enum display names are now read as text. Entries
+  match on namespace, key and source text, so an unread source variant under a decoded key stays
+  missing, and authored bracketed namespaces are compared as Unreal saved them. UE 5.8 user-defined
+  enums, which save an extra underlying-type byte, now decode instead of failing.
+- 10babde: Check localization quality over the index instead of rebuilding the whole target as objects.
+    - An opened index now offers `localizationQuality(options, ruleDocument)`. It checks lines in
+      bounded pages and keeps findings as columns. Pages, focus and proposals re-check only the rows
+      they show.
+    - `localizationQualityWorkspaceOf(source, quality)` builds the same workspace over either form;
+      `localizationQuality(report, join)` is the in-memory form for adapters without an index.
+      `localizationQualityWorkspace(source, report, join)` is unchanged.
+    - `checkLocalizationLine` and the per-line policy and accepted-finding helpers expose the checks
+      `checkLocalizationTarget` runs, one line at a time.
+    - Localization finding IDs are now a fast hash of the finding's line, culture, rule and values.
+      They stay stable across rescans of unchanged text; IDs from older versions do not resolve.
+
+### Patch Changes
+
+- 68d49c5: Read localization lines in bulk without re-decoding evidence for every entry.
+  `localizationLines` used to hydrate one line per page. Each manifest, archive and PO entry
+  re-decoded its file's metadata and zstd string blocks. On a 238k-line, 10-culture target that took
+  over 40 minutes before it ran out of memory.
+    - Bulk reads now hydrate rows in storage order, in pages of adjacent rows (bridging small gaps), and
+      return them in the requested order.
+    - Multi-line pages decode each evidence file's rows in sorted runs once per page.
+    - Shared string lookups decode in ID order, so each block is decompressed once per lookup.
+
+    Single-line browsing is unchanged.
+
+- c075169: Hydrate localization lines and scan localization quality about twice as fast, in shorter pauses.
+    - A page of lines reads its columns, evidence entries and strings once, then builds its lines
+      without per-entry Effect or schema work.
+    - Evidence entries read from the index are no longer schema-decoded one by one. The importer
+      validates Unreal's files when it writes the index, and checksums guard the index's bytes.
+    - The quality scan checks 256 lines per page and yields after each, and while it prepares line
+      order. On a generated 583,507-line, 10-culture target the longest pause fell from 4–5 s to
+      0.5–0.7 s, and the scan from about 205 s to 115 s.
+
+- d8eca33: Upgrade Effect and its integrations to stable 4.0.4. Update renamed schema and configuration APIs,
+  JSON Schema validation, synchronous cache queries, retained resource cleanup, and Remote Control
+  response handling while preserving authoritative wire contracts and existing workflow behavior.
+  Published libraries now require the application to provide `effect@^4.0.0` as a peer dependency,
+  and `@ue-shed/observability` also requires `@effect/opentelemetry@^4.0.0`. Install these in the
+  application (or reuse compatible existing versions) so UE Shed shares the application's Effect
+  runtime. Workspace development and tests remain pinned to Effect 4.0.4 through the catalog.
+- Updated dependencies [8f9bcf1]
+- Updated dependencies [d8eca33]
+    - @ue-shed/unreal-assets@0.14.0
+    - @ue-shed/localization@0.14.0
+
 ## 0.13.0
 
 ### Minor Changes

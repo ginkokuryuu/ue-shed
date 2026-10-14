@@ -1,5 +1,21 @@
 # @ue-shed/world
 
+## 0.14.0
+
+### Patch Changes
+
+- d8eca33: Upgrade Effect and its integrations to stable 4.0.4. Update renamed schema and configuration APIs,
+  JSON Schema validation, synchronous cache queries, retained resource cleanup, and Remote Control
+  response handling while preserving authoritative wire contracts and existing workflow behavior.
+  Published libraries now require the application to provide `effect@^4.0.0` as a peer dependency,
+  and `@ue-shed/observability` also requires `@effect/opentelemetry@^4.0.0`. Install these in the
+  application (or reuse compatible existing versions) so UE Shed shares the application's Effect
+  runtime. Workspace development and tests remain pinned to Effect 4.0.4 through the catalog.
+- Updated dependencies [8f9bcf1]
+- Updated dependencies [d8eca33]
+    - @ue-shed/protocol@0.14.0
+    - @ue-shed/unreal-connection@0.14.0
+
 ## 0.13.0
 
 ### Patch Changes
