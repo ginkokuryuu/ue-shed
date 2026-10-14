@@ -672,7 +672,7 @@ try {
 				"    Effect.provide(assetReaderLayer({ executable: resolveUassetExecutable() }))",
 				"  )",
 				");",
-				"if (corpus.coverage.discoveredPackages !== 2 || corpus.coverage.textUnits < 1) {",
+				"if (corpus.coverage.discoveredPackages !== 3 || corpus.coverage.textUnits < 1) {",
 				"  throw new Error('packed Game Text scan did not account for the fixture');",
 				"}",
 				"const query = textCorpusQuery(corpus);",
