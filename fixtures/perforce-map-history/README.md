@@ -64,5 +64,8 @@ It never uses a `p4` selected from `PATH`, a contributor workspace, or a studio 
 Unless both `UE_SHED_PERFORCE_MAP_HISTORY_P4_EXECUTABLE` and
 `UE_SHED_PERFORCE_MAP_HISTORY_P4D_EXECUTABLE` are set, the harness downloads Perforce's pinned
 `r26.1` command-line pair from its official distribution, verifies the pinned SHA-256 values, and
-caches them outside the repository. Set `UE_SHED_PERFORCE_MAP_HISTORY_BINARY_CACHE` to choose that
-cache location. The default uses the local application cache.
+caches them outside the repository. The pins are checked against the `SHA256SUMS` file Perforce
+publishes in each `r26.1` platform directory. On macOS the harness selects that directory by
+architecture (`bin.macosx12arm64` for arm64, `bin.macosx1015x86_64` for x64); other macOS
+architectures must use the explicit binary paths. Set `UE_SHED_PERFORCE_MAP_HISTORY_BINARY_CACHE`
+to choose that cache location. The default uses the local application cache.
