@@ -1,5 +1,9 @@
 # @ue-shed/protocol
 
+## 0.16.1
+
+No direct behavioral changes; version advanced for suite alignment.
+
 ## 0.16.0
 
 ### Minor Changes

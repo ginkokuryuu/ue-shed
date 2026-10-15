@@ -1,5 +1,11 @@
 # @ue-shed/unreal-assets
 
+## 0.16.1
+
+### Patch Changes
+
+- @ue-shed/protocol@0.16.1
+
 ## 0.16.0
 
 ### Minor Changes
