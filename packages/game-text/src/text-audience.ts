@@ -446,52 +446,74 @@ export function savedTextAudienceSubject(occurrence: SavedTextAudienceInput): Te
 	});
 }
 
-function equalsIgnoringCase(left: string, right: string): boolean {
-	return left.length === right.length && left.toLowerCase() === right.toLowerCase();
+/** A subject with every name lowercased and the property path split once, for all rows. */
+type PreparedSubject = {
+	readonly namespace: string | undefined;
+	readonly folder: string;
+	/** The class name, then the object names of the outer chain. */
+	readonly names: readonly string[];
+	readonly module: string | undefined;
+	readonly elements: readonly string[];
+	readonly locationKind: TextAudienceSubject["locationKind"];
+};
+
+const lower = (value: string) => value.toLowerCase();
+
+function prepare(subject: TextAudienceSubject): PreparedSubject {
+	return {
+		namespace: subject.namespace?.toLowerCase(),
+		folder: `${subject.packagePath.toLowerCase()}/`,
+		names: [
+			...(subject.className === undefined ? [] : [subject.className]),
+			...subject.objects
+		].map(lower),
+		module: subject.module?.toLowerCase(),
+		elements: propertyElements(subject.propertyPath).map(lower),
+		locationKind: subject.locationKind
+	};
 }
 
-function nameMatches(name: string, match: Extract<TextAudienceMatch, { kind: "object" }>) {
-	const lower = name.toLowerCase();
-	const value = match.value.toLowerCase();
-	return match.position === "prefix"
-		? lower.startsWith(value)
-		: match.position === "suffix"
-			? lower.endsWith(value)
-			: lower === value;
+// Each row's match values, lowercased (and a property path split) once.
+const loweredValues = new WeakMap<TextAudienceMatch, readonly string[]>();
+function valuesOf(match: TextAudienceMatch): readonly string[] {
+	let values = loweredValues.get(match);
+	if (values === undefined) {
+		const value = match.value.toLowerCase();
+		values = match.kind === "property" && !match.anywhere ? value.split(".") : [value];
+		loweredValues.set(match, values);
+	}
+	return values;
 }
 
-function matches(subject: TextAudienceSubject, match: TextAudienceMatch): boolean {
+function matches(subject: PreparedSubject, match: TextAudienceMatch): boolean {
+	if (match.kind === "location") return subject.locationKind === match.value;
+	const values = valuesOf(match);
+	const value = values[0]!;
 	switch (match.kind) {
 		case "namespace":
-			return (
-				subject.namespace !== undefined &&
-				equalsIgnoringCase(subject.namespace, match.value)
-			);
+			return subject.namespace === value;
 		case "folder":
-			return `${subject.packagePath.toLowerCase()}/`.startsWith(match.value.toLowerCase());
+			return subject.folder.startsWith(value);
 		case "object":
-			return (
-				(subject.className !== undefined && nameMatches(subject.className, match)) ||
-				subject.objects.some((name) => nameMatches(name, match))
+			return subject.names.some((name) =>
+				match.position === "prefix"
+					? name.startsWith(value)
+					: match.position === "suffix"
+						? name.endsWith(value)
+						: name === value
 			);
 		case "module":
 			return (
 				subject.module !== undefined &&
-				(match.suffix
-					? subject.module.toLowerCase().endsWith(match.value.toLowerCase())
-					: equalsIgnoringCase(subject.module, match.value))
+				(match.suffix ? subject.module.endsWith(value) : subject.module === value)
 			);
 		case "property": {
-			const elements = propertyElements(subject.propertyPath);
-			if (match.anywhere)
-				return elements.some((element) => equalsIgnoringCase(element, match.value));
-			const wanted = match.value.split(".");
-			if (elements.length < wanted.length) return false;
-			const tail = elements.slice(elements.length - wanted.length);
-			return tail.every((element, index) => equalsIgnoringCase(element, wanted[index]!));
+			const elements = subject.elements;
+			if (match.anywhere) return elements.includes(value);
+			if (elements.length < values.length) return false;
+			const offset = elements.length - values.length;
+			return values.every((wanted, index) => elements[offset + index] === wanted);
 		}
-		case "location":
-			return subject.locationKind === match.value;
 	}
 }
 
@@ -500,7 +522,8 @@ export function matchTextAudiencePolicy<const Rule extends TextAudienceRule>(
 	subject: TextAudienceSubject,
 	policy: readonly Rule[]
 ): Rule | undefined {
-	return policy.find((rule) => rule.when.every((match) => matches(subject, match)));
+	const prepared = prepare(subject);
+	return policy.find((rule) => rule.when.every((match) => matches(prepared, match)));
 }
 
 export type TextAudienceEvidence = {
