@@ -360,6 +360,10 @@ pub struct SavedAssetPackageTextRecord {
     /// reflects missing runtime gatherable text instead of decoder gaps.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub gather_coverage: Option<SavedAssetGatherCoverage>,
+    /// v1.12: each Blueprint in the package with the generated class, default objects and saved
+    /// skeleton class its compile wrote beside it. Text under them is a representation copy.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub blueprint_classes: Vec<SavedAssetBlueprintClasses>,
 }
 
 impl SavedAssetPackageTextRecord {
@@ -418,6 +422,7 @@ pub enum SavedAssetPackageTextEvent {
     },
 }
 
+pub use uasset_inspection::blueprint_classes::SavedAssetBlueprintClasses;
 pub use uasset_inspection::text_wire::{
     EditCapability, SavedAssetGatherCoverage, SavedAssetMissingGatherableText,
     SavedAssetTextCoverageGap, SavedAssetTextOccurrence, TextCoverageGapReason,
@@ -508,6 +513,7 @@ mod package_text_tests {
             gap_counts: TextGapCounts::default(),
             gap_samples: Vec::new(),
             gather_coverage: None,
+            blueprint_classes: Vec::new(),
         };
         for (index, reason) in [
             TextCoverageGapReason::PropertyDecoderRejected,

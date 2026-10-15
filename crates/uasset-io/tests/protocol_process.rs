@@ -77,6 +77,53 @@ fn package_text_gather_coverage_is_negotiated() {
     }
 }
 
+#[test]
+fn package_text_blueprint_classes_are_negotiated() {
+    let project_root =
+        std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../fixtures/unreal-project");
+    for minor in [11, 12] {
+        let mut request = base_request(serde_json::json!({
+            "kind": "extract_text_packages",
+            "paths": [
+                "Content/Fixture/Blueprints/BP_ReviewFixture.uasset",
+                "Content/Fixture/Text/DA_TextOccurrences.uasset"
+            ],
+            "projectRoot": project_root.to_string_lossy()
+        }));
+        request["contract"]["version"]["minor"] = minor.into();
+        let (success, events, stderr) = run_request(request);
+        assert!(success, "package text failed: {stderr}");
+        assert_valid_events(&events);
+        let records: Vec<_> = events
+            .iter()
+            .filter(|event| event["result"]["event"]["event"] == "text_package_record")
+            .map(|event| &event["result"]["event"])
+            .collect();
+        assert_eq!(records.len(), 2);
+        for record in records {
+            let classes = record.get("blueprintClasses");
+            let blueprint = record["path"]
+                .as_str()
+                .unwrap()
+                .ends_with("BP_ReviewFixture.uasset");
+            if minor < 12 || !blueprint {
+                // Strict older clients never see the key; packages without a Blueprint omit it.
+                assert!(classes.is_none(), "minor {minor}: {record}");
+            } else {
+                // The Blueprint's saved GeneratedClass and its RF_ClassDefaultObject export.
+                assert_eq!(
+                    classes.unwrap(),
+                    &serde_json::json!([{
+                        "blueprint": "/Game/Fixture/Blueprints/BP_ReviewFixture.BP_ReviewFixture",
+                        "generatedClass": "/Game/Fixture/Blueprints/BP_ReviewFixture.BP_ReviewFixture_C",
+                        "classDefault": "/Game/Fixture/Blueprints/BP_ReviewFixture.Default__BP_ReviewFixture_C"
+                    }])
+                );
+            }
+        }
+    }
+}
+
 fn run_request(request: Value) -> (bool, Vec<Value>, String) {
     let mut child = Command::new(env!("CARGO_BIN_EXE_uasset"))
         .arg("protocol")
