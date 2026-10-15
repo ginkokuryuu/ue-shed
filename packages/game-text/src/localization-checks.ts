@@ -145,6 +145,26 @@ export interface LocalizationLineCheckContext {
 	>;
 	/** The rule file's `segmentSeparator`, when it has one. */
 	readonly segmentSeparator?: string | undefined;
+	/**
+	 * Whether a line without an identity holds only culture-invariant text, answered without its
+	 * units; a scan whose units are costly to build passes it. Absent, the line's units answer.
+	 */
+	readonly cultureInvariant?: ((line: LocalizationLine) => boolean) | undefined;
+}
+
+/** Every saved occurrence of the line is culture invariant, and it has one. */
+export function localizationCultureInvariantUnits(lineUnits: readonly TextUnit[]): boolean {
+	let found = false;
+	for (const unit of lineUnits)
+		for (const occurrence of unit.occurrences) {
+			if (
+				occurrence.identity.status !== "unresolved" ||
+				occurrence.identity.reason !== "culture_invariant"
+			)
+				return false;
+			found = true;
+		}
+	return found;
 }
 
 export interface LocalizationLineCheckOutput {
@@ -511,16 +531,10 @@ export function checkLocalizationLine(
 			!sharedSourceCandidate(line.source)
 		)
 			return;
+		// Most lines without a key are not culture invariant; a scan can say so without units.
+		if (context.cultureInvariant && !context.cultureInvariant(line)) return;
 		const lineUnits = units();
-		const occurrences = lineUnits.flatMap((unit) => unit.occurrences);
-		if (
-			occurrences.length > 0 &&
-			occurrences.every(
-				(occurrence) =>
-					occurrence.identity.status === "unresolved" &&
-					occurrence.identity.reason === "culture_invariant"
-			)
-		)
+		if (localizationCultureInvariantUnits(lineUnits))
 			add({
 				lineId: line.id,
 				target,

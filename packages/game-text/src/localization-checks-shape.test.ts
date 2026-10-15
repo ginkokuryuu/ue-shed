@@ -105,6 +105,10 @@ describe("text shape helpers", () => {
 	});
 	it("measures visible length and flags only clear outliers", () => {
 		expect(visibleTextLength("<b>Hi</> {Name}|plural(one=x,other=y)  there")).toBe(8);
+		// Whitespace runs, non-breaking spaces included, count once; ends do not count.
+		expect(visibleTextLength("  a  \tb \n")).toBe(3);
+		// A supplementary-plane ideograph is one wide code point.
+		expect(visibleTextLength("\u{20000}x")).toBe(3);
 		// Wide characters count twice, so a Chinese translation of similar meaning is no outlier.
 		expect(
 			lengthOutlier("Open the inventory to see items", "打开背包查看物品")

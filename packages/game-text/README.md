@@ -312,8 +312,9 @@ matching the role appear in policy evidence; gathered-only lines cannot acquire 
 Unknown target cultures appear in `ruleDiagnostics` as warnings because rules are project-wide.
 Duplicate culture keys (including escaped JSON keys), duplicate role/rule IDs, undeclared roles,
 empty terms and non-positive budgets fail with typed recovery guidance. Both versions support
-`disabledLocalizationChecks`. See [the v2 example](fixtures/quality-rules.v2.json) for an authored
-document; its limits and terms are examples, not built-ins.
+`disabledLocalizationChecks` and `segmentSeparator` (1–16 characters). See
+[the v2 example](fixtures/quality-rules.v2.json) for an authored document; its limits and terms are
+examples, not built-ins.
 
 `localizationProgressReport(corpus, joined, evidence, baseline?)` is pure and browser-safe. It
 reports every primary state's line/source-word counts, independent `notSynced` counts including

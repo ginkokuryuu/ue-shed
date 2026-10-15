@@ -194,9 +194,12 @@ export function lengthOutlier(
 // Upper-case markers only: "todo" is Spanish and Portuguese for "all".
 const PLACEHOLDER_MARKERS = /\b(?:TODO|TBD|FIXME)\b/gu;
 const PLACEHOLDER_PHRASES = /lorem ipsum|\bto be translated\b|\bplaceholder\b/giu;
+/** Any of them, in any case: one test rules out nearly every line. */
+const PLACEHOLDER_ANY = /todo|tbd|fixme|lorem ipsum|to be translated|placeholder/iu;
 
 /** Placeholder markers and phrases in source text, in order of appearance. */
 export function placeholderMatches(text: string): string[] {
+	if (!PLACEHOLDER_ANY.test(text)) return [];
 	const matches = [
 		...text.matchAll(PLACEHOLDER_MARKERS),
 		...text.matchAll(PLACEHOLDER_PHRASES)
@@ -208,7 +211,7 @@ const LETTER = /\p{L}/u;
 
 /** Text with digits and no letters or format arguments, such as "100", "3/4" or "+25%". */
 export function numberOnlyText(text: string): boolean {
-	return /\p{N}/u.test(text) && !LETTER.test(text) && !text.includes("{");
+	return !text.includes("{") && !LETTER.test(text) && /\p{N}/u.test(text);
 }
 
 /** Sources worth grouping as "Same text, different keys": they have letters. */
@@ -223,8 +226,15 @@ export function consistentTranslationCandidate(text: string): boolean {
 
 /** Leading and trailing whitespace and runs of two or more spaces inside the text. */
 export function sourceWhitespace(text: string) {
-	const leading = /^\s*/u.exec(text)![0],
-		trailing = leading.length === text.length ? "" : /\s*$/u.exec(text)![0];
-	const inner = text.slice(leading.length, text.length - trailing.length);
-	return { leading, trailing, repeatedSpaces: [...inner.matchAll(/ {2,}/gu)].length };
+	let start = 0,
+		end = text.length;
+	while (start < end && space(text.charCodeAt(start))) start++;
+	while (end > start && space(text.charCodeAt(end - 1))) end--;
+	let repeatedSpaces = 0;
+	for (let index = text.indexOf("  ", start); index >= 0 && index + 1 < end; ) {
+		repeatedSpaces++;
+		while (index < end && text.charCodeAt(index) === 0x20) index++;
+		index = text.indexOf("  ", index);
+	}
+	return { leading: text.slice(0, start), trailing: text.slice(end), repeatedSpaces };
 }

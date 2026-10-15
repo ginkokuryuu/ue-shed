@@ -21,4 +21,5 @@ Rate Game Text checks by severity and add translation shape, source and consiste
 - `duplicate_source` reports once per shared text and leaves out text without letters.
 - Keys with conflicting saved texts list them in `sourceVariants` on findings, summaries and focus
   instead of the joined text, and are not compared or grouped by it.
-- Empty archive entries are reported when a partly read package left the saved text blank.
+- `checkLocalizationTarget` also checks a line whose saved text is blank when its manifest has the
+  source, as a partly read package can leave it, so its empty archive entries are reported.

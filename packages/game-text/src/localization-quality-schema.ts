@@ -43,8 +43,8 @@ const Base = {
 	/** The check's severity; never part of the finding's ID. */
 	severity: CheckSeverity,
 	/**
-	 * The line's distinct saved sources when they conflict (one key, several texts), in the join's
-	 * order. The line's `source` joins them for search; findings list them instead.
+	 * The line's distinct saved sources when they conflict (one key, several texts), sorted. The
+	 * line's `source` joins them for search; findings list them instead.
 	 */
 	sourceVariants: Schema.optionalKey(Schema.Array(Schema.String).check(Schema.isMinLength(2)))
 };

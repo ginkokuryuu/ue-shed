@@ -152,9 +152,36 @@ function unitIndex(data: JoinedQueryData) {
 			}
 			return units;
 		},
-		idRow: (row: number) => idRows[row]!
+		idRow: (row: number) => idRows[row]!,
+		/**
+		 * The units a line names hold only culture-invariant occurrences, read from the
+		 * occurrence identity column without building the units; as
+		 * `localizationCultureInvariantUnits` over `forLine`.
+		 */
+		cultureInvariant(line: LocalizationLine): boolean {
+			if (line.origin.kind !== "corpus") return false;
+			const starts = data.joined.meta.packageStarts;
+			let found = false;
+			for (const id of line.origin.unitIds) {
+				const row = find(id);
+				if (row === undefined) continue;
+				for (const member of data.members("raw", row)) {
+					let shard = 0;
+					while (starts[shard + 1]! <= member) shard++;
+					const identity = data.packageColumn(shard, "occurrence.identity")[
+						member - starts[shard]!
+					];
+					if (identity !== CULTURE_INVARIANT) return false;
+					found = true;
+				}
+			}
+			return found;
+		}
 	};
 }
+
+/** The occurrence identity column's code for culture-invariant text. */
+const CULTURE_INVARIANT = 2;
 
 /** Positions of rows outside the join. */
 const NOT_JOINED = 0xffffffff;
@@ -325,7 +352,8 @@ export const indexedLocalizationQuality = Effect.fn("GameText.localizationQualit
 					duplicates.rowSources
 				)
 			: new Map(),
-		segmentSeparator: ruleDocument?.segmentSeparator
+		segmentSeparator: ruleDocument?.segmentSeparator,
+		cultureInvariant: (line) => units.cultureInvariant(line)
 	};
 	const units = unitIndex(data);
 	yield* Effect.yieldNow;

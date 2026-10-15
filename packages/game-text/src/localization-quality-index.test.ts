@@ -156,6 +156,11 @@ it.live(
 				// A second location for one key, an ungathered key and a culture-invariant text.
 				occurrence("K00", "Hello {PlayerName}", 1),
 				occurrence("K90", "Only in the asset", 2),
+				// Saved text without a key that is not culture invariant.
+				{
+					...occurrence("", "No key yet", 6),
+					identity: { status: "unresolved" as const, reason: "missing_key" as const }
+				},
 				// Two String Tables declaring one namespace and key.
 				...["/Game/Text/TableA.TableA", "/Game/Text/TableB.TableB"].map((path) => ({
 					...occurrence("Shared", "Shared entry", 5),
