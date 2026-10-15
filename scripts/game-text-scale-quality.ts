@@ -141,7 +141,14 @@ export async function scaleQuality(result: GameTextIndexRefreshResult) {
 		const quality = await Effect.runPromise(
 			result.localizationQuality({ review: result.review.file })
 		);
-		return { quality, findings: quality.findings.length, ...stalls() };
+		const measured = stalls();
+		// Findings by check, from the finding columns; no line is read.
+		const byCheck: Record<string, number> = {};
+		for (let position = 0; position < quality.findings.length; position++) {
+			const key = `findings.${quality.findings.filter(position)}`;
+			byCheck[key] = (byCheck[key] ?? 0) + 1;
+		}
+		return { quality, findings: quality.findings.length, ...measured, ...byCheck };
 	} catch (cause) {
 		stalls();
 		throw cause;
