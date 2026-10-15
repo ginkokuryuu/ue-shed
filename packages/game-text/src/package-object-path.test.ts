@@ -1,10 +1,11 @@
-import { join } from "node:path";
+import { join, resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 import type { SavedAssetPackageTextRecord } from "@ue-shed/unreal-assets";
 import { emptyPackageTextRecord } from "./package-text-record.js";
 import { mountPackageTextEvent, mountedPackageName } from "./package-object-path.js";
 
-const root = join("D:", "Projects", "Game");
+// Absolute on every host: package files may be absolute or relative to the project.
+const root = resolve("Projects", "Game");
 
 describe("package object paths", () => {
 	it("names a Content package as Unreal mounts it, and nothing else", () => {
