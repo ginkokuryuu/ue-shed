@@ -291,5 +291,6 @@ export function joinedQueryColumns(input: {
 	result["query.raw.id_starts"] = Uint32Array.from(packedIds.offsets);
 	result["query.line.starts"] = lineStarts;
 	result["query.occurrence.places"] = places;
+	result["query.occurrence.sources"] = c.source;
 	return result;
 }

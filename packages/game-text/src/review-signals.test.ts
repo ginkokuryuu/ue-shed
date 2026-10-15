@@ -6,6 +6,95 @@ import { makeIndexRegressionFixture } from "./index-refresh-regressions.test-sup
 import { joinLocalizationTarget } from "./localization.js";
 import { textCorpusQuery } from "./query.js";
 import { checkLocalizationTarget } from "./localization-checks.js";
+import { u32 } from "./joined-target-input.js";
+
+for (const mixed of [false, true])
+	it.live(
+		`matches a full rebuild after same-place and shared-source overlays (mixed=${mixed})`,
+		() =>
+			Effect.gen(function* () {
+				const fixture = yield* makeIndexRegressionFixture();
+				const a = "A".repeat(40),
+					b = "B".repeat(40),
+					c = "C".repeat(40);
+				const rows = (source: string, other: string) => [
+					occurrence("New", source, "Label"),
+					occurrence("K", a, "Label"),
+					occurrence("Other", other, "OtherLabel"),
+					{
+						...occurrence("Missing", a),
+						identity: { status: "unresolved" as const, reason: "missing_key" as const }
+					},
+					...(mixed ? [occurrence("New", c, "ExtraLabel"), occurrence("Clean", c)] : [])
+				];
+				yield* Effect.gen(function* () {
+					const index = yield* GameTextIndexRefresh;
+					for (const [step, [source, other, expected]] of (
+						[
+							[a, a, mixed ? 4 : 3],
+							[a, b, mixed ? 2 : 0],
+							[b, b, mixed ? 3 : 2],
+							[a, "D".repeat(40), mixed ? 2 : 0]
+						] as const
+					).entries()) {
+						fixture.update(rows(source, other));
+						const indexed = yield* index.refresh(fixture.request);
+						expect(indexed.join.strategy).toBe(step === 0 ? "full" : "incremental");
+						const oracle = textCorpusQuery(
+							fixture.raw(),
+							undefined,
+							joinLocalizationTarget(fixture.raw(), indexed.evidence)
+						);
+						for (const localization of [undefined, { target: fixture.target.name }]) {
+							const request = {
+								query: "",
+								capability: "all" as const,
+								pageSize: 50,
+								...(localization ? { localization } : undefined)
+							};
+							const page = indexed.query.search(request);
+							expect(page.counts.duplicate_source).toBe(expected);
+							expect(page.counts.unresolved).toBe(1);
+							expect(
+								page.units.map(({ localization: _marks, ...unit }) => unit)
+							).toEqual(
+								oracle
+									.search(request)
+									.units.map(({ localization: _marks, ...unit }) => unit)
+							);
+						}
+						// Keep consecutive overlays so the persisted occurrence patches must flatten.
+						if (step !== 3) continue;
+						const fields = [
+							"query.raw.signals",
+							"query.slice.signals",
+							"query.occurrence.sources"
+						];
+						const overlay = [];
+						for (const field of fields)
+							overlay.push(yield* u32(indexed.joined.layer, field));
+						const requests = [
+							{ query: "", capability: "all" as const, pageSize: 50 },
+							{
+								query: "",
+								capability: "all" as const,
+								pageSize: 50,
+								localization: { target: fixture.target.name }
+							}
+						];
+						const pages = requests.map((request) => indexed.query.search(request));
+						yield* index.invalidate(fixture.request);
+						const full = yield* index.refresh(fixture.request);
+						expect(full.join.strategy).toBe("full");
+						for (const [i, field] of fields.entries())
+							expect(yield* u32(full.joined.layer, field)).toEqual(overlay[i]);
+						expect(requests.map((request) => full.query.search(request))).toEqual(
+							pages
+						);
+					}
+				}).pipe(Effect.provide(fixture.layer()));
+			}).pipe(Effect.scoped)
+	);
 
 it.live("does not pair a re-keyed place with its gathered or saved previous identity", () =>
 	Effect.gen(function* () {

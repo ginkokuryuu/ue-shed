@@ -514,7 +514,36 @@ export const incrementJoinedTarget = Effect.fn("JoinedTarget.increment")(functio
 		// Recompute with typed columns: no decoded source, unit or line objects are retained.
 		const places = yield* u32(layer, "query.occurrence.places");
 		const occurrenceLines = new Uint32Array(places.length);
-		const occurrenceSources = new Uint32Array(places.length);
+		const occurrenceSources = new Uint32Array(yield* u32(layer, "query.occurrence.sources"));
+		for (const [member, source] of packageChanges) {
+			occurrenceSources[member] = source;
+			set("query.occurrence.sources", member, source);
+		}
+		// Only old/new source groups can change, including unchanged rows at other places.
+		// A dirty row may also contain clean sources: count those too before recomputing its bit.
+		const dirtySources = new Set([...oldSources, ...newSources]);
+		const neededSources = new Set<number>();
+		const queries = [];
+		for (const kind of ["raw", "slice"] as const) {
+			const prefix = `query.${kind}.`;
+			const identities = yield* u32(layer, prefix + "identity");
+			const starts = yield* u32(layer, prefix + "member_start");
+			const ends = yield* u32(layer, prefix + "member_end");
+			const members = yield* u32(layer, prefix + "members");
+			const flags = yield* u32(layer, prefix + "signals");
+			const rows: number[] = [];
+			for (let row = 0; row < flags.length; row++) {
+				if (identities[row] !== 0 || flags[row]! & 8) continue;
+				let dirty = false;
+				for (let offset = starts[row]!; offset < ends[row]! && !dirty; offset++)
+					dirty = dirtySources.has(occurrenceSources[members[offset]!]!);
+				if (!dirty) continue;
+				rows.push(row);
+				for (let offset = starts[row]!; offset < ends[row]!; offset++)
+					neededSources.add(occurrenceSources[members[offset]!]!);
+			}
+			queries.push({ prefix, starts, ends, members, flags, rows });
+		}
 		const counterparts = new DuplicateSources<number, number, number>();
 		const sliceLines = yield* u32(layer, "query.slice.line");
 		const sliceIdentities = yield* u32(layer, "query.slice.identity");
@@ -527,21 +556,13 @@ export const incrementJoinedTarget = Effect.fn("JoinedTarget.increment")(functio
 			const line = sliceLines[row]!;
 			for (let offset = sliceStart[row]!; offset < sliceEnd[row]!; offset++) {
 				const member = sliceMembers[offset]!;
-				const source = yield* packageColumn(member, "source");
+				const source = occurrenceSources[member]!;
 				occurrenceLines[member] = line;
-				occurrenceSources[member] = source;
-				counterparts.add(source, line, places[member]!);
+				if (neededSources.has(source)) counterparts.add(source, line, places[member]!);
 			}
 		}
-		for (const kind of ["raw", "slice"] as const) {
-			const prefix = `query.${kind}.`;
-			const identities = yield* u32(layer, prefix + "identity");
-			const starts = yield* u32(layer, prefix + "member_start");
-			const ends = yield* u32(layer, prefix + "member_end");
-			const members = yield* u32(layer, prefix + "members");
-			const flags = yield* u32(layer, prefix + "signals");
-			for (let row = 0; row < flags.length; row++) {
-				if (identities[row] !== 0 || flags[row]! & 8) continue;
+		for (const { prefix, starts, ends, members, flags, rows } of queries) {
+			for (const row of rows) {
 				let duplicate = false;
 				for (let offset = starts[row]!; offset < ends[row]!; offset++) {
 					const member = members[offset]!;
