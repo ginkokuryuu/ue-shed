@@ -62,6 +62,7 @@ import { GameTextLocalizationError } from "./localization-schema.js";
 import { localizationManifestNotes } from "./localization.js";
 import { gatheredTextGroups, localizationLineUnits } from "./gathered-text.js";
 import { hasDifferingCopy } from "./text-copies.js";
+import { longestSource } from "./source-metrics.js";
 import {
 	localizationQueryPage,
 	matchesLocalizationLine,
@@ -83,7 +84,9 @@ function isCountedSignal(
 }
 
 function sourceValue(unit: TextUnit): string {
-	return unit.source.status === "consistent" ? unit.source.value : unit.source.values.join(" ");
+	return unit.source.status === "consistent"
+		? unit.source.value
+		: longestSource(unit.source.values);
 }
 
 function wordCount(value: string): number {

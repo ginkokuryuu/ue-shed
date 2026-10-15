@@ -9,6 +9,7 @@ import { loadJoinFile, u32, type ColumnReader } from "./joined-target-input.js";
 import { precedence, reasonBit, stateBit, type JoinedTargetInput } from "./joined-target.js";
 import { decodeWtf8 } from "./wtf8.js";
 import type { JoinedSourcePatches } from "./joined-source-patches.js";
+import { longestSource } from "./source-metrics.js";
 
 const same = (a: Uint32Array, b: Uint32Array) =>
 	a.length === b.length &&
@@ -489,14 +490,9 @@ export const incrementJoinedTarget = Effect.fn("JoinedTarget.increment")(functio
 						selected.some((source, i) => source !== sources[sourceStart + i])
 					)
 						sourceEdits[kind].set(queryRow, selected);
-					const characters = decoded.reduce(
-						(sum, { value }) => sum + value.length,
-						Math.max(0, selected.length - 1)
-					);
-					const words = decoded.reduce(
-						(sum, { value }) => sum + value.trim().split(/\s+/u).filter(Boolean).length,
-						0
-					);
+					const longest = longestSource(decoded.map(({ value }) => value));
+					const characters = longest.length;
+					const words = longest.trim().split(/\s+/u).filter(Boolean).length;
 					const visible = Number(decoded.some(({ value }) => value.trim() !== ""));
 					if (visible !== (yield* u32(layer, prefix + "visible"))[queryRow])
 						return fallback("query-source-visibility");

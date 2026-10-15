@@ -8,6 +8,7 @@ import {
 import { snapshotCheck } from "./snapshot-format.js";
 import { textAudienceBit } from "./text-audience.js";
 import { OCCURRENCE_COPY_DIFFERS } from "./package-text-columns.js";
+import { longestSource } from "./source-metrics.js";
 
 /** Numeric query entries retain raw-unit predicates and each gathered occurrence slice. */
 export function joinedQueryColumns(input: {
@@ -174,13 +175,13 @@ export function joinedQueryColumns(input: {
 		decoded.sort((a, b) => (a.value < b.value ? -1 : a.value > b.value ? 1 : 0));
 		for (const { source, value } of decoded) {
 			sources.add(source);
-			characters += value.length;
 			if (value.trim() !== "") {
 				visible = true;
-				words += value.trim().split(/\s+/u).length;
 			}
 		}
-		characters += Math.max(0, values.size - 1);
+		const longest = longestSource(decoded.map(({ value }) => value));
+		characters = longest.length;
+		words = longest.trim() === "" ? 0 : longest.trim().split(/\s+/u).length;
 		if (characters >= 40) flags |= 4;
 		if (c.identity[first]! >= 2 || c.key[first] === empty) flags |= 8;
 		if (editing === 2) flags |= 32;

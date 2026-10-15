@@ -446,10 +446,12 @@ export const TextUnitSearchResult = Schema.Struct({
 	locationKinds: Schema.Array(
 		Schema.Literals(["data_table_cell", "string_table_entry", "asset_property"])
 	),
+	/** UTF-16 length of the longest source, also used for `long`; lexical order breaks ties. */
 	characterCount: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
 	occurrenceCount: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
 	remainingContextCount: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
 	reviewSignals: Schema.Array(TextReviewSignal),
+	/** Whitespace-delimited words in that same longest source, never the joined variants. */
 	wordCount: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
 	/** Player if any occurrence is player text, else unknown if any is, else editor. */
 	audience: Schema.optionalKey(TextAudience)
