@@ -25,6 +25,8 @@ import {
 	type TextPackageCoverageSummary
 } from "./corpus-summary.js";
 import type { TextUnit, TextOccurrence, TextUnitSearchResult, TextReviewSignal } from "./schema.js";
+import { TextCopyKind } from "./schema.js";
+import type { SavedTextRepresentationCopy } from "./representation-copies.js";
 import {
 	LocalizationLineId,
 	LocalizationEvidenceLineId,
@@ -60,7 +62,8 @@ export const querySignals = [
 	"long",
 	"unresolved",
 	"conflicting",
-	"evidence_only"
+	"evidence_only",
+	"compiled_copy_differs"
 ] as const satisfies readonly TextReviewSignal[];
 
 /** The largest page hydrateJoinedTarget accepts. */
@@ -414,11 +417,37 @@ export class JoinedQueryData {
 									entry_key: s("row")
 								},
 				edit_capability: c("editable") ? "source_editable" : "read_only",
-				...(gather === 0 ? undefined : { gather_editor_only: gather === 2 })
+				...(gather === 0 ? undefined : { gather_editor_only: gather === 2 }),
+				...(c("copies") === 0 ? undefined : { copies: this.copies(shard, row) })
 			}
 		});
 		// The audience the index stored and filters by.
 		return { ...occurrence, ...textAudienceFields(decodeTextAudience(c("audience"))) };
+	}
+	/** The representation copies folded into one stored occurrence, in the reader's order. */
+	private copies(shard: number, row: number): SavedTextRepresentationCopy[] {
+		const starts = this.packageColumn(shard, "occurrence.copy_start"),
+			kinds = this.packageColumn(shard, "copy.kind"),
+			objects = this.packageColumn(shard, "copy.object"),
+			sources = this.packageColumn(shard, "copy.source");
+		const start = starts[row]!,
+			end = starts[row + 1]!;
+		snapshotCheck(start < end && end <= kinds.length, "copy", "Invalid range");
+		const values = this.strings([
+			...objects.subarray(start, end),
+			...sources.subarray(start, end)
+		]);
+		const copies: SavedTextRepresentationCopy[] = [];
+		for (let index = 0; index < end - start; index++) {
+			const kind = TextCopyKind.literals[kinds[start + index]!];
+			snapshotCheck(kind !== undefined, "copy", "Invalid kind");
+			copies.push({
+				object_path: values[index]!,
+				kind,
+				source: values[end - start + index]!
+			});
+		}
+		return copies;
 	}
 	members(kind: "raw" | "slice", row: number) {
 		const prefix = `query.${kind}.`;

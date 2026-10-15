@@ -1,8 +1,8 @@
-import { assetReaderLayer } from "@ue-shed/unreal-assets";
-import { Effect } from "effect";
+import { AssetReader, assetReaderLayer } from "@ue-shed/unreal-assets";
+import { Effect, Stream } from "effect";
 import { describe, expect, it } from "vitest";
 import { useSavedFixtureProject } from "../../../fixtures/unreal-project/saved-project.test-support.js";
-import { scanTextCorpus } from "./corpus.js";
+import { scanTextCorpus, textCorpusFromExtractionEvents } from "./corpus.js";
 import { searchTextCorpus } from "./search.js";
 
 const executable = process.env.UE_SHED_UASSET_EXECUTABLE;
@@ -77,5 +77,53 @@ describe.skipIf(!executable)("game text fixture corpus", () => {
 			})
 		);
 		expect(corpus.diagnostics).toEqual([]);
+	});
+
+	it("reports a Blueprint's classes and keeps sites saved only under them", async () => {
+		const events = await Effect.runPromise(
+			Effect.gen(function* () {
+				const reader = yield* AssetReader;
+				return yield* Stream.runCollect(
+					reader.extractProjectTextPackages!({
+						projectRoot: fixture.root,
+						paths: [
+							"Content/Fixture/Blueprints/BP_ReviewFixture.uasset",
+							"Content/Fixture/Text/DA_TextOccurrences.uasset"
+						]
+					})
+				);
+			}).pipe(Effect.provide(assetReaderLayer({ executable: executable! })))
+		);
+		const records = [...events].filter((event) => event.event === "text_package_record");
+		const blueprint = records.find((record) =>
+			record.path.endsWith("BP_ReviewFixture.uasset")
+		)!;
+		const path = "/Game/Fixture/Blueprints/BP_ReviewFixture";
+		expect(blueprint.blueprintClasses).toEqual([
+			{
+				blueprint: `${path}.BP_ReviewFixture`,
+				generatedClass: `${path}.BP_ReviewFixture_C`,
+				classDefault: `${path}.Default__BP_ReviewFixture_C`
+			}
+		]);
+		const corpus = textCorpusFromExtractionEvents({ projectRoot: fixture.root, events });
+		// Construction-script nodes are saved only under the generated class: every one stays a
+		// place, and nothing in either package is folded.
+		const occurrences = corpus.units.flatMap((unit) => unit.occurrences);
+		expect(corpus.coverage.textOccurrences).toBe(
+			records.reduce((sum, record) => sum + record.occurrences.length, 0)
+		);
+		expect(occurrences.filter((item) => item.copies !== undefined)).toEqual([]);
+		expect(
+			occurrences.filter((item) =>
+				item.location.objectPath.startsWith(`${path}.BP_ReviewFixture_C.`)
+			)
+		).toHaveLength(4);
+		// fixture-contract.json: one key, two legitimate properties of one asset, two places.
+		const shared = corpus.units.find(
+			(unit) =>
+				unit.identity.status === "resolved" && unit.identity.key === "SharedHoldPrompt"
+		)!;
+		expect(shared.occurrences).toHaveLength(2);
 	});
 });

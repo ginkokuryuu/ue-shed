@@ -8,7 +8,6 @@ import {
 	type SavedAssetScan,
 	type SavedAssetTextExtractionEvent,
 	type SavedAssetPackageTextEvent,
-	type SavedAssetTextOccurrence,
 	type SavedAssetGatherCoverage,
 	SavedAssetTextCoverageGap,
 	type SavedProperty,
@@ -29,10 +28,11 @@ import {
 } from "./schema.js";
 import { mountPackageTextEvent } from "./package-object-path.js";
 import {
-	classifySavedTextAudience,
-	classifyTextAudience,
-	textAudienceFields
-} from "./text-audience.js";
+	classifyFoldedTextAudience,
+	foldRepresentationCopies,
+	type PackageTextOccurrence
+} from "./representation-copies.js";
+import { classifyTextAudience, textAudienceFields } from "./text-audience.js";
 
 const makeOccurrenceId = TextOccurrenceId.make;
 const makeUnitId = TextUnitId.make;
@@ -150,7 +150,7 @@ function addTextOccurrence(options: {
 }
 
 export function textOccurrenceFromExtraction(options: {
-	readonly occurrence: SavedAssetTextOccurrence;
+	readonly occurrence: PackageTextOccurrence;
 	readonly packageFile: string;
 }): TextOccurrence {
 	const extractedIdentity = options.occurrence.identity;
@@ -202,7 +202,16 @@ export function textOccurrenceFromExtraction(options: {
 		identity,
 		location,
 		editCapability: options.occurrence.edit_capability,
-		...textAudienceFields(classifySavedTextAudience(options.occurrence))
+		...textAudienceFields(classifyFoldedTextAudience(options.occurrence)),
+		...(options.occurrence.copies === undefined
+			? undefined
+			: {
+					copies: options.occurrence.copies.map((copy) => ({
+						objectPath: copy.object_path,
+						kind: copy.kind,
+						source: copy.source
+					}))
+				})
 	};
 }
 
@@ -638,7 +647,8 @@ function foldTextExtractionEvent(
 	const event = mountPackageTextEvent(projectRoot, extracted);
 	if (event.event === "text_package_record") {
 		const packageFile = relative(projectRoot, event.path);
-		for (const occurrence of event.occurrences) {
+		// Only package records carry the Blueprint evidence that identifies representation copies.
+		for (const occurrence of foldRepresentationCopies(event).occurrences) {
 			accumulator.occurrences.push(textOccurrenceFromExtraction({ occurrence, packageFile }));
 		}
 		const total = Object.values(event.gapCounts).reduce((sum, count) => sum + count, 0);

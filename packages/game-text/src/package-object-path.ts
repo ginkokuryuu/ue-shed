@@ -1,5 +1,6 @@
 import { relative, resolve } from "node:path";
 import type {
+	SavedAssetBlueprintClasses,
 	SavedAssetPackageTextEvent,
 	SavedAssetTextCoverageGap,
 	SavedAssetTextExtractionEvent,
@@ -60,6 +61,33 @@ function mountOccurrence(
 		: occurrence;
 }
 
+function mountBlueprintClasses(
+	classes: SavedAssetBlueprintClasses,
+	packageName: string
+): SavedAssetBlueprintClasses {
+	const optional = ["classDefault", "skeletonClass", "skeletonClassDefault"] as const;
+	if (
+		!isPackageRelative(classes.blueprint) &&
+		!isPackageRelative(classes.generatedClass) &&
+		!optional.some((field) => isPackageRelative(classes[field] ?? ""))
+	)
+		return classes;
+	const mount = (path: string) => mountObjectPath(path, packageName);
+	return {
+		blueprint: mount(classes.blueprint),
+		generatedClass: mount(classes.generatedClass),
+		...(classes.classDefault === undefined
+			? undefined
+			: { classDefault: mount(classes.classDefault) }),
+		...(classes.skeletonClass === undefined
+			? undefined
+			: { skeletonClass: mount(classes.skeletonClass) }),
+		...(classes.skeletonClassDefault === undefined
+			? undefined
+			: { skeletonClassDefault: mount(classes.skeletonClassDefault) })
+	};
+}
+
 function mountGap(gap: SavedAssetTextCoverageGap, packageName: string): SavedAssetTextCoverageGap {
 	return isPackageRelative(gap.object_path)
 		? { ...gap, object_path: mountObjectPath(gap.object_path, packageName) }
@@ -110,5 +138,17 @@ export function mountPackageTextEvent(
 		changed ||= mounted !== gap;
 		return mounted;
 	});
-	return changed ? { ...event, occurrences, gapSamples } : event;
+	const blueprintClasses = event.blueprintClasses?.map((classes) => {
+		const mounted = mountBlueprintClasses(classes, packageName);
+		changed ||= mounted !== classes;
+		return mounted;
+	});
+	return changed
+		? {
+				...event,
+				occurrences,
+				gapSamples,
+				...(blueprintClasses === undefined ? undefined : { blueprintClasses })
+			}
+		: event;
 }

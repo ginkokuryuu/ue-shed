@@ -151,8 +151,16 @@ export const makeIndexRegressionFixture = Effect.fn("Test.GameText.indexFixture"
 			};
 			signature++;
 		},
-		update: (occurrences: SavedAssetPackageTextRecord["occurrences"]) => {
-			record = { ...record, occurrences };
+		update: (
+			occurrences: SavedAssetPackageTextRecord["occurrences"],
+			blueprintClasses?: SavedAssetPackageTextRecord["blueprintClasses"]
+		) => {
+			const { blueprintClasses: _previous, ...rest } = record;
+			record = {
+				...rest,
+				occurrences,
+				...(blueprintClasses === undefined ? undefined : { blueprintClasses })
+			};
 			signature++;
 		}
 	};

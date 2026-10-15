@@ -7,6 +7,7 @@ import {
 } from "./shared-string-codec.js";
 import { snapshotCheck } from "./snapshot-format.js";
 import { textAudienceBit } from "./text-audience.js";
+import { OCCURRENCE_COPY_DIFFERS } from "./package-text-columns.js";
 
 /** Numeric query entries retain raw-unit predicates and each gathered occurrence slice. */
 export function joinedQueryColumns(input: {
@@ -165,6 +166,8 @@ export function joinedQueryColumns(input: {
 			origins |= 1 << (c.location[member] === 2 ? 0 : c.location[member] === 1 ? 1 : 2);
 			editing |= c.editable[member] ? 1 : 2;
 			audience |= textAudienceBit(c.audience[member]!);
+			// A Blueprint edited since it compiled: the game shows a compiled copy's text.
+			if (c.copies[member]! & OCCURRENCE_COPY_DIFFERS) flags |= 64;
 			if (strings.string(c.notes[member]!).trim() !== "") notes = 1;
 		}
 		const decoded = [...values].map((source) => ({ source, value: strings.string(source) }));

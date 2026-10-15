@@ -211,6 +211,43 @@ project's rules, not here. The compact index stores each occurrence's audience; 
 is part of every package shard's key, so changing it re-encodes the stored shards from their saved
 evidence without reading packages again.
 
+### Compiled Blueprint copies
+
+Compiling a Blueprint saves its authored subobjects again in the same package: a Widget
+Blueprint's `WBP_X.WBP_X.WidgetTree.Title` is also saved as `WBP_X.WBP_X_C.WidgetTree.Title` under
+the generated class, its UMG animations as `WBP_X_C.FadeIn_INST`, and some engines and older saves
+also keep a skeleton class (`SKEL_WBP_X_C`) and default objects (`Default__WBP_X_C`). Read naively,
+every widget text is two places, and a Blueprint edited but not compiled reads as one key with two
+texts.
+
+Since uasset-io 1.12 each package record lists its Blueprints' `blueprintClasses`: the Blueprint,
+the export its saved `GeneratedClass` names, that class's default object (the export flagged
+`RF_ClassDefaultObject`) and, when one was saved, the skeleton class and its default object. Names
+are never the evidence on their own, so an asset whose own name ends in `_C` is never a class.
+Game Text folds each copy into its authored site, the occurrence with:
+
+- the same location kind and property path,
+- the same key (namespace and key, String Table reference, or both unkeyed),
+- and the authored object path: the Blueprint in place of the generated class, skeleton class or
+  default object, with a leading `Name_INST` read as `Name`.
+
+Two properties of one object that share a key stay two places. A copy under another key stays its
+own place. A site saved only under the class, such as a construction-script node, has no authored
+site and stays a place at its own path; copies of it fold into the generated class's site, then the
+default object's, then the skeleton's.
+
+The place keeps its own text: the line's source, search, counts, facets, exports and localization
+joins all use the authored text, which is what the next compile and gather will use. Each copy is
+kept on the place's `copies` (`objectPath`, `kind`: `generated_class`, `instance`, `class_default`
+or `skeleton`, and its own `source`). When a copy's text differs, the place never makes its key
+"Same key, different text"; its unit instead has the `compiled_copy_differs` review signal
+("Blueprint not compiled since edit"), and the line page says what the game shows until the
+Blueprint is compiled. A place's audience is the line rollup over the place and its copies.
+
+Folding happens per package record, the same way in the in-memory corpus and in the index
+(`package-text-v5`), and is idempotent. Records from readers before 1.12 and streamed
+`text_occurrence` events carry no Blueprint evidence and are never folded.
+
 The compact corpus path is governed by Plan 033:
 
 - the shared project index performs the only project-wide enumeration;

@@ -9,6 +9,7 @@ import {
 	type TextCorpusQuerySummary,
 	type TextCorpusSearchPage,
 	type TextCorpusSearchRequest,
+	type TextCopyKind,
 	type TextOccurrence,
 	type TextQualityFindingId,
 	type TextQualityFilter,
@@ -1992,12 +1993,22 @@ export function GameTextRoute(props: {
 	);
 }
 
+const COPY_KIND_LABELS = {
+	generated_class: "compiled class copy",
+	instance: "compiled animation copy",
+	class_default: "class defaults copy",
+	skeleton: "skeleton class copy"
+} as const satisfies Record<TextCopyKind, string>;
+
 export function OccurrenceCard(props: {
 	readonly client: Pick<GameTextClientApi, "locateAsset">;
 	readonly occurrence: TextOccurrence;
 	readonly conflicting: boolean;
 	readonly onOpenDataAuthoring?: ((objectPath: string) => void) | undefined;
 }) {
+	// The game runs the compiled class: a copy with other text is what players see.
+	const staleCopy = () =>
+		props.occurrence.copies?.find((copy) => copy.source !== props.occurrence.source);
 	return (
 		<article {...stylex.attrs(styles.card)}>
 			<div {...stylex.attrs(styles.bar)}>
@@ -2013,6 +2024,14 @@ export function OccurrenceCard(props: {
 			<Show when={props.conflicting}>
 				<p {...stylex.attrs(styles.notes)}>{props.occurrence.source}</p>
 			</Show>
+			<Show when={staleCopy()}>
+				{(copy) => (
+					<p {...stylex.attrs(styles.notes)}>
+						Blueprint not compiled since this text was edited. The game shows "
+						{copy().source}".
+					</p>
+				)}
+			</Show>
 			<Show
 				when={props.occurrence.devNotes.trim()}
 				fallback={<span {...stylex.attrs(styles.muted)}>No translator notes</span>}
@@ -2022,6 +2041,13 @@ export function OccurrenceCard(props: {
 			<details>
 				<summary {...stylex.attrs(styles.muted)}>Saved file</summary>
 				<code {...stylex.attrs(styles.mono)}>{props.occurrence.packageFile}</code>
+				<For each={props.occurrence.copies ?? []}>
+					{(copy) => (
+						<code {...stylex.attrs(styles.mono)}>
+							{copy.objectPath} ({COPY_KIND_LABELS[copy.kind]})
+						</code>
+					)}
+				</For>
 			</details>
 			<div {...stylex.attrs(styles.bar)}>
 				<CopyButton label="Copy asset path" value={props.occurrence.location.objectPath} />
