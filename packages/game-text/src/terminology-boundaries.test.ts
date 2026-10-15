@@ -29,9 +29,7 @@ it("treats combining marks as part of the word around a term", () => {
 	// An Indic vowel sign continues the word: "क" is not matched inside "किताब".
 	expect(termMatches("किताब", "क", false)).toEqual([]);
 	// A term ending in a mark still matches whole, with UTF-16 offsets.
-	expect(termMatches("x café y", "café", false)).toEqual([
-		{ start: 2, end: 7, matched: "café" }
-	]);
+	expect(termMatches("x café y", "café", false)).toEqual([{ start: 2, end: 7, matched: "café" }]);
 });
 
 it("keeps case behavior, phrases, punctuation and UTF-16 offsets", () => {
