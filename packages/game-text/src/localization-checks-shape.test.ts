@@ -35,7 +35,9 @@ import {
 } from "./localization-text-shape.js";
 import {
 	WorkspaceQualityPage,
+	localizationQuality,
 	localizationQualityWorkspace,
+	localizationQualityWorkspaceOf,
 	workspaceQualityCsv
 } from "./localization-workspace.js";
 import { STARTER_GAME_TEXT_RULES } from "./starter-rules.js";
@@ -635,6 +637,8 @@ describe("built-in source checks", () => {
 	});
 	it("lists a placeholder once where the workspace also shows the rule file's source findings", () => {
 		const starter = rules({});
+		const hydrated: number[] = [];
+		const unreported: unknown[] = [];
 		const workspace = (source: string, document: TextQualityRuleDocument) => {
 			const text = corpus([unit("K", source)]);
 			const files = evidence(
@@ -643,11 +647,28 @@ describe("built-in source checks", () => {
 				noPO()
 			);
 			const { joined, report: value } = report(text, files, {}, document);
-			return localizationQualityWorkspace(
-				evaluateGameTextSourceQuality(text, document),
-				value,
-				joined
+			unreported.push(
+				kind(value, "placeholder_text").map((finding) => finding.unreportedMatches)
 			);
+			// The checks recorded which placeholders the source terminology reports: building
+			// the workspace reads findings' facts, never the findings themselves.
+			const quality = localizationQuality(value, joined);
+			let items = 0;
+			const built = localizationQualityWorkspaceOf(
+				evaluateGameTextSourceQuality(text, document),
+				{
+					...quality,
+					findings: {
+						...quality.findings,
+						items: (positions) => {
+							items += positions.length;
+							return quality.findings.items(positions);
+						}
+					}
+				}
+			);
+			hydrated.push(items);
+			return built;
 		};
 		const problems = (value: ReturnType<typeof workspace>) =>
 			value
@@ -698,6 +719,9 @@ describe("built-in source checks", () => {
 		expect(problems(workspace("TODO: name", elsewhere))).toEqual([
 			["placeholder_text", "en · Placeholder “TODO”"]
 		]);
+		expect(hydrated).toEqual([0, 0, 0]);
+		// The report keeps every placeholder, and notes which the source terminology leaves.
+		expect(unreported).toEqual([[[]], [["TODO"]], [undefined]]);
 	});
 	it("checks source markup the way Slate reads it", () => {
 		const markup = (source: string) => kind(line(source, source), "source_markup");

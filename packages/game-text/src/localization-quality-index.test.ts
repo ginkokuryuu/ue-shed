@@ -278,10 +278,21 @@ it.live(
 						),
 						join
 					);
-					const indexed = localizationQualityWorkspaceOf(
-						source,
-						yield* result.localizationQuality!(options, document)
-					);
+					// Placeholders the source terminology reports are left out from the scan's
+					// facts: building the workspace hydrates no finding.
+					const quality = yield* result.localizationQuality!(options, document);
+					let hydrated = 0;
+					const indexed = localizationQualityWorkspaceOf(source, {
+						...quality,
+						findings: {
+							...quality.findings,
+							items: (positions) => {
+								hydrated += positions.length;
+								return quality.findings.items(positions);
+							}
+						}
+					});
+					expect(hydrated).toBe(0);
 					const all = legacy.search({ target: join.target, filter: "all" });
 					for (const filter of WorkspaceQualityFilter.literals)
 						expect([filter, all.counts[filter]]).not.toEqual([filter, 0]);

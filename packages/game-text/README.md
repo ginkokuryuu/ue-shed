@@ -336,7 +336,10 @@ prints only it. A workspace that lists both (`localizationQualityWorkspace(Of)` 
 report) shows a placeholder once: a `placeholder_text` finding whose every placeholder a source
 terminology finding already marks in the same text of one of its places is left out of pages,
 counts and exports, and one with others left names only those in its summary. The starter rules
-forbid "placeholder", so without this such text appeared twice. `placeholder_translation` leaves
+forbid "placeholder", so without this such text appeared twice. The check records this on the
+finding (`unreportedMatches`: the placeholders the rule file's terminology leaves, empty when it
+leaves none), and the indexed scan keeps it as a fact, so building a workspace reads no finding;
+the workspace expects its source report to come from the same rule document. `placeholder_translation` leaves
 out the native culture, a translation equal to its source, a
 source that is itself a placeholder, and punctuation-only answers ("...") to a source under three
 words, which can be a silent reply. The source checks skip Blueprint bytecode fragments (manifest entries

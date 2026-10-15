@@ -1994,6 +1994,11 @@ current source only in `\r\n` against `\n`). Several others were noisy. Changes:
   names only the rest in a partly covered one's summary. The localization report keeps them all: it
   holds no source findings, and `loc check` prints only it. A first version dropped the matches in
   the check itself, which left `loc check --check placeholder_text` empty with the starter rules.
+  A second rechecked every `placeholder_text` finding when the workspace was built, in one array
+  outside the scan's pages. Now the check records the placeholders the rule document's terminology
+  leaves (`unreportedMatches`, not part of the ID), reading the line's units only when a term
+  overlaps a placeholder, and the indexed scan stores "reported in full" as a fact (one byte a
+  finding, only when some is); the workspace reads that fact and hydrates nothing.
 - **Stall.** The worst stall (3.7–4.5 s) was not after the last progress call: it was one page
   that held keys saved in thousands of places (`FEventTrackEditor`/`TrackName` "Events" took
   2.3 s, `SCS`/`Default` 2.1 s), whose units every keyed line built for its notes and saved

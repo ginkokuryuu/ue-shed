@@ -796,7 +796,9 @@ export const indexedLocalizationQuality = Effect.fn("GameText.localizationQualit
 	};
 	const storedFacts = u32Builder(),
 		storedFirst = u32Builder(),
-		storedSecond = u32Builder();
+		storedSecond = u32Builder(),
+		/** Stored findings the rule file's source terminology reports in full, ascending. */
+		storedReported = u32Builder();
 	const blockStart = new Uint32Array(lineCount),
 		blockSize = new Uint32Array(lineCount);
 	let checkedLines = 0;
@@ -811,6 +813,8 @@ export const indexedLocalizationQuality = Effect.fn("GameText.localizationQualit
 			blockSize[rank] = findings.length;
 			for (const finding of findings) {
 				const [first, second] = localizationFindingHash(finding);
+				if (finding.kind === "placeholder_text" && finding.unreportedMatches?.length === 0)
+					storedReported.push(storedFacts.length);
 				storedFacts.push(pack(finding));
 				storedFirst.push(first);
 				storedSecond.push(second);
@@ -867,6 +871,11 @@ export const indexedLocalizationQuality = Effect.fn("GameText.localizationQualit
 		second = new Uint32Array(total),
 		blockOf = new Uint32Array(total),
 		blockPosition = new Uint32Array(lineCount);
+	// One byte a finding, only when some placeholder is reported in full by the source rules.
+	const storedIsReported = storedReported.length === 0 ? undefined : new Uint8Array(total);
+	for (let index = 0; index < storedReported.length; index++)
+		storedIsReported![storedReported.at(index)] = 1;
+	const reportedBySource = storedIsReported && new Uint8Array(total);
 	let position = 0;
 	for (let rank = 0; rank < lineCount; rank++) {
 		if (tied[rank]) continue;
@@ -877,6 +886,7 @@ export const indexedLocalizationQuality = Effect.fn("GameText.localizationQualit
 			first[position] = storedFirst.at(stored);
 			second[position] = storedSecond.at(stored);
 			blockOf[position] = rank;
+			if (reportedBySource) reportedBySource[position] = storedIsReported![stored]!;
 		}
 	}
 	const limits = new Map(
@@ -938,6 +948,7 @@ export const indexedLocalizationQuality = Effect.fn("GameText.localizationQualit
 		filter: (position) => WorkspaceQualityFilter.literals[(facts[position]! >>> 12) & 0x3f]!,
 		ruleId: (position) => ruleIds[facts[position]! >>> 19]!,
 		eligible: (position) => ((facts[position]! >>> 18) & 1) === 1,
+		reportedBySource: (position) => reportedBySource?.[position] === 1,
 		find(id, culture) {
 			const match = /^localization-finding:([0-9a-f]{8})([0-9a-f]{8})$/u.exec(id);
 			if (!match) return undefined;

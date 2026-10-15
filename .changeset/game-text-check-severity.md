@@ -25,7 +25,9 @@ Rate Game Text checks by severity and add translation shape, source and consiste
 - `culture_invariant_text` reports only player text outside debug content and text render
   components, in a property that holds at least as much localizable text in the project.
 - A quality workspace that lists source findings too shows a placeholder once: it leaves out a
-  `placeholder_text` finding a source terminology finding already covers.
+  `placeholder_text` finding a source terminology finding already covers. The check records
+  which placeholders the rule file's terminology leaves (`unreportedMatches`), so the workspace
+  decides from the scan's facts without rechecking findings.
 - Indexed scans build a line's units only for its findings, read translator notes and String
   Table entries from occurrence columns, and halve slow pages, so a key saved in thousands of
   places no longer stalls the scan for seconds.

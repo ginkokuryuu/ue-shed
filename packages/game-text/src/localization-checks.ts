@@ -24,6 +24,8 @@ import {
 import { localizationEvidenceFileStatuses } from "./localization-status.js";
 import { TextQualityRuleId, type TextQualityAffectedOccurrence } from "./quality-schema.js";
 import type { GameTextRuleDocument } from "./quality-rules-v2.js";
+import { matchesTextRole, prepareTextQualityRules, termMatches } from "./quality.js";
+import type { TextRole } from "./quality-schema.js";
 import { evaluateLocalizationPolicy } from "./localization-policy.js";
 import { localizationShippedTranslation } from "./localization-shipped-translation.js";
 import { withoutAcceptedFindings } from "./localization-review.js";
@@ -43,7 +45,7 @@ import {
 	lengthOutlierMinimumRatio,
 	normalizedLineEndings,
 	numberOnlyText,
-	placeholderMatches,
+	placeholderMatchRanges,
 	placeholderTranslation,
 	richTextTagBalance,
 	sharedSourceCandidate,
@@ -155,6 +157,8 @@ export interface LocalizationLineCheckContext {
 	readonly optionalTags: ReadonlySet<string>;
 	/** The rule file's `optionalArguments`. */
 	readonly optionalArguments: ReadonlySet<string>;
+	/** The rule file's source terminology rules: each role and the terms it discourages. */
+	readonly sourceTerminology: readonly SourceTerminology[];
 
 	/**
 	 * `localizationPropertiesWhereLocalizable` over the project: culture-invariant text is
@@ -320,13 +324,76 @@ export function localizationSourceCulture(
 	return first;
 }
 
+/** A source terminology rule as `placeholder_text` reads it: where it applies and what it finds. */
+interface SourceTerminology {
+	readonly role: TextRole;
+	readonly caseSensitive: boolean;
+	/** Forbidden terms and the alternatives of preferred terms, as the source rule matches them. */
+	readonly terms: readonly string[];
+}
+
 /** The rule file's settings the line checks read. */
 export function localizationRuleContext(ruleDocument: GameTextRuleDocument | undefined) {
 	return {
 		segmentSeparator: ruleDocument?.segmentSeparator,
 		optionalTags: new Set((ruleDocument?.optionalTags ?? []).map((tag) => tag.toLowerCase())),
-		optionalArguments: new Set(ruleDocument?.optionalArguments ?? [])
+		optionalArguments: new Set(ruleDocument?.optionalArguments ?? []),
+		sourceTerminology: (ruleDocument ? prepareTextQualityRules(ruleDocument) : []).flatMap(
+			({ rule, role, terms }): SourceTerminology[] =>
+				rule.kind === "terminology"
+					? [
+							{
+								role,
+								caseSensitive: rule.caseSensitive,
+								terms: terms.map(({ term }) => term)
+							}
+						]
+					: []
+		)
 	};
+}
+
+/**
+ * The placeholders of `text` that the rule file's source terminology does not report, when it
+ * reports some: a discouraged term overlapping the placeholder, in an occurrence of the line with
+ * this text at a place of the term's role. That is the source rule's own finding, so a list that
+ * shows both names each placeholder once. Units are read only when a term overlaps a placeholder.
+ */
+function unreportedPlaceholders(
+	text: string,
+	placeholders: ReadonlyArray<{
+		readonly match: string;
+		readonly start: number;
+		readonly end: number;
+	}>,
+	terminology: readonly SourceTerminology[],
+	units: () => readonly TextUnit[]
+): string[] | undefined {
+	const overlaps = (range: { readonly start: number; readonly end: number }) =>
+		placeholders.some(({ start, end }) => range.start < end && start < range.end);
+	const candidates = terminology.flatMap(({ role, caseSensitive, terms }) => {
+		const ranges = terms
+			.flatMap((term) => termMatches(text, term, caseSensitive))
+			.filter(overlaps);
+		return ranges.length ? [{ role, ranges }] : [];
+	});
+	if (candidates.length === 0) return undefined;
+	const reported: Array<{ readonly start: number; readonly end: number }> = [];
+	for (const { role, ranges } of candidates)
+		if (
+			units().some((unit) =>
+				unit.occurrences.some(
+					(occurrence) => occurrence.source === text && matchesTextRole(occurrence, role)
+				)
+			)
+		)
+			reported.push(...ranges);
+	if (reported.length === 0) return undefined;
+	return placeholders
+		.filter(
+			({ start, end }) => !reported.some((range) => range.start < end && start < range.end)
+		)
+		.map(({ match }) => match);
 }
 
 /** Rejects a selection outside the target and lists the built-in checks that run. */
@@ -607,20 +674,28 @@ const affectedOf = (lineUnits: readonly TextUnit[]): TextQualityAffectedOccurren
 function sourceTextFindings(
 	text: string,
 	base: FindingBase,
-	line: { readonly gathered: boolean; readonly bytecode: boolean },
+	line: {
+		readonly gathered: boolean;
+		readonly bytecode: boolean;
+		readonly terminology: readonly SourceTerminology[];
+		readonly units: () => readonly TextUnit[];
+	},
 	add: (finding: UnratedFinding) => void
 ) {
-	const matches = placeholderMatches(text);
-	if (matches.length)
+	const placeholders = placeholderMatchRanges(text);
+	if (placeholders.length) {
+		const unreported = unreportedPlaceholders(text, placeholders, line.terminology, line.units);
 		add({
 			...base,
 			ruleId: ruleIdOf("placeholder_text"),
 			kind: "placeholder_text",
-			actual: { source: text, matches },
+			actual: { source: text, matches: placeholders.map(({ match }) => match) },
 			expectation: { finalText: true },
+			...(unreported ? { unreportedMatches: unreported } : undefined),
 			recovery:
 				"Replace the placeholder with final text, or keep the line out of the build until it has some."
 		});
+	}
 	// Bytecode fragments keep the spaces they are joined with; text the gather skips is not sent.
 	const space = line.gathered && !line.bytecode ? sourceWhitespace(text) : undefined;
 	if (space && (space.leading || space.trailing || space.repeatedSpaces))
@@ -760,7 +835,12 @@ export function checkLocalizationLine(
 	const bytecode =
 		line.manifest.length > 0 &&
 		line.manifest.every((entry) => entry.path.endsWith(BYTECODE_MANIFEST_PATH));
-	const sourceChecks = { gathered: line.manifest.length > 0, bytecode };
+	const sourceChecks = {
+		gathered: line.manifest.length > 0,
+		bytecode,
+		terminology: enabled.includes("placeholder_text") ? context.sourceTerminology : [],
+		units: unitsOnce
+	};
 	/** The source's visible length, measured once for every culture. */
 	let sourceLength: number | undefined;
 	for (const culture of cultures) {
