@@ -97,6 +97,8 @@ export type TextQualityRule = Schema.Schema.Type<typeof TextQualityRule>;
 
 export const TextQualityRuleDocument = Schema.Struct({
 	disabledLocalizationChecks: Schema.optionalKey(Schema.Array(LocalizationCheckId)),
+	/** Opt-in checks to run, such as `missing_translator_notes`; the others run by default. */
+	enabledLocalizationChecks: Schema.optionalKey(Schema.Array(LocalizationCheckId)),
 	rules: Schema.Array(TextQualityRule).check(Schema.isMinLength(1), Schema.isMaxLength(512)),
 	roles: Schema.Array(TextRole).check(Schema.isMinLength(1), Schema.isMaxLength(256)),
 	schemaVersion: Schema.Literal(1)

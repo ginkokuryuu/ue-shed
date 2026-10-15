@@ -213,6 +213,7 @@ export const indexedLocalizationQuality = Effect.fn("GameText.localizationQualit
 		joinPosition[joinRows[position]!] = position;
 	const context: LocalizationLineCheckContext = {
 		target: target.name,
+		nativeCulture: target.nativeCulture,
 		options,
 		enabled,
 		duplicates: yield* duplicateSources(data, target.cultures, joinPosition)

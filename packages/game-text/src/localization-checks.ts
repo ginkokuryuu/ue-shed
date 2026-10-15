@@ -114,6 +114,8 @@ function renameArgument(
 /** Built-in checks shared by every line of a target; prepared once per target. */
 export interface LocalizationLineCheckContext {
 	readonly target: LocalizationJoin["target"];
+	/** Source-level findings belong to this culture when the line has it in the target. */
+	readonly nativeCulture: LocalizationJoin["nativeCulture"];
 	readonly options: LocalizationCheckOptions;
 	readonly enabled: readonly LocalizationCheckId[];
 	/** Shared sources by text; only sources with more than one identity are needed. */
@@ -124,6 +126,36 @@ export interface LocalizationLineCheckOutput {
 	readonly findings: LocalizationQualityFinding[];
 	readonly checkDiagnostics: LocalizationCheckDiagnostic[];
 	readonly changes: LocalizationChange[];
+}
+
+/** Checks that run only when a rule document or the options ask for them. */
+export const optInLocalizationChecks: readonly LocalizationCheckId[] = ["missing_translator_notes"];
+
+/**
+ * Checks about the source line rather than a translation. Each reports once per line, under the
+ * line's source culture (see `localizationSourceCulture`), not once per culture.
+ */
+export const sourceLevelLocalizationChecks: readonly LocalizationCheckId[] = [
+	"missing_translator_notes",
+	"duplicate_source"
+];
+
+/**
+ * The culture a line's source-level findings are reported under: the target's native culture when
+ * the line has it in the target, otherwise the first of its cultures in the target by code.
+ */
+export function localizationSourceCulture(
+	line: Pick<LocalizationLine, "cultures">,
+	nativeCulture: LocalizationJoin["nativeCulture"]
+): LocalizationCultureState["culture"] | undefined {
+	let first: LocalizationCultureState["culture"] | undefined;
+	for (const culture of line.cultures) {
+		if (culture.state === "outside_target") continue;
+		if (culture.culture === nativeCulture) return culture.culture;
+		if (first === undefined || culture.culture.localeCompare(first) < 0)
+			first = culture.culture;
+	}
+	return first;
 }
 
 /** Rejects a selection outside the target and lists the built-in checks that run. */
@@ -146,8 +178,15 @@ export function enabledLocalizationChecks(
 		...(options.disabledChecks ?? []),
 		...(ruleDocument?.disabledLocalizationChecks ?? [])
 	]);
+	const optedIn = new Set([
+		...(options.checks ?? []),
+		...(ruleDocument?.enabledLocalizationChecks ?? [])
+	]);
 	return LocalizationCheckId.literals.filter(
-		(id) => !disabled.has(id) && (!options.checks || options.checks.includes(id))
+		(id) =>
+			!disabled.has(id) &&
+			(!options.checks || options.checks.includes(id)) &&
+			(!optInLocalizationChecks.includes(id) || optedIn.has(id))
 	);
 }
 
@@ -267,6 +306,7 @@ export function checkLocalizationLine(
 		.flatMap((unit) => unit.occurrences.map((occurrence) => occurrence.devNotes))
 		.filter((note) => note.trim().length > 0);
 	const source = line.manifest[0]?.source.Text ?? line.source;
+	const sourceCulture = localizationSourceCulture(line, context.nativeCulture);
 	for (const culture of [...line.cultures].sort((a, b) => a.culture.localeCompare(b.culture))) {
 		if (
 			(options.culture && culture.culture !== options.culture) ||
@@ -300,7 +340,10 @@ export function checkLocalizationLine(
 				recovery:
 					"Provide a non-empty translation in the culture's PO entry, then import and compile with Unreal."
 			});
+		// Source-level checks report once per line, under the line's source culture.
+		const sourceLevel = culture.culture === sourceCulture;
 		if (
+			sourceLevel &&
 			notes.length === 0 &&
 			line.manifest.every((entry) => localizationManifestNotes(entry).length === 0)
 		)
@@ -313,7 +356,7 @@ export function checkLocalizationLine(
 				recovery:
 					"Add translator context to a source occurrence or manifest-producing source."
 			});
-		const duplicates = context.duplicates.get(line.source);
+		const duplicates = sourceLevel ? context.duplicates.get(line.source) : undefined;
 		if (duplicates && duplicates.identityCount > 1)
 			add({
 				...base,
@@ -497,7 +540,13 @@ export function checkLocalizationTarget(
 	const duplicates = localizationDuplicateSources();
 	for (const line of join.lines)
 		if (localizationDuplicateCandidate(line)) duplicates.add(line.source, line.identity!);
-	const context = { target: join.target, options, enabled, duplicates: duplicates.finish() };
+	const context = {
+		target: join.target,
+		nativeCulture: join.nativeCulture,
+		options,
+		enabled,
+		duplicates: duplicates.finish()
+	};
 	for (const line of [...join.lines].sort((a, b) => a.id.localeCompare(b.id)))
 		checkLocalizationLine(line, () => localizationLineUnits(line, byUnit), context, {
 			findings,
