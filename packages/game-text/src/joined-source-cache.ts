@@ -73,6 +73,8 @@ export const prepareJoinedSourceCache = Effect.fn("JoinedTarget.sourceCache")(fu
 	for (let id = 0; id < selected.length; id++) if (selected[id]) ids[row++] = id;
 	const last = strings.reader.manifest.segments.at(-1),
 		publishedCount = last ? last.start + last.count : 0;
+	// Published IDs are read from their segments, which the caller may not have loaded.
+	yield* strings.need([ids.filter((id) => id < publishedCount)]);
 	const appended = new Map<number, Uint8Array>();
 	for (let start = 0; start < ids.length; start += 8192) {
 		const fresh = Array.from(ids.subarray(start, start + 8192)).filter(
