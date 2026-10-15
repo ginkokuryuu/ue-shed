@@ -1,5 +1,5 @@
 import { Schema } from "effect";
-import type { LocalizationTarget } from "@ue-shed/localization";
+import type { LocalizationTarget } from "@ue-shed/localization/browser";
 import { localizationGatherCoverage, localizationGathersEditorOnlyData } from "./localization.js";
 import type { TextOccurrence } from "./schema.js";
 
