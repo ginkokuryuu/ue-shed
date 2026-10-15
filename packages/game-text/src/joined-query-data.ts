@@ -9,7 +9,12 @@ import { relative, resolve } from "node:path";
 import { Cache, Effect, Schema } from "effect";
 import { textOccurrenceFromExtraction, textCorpusFromExtractionEvents } from "./corpus.js";
 import { emptyPackageTextRecord } from "./package-text-record.js";
-import { packageTextGapReasons, decodePackageTextColumns } from "./package-text-columns.js";
+import {
+	packageTextGapReasons,
+	decodePackageTextColumns,
+	decodeStoredCopy,
+	occurrenceCopyCount
+} from "./package-text-columns.js";
 import { textCorpusWithExcludedPackages } from "./package-text-candidates.js";
 import { comparePackageTextPathBytes } from "./package-text-order.js";
 import { TextUnitId } from "./identifiers.js";
@@ -25,7 +30,6 @@ import {
 	type TextPackageCoverageSummary
 } from "./corpus-summary.js";
 import type { TextUnit, TextOccurrence, TextUnitSearchResult, TextReviewSignal } from "./schema.js";
-import { TextCopyKind } from "./schema.js";
 import type { SavedTextRepresentationCopy } from "./representation-copies.js";
 import {
 	LocalizationLineId,
@@ -417,37 +421,62 @@ export class JoinedQueryData {
 									entry_key: s("row")
 								},
 				edit_capability: c("editable") ? "source_editable" : "read_only",
-				...(gather === 0 ? undefined : { gather_editor_only: gather === 2 }),
-				...(c("copies") === 0 ? undefined : { copies: this.copies(shard, row) })
+				...(gather === 0 ? undefined : { gather_editor_only: gather === 2 })
 			}
 		});
 		// The audience the index stored and filters by.
-		return { ...occurrence, ...textAudienceFields(decodeTextAudience(c("audience"))) };
+		const decoded = { ...occurrence, ...textAudienceFields(decodeTextAudience(c("audience"))) };
+		if (c("copies") === 0) return decoded;
+		// Copies are provenance most readers never look at, such as checks over every line, and
+		// their paths are scattered through the string store: decode them on first access.
+		const load = () =>
+			this.copies(shard, row, s("source")).map((copy) => ({
+				objectPath: copy.object_path,
+				kind: copy.kind,
+				source: copy.source
+			}));
+		let copies: ReturnType<typeof load> | undefined;
+		return {
+			...decoded,
+			get copies() {
+				return (copies ??= load());
+			}
+		};
 	}
 	/** The representation copies folded into one stored occurrence, in the reader's order. */
-	private copies(shard: number, row: number): SavedTextRepresentationCopy[] {
-		const starts = this.packageColumn(shard, "occurrence.copy_start"),
-			kinds = this.packageColumn(shard, "copy.kind"),
+	private copies(shard: number, row: number, placeSource: string): SavedTextRepresentationCopy[] {
+		const kinds = this.packageColumn(shard, "copy.kind"),
 			objects = this.packageColumn(shard, "copy.object"),
 			sources = this.packageColumn(shard, "copy.source");
-		const start = starts[row]!,
-			end = starts[row + 1]!;
-		snapshotCheck(start < end && end <= kinds.length, "copy", "Invalid range");
+		const start = this.copyStarts(shard)[row]!,
+			end = start + occurrenceCopyCount(this.packageColumn(shard, "occurrence.copies")[row]!);
+		snapshotCheck(start < end && end <= kinds.length, "copy", "Invalid copy range");
 		const values = this.strings([
 			...objects.subarray(start, end),
 			...sources.subarray(start, end)
 		]);
-		const copies: SavedTextRepresentationCopy[] = [];
-		for (let index = 0; index < end - start; index++) {
-			const kind = TextCopyKind.literals[kinds[start + index]!];
-			snapshotCheck(kind !== undefined, "copy", "Invalid kind");
-			copies.push({
-				object_path: values[index]!,
-				kind,
-				source: values[end - start + index]!
-			});
+		return Array.from({ length: end - start }, (_, index) =>
+			decodeStoredCopy(
+				kinds[start + index]!,
+				values[index]!,
+				values[end - start + index]!,
+				placeSource
+			)
+		);
+	}
+	/** Each occurrence's first copy row in a shard, from the copy counts; built on first focus. */
+	private copyStarts(shard: number) {
+		const dependency = this.joined.meta.dependencies[this.joined.meta.packageNames[shard]!]!;
+		const key = `layer:${dependency}\0copy-starts`;
+		let starts = this.columns.get(key);
+		if (!starts) {
+			const flags = this.packageColumn(shard, "occurrence.copies");
+			starts = new Uint32Array(flags.length + 1);
+			for (let row = 0; row < flags.length; row++)
+				starts[row + 1] = starts[row]! + occurrenceCopyCount(flags[row]!);
+			this.columns.set(key, starts);
 		}
-		return copies;
+		return starts;
 	}
 	members(kind: "raw" | "slice", row: number) {
 		const prefix = `query.${kind}.`;
@@ -992,7 +1021,7 @@ export class JoinedQueryData {
 						...(yield* decodePackageTextColumns({
 							...layer,
 							section: (field) =>
-								field.startsWith("occurrence.")
+								field.startsWith("occurrence.") || field.startsWith("copy.")
 									? Effect.succeed(new Uint32Array())
 									: field === "package.occurrence_start"
 										? Effect.succeed(new Uint32Array(packageCount + 1))

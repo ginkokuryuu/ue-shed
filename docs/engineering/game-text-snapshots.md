@@ -506,10 +506,11 @@ the entire target. These caches are bounded Effect caches owned by the query gen
 `package-text-v5` stores each package record with its Blueprint representation copies folded into
 their authored sites ([Compiled Blueprint copies](../products/game-text.md#compiled-blueprint-copies)).
 Occurrence rows are places only, so joins, units, counts and facets read them unchanged. Each
-place has `occurrence.copies` (bit 0: it has copies; bit 1: a copy holds other text) and
-`occurrence.copy_start` (one more row than occurrences) into the `copy.object`, `copy.kind` and
-`copy.source` columns; `package.blueprint_start` and the `blueprint.*` columns keep the reader's
-`blueprintClasses`, so a decoded shard round-trips to the folded record. A place's
+place has `occurrence.copies`: bit 0 when it has copies, bit 1 when a copy holds other text, and
+the copy count from bit 2. Copies are sparse rows in their places' order (`copy.object`,
+`copy.kind`, `copy.source`); a copy with its place's text sets bit 2 of `copy.kind` and stores
+an empty source. `package.blueprints` keeps the reader's `blueprintClasses` as JSON
+(empty without a Blueprint), so a decoded shard round-trips to the folded record. A place's
 `occurrence.audience` is the rollup over the place and its copies. `joined-v14` reads
 `occurrence.copies` and sets query signal bit 6 (`compiled_copy_differs`). A change to a copy's
 text or to a place's copy flags is a package-structure change, so the join rebuilds in full; edits

@@ -1,7 +1,7 @@
 import { Effect, Schema } from "effect";
 import {
+	SavedAssetBlueprintClasses,
 	SavedAssetPackageTextEvent,
-	type SavedAssetBlueprintClasses,
 	type SavedAssetMissingGatherableText,
 	type SavedAssetTextCoverageGap
 } from "@ue-shed/unreal-assets";
@@ -60,16 +60,40 @@ const stringFields = {
 	"missing.site": "paths",
 	"copy.object": "paths",
 	"copy.source": "source",
-	"blueprint.object": "paths",
-	"blueprint.generated": "paths",
-	"blueprint.default": "paths",
-	"blueprint.skeleton": "paths",
-	"blueprint.skeleton_default": "paths"
+	// The reader's `blueprintClasses` as JSON, or empty: one section, not one per field.
+	"package.blueprints": "paths"
 } as const;
 const copyKinds = TextCopyKind.literals;
+const decodeBlueprintClasses = Schema.decodeUnknownSync(
+	Schema.fromJsonString(Schema.Array(SavedAssetBlueprintClasses))
+);
 /** Bits of `occurrence.copies`: the place has folded copies, and one of them holds other text. */
 export const OCCURRENCE_HAS_COPIES = 1;
 export const OCCURRENCE_COPY_DIFFERS = 2;
+/** `occurrence.copies` holds the place's copy count from this bit; its copies follow in order. */
+const COPY_COUNT_SHIFT = 2;
+/** `copy.kind` bit for a copy with its place's text; its `copy.source` is then empty. */
+const COPY_SAME_SOURCE = 4;
+
+export function occurrenceCopyCount(flags: number): number {
+	return flags >>> COPY_COUNT_SHIFT;
+}
+
+/** One stored copy; a copy with its place's text stores no source of its own. */
+export function decodeStoredCopy(
+	code: number,
+	objectPath: string,
+	source: string,
+	placeSource: string
+): SavedTextRepresentationCopy {
+	const kind = copyKinds[code & ~COPY_SAME_SOURCE];
+	snapshotCheck(kind !== undefined, "copy", "Invalid kind");
+	return {
+		object_path: objectPath,
+		kind,
+		source: code & COPY_SAME_SOURCE ? placeSource : source
+	};
+}
 const fieldDomains = new Map<string, string>(Object.entries(stringFields));
 const numberFields = [
 	"package.status",
@@ -83,7 +107,6 @@ const numberFields = [
 	"package.gather_sites",
 	"package.gather_missing",
 	"package.missing_start",
-	"package.blueprint_start",
 	"occurrence.identity",
 	"occurrence.location",
 	"occurrence.editable",
@@ -91,10 +114,9 @@ const numberFields = [
 	// policy table give the occurrence (encodeTextAudience), so joins never re-read path strings.
 	"occurrence.gather",
 	"occurrence.audience",
-	// OCCURRENCE_HAS_COPIES | OCCURRENCE_COPY_DIFFERS, so joins never read copy strings; and each
-	// occurrence's first row in the copy columns (one more row than occurrences).
+	// OCCURRENCE_HAS_COPIES | OCCURRENCE_COPY_DIFFERS and the copy count, so joins never read
+	// copy strings. Copies are sparse rows in their places' order.
 	"occurrence.copies",
-	"occurrence.copy_start",
 	"copy.kind",
 	"gap.reason"
 ];
@@ -116,9 +138,7 @@ export function packageTextColumns(records: readonly PackageTextStored[]) {
 		number(field, tables.get(stringFields[field])!.intern(value));
 	let occurrenceCount = 0,
 		gapCount = 0,
-		missingCount = 0,
-		copyCount = 0,
-		blueprintCount = 0;
+		missingCount = 0;
 	for (const stored of records) {
 		// Idempotent: records from the reader fold here, stored records are already folded.
 		const record =
@@ -140,7 +160,12 @@ export function packageTextColumns(records: readonly PackageTextStored[]) {
 		number("package.occurrence_start", occurrenceCount);
 		number("package.gap_start", gapCount);
 		number("package.missing_start", missingCount);
-		number("package.blueprint_start", blueprintCount);
+		string(
+			"package.blueprints",
+			record.event === "text_package_record" && record.blueprintClasses?.length
+				? JSON.stringify(record.blueprintClasses)
+				: ""
+		);
 		const gather = record.event === "text_package_record" ? record.gatherCoverage : undefined;
 		number("package.gather", Number(gather !== undefined));
 		number("package.gather_sites", gather?.runtimeSites ?? 0);
@@ -206,25 +231,17 @@ export function packageTextColumns(records: readonly PackageTextStored[]) {
 				"occurrence.copies",
 				occurrence.copies === undefined
 					? 0
-					: OCCURRENCE_HAS_COPIES |
+					: (occurrence.copies.length << COPY_COUNT_SHIFT) |
+							OCCURRENCE_HAS_COPIES |
 							(hasDifferingCopy(occurrence) ? OCCURRENCE_COPY_DIFFERS : 0)
 			);
-			number("occurrence.copy_start", copyCount);
 			for (const copy of occurrence.copies ?? []) {
+				const same = copy.source === occurrence.source;
 				string("copy.object", copy.object_path);
-				string("copy.source", copy.source);
-				number("copy.kind", copyKinds.indexOf(copy.kind));
-				copyCount++;
+				string("copy.source", same ? "" : copy.source);
+				number("copy.kind", copyKinds.indexOf(copy.kind) | (same ? COPY_SAME_SOURCE : 0));
 			}
 			occurrenceCount++;
-		}
-		for (const classes of record.blueprintClasses ?? []) {
-			string("blueprint.object", classes.blueprint);
-			string("blueprint.generated", classes.generatedClass);
-			string("blueprint.default", classes.classDefault ?? "");
-			string("blueprint.skeleton", classes.skeletonClass ?? "");
-			string("blueprint.skeleton_default", classes.skeletonClassDefault ?? "");
-			blueprintCount++;
 		}
 		for (const sample of record.gapSamples) {
 			string("gap.object", sample.object_path);
@@ -243,8 +260,6 @@ export function packageTextColumns(records: readonly PackageTextStored[]) {
 	number("package.occurrence_start", occurrenceCount);
 	number("package.gap_start", gapCount);
 	number("package.missing_start", missingCount);
-	number("package.blueprint_start", blueprintCount);
-	number("occurrence.copy_start", copyCount);
 	const columns: SnapshotColumn[] = [...tables.values()].flatMap((table) => [...table.finish()]);
 	for (const [name, rows] of values) {
 		const domain = fieldDomains.get(name);
@@ -294,6 +309,8 @@ export const decodePackageTextColumns = Effect.fn("PackageText.decodeColumns")(f
 				return result;
 			};
 			const records: PackageTextStored[] = [];
+			const copyCount = columns.get("copy.kind")!.length;
+			let copyRow = 0;
 			for (let row = 0; row < columns.get("package.path")!.length; row++) {
 				const path = string("package.path", row),
 					signature = string("package.signature", row);
@@ -330,25 +347,23 @@ export const decodePackageTextColumns = Effect.fn("PackageText.decodeColumns")(f
 					);
 					const namespace = string("occurrence.namespace", index),
 						key = string("occurrence.key", index);
-					const copyStart = value("occurrence.copy_start", index),
-						copyEnd = value("occurrence.copy_start", index + 1);
-					snapshotCheck(
-						copyStart <= copyEnd &&
-							copyEnd <= columns.get("copy.kind")!.length &&
-							(copyStart === copyEnd) === (value("occurrence.copies", index) === 0),
-						"copy",
-						"Invalid range"
-					);
 					const copies: SavedTextRepresentationCopy[] = [];
-					for (let copy = copyStart; copy < copyEnd; copy++) {
-						const kind = copyKinds[value("copy.kind", copy)];
-						snapshotCheck(kind !== undefined, "copy", "Invalid kind");
-						copies.push({
-							object_path: string("copy.object", copy),
-							kind,
-							source: string("copy.source", copy)
-						});
-					}
+					const flags = value("occurrence.copies", index),
+						copyEnd = copyRow + occurrenceCopyCount(flags);
+					snapshotCheck(
+						copyEnd <= copyCount && (flags === 0) === (copyEnd === copyRow),
+						"copy",
+						"Invalid copy count"
+					);
+					for (; copyRow < copyEnd; copyRow++)
+						copies.push(
+							decodeStoredCopy(
+								value("copy.kind", copyRow),
+								string("copy.object", copyRow),
+								string("copy.source", copyRow),
+								string("occurrence.source", index)
+							)
+						);
 					const object_path = string("occurrence.object", index),
 						property_path = string("occurrence.property", index);
 					occurrences.push({
@@ -420,30 +435,9 @@ export const decodePackageTextColumns = Effect.fn("PackageText.decodeColumns")(f
 						source: string("missing.source", index),
 						site: string("missing.site", index)
 					});
-				const blueprintStart = value("package.blueprint_start", row),
-					blueprintEnd = value("package.blueprint_start", row + 1);
-				snapshotCheck(
-					blueprintStart <= blueprintEnd &&
-						blueprintEnd <= columns.get("blueprint.object")!.length,
-					"blueprint",
-					"Invalid range"
-				);
-				const blueprintClasses: SavedAssetBlueprintClasses[] = [];
-				for (let index = blueprintStart; index < blueprintEnd; index++) {
-					const optional = (name: string) => string(name, index) || undefined;
-					const classDefault = optional("blueprint.default"),
-						skeletonClass = optional("blueprint.skeleton"),
-						skeletonClassDefault = optional("blueprint.skeleton_default");
-					blueprintClasses.push({
-						blueprint: string("blueprint.object", index),
-						generatedClass: string("blueprint.generated", index),
-						...(classDefault === undefined ? undefined : { classDefault }),
-						...(skeletonClass === undefined ? undefined : { skeletonClass }),
-						...(skeletonClassDefault === undefined
-							? undefined
-							: { skeletonClassDefault })
-					});
-				}
+				const blueprints = string("package.blueprints", row);
+				const blueprintClasses =
+					blueprints === "" ? [] : decodeBlueprintClasses(blueprints);
 				records.push({
 					path,
 					signature,
@@ -480,6 +474,7 @@ export const decodePackageTextColumns = Effect.fn("PackageText.decodeColumns")(f
 					}
 				});
 			}
+			snapshotCheck(copyRow === copyCount, "copy", "Copy outside its place");
 			return records;
 		},
 		catch: (cause) => snapshotFailure("package-text", String(cause))

@@ -57,6 +57,8 @@ describe("representationSite", () => {
 	] as const;
 	it.each([
 		["WBP_Menu_C.WidgetTree.Title", "WBP_Menu.WidgetTree.Title", "generated_class"],
+		["WBP_Menu_C:WidgetTree.Title", "WBP_Menu:WidgetTree.Title", "generated_class"],
+		["WBP_Menu_C:FadeIn_INST.FadeIn", "WBP_Menu:FadeIn.FadeIn", "instance"],
 		["WBP_Menu_C.FadeIn_INST.FadeIn.Track_0", "WBP_Menu.FadeIn.FadeIn.Track_0", "instance"],
 		["Default__WBP_Menu_C", "WBP_Menu", "class_default"],
 		["Default__WBP_Menu_C.Prompt", "WBP_Menu.Prompt", "class_default"]

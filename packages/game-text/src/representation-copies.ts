@@ -71,28 +71,27 @@ function copyPrefixes(classes: readonly SavedAssetBlueprintClasses[]): Prefix[] 
  * The authored site an object path copies, and the kind of copy, or undefined for a path outside
  * every class and default object the reader reported. `Pkg.X_C.WidgetTree.Title` copies
  * `Pkg.X.WidgetTree.Title`; a UMG animation `Pkg.X_C.FadeIn_INST.FadeIn.Track` copies
- * `Pkg.X.FadeIn.FadeIn.Track`; `Pkg.Default__X_C.Prompt` maps to `Pkg.X.Prompt`.
+ * `Pkg.X.FadeIn.FadeIn.Track`; `Pkg.Default__X_C.Prompt` maps to `Pkg.X.Prompt`. The reader joins
+ * outers with `.`; Unreal's `Pkg.X_C:WidgetTree.Title` spelling maps the same way, keeping `:`.
  */
 export function representationSite(
 	objectPath: string,
 	prefixes: readonly Prefix[]
 ): { readonly site: string; readonly kind: TextCopyKind } | undefined {
 	for (const prefix of prefixes) {
-		if (
-			objectPath !== prefix.path &&
-			!(objectPath.startsWith(prefix.path) && objectPath[prefix.path.length] === ".")
-		)
+		if (objectPath === prefix.path) return { site: prefix.blueprint, kind: prefix.kind };
+		const separator = objectPath[prefix.path.length];
+		if ((separator !== "." && separator !== ":") || !objectPath.startsWith(prefix.path))
 			continue;
 		const rest = objectPath.slice(prefix.path.length + 1);
-		if (rest === "") return { site: prefix.blueprint, kind: prefix.kind };
 		const dot = rest.indexOf("."),
 			first = dot < 0 ? rest : rest.slice(0, dot);
 		if (prefix.instances && first.length > 5 && first.endsWith("_INST"))
 			return {
-				site: `${prefix.blueprint}.${first.slice(0, -5)}${dot < 0 ? "" : rest.slice(dot)}`,
+				site: `${prefix.blueprint}${separator}${first.slice(0, -5)}${dot < 0 ? "" : rest.slice(dot)}`,
 				kind: prefix.kind === "generated_class" ? "instance" : prefix.kind
 			};
-		return { site: `${prefix.blueprint}.${rest}`, kind: prefix.kind };
+		return { site: `${prefix.blueprint}${separator}${rest}`, kind: prefix.kind };
 	}
 	return undefined;
 }
