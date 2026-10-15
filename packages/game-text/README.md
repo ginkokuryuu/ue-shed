@@ -295,7 +295,8 @@ culture in the target by code), so a selected non-native culture does not show t
 out text without letters. `culture_invariant_text` findings have no identity (`identity: null`), so
 they cannot be accepted in a review file. Most culture-invariant text is invariant on purpose, so it
 is reported only for a saved place that is not editor text (by its audience), not in a package
-whose path has "debug" in it and not a text render placed in a level or a sequence, and only in a
+whose path has "debug" in it and not a text render component (world-space labels, mostly debug
+names and distances), and only in a
 property (a class's property path, or a DataTable's column, without container indexes) that holds
 at least as much keyed or String Table text in the project as invariant text in such places. A
 column of backer names with a few localized headings, or a label no one localizes, is left alone.

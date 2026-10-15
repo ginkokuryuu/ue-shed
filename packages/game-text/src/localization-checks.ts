@@ -257,13 +257,15 @@ export function localizationLocalizableProperties(
 
 /** A package path with "debug" in a folder or asset name: debug menus, saves and test maps. */
 const DEBUG_PACKAGE = /debug/iu;
+/**
+ * World-space text renders: labels on actors placed in levels, sequences and Blueprint templates,
+ * mostly debug labels such as spawner names and waypoint distances.
+ */
 const TEXT_RENDER_CLASS = /\.TextRenderComponent$/u;
-/** Objects that place text in a level or a sequence rather than in a widget or data. */
-const PLACED_OBJECT = /\.(?:PersistentLevel|MovieScene\w*)\./u;
 
 /**
  * A saved place where culture-invariant text could reach players by mistake: not editor text, not
- * in debug content, not a text render placed in a level or a sequence, not a String Table entry.
+ * in debug content, not a text render component, not a String Table entry.
  */
 export function invariantTextPlace(
 	occurrence: Pick<TextOccurrence, "audience" | "location">
@@ -274,11 +276,7 @@ export function invariantTextPlace(
 	const path = location.objectPath,
 		dot = path.indexOf(".", path.lastIndexOf("/") + 1);
 	if (DEBUG_PACKAGE.test(dot < 0 ? path : path.slice(0, dot))) return false;
-	return !(
-		location.kind === "asset_property" &&
-		TEXT_RENDER_CLASS.test(location.classPath) &&
-		PLACED_OBJECT.test(location.objectPath)
-	);
+	return !(location.kind === "asset_property" && TEXT_RENDER_CLASS.test(location.classPath));
 }
 
 /**

@@ -269,7 +269,16 @@ export function placeholderTranslation(source: string, translation: string): str
 	const trimmed = translation.trim();
 	if (trimmed.length === 0 || trimmed.length > 24 || !LETTER.test(source)) return undefined;
 	if (translationGroupKey(trimmed) === translationGroupKey(source)) return undefined;
-	if (placeholderMatches(source).length) return undefined;
+	if (
+		placeholderMatches(source).length ||
+		PLACEHOLDER_TRANSLATIONS.has(
+			source
+				.trim()
+				.toLowerCase()
+				.replace(/[\p{P}\s]+$/u, "")
+		)
+	)
+		return undefined;
 	if (!LETTER_OR_NUMBER.test(trimmed)) return visibleWordCount(source) >= 3 ? trimmed : undefined;
 	const word = trimmed.toLowerCase().replace(/[\p{P}\s]+$/u, "");
 	if (word === "todo") return trimmed.startsWith("TODO") ? trimmed : undefined;

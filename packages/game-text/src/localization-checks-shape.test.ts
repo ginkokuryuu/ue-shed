@@ -171,6 +171,7 @@ describe("text shape helpers", () => {
 		// "Todo" is Spanish for "all"; the source's own placeholders are placeholder_text's.
 		expect(placeholderTranslation("All", "Todo")).toBeUndefined();
 		expect(placeholderTranslation("TBD", "skip")).toBeUndefined();
+		expect(placeholderTranslation("tbd", "skip")).toBeUndefined();
 		expect(placeholderTranslation("xxx", "xxx")).toBeUndefined();
 		// A short line may be answered with silence.
 		expect(placeholderTranslation("*exhales*", "...")).toBeUndefined();
@@ -730,7 +731,7 @@ describe("built-in source checks", () => {
 				objectPath:
 					"/Game/UI/Debug/WBP_NpcDebugPanel.WBP_NpcDebugPanel_C.WidgetTree.TextBlock_5"
 			}),
-			// Text renders placed in a level or a sequence.
+			// Text renders placed in a level, a sequence or a Blueprint template.
 			invariantUnit("d", "Betty Bird Feeder Spot", {
 				objectPath:
 					"/Game/Maps/Waypoints.Waypoints.PersistentLevel.C_AnimationWaypoint_198.Text",
@@ -740,6 +741,11 @@ describe("built-in source checks", () => {
 			invariantUnit("e", "C : 1 N : 0 Distance : 792.288", {
 				objectPath:
 					"/Game/Cutscene/Heart_7.Heart_7.MovieScene_0.BP_Cutscene_Waypoint_1.TextComponent",
+				classPath: "/Script/Engine.TextRenderComponent",
+				propertyPath: "Text"
+			}),
+			invariantUnit("g", "Wild Life Spawner", {
+				objectPath: "/Game/Mining/BP_MonsterSpawner.Default__BP_MonsterSpawner_C.Text",
 				classPath: "/Script/Engine.TextRenderComponent",
 				propertyPath: "Text"
 			}),
