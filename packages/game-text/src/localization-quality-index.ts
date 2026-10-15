@@ -44,6 +44,7 @@ import {
 	localizationFindingHash,
 	workspaceQualityFilterOf,
 	workspaceQualityItem,
+	type LocalizationFindingGroup,
 	type LocalizationFindingList,
 	type LocalizationQuality
 } from "./localization-workspace.js";
@@ -887,6 +888,7 @@ export const indexedLocalizationQuality = Effect.fn("GameText.localizationQualit
 	for (let index = 0; index < storedReported.length; index++)
 		storedIsReported![storedReported.at(index)] = 1;
 	const reportedBySource = storedIsReported && new Uint8Array(total);
+	const groupSizes = new Map<number, number>();
 	let position = 0;
 	for (let rank = 0; rank < lineCount; rank++) {
 		if (tied[rank]) continue;
@@ -898,7 +900,34 @@ export const indexedLocalizationQuality = Effect.fn("GameText.localizationQualit
 			second[position] = storedSecond.at(stored);
 			blockOf[position] = rank;
 			if (reportedBySource) reportedBySource[position] = storedIsReported![stored]!;
+			const key = facts[position]! * 2 + (reportedBySource?.[position] ?? 0);
+			groupSizes.set(key, (groupSizes.get(key) ?? 0) + 1);
+			if ((position & 0xffff) === 0xffff) yield* Effect.yieldNow;
 		}
+	}
+	// Group numeric positions by immutable scan facts. Workspace pages count groups and select
+	// by rank inside them, instead of revisiting millions of findings for every selection.
+	const groups: LocalizationFindingGroup[] = [];
+	const groupByKey = new Map<number, { positions: Uint32Array; next: number }>();
+	for (const [key, size] of groupSizes) {
+		const fact = Math.floor(key / 2);
+		const positions = new Uint32Array(size);
+		groups.push({
+			culture: target.cultures[fact & 0xfff]!,
+			filter: WorkspaceQualityFilter.literals[(fact >>> 12) & 0x3f]!,
+			ruleId: ruleIds[fact >>> 19]!,
+			eligible: ((fact >>> 18) & 1) === 1,
+			reportedBySource: key % 2 === 1,
+			positions
+		});
+		groupByKey.set(key, { positions, next: 0 });
+		if ((groups.length & 0x7ff) === 0) yield* Effect.yieldNow;
+	}
+	for (let position = 0; position < total; position++) {
+		const key = facts[position]! * 2 + (reportedBySource?.[position] ?? 0);
+		const group = groupByKey.get(key)!;
+		group.positions[group.next++] = position;
+		if ((position & 0xffff) === 0xffff) yield* Effect.yieldNow;
 	}
 	const limits = new Map(
 		[...limitCounts].map(([scope, codes]) => [
@@ -936,7 +965,7 @@ export const indexedLocalizationQuality = Effect.fn("GameText.localizationQualit
 		});
 	};
 	let lineOfRaw: Uint32Array | undefined;
-	const lineOfUnit = (id: TextUnitId) => {
+	const rowOfUnit = (id: TextUnitId) => {
 		const raw = units.find(id);
 		if (raw === undefined) return undefined;
 		if (!lineOfRaw) {
@@ -951,10 +980,21 @@ export const indexedLocalizationQuality = Effect.fn("GameText.localizationQualit
 					lineOfRaw[sliceRaw[slice]!] = row + 1;
 		}
 		const row = lineOfRaw[units.idRow(raw)];
-		return row ? data.line(row - 1) : undefined;
+		return row ? row - 1 : undefined;
+	};
+	const lineOfUnit = (id: TextUnitId) => {
+		const row = rowOfUnit(id);
+		return row === undefined ? undefined : data.line(row);
+	};
+	const sourceKeyOfUnit = (id: TextUnitId) => {
+		const row = rowOfUnit(id);
+		if (row === undefined) return undefined;
+		// Corpus lines with an empty key have a null identity, as the hydrated line does.
+		return data.strings([data.column("line.key")[row]!])[0] || undefined;
 	};
 	const findings: LocalizationFindingList = {
 		length: total,
+		groups,
 		culture: (position) => target.cultures[facts[position]! & 0xfff]!,
 		filter: (position) => WorkspaceQualityFilter.literals[(facts[position]! >>> 12) & 0x3f]!,
 		ruleId: (position) => ruleIds[facts[position]! >>> 19]!,
@@ -995,7 +1035,8 @@ export const indexedLocalizationQuality = Effect.fn("GameText.localizationQualit
 			unsupportedRuleCultures: policy?.diagnostics.length ?? 0,
 			status: corpus.status,
 			coverage: corpus.coverage,
-			lineOfUnit
+			lineOfUnit,
+			sourceKeyOfUnit
 		}
 	} satisfies LocalizationQuality;
 });

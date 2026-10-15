@@ -247,6 +247,11 @@ export const WorkspaceQualityFocusResult = Schema.Union([
 ]);
 export type WorkspaceQualityFocusResult = typeof WorkspaceQualityFocusResult.Type;
 type Finding = LocalizationQualityReport["findings"][number];
+interface SeverityBuckets<A> {
+	blocking: A[];
+	normal: A[];
+	low: A[];
+}
 type SourceFinding = TextQualityReport["findings"][number];
 type RuleId = (typeof TextQualityRuleSummary.Type)["ruleId"];
 /** A shown finding: the finding, its line when known, and the summary the list displays. */
@@ -485,7 +490,8 @@ function findingSource(finding: Finding, line: LocalizationLine | undefined): st
 }
 export function workspaceQualityItem(
 	finding: Finding | SourceFinding,
-	line: LocalizationLine | undefined
+	line: LocalizationLine | undefined,
+	sourceKey?: string
 ): WorkspaceQualityItem {
 	const localized = "culture" in finding;
 	const id = localized
@@ -499,7 +505,8 @@ export function workspaceQualityItem(
 		" · " +
 		(localized
 			? (finding.identity?.key ?? "No key")
-			: (line?.identity?.key ??
+			: (sourceKey ??
+				line?.identity?.key ??
 				(location?.kind === "string_table_entry" ? location.entryKey : finding.ruleId))) +
 		" · " +
 		workspaceQualityLabels[workspaceQualityFilterOf(finding)] +
@@ -592,9 +599,22 @@ function ranges(text: string, finding: Finding, side: "source" | "translation") 
 	return matches.sort((a, b) => a.start - b.start);
 }
 
+/** A compact group of positions sharing the scan facts used for workspace selection. */
+export interface LocalizationFindingGroup {
+	readonly culture: CultureCode;
+	readonly filter: WorkspaceQualityFilter;
+	readonly ruleId: RuleId;
+	readonly eligible: boolean;
+	readonly reportedBySource: boolean;
+	/** Ascending positions in the finding list, sharing all the facts above. */
+	readonly positions: Uint32Array;
+}
+
 /** Localization findings in report order. Facts are cheap; only `items` reads lines. */
 export interface LocalizationFindingList {
 	readonly length: number;
+	/** Optional compact selection index, prepared cooperatively by indexed scans. */
+	readonly groups?: readonly LocalizationFindingGroup[];
 	culture(position: number): CultureCode;
 	filter(position: number): WorkspaceQualityFilter;
 	ruleId(position: number): RuleId;
@@ -620,6 +640,8 @@ export interface LocalizationQualityMetadata {
 	readonly coverage: TextCorpus["coverage"];
 	/** The line a source finding's unit belongs to, for its context. */
 	readonly lineOfUnit: (id: TextUnitId) => LocalizationLine | undefined;
+	/** Optional source-summary context without hydrating the unit's complete localization line. */
+	readonly sourceKeyOfUnit?: (id: TextUnitId) => string | undefined;
 }
 
 /** Findings and metadata a quality workspace reads, however they are stored. */
@@ -650,22 +672,26 @@ export function localizationQuality(
 				: []
 		)
 	);
-	const items = report.findings.map((finding) =>
-		workspaceQualityItem(
+	const itemAt = (position: number) => {
+		const finding = report.findings[position]!;
+		return workspaceQualityItem(
 			finding,
 			"culture" in finding ? lines.get(finding.lineId) : units.get(finding.textUnitId)
-		)
-	);
+		);
+	};
 	return {
 		findings: {
-			length: items.length,
-			culture: (position) => items[position]!.summary.culture!,
-			filter: (position) => items[position]!.summary.filter,
-			ruleId: (position) => items[position]!.finding.ruleId,
+			length: report.findings.length,
+			culture: (position) => {
+				const finding = report.findings[position]!;
+				return ("culture" in finding ? finding.culture : undefined)!;
+			},
+			filter: (position) => workspaceQualityFilterOf(report.findings[position]!),
+			ruleId: (position) => report.findings[position]!.ruleId,
 			eligible: (position) =>
-				eligibleLocalizationChange(items[position]!.finding) !== undefined,
+				eligibleLocalizationChange(report.findings[position]!) !== undefined,
 			reportedBySource: (position) => {
-				const { finding } = items[position]!;
+				const finding = report.findings[position]!;
 				return (
 					"culture" in finding &&
 					finding.kind === "placeholder_text" &&
@@ -673,12 +699,16 @@ export function localizationQuality(
 				);
 			},
 			find: (id, culture) => {
-				const position = items.findIndex(
-					({ summary }) => summary.id === id && (!culture || summary.culture === culture)
+				const position = report.findings.findIndex(
+					(finding) =>
+						(!culture || ("culture" in finding && finding.culture === culture)) &&
+						("culture" in finding
+							? localizationFindingId(localizationFindingHash(finding))
+							: textQualityFindingId(finding)) === id
 				);
 				return position < 0 ? undefined : position;
 			},
-			items: (positions) => positions.map((position) => items[position]!),
+			items: (positions) => positions.map(itemAt),
 			limits: (culture) => {
 				const limits = new Map<LocalizationCheckDiagnostic["code"], number>();
 				for (const diagnostic of report.checkDiagnostics) {
@@ -729,12 +759,57 @@ export function localizationQualityWorkspaceOf(
 	source: TextQualityReport | undefined,
 	{ findings: list, metadata }: LocalizationQuality
 ) {
-	const sourceQuery = source ? textQualityQuery(source) : undefined;
-	const sourceItems = (source?.findings ?? []).map((finding) =>
-		workspaceQualityItem(finding, metadata.lineOfUnit(finding.textUnitId))
-	);
-	const sourceCount = sourceItems.length,
+	const sourceFindings = source?.findings ?? [];
+	// The last page's source IDs also serve focus without hashing every preceding finding.
+	const pageSources = new Map<TextQualityFindingId, SourceFinding>();
+	const sourceItem = (finding: SourceFinding) => {
+		// A source summary with an occurrence already has its asset context. Only the joined key
+		// is missing; reading all translations and evidence for that key costs far more.
+		const item =
+			metadata.sourceKeyOfUnit && finding.affectedOccurrences[0]
+				? workspaceQualityItem(
+						finding,
+						undefined,
+						metadata.sourceKeyOfUnit(finding.textUnitId)
+					)
+				: workspaceQualityItem(finding, metadata.lineOfUnit(finding.textUnitId));
+		pageSources.set(item.summary.id, finding);
+		return item;
+	};
+	const sourceItemAt = (position: number) => sourceItem(sourceFindings[position]!);
+	const sourceCount = sourceFindings.length,
 		total = sourceCount + list.length;
+	let sourceGroups:
+		| Array<{ filter: SourceFinding["kind"]; ruleId: RuleId; positions: Uint32Array }>
+		| undefined;
+	const groupedSource = () => {
+		if (sourceGroups) return sourceGroups;
+		const byRule = new Map<RuleId, { character_budget?: number[]; terminology?: number[] }>();
+		const groups: Array<{
+			filter: SourceFinding["kind"];
+			ruleId: RuleId;
+			positions: number[];
+		}> = [];
+		for (let position = 0; position < sourceCount; position++) {
+			const finding = sourceFindings[position]!;
+			let rule = byRule.get(finding.ruleId);
+			if (!rule) {
+				rule = {};
+				byRule.set(finding.ruleId, rule);
+			}
+			let positions = rule[finding.kind];
+			if (!positions) {
+				positions = [];
+				rule[finding.kind] = positions;
+				groups.push({ filter: finding.kind, ruleId: finding.ruleId, positions });
+			}
+			positions.push(position);
+		}
+		return (sourceGroups = groups.map((group) => ({
+			...group,
+			positions: Uint32Array.from(group.positions)
+		})));
+	};
 	// One list shows source and localization findings: a placeholder is reported once. The checks
 	// ran with the rule document the source report comes from, and recorded which placeholders
 	// its terminology reports; nothing is hydrated here.
@@ -747,7 +822,7 @@ export function localizationQualityWorkspaceOf(
 			(!request.culture || list.culture(position - sourceCount) === request.culture));
 	const filterAt = (position: number) =>
 		position < sourceCount
-			? sourceItems[position]!.summary.filter
+			? workspaceQualityFilterOf(sourceFindings[position]!)
 			: list.filter(position - sourceCount);
 	const severityAt = (position: number) => {
 		const filter = filterAt(position);
@@ -755,19 +830,20 @@ export function localizationQualityWorkspaceOf(
 	};
 	const ruleAt = (position: number) =>
 		position < sourceCount
-			? sourceItems[position]!.finding.ruleId
+			? sourceFindings[position]!.ruleId
 			: list.ruleId(position - sourceCount);
 	const eligibleAt = (position: number) =>
 		position < sourceCount
-			? eligibleLocalizationChange(sourceItems[position]!.finding) !== undefined
+			? eligibleLocalizationChange(sourceFindings[position]!) !== undefined
 			: list.eligible(position - sourceCount);
 	const itemsAt = (positions: readonly number[]): WorkspaceQualityItem[] => {
+		pageSources.clear();
 		const localized = list.items(
 			positions.filter((position) => position >= sourceCount).map((p) => p - sourceCount)
 		);
 		let next = 0;
 		return positions.map((position) =>
-			position < sourceCount ? sourceItems[position]! : withSummary(localized[next++]!)
+			position < sourceCount ? sourceItemAt(position) : withSummary(localized[next++]!)
 		);
 	};
 	/** Summaries in batches, so a large export never holds every finding and line at once. */
@@ -792,49 +868,82 @@ export function localizationQualityWorkspaceOf(
 				bySeverity.get(severityAt(position))!.push(position);
 		return [...bySeverity.values()].flat();
 	};
-	const search = (request: WorkspaceQualityRequest): WorkspaceQualityPage => {
+	// Keep just the current selection's numeric positions and counts. Moving through its pages
+	// neither rechecks findings nor walks the full list again; changing selection replaces it.
+	const select = (request: WorkspaceQualityRequest) => {
 		const typeCounts = new Map<WorkspaceQualityFilter, number>();
 		const ruleCounts = new Map<string, number>();
 		const severityCounts = { blocking: 0, normal: 0, low: 0 };
-		const matchedBySeverity = { blocking: 0, normal: 0, low: 0 };
-		const offset = request.offset ?? 0;
+		const matchedBySeverity: SeverityBuckets<number> = {
+			blocking: [],
+			normal: [],
+			low: []
+		};
 		let cultureCount = 0,
 			matchedCount = 0,
 			suggestedFixCount = 0;
-		for (let position = 0; position < total; position++) {
+		const record = (
+			filter: WorkspaceQualityFilter,
+			rule: RuleId,
+			count: number,
+			eligible: number
+		) => {
+			const severity = filter === "all" ? "normal" : workspaceQualitySeverity(filter);
+			cultureCount += count;
+			typeCounts.set(filter, (typeCounts.get(filter) ?? 0) + count);
+			ruleCounts.set(rule, (ruleCounts.get(rule) ?? 0) + count);
+			severityCounts[severity] += count;
+			if (request.filter !== "all" && request.filter !== filter) return false;
+			matchedCount += count;
+			suggestedFixCount += eligible;
+			return true;
+		};
+		for (let position = 0; position < (list.groups ? 0 : total); position++) {
 			if (!inCulture(request, position)) continue;
-			cultureCount++;
 			const filter = filterAt(position),
 				rule = ruleAt(position),
 				severity = severityAt(position);
-			typeCounts.set(filter, (typeCounts.get(filter) ?? 0) + 1);
-			ruleCounts.set(rule, (ruleCounts.get(rule) ?? 0) + 1);
-			severityCounts[severity]++;
-			if (request.filter !== "all" && request.filter !== filter) continue;
-			matchedBySeverity[severity]++;
-			matchedCount++;
-			if (eligibleAt(position)) suggestedFixCount++;
+			if (record(filter, rule, 1, eligibleAt(position) ? 1 : 0))
+				matchedBySeverity[severity].push(position);
 		}
-		// The page in severity order: skip whole severities before the offset, then read on.
-		const page: number[] = [];
-		let skipped = 0;
-		for (const severity of CheckSeverity.literals) {
-			const count = matchedBySeverity[severity];
-			if (page.length >= 50 || skipped + count <= offset) {
-				skipped += count;
+		const runs: SeverityBuckets<{ positions: Uint32Array; base: number }> = {
+			blocking: [],
+			normal: [],
+			low: []
+		};
+		for (const severity of CheckSeverity.literals)
+			if (matchedBySeverity[severity].length)
+				runs[severity].push({
+					positions: Uint32Array.from(matchedBySeverity[severity]),
+					base: 0
+				});
+		if (list.groups)
+			for (const group of groupedSource())
+				if (record(group.filter, group.ruleId, group.positions.length, 0))
+					runs[workspaceQualitySeverity(group.filter)].push({
+						positions: group.positions,
+						base: 0
+					});
+		for (const group of list.groups ?? []) {
+			if (
+				(source && group.reportedBySource) ||
+				(request.culture && request.culture !== group.culture)
+			)
 				continue;
-			}
-			let seen = skipped;
-			for (let position = 0; position < total && page.length < 50; position++) {
-				if (
-					!inCulture(request, position) ||
-					(request.filter !== "all" && request.filter !== filterAt(position)) ||
-					severityAt(position) !== severity
+			if (
+				record(
+					group.filter,
+					group.ruleId,
+					group.positions.length,
+					group.eligible ? group.positions.length : 0
 				)
-					continue;
-				if (seen++ >= offset) page.push(position);
-			}
-			skipped += count;
+			)
+				runs[
+					group.filter === "all" ? "normal" : workspaceQualitySeverity(group.filter)
+				].push({
+					positions: group.positions,
+					base: sourceCount
+				});
 		}
 		const counts = Schema.decodeUnknownSync(WorkspaceQualityPage.fields.counts)(
 			Object.fromEntries(
@@ -845,17 +954,79 @@ export function localizationQualityWorkspaceOf(
 			)
 		);
 		return {
+			culture: request.culture,
+			filter: request.filter,
+			positions: CheckSeverity.literals.map((severity) => runs[severity]),
 			counts,
 			severityCounts,
 			limits: [...list.limits(request.culture)],
 			unsupportedRuleCultures: metadata.unsupportedRuleCultures,
 			total: matchedCount,
-			findings: itemsAt(page).map((item) => item.summary),
 			suggestedFixCount,
 			rules: [...(source?.rules ?? []).map((rule) => rule.ruleId), ...metadata.rules].map(
 				(ruleId) => ({ ruleId, findingCount: ruleCounts.get(ruleId) ?? 0 })
-			),
-			...(offset + 50 < matchedCount ? { nextOffset: offset + 50 } : undefined)
+			)
+		};
+	};
+	let selection: ReturnType<typeof select> | undefined;
+	const search = (request: WorkspaceQualityRequest): WorkspaceQualityPage => {
+		if (
+			!selection ||
+			selection.culture !== request.culture ||
+			selection.filter !== request.filter
+		)
+			selection = select(request);
+		const { culture: _culture, filter: _filter, positions, ...page } = selection;
+		const offset = request.offset ?? 0;
+		const selected: number[] = [];
+		let skipped = 0;
+		const lowerBound = (values: Uint32Array, value: number) => {
+			let low = 0,
+				high = values.length;
+			while (low < high) {
+				const middle = (low + high) >>> 1;
+				if (values[middle]! < value) low = middle + 1;
+				else high = middle;
+			}
+			return low;
+		};
+		// Select by rank across sorted fact groups, without merging or walking their full contents.
+		for (const runs of positions) {
+			const count = runs.reduce((sum, run) => sum + run.positions.length, 0);
+			if (skipped + count <= offset) {
+				skipped += count;
+				continue;
+			}
+			const start = Math.max(0, offset - skipped);
+			let low = 0,
+				high = total;
+			while (low < high) {
+				const middle = Math.floor((low + high) / 2);
+				const through = runs.reduce(
+					(sum, run) => sum + lowerBound(run.positions, middle + 1 - run.base),
+					0
+				);
+				if (through <= start) low = middle + 1;
+				else high = middle;
+			}
+			const candidates: number[] = [];
+			for (const run of runs) {
+				const from = lowerBound(run.positions, low - run.base);
+				for (const position of run.positions.subarray(from, from + 50 - selected.length))
+					candidates.push(position + run.base);
+			}
+			candidates.sort((a, b) => a - b);
+			selected.push(...candidates.slice(0, 50 - selected.length));
+			skipped += count;
+			if (selected.length === 50) break;
+		}
+		const { suggestedFixCount, rules, ...summary } = page;
+		return {
+			...summary,
+			findings: itemsAt(selected).map((item) => item.summary),
+			suggestedFixCount,
+			rules,
+			...(offset + 50 < page.total ? { nextOffset: offset + 50 } : undefined)
 		};
 	};
 	return {
@@ -873,7 +1044,12 @@ export function localizationQualityWorkspaceOf(
 			};
 		},
 		focus(request: WorkspaceQualityFocusRequest): WorkspaceQualityFocusResult {
-			let item = sourceItems.find(({ summary }) => summary.id === request.id);
+			const sourceFinding =
+				pageSources.get(request.id) ??
+				(request.id.startsWith("quality-finding:")
+					? sourceFindings.find((finding) => textQualityFindingId(finding) === request.id)
+					: undefined);
+			let item = sourceFinding ? sourceItem(sourceFinding) : undefined;
 			if (!item) {
 				const position = list.find(request.id, request.culture);
 				item =
@@ -886,11 +1062,13 @@ export function localizationQualityWorkspaceOf(
 			if (!("culture" in finding)) {
 				const offset = request.occurrenceOffset ?? 0;
 				const previous = offset ? finding.affectedOccurrences[offset - 1]?.id : undefined;
-				const focus = sourceQuery?.focus({
-					id: summary.id,
-					pageSize: 50,
-					...(previous ? { occurrenceCursor: previous } : undefined)
-				});
+				const focus =
+					source &&
+					textQualityQuery({ ...source, findings: [finding] }).focus({
+						id: summary.id,
+						pageSize: 50,
+						...(previous ? { occurrenceCursor: previous } : undefined)
+					});
 				return focus
 					? { status: "found", focus: { kind: "source", focus } }
 					: { status: "not_found" };

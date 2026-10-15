@@ -14,9 +14,11 @@ import { GameTextIndexSource, gameTextIndexRefreshLayer } from "./index-refresh.
 import { typeScriptIndexBuilderLayer } from "./index-builder.js";
 import { textCorpusFromExtractionEvents } from "./corpus.js";
 
-export const makeIndexRegressionFixture = Effect.fn("Test.GameText.indexFixture")(function* () {
+export const makeIndexRegressionFixture = Effect.fn("Test.GameText.indexFixture")(function* (
+	parentDirectory = tmpdir()
+) {
 	const directory = yield* Effect.acquireRelease(
-		Effect.promise(() => mkdtemp(join(tmpdir(), "ue-shed-index-regressions-"))),
+		Effect.promise(() => mkdtemp(join(parentDirectory, "ue-shed-index-regressions-"))),
 		(directory) => Effect.promise(() => rm(directory, { recursive: true, force: true }))
 	);
 	const projectRoot = yield* Effect.promise(() => realpath(directory));
@@ -109,11 +111,11 @@ export const makeIndexRegressionFixture = Effect.fn("Test.GameText.indexFixture"
 			});
 		})
 	).pipe(Layer.provide(LocalizationEvidenceNodeLive));
-	const layer = (worker = false) =>
+	const layer = (worker = false, suppliedSource = source) =>
 		gameTextIndexRefreshLayer(join(projectRoot, "cache"), {
 			searchWorker: worker
 		}).pipe(
-			Layer.provide(source),
+			Layer.provide(suppliedSource),
 			Layer.provide(typeScriptIndexBuilderLayer),
 			Layer.provide(evidence)
 		);
