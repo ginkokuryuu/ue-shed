@@ -12,6 +12,7 @@ import {
 	compareReportedLocalizationFindings,
 	enabledLocalizationChecks,
 	localizationDuplicateSources,
+	localizationTranslationVariants,
 	type LocalizationLineCheckContext
 } from "./localization-checks.js";
 import type {
@@ -22,7 +23,15 @@ import type {
 } from "./localization-quality-schema.js";
 import { localizationLinePolicyFindings, localizationPolicyRules } from "./localization-policy.js";
 import { acceptedFindingFilter } from "./localization-review.js";
-import { localizationStates, type LocalizationLine } from "./localization-schema.js";
+import {
+	LocalizationUnknownReason,
+	localizationStates,
+	type LocalizationLine
+} from "./localization-schema.js";
+import {
+	consistentTranslationCandidate,
+	sharedSourceCandidate
+} from "./localization-text-shape.js";
 import {
 	WorkspaceQualityFilter,
 	eligibleLocalizationChange,
@@ -150,9 +159,12 @@ function unitIndex(data: JoinedQueryData) {
 /** Positions of rows outside the join. */
 const NOT_JOINED = 0xffffffff;
 
+const CONFLICTING_SOURCE = 1 << LocalizationUnknownReason.literals.indexOf("conflicting_source");
+
 /**
  * Groups duplicate sources from line columns and shared strings, without hydrating lines. Only
- * the join's rows count, and identities that compare equal keep the join's order.
+ * the join's rows count, and identities that compare equal keep the join's order. Also returns
+ * the rows of every shared line, for the translation pass.
  */
 const duplicateSources = Effect.fn("GameText.localizationQuality.duplicates")(function* (
 	data: JoinedQueryData,
@@ -163,6 +175,7 @@ const duplicateSources = Effect.fn("GameText.localizationQuality.duplicates")(fu
 	const namespaces = column("line.namespace"),
 		keys = column("line.key"),
 		sources = column("line.source"),
+		reasons = column("line.reasons"),
 		occurrenceStart = column("line.occ_start"),
 		occurrenceEnd = column("line.occ_end");
 	const states = cultures.map((_, index) => column(`c${index}.state`));
@@ -180,6 +193,8 @@ const duplicateSources = Effect.fn("GameText.localizationQuality.duplicates")(fu
 			// The same conditions as `localizationDuplicateCandidate` on a hydrated line.
 			if (occurrenceEnd[row]! > occurrenceStart[row]! && key[index] === "") continue;
 			if (text[index]!.trim().length === 0) continue;
+			if (!sharedSourceCandidate(text[index]!)) continue;
+			if (reasons[row]! & CONFLICTING_SOURCE) continue;
 			if (states.every((state) => state[row] === outside)) continue;
 			groups.add(
 				text[index]!,
@@ -187,12 +202,76 @@ const duplicateSources = Effect.fn("GameText.localizationQuality.duplicates")(fu
 					namespace: TextNamespace.make(namespace[index]!),
 					key: TextKey.make(key[index]!)
 				}),
-				joinPosition[row]!
+				joinPosition[row]!,
+				row
 			);
 		}
 		yield* Effect.yieldNow;
 	}
 	return groups.finish();
+});
+
+/** Rows whose translations the second pass reads before yielding. */
+const TRANSLATION_PAGE_ROWS = 4096;
+
+/**
+ * The bounded second pass for `inconsistent_translation`: reads only the lines that share a
+ * source, and only their state, facts and shipped translation columns, as line previews do;
+ * hydrating these scattered rows as lines took a page per row. Each culture's shipped translation
+ * is the pending PO text when the culture is `not_synced`, otherwise the archive translation, as
+ * `localizationShippedTranslation` picks it on a hydrated line.
+ */
+const translationVariants = Effect.fn("GameText.localizationQuality.translations")(function* (
+	data: JoinedQueryData,
+	shared: Parameters<typeof localizationTranslationVariants>[0],
+	rows: readonly number[],
+	rowSources: readonly string[]
+) {
+	const target = data.joined.meta.input.target;
+	const variants = localizationTranslationVariants(shared);
+	const outside = localizationStates.indexOf("outside_target"),
+		notSynced = 1 << localizationStates.indexOf("not_synced");
+	const cultures = target.cultures.map((culture, index) => ({
+		culture,
+		state: data.column(`c${index}.state`),
+		facts: data.column(`c${index}.facts`),
+		archive: data.column(`c${index}.archive`),
+		po: data.column(`c${index}.po`),
+		archives: target.outputPaths.archives[culture]!,
+		portableObjects: target.outputPaths.portableObjects[culture]!
+	}));
+	for (let start = 0; start < rows.length; start += TRANSLATION_PAGE_ROWS) {
+		const ids: number[] = [],
+			sources: string[] = [],
+			names: CultureCode[] = [];
+		for (
+			let index = start;
+			index < Math.min(rows.length, start + TRANSLATION_PAGE_ROWS);
+			index++
+		) {
+			const row = rows[index]!,
+				source = rowSources[index]!;
+			if (!consistentTranslationCandidate(source)) continue;
+			for (const culture of cultures) {
+				if (culture.state[row] === outside) continue;
+				const pending = (culture.facts[row]! & notSynced) !== 0,
+					entry = pending ? culture.po[row]! : culture.archive[row]!;
+				if (!entry) continue;
+				const id = pending
+					? data.translationId(culture.portableObjects, entry - 1, true)
+					: data.translationId(culture.archives, entry - 1);
+				if (id === undefined) continue;
+				ids.push(id);
+				sources.push(source);
+				names.push(culture.culture);
+			}
+		}
+		const translations = data.strings(ids);
+		for (let index = 0; index < ids.length; index++)
+			variants.addTranslation(sources[index]!, names[index]!, translations[index]!);
+		yield* Effect.yieldNow;
+	}
+	return variants.finish();
 });
 
 /**
@@ -231,12 +310,22 @@ export const indexedLocalizationQuality = Effect.fn("GameText.localizationQualit
 	const joinPosition = new Uint32Array(count).fill(NOT_JOINED);
 	for (let position = 0; position < lineCount; position++)
 		joinPosition[joinRows[position]!] = position;
+	const duplicates = yield* duplicateSources(data, target.cultures, joinPosition);
 	const context: LocalizationLineCheckContext = {
 		target: target.name,
 		nativeCulture: target.nativeCulture,
 		options,
 		enabled,
-		duplicates: yield* duplicateSources(data, target.cultures, joinPosition)
+		duplicates: duplicates.shared,
+		translations: enabled.includes("inconsistent_translation")
+			? yield* translationVariants(
+					data,
+					duplicates.shared,
+					duplicates.rows,
+					duplicates.rowSources
+				)
+			: new Map(),
+		segmentSeparator: ruleDocument?.segmentSeparator
 	};
 	const units = unitIndex(data);
 	yield* Effect.yieldNow;

@@ -110,7 +110,8 @@ interface AcceptableFinding {
 	readonly lineId: LocalizationLine["id"];
 	readonly ruleId: string;
 	readonly culture: string;
-	readonly identity: { readonly namespace: string; readonly key: string };
+	/** Text without a key, such as culture-invariant text, cannot be accepted. */
+	readonly identity: { readonly namespace: string; readonly key: string } | null;
 }
 
 export function withoutAcceptedFindings<F extends AcceptableFinding>(
@@ -135,6 +136,7 @@ export function acceptedFindingFilter(file: LocalizationReviewFile | undefined) 
 		])
 	);
 	return (line: LocalizationLine | undefined, finding: AcceptableFinding) => {
+		if (finding.identity === null) return true;
 		const fingerprint = accepted.get(
 			JSON.stringify([
 				finding.ruleId,

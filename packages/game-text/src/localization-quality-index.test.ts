@@ -11,6 +11,7 @@ import { checkLocalizationTarget } from "./localization-checks.js";
 import type { LocalizationQualityProgress } from "./localization-quality-index.js";
 import type { LocalizationCheckOptions } from "./localization-quality-schema.js";
 import { localizationLineFingerprint } from "./localization-review.js";
+import { SourceCheckId } from "./localization-check-ids.js";
 import {
 	WorkspaceQualityFilter,
 	localizationQualityWorkspace,
@@ -20,8 +21,12 @@ import {
 import { TextQualityFindingId } from "./quality-query.js";
 import { GameTextRuleDocument, evaluateGameTextSourceQuality } from "./quality-rules-v2.js";
 
-/** One problem per key pattern; German carries the translation problems. */
-const patterns = [
+/**
+ * One problem per key pattern; German carries the translation problems. `deSource` is the source
+ * German's archive entry records, when it was translated from older text; `dePO` is a pending PO
+ * translation that differs from the archive.
+ */
+const patterns: ReadonlyArray<{ source: string; de: string; deSource?: string; dePO?: string }> = [
 	{ source: "Hello {PlayerName}", de: "Hallo {Name}" },
 	{ source: "<Bold>Gold</>", de: "<Bold>Gold" },
 	{ source: "Ready ", de: "Bereit" },
@@ -30,15 +35,28 @@ const patterns = [
 	{ source: "Exit", de: "Beenden" },
 	{ source: "Empty me", de: "" },
 	{ source: "Fine text", de: "Feiner Text" },
-	{ source: "Exit", de: "Verlassen" }
+	{ source: "Exit", de: "Verlassen" },
+	{ source: "Take {Count} {Item}", de: "Nimm {Count}" },
+	{ source: "Press <Key>Space</> now", de: "Jetzt Leertaste drücken" },
+	{ source: "<Italic>Note</>", de: "<italic>Hinweis</>" },
+	{ source: "First\nSecond", de: "Erste Zweite" },
+	{ source: "Yes // No", de: "Ja Nein" },
+	{ source: "A fairly long sentence about the harbour", de: "Hafen" },
+	{ source: "Open the door", de: "Öffne die Tür", deSource: "Open the gate" },
+	{ source: "TODO: final name", de: "TODO: Name" },
+	{ source: "Unclosed <Em>tag", de: "Offenes <Em>Tag" },
+	{ source: "100", de: "100" },
+	{ source: "Save game", de: "Spiel speichern" },
+	{ source: "Save game", de: "Spiel speichern", dePO: "Spiel sichern" }
 ];
-const keys = Array.from({ length: 30 }, (_, index) => ({
+const keys = Array.from({ length: 45 }, (_, index) => ({
 	key: `K${String(index).padStart(2, "0")}`,
 	...patterns[index % patterns.length]!
 }));
 /** Gathered keys; the last few keys exist only in the localization files. */
-const gathered = keys.slice(0, 27);
-const po = (text: string) => text.replaceAll("\\", "\\\\").replaceAll('"', '\\"');
+const gathered = keys.slice(0, 42);
+const po = (text: string) =>
+	text.replaceAll("\\", "\\\\").replaceAll('"', '\\"').replaceAll("\n", "\\n");
 
 const occurrence = (key: string, source: string, index: number) => ({
 	source,
@@ -55,6 +73,7 @@ const occurrence = (key: string, source: string, index: number) => ({
 
 const document = Schema.decodeUnknownSync(GameTextRuleDocument)({
 	schemaVersion: 2,
+	segmentSeparator: "//",
 	roles: [
 		{
 			id: "menu",
@@ -104,9 +123,9 @@ async function writeLocalization(projectRoot: string, entries: typeof keys) {
 	const archive = (culture: "en" | "de") => ({
 		FormatVersion: 2,
 		Namespace: "UI",
-		Children: entries.map(({ key, source, de }) => ({
+		Children: entries.map(({ key, source, de, deSource }) => ({
 			Key: key,
-			Source: { Text: source },
+			Source: { Text: culture === "de" ? (deSource ?? source) : source },
 			Translation: { Text: culture === "en" ? source : de }
 		}))
 	});
@@ -115,8 +134,8 @@ async function writeLocalization(projectRoot: string, entries: typeof keys) {
 		entries
 			.filter(({ source }) => culture === "en" || source !== "Line one")
 			.map(
-				({ key, source, de }) =>
-					`msgctxt "UI,${key}"\nmsgid "${po(source)}"\nmsgstr "${po(culture === "en" ? source : de)}"\n`
+				({ key, source, de, dePO }) =>
+					`msgctxt "UI,${key}"\nmsgid "${po(source)}"\nmsgstr "${po(culture === "en" ? source : (dePO ?? de))}"\n`
 			)
 			.join("\n");
 	await writeFile(join(projectRoot, "Review.manifest"), JSON.stringify(manifest));
@@ -137,6 +156,15 @@ it.live(
 				// A second location for one key, an ungathered key and a culture-invariant text.
 				occurrence("K00", "Hello {PlayerName}", 1),
 				occurrence("K90", "Only in the asset", 2),
+				// Two String Tables declaring one namespace and key.
+				...["/Game/Text/TableA.TableA", "/Game/Text/TableB.TableB"].map((path) => ({
+					...occurrence("Shared", "Shared entry", 5),
+					location: {
+						kind: "string_table_entry" as const,
+						object_path: path,
+						entry_key: "Shared"
+					}
+				})),
 				{
 					...occurrence("", "Invariant", 3),
 					identity: {
@@ -207,14 +235,32 @@ it.live(
 						filter: "all",
 						culture: other
 					});
-					expect([
-						translated.counts.duplicate_source,
-						translated.counts.missing_translator_notes
-					]).toEqual([0, 0]);
-					for (const filter of [
+					const sourceLevel = [
 						"duplicate_source",
-						"missing_translator_notes"
-					] as const) {
+						"missing_translator_notes",
+						...SourceCheckId.literals
+					] as const;
+					expect(sourceLevel.map((filter) => translated.counts[filter])).toEqual(
+						sourceLevel.map(() => 0)
+					);
+					// Blocking findings lead every page; counts by severity add up.
+					const severities = legacy
+						.export({ target: join.target, filter: "all" })
+						.findings.map(({ severity }) => severity);
+					expect(severities).toEqual([
+						...severities.filter((severity) => severity === "blocking"),
+						...severities.filter((severity) => severity === "normal"),
+						...severities.filter((severity) => severity === "low")
+					]);
+					expect(all.severityCounts.blocking).toBeGreaterThan(0);
+					// Pending PO text counts as the shipped translation in the translation pass.
+					expect(
+						legacy
+							.export({ target: join.target, filter: "inconsistent_translation" })
+							.findings.filter(({ source }) => source === "Save game")
+							.map(({ problem }) => problem)
+					).toEqual(Array(4).fill("de · Translated inconsistently · 2 translations"));
+					for (const filter of sourceLevel) {
 						const found = legacy.export({ target: join.target, filter }).findings;
 						expect(new Set(found.map(({ culture }) => culture))).toEqual(
 							new Set([join.nativeCulture])
@@ -528,7 +574,7 @@ it.live("proposals past the first 100 count the rest without reading their lines
 				{ target: join.target, filter: "all" as const },
 				{
 					target: join.target,
-					filter: "format_arguments" as const,
+					filter: "format_argument_renamed" as const,
 					culture: join.cultures[1]!
 				}
 			]) {

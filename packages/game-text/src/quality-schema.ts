@@ -1,6 +1,6 @@
 import { TextCorpusDiagnosticSummary } from "./corpus-summary.js";
 import { Effect, Schema } from "effect";
-import { LocalizationCheckId } from "./localization-check-ids.js";
+import { BuiltInCheckId } from "./localization-check-ids.js";
 import { TextCorpus, TextLocation, TextOccurrenceId, TextUnitId } from "./schema.js";
 
 const SafeIdentifier = Schema.Trim.check(Schema.isPattern(/^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/));
@@ -96,7 +96,14 @@ export const TextQualityRule = Schema.Union([
 export type TextQualityRule = Schema.Schema.Type<typeof TextQualityRule>;
 
 export const TextQualityRuleDocument = Schema.Struct({
-	disabledLocalizationChecks: Schema.optionalKey(Schema.Array(LocalizationCheckId)),
+	disabledLocalizationChecks: Schema.optionalKey(Schema.Array(BuiltInCheckId)),
+	/**
+	 * Text the project uses to join segments of one line, such as `"//"`. When set, the
+	 * `segment_separator` check expects each translation to use it as often as its source.
+	 */
+	segmentSeparator: Schema.optionalKey(
+		Schema.String.check(Schema.isNonEmpty(), Schema.isMaxLength(16))
+	),
 	rules: Schema.Array(TextQualityRule).check(Schema.isMinLength(1), Schema.isMaxLength(512)),
 	roles: Schema.Array(TextRole).check(Schema.isMinLength(1), Schema.isMaxLength(256)),
 	schemaVersion: Schema.Literal(1)

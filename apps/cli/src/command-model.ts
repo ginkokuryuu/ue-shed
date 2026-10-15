@@ -8,7 +8,7 @@ import {
 } from "@ue-shed/plugin-distribution";
 import { Schema } from "effect";
 import {
-	LocalizationCheckId,
+	BuiltInCheckId,
 	LocalizationGateCheck,
 	LocalizationReviewLens,
 	LocalizationState,
@@ -100,7 +100,7 @@ export const CliCommand = Schema.TaggedUnion({
 		...Reader,
 		target: Schema.String,
 		culture: Schema.optionalKey(Schema.String),
-		checks: Schema.Array(LocalizationCheckId),
+		checks: Schema.Array(BuiltInCheckId),
 		changes: Schema.optionalKey(Schema.String)
 	},
 	LocalizationExport: {

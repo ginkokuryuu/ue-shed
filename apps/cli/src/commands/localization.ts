@@ -2,7 +2,7 @@ import { Effect, Option } from "effect";
 import { CliCommandError } from "../cli-runtime.js";
 import { Argument, Command, Flag } from "effect/cli";
 import {
-	LocalizationCheckId,
+	BuiltInCheckId,
 	LocalizationGateCheck,
 	LocalizationReviewLens,
 	LocalizationState,
@@ -139,7 +139,7 @@ export const localizationCommand = Command.make("loc").pipe(
 				projectRoot: Argument.String("project-root"),
 				target: Flag.String("target"),
 				culture: Flag.String("culture").pipe(Flag.optional),
-				checks: Flag.Literals("check", LocalizationCheckId.literals).pipe(Flag.atMost(64)),
+				checks: Flag.Literals("check", BuiltInCheckId.literals).pipe(Flag.atMost(64)),
 				changes: Flag.String("changes").pipe(Flag.optional),
 				reader: Flag.String("reader").pipe(Flag.optional)
 			},
