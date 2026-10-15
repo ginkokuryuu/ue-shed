@@ -1269,6 +1269,11 @@ describe("Game Text writing workspace", () => {
 					...occurrence,
 					id: makeTextOccurrenceId(`occurrence:${id}`),
 					identity,
+					// Each line is its own String Table entry: keys at one place are not duplicates.
+					location:
+						occurrence.location.kind === "string_table_entry"
+							? { ...occurrence.location, entryKey: id }
+							: occurrence.location,
 					source
 				})),
 				source: { status: "consistent" as const, value: source }

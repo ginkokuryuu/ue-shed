@@ -37,7 +37,7 @@ import {
 import { finishJoinedTarget } from "./joined-target-marks.js";
 import { incrementJoinedTarget } from "./joined-target-incremental.js";
 import { comparePackageTextPathBytes } from "./package-text-order.js";
-import { joinedQueryColumns } from "./joined-query-columns.js";
+import { joinedQueryColumns, joinedDuplicateSources } from "./joined-query-columns.js";
 import { joinedQueryPlaces } from "./joined-query-places.js";
 import { prepareJoinedSourceCache } from "./joined-source-cache.js";
 import { joinedPhysicalChunkName } from "./joined-column-chunks.js";
@@ -118,7 +118,7 @@ export const refreshJoinedTarget = Effect.fn("JoinedTarget.refresh")(function* (
 			.sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))
 	);
 	const key =
-		"joined-v14:" +
+		"joined-v18:" +
 		createHash("sha256")
 			.update(
 				JSON.stringify([
@@ -146,7 +146,7 @@ export const refreshJoinedTarget = Effect.fn("JoinedTarget.refresh")(function* (
 	}
 	const reader = yield* store.open();
 	let incrementalFallback: string | undefined;
-	if (!input.force && (root.active.joined ?? "").startsWith("joined-v14:")) {
+	if (!input.force && (root.active.joined ?? "").startsWith("joined-v18:")) {
 		const incremental = yield* incrementJoinedTarget(
 			input,
 			key,
@@ -614,7 +614,7 @@ export const refreshJoinedTarget = Effect.fn("JoinedTarget.refresh")(function* (
 					const source = c.source[member]!;
 					if (!values.has(source)) {
 						const value = strings.string(source);
-						length += (values.size ? 1 : 0) + value.length;
+						length = Math.max(length, value.length);
 						searchable ||= value.trim() !== "";
 						values.add(source);
 					}
@@ -875,7 +875,8 @@ export const refreshJoinedTarget = Effect.fn("JoinedTarget.refresh")(function* (
 		row++;
 	}
 	yield* flushSources();
-	const sourceFirst = new Uint32Array(maximumId).fill(absent);
+	const duplicates = joinedDuplicateSources(packages, line, order, empty);
+	const { duplicate } = duplicates;
 	const unitFirstLine = new Uint32Array(occurrenceCount).fill(absent);
 	for (let row = 0; row < count; row++)
 		for (let i = line.occ_start![row]!; i < line.occ_end![row]!; i++) {
@@ -885,19 +886,9 @@ export const refreshJoinedTarget = Effect.fn("JoinedTarget.refresh")(function* (
 				line.split_unit![row] = 1;
 				line.split_unit![unitFirstLine[representative]!] = 1;
 			} else unitFirstLine[representative] = row;
-			if (c.identity[occurrence] === 1) continue;
-			const source = c.source[occurrence]!,
-				previous = sourceFirst[source]!;
-			if (previous === absent) sourceFirst[source] = row;
-			else if (previous !== row) {
-				if (visibleOccurrence[occurrence] || !visibleLine[row]) line.problems![row]! |= 32;
-				for (let j = line.occ_start![previous]!; j < line.occ_end![previous]!; j++)
-					if (
-						c.source[order[j]!] === source &&
-						(visibleOccurrence[order[j]!] || !visibleLine[previous])
-					)
-						line.problems![previous]! |= 32;
-			}
+			if (c.identity[occurrence] !== 0 || c.key[occurrence] === empty) continue;
+			if (duplicate[occurrence] && (visibleOccurrence[occurrence] || !visibleLine[row]))
+				line.problems![row]! |= 32;
 		}
 	const folderIds = new Uint32Array(folderValues.length);
 	for (let start = 0; start < folderValues.length; start += 8192)
@@ -912,6 +903,7 @@ export const refreshJoinedTarget = Effect.fn("JoinedTarget.refresh")(function* (
 	const marks = yield* finishJoinedTarget(input, columns, reader, writer);
 	yield* strings.need([c.namespace, c.key]);
 	const queryColumns = joinedQueryColumns({
+		duplicates,
 		packages,
 		line,
 		order,

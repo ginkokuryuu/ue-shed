@@ -9,6 +9,8 @@ import { loadJoinFile, u32, type ColumnReader } from "./joined-target-input.js";
 import { precedence, reasonBit, stateBit, type JoinedTargetInput } from "./joined-target.js";
 import { decodeWtf8 } from "./wtf8.js";
 import type { JoinedSourcePatches } from "./joined-source-patches.js";
+import { longestSource } from "./source-metrics.js";
+import { DuplicateSources } from "./duplicate-sources.js";
 
 const same = (a: Uint32Array, b: Uint32Array) =>
 	a.length === b.length &&
@@ -489,14 +491,9 @@ export const incrementJoinedTarget = Effect.fn("JoinedTarget.increment")(functio
 						selected.some((source, i) => source !== sources[sourceStart + i])
 					)
 						sourceEdits[kind].set(queryRow, selected);
-					const characters = decoded.reduce(
-						(sum, { value }) => sum + value.length,
-						Math.max(0, selected.length - 1)
-					);
-					const words = decoded.reduce(
-						(sum, { value }) => sum + value.trim().split(/\s+/u).filter(Boolean).length,
-						0
-					);
+					const longest = longestSource(decoded.map(({ value }) => value));
+					const characters = longest.length;
+					const words = longest.trim().split(/\s+/u).filter(Boolean).length;
 					const visible = Number(decoded.some(({ value }) => value.trim() !== ""));
 					if (visible !== (yield* u32(layer, prefix + "visible"))[queryRow])
 						return fallback("query-source-visibility");
@@ -515,50 +512,69 @@ export const incrementJoinedTarget = Effect.fn("JoinedTarget.increment")(functio
 			}
 		// Duplicate-source lenses need exact frequencies even when a long-text finding stays set.
 		// Recompute with typed columns: no decoded source, unit or line objects are retained.
-		const last = reader.manifest.segments.at(-1);
-		const frequencies = new Uint32Array(last ? last.start + last.count : 0);
-		const lastLine = new Uint32Array(frequencies.length);
-		const sliceLines = yield* u32(layer, "query.slice.line");
-		const sliceIdentities = yield* u32(layer, "query.slice.identity");
-		const sliceStart = yield* u32(layer, "query.slice.source_start");
-		const sliceEnd = yield* u32(layer, "query.slice.source_end");
-		const sliceSources = yield* u32(layer, "query.slice.sources");
-		const countSource = (source: number, line: number) => {
-			if (lastLine[source] === line) return;
-			lastLine[source] = line;
-			frequencies[source]!++;
-		};
-		for (let row = 0; row < sliceLines.length; row++) {
-			if (sliceIdentities[row] === 1) continue;
-			const line = sliceLines[row]! + 1;
-			const selected = sourceEdits.slice.get(row);
-			if (selected) for (const source of selected) countSource(source, line);
-			else
-				for (let offset = sliceStart[row]!; offset < sliceEnd[row]!; offset++)
-					countSource(sliceSources[offset]!, line);
+		const places = yield* u32(layer, "query.occurrence.places");
+		const occurrenceLines = new Uint32Array(places.length);
+		const occurrenceSources = new Uint32Array(yield* u32(layer, "query.occurrence.sources"));
+		for (const [member, source] of packageChanges) {
+			occurrenceSources[member] = source;
+			set("query.occurrence.sources", member, source);
 		}
+		// Only old/new source groups can change, including unchanged rows at other places.
+		// A dirty row may also contain clean sources: count those too before recomputing its bit.
 		const dirtySources = new Set([...oldSources, ...newSources]);
+		const neededSources = new Set<number>();
+		const queries = [];
 		for (const kind of ["raw", "slice"] as const) {
 			const prefix = `query.${kind}.`;
 			const identities = yield* u32(layer, prefix + "identity");
-			const starts = yield* u32(layer, prefix + "source_start");
-			const ends = yield* u32(layer, prefix + "source_end");
-			const sources = yield* u32(layer, prefix + "sources");
+			const starts = yield* u32(layer, prefix + "member_start");
+			const ends = yield* u32(layer, prefix + "member_end");
+			const members = yield* u32(layer, prefix + "members");
 			const flags = yield* u32(layer, prefix + "signals");
+			const rows: number[] = [];
 			for (let row = 0; row < flags.length; row++) {
-				if (identities[row] === 1) continue;
-				const selected = sourceEdits[kind].get(row);
-				let dirty = selected !== undefined,
-					duplicate = false;
+				if (identities[row] !== 0 || flags[row]! & 8) continue;
+				let dirty = false;
+				for (let offset = starts[row]!; offset < ends[row]! && !dirty; offset++)
+					dirty = dirtySources.has(occurrenceSources[members[offset]!]!);
+				if (!dirty) continue;
+				rows.push(row);
+				for (let offset = starts[row]!; offset < ends[row]!; offset++)
+					neededSources.add(occurrenceSources[members[offset]!]!);
+			}
+			queries.push({ prefix, starts, ends, members, flags, rows });
+		}
+		const counterparts = new DuplicateSources<number, number, number>();
+		const sliceLines = yield* u32(layer, "query.slice.line");
+		const sliceIdentities = yield* u32(layer, "query.slice.identity");
+		const sliceFlags = yield* u32(layer, "query.slice.signals");
+		const sliceStart = yield* u32(layer, "query.slice.member_start");
+		const sliceEnd = yield* u32(layer, "query.slice.member_end");
+		const sliceMembers = yield* u32(layer, "query.slice.members");
+		for (let row = 0; row < sliceLines.length; row++) {
+			if (sliceIdentities[row] !== 0 || sliceFlags[row]! & 8) continue;
+			const line = sliceLines[row]!;
+			for (let offset = sliceStart[row]!; offset < sliceEnd[row]!; offset++) {
+				const member = sliceMembers[offset]!;
+				const source = occurrenceSources[member]!;
+				occurrenceLines[member] = line;
+				if (neededSources.has(source)) counterparts.add(source, line, places[member]!);
+			}
+		}
+		for (const { prefix, starts, ends, members, flags, rows } of queries) {
+			for (const row of rows) {
+				let duplicate = false;
 				for (let offset = starts[row]!; offset < ends[row]!; offset++) {
-					const source = sources[offset]!;
-					dirty ||= dirtySources.has(source);
-					if (!selected) duplicate ||= frequencies[source]! > 1;
+					const member = members[offset]!;
+					duplicate ||= counterparts.hasOther(
+						occurrenceSources[member]!,
+						occurrenceLines[member]!,
+						places[member]!
+					);
 				}
-				if (selected) for (const source of selected) duplicate ||= frequencies[source]! > 1;
 				const currentFlags = hot.get(prefix + "signals")?.get(row) ?? flags[row]!;
 				const updated = (currentFlags & ~2) | (duplicate ? 2 : 0);
-				if (dirty && updated !== currentFlags) set(prefix + "signals", row, updated);
+				if (updated !== currentFlags) set(prefix + "signals", row, updated);
 			}
 		}
 		for (const edits of hot.values())
