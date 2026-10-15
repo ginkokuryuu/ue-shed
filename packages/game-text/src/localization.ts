@@ -103,6 +103,28 @@ function gatherRules(target: LocalizationTarget): readonly GatherRule[] | undefi
 	];
 }
 
+/**
+ * Whether the target's asset gather reads editor-only data (`ShouldGatherFromEditorOnlyData`).
+ * Unreal's GatherTextFromAssets commandlet defaults it to false. A recipe with several asset-gather
+ * steps that disagree, or no asset gather at all, is undefined: the caller cannot rely on it.
+ */
+export function localizationGathersEditorOnlyData(target: LocalizationTarget): boolean | undefined {
+	const steps = target.configs.flatMap((config) =>
+		config.steps
+			.filter((step) => step.commandletClass === "GatherTextFromAssets")
+			.map(
+				(step) =>
+					step.fields.ShouldGatherFromEditorOnlyData ??
+					config.common.ShouldGatherFromEditorOnlyData ??
+					false
+			)
+	);
+	if (steps.length) return steps.every((value) => value === steps[0]) ? steps[0] : undefined;
+	const settings = target.dashboard?.settings.GatherFromPackages;
+	if (!settings?.IsEnabled) return undefined;
+	return settings.ShouldGatherFromEditorOnlyData ?? false;
+}
+
 function pathRating(pattern: string): number {
 	return (
 		100 - (pattern.match(/\//gu)?.length ?? 0) + (pattern.match(/[?*]/gu)?.length ?? 0) * 1000
