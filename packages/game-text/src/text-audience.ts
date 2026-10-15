@@ -448,8 +448,9 @@ export function savedTextAudienceSubject(occurrence: SavedTextAudienceInput): Te
 type PreparedSubject = {
 	readonly namespace: string | undefined;
 	readonly folder: string;
-	/** The class name, then the object names of the outer chain. */
-	readonly names: readonly string[];
+	readonly className: string | undefined;
+	/** The object names of the outer chain. */
+	readonly objects: readonly string[];
 	readonly module: string | undefined;
 	readonly elements: readonly string[];
 	readonly locationKind: TextAudienceSubject["locationKind"];
@@ -461,10 +462,8 @@ function prepare(subject: TextAudienceSubject): PreparedSubject {
 	return {
 		namespace: subject.namespace?.toLowerCase(),
 		folder: `${subject.packagePath.toLowerCase()}/`,
-		names: [
-			...(subject.className === undefined ? [] : [subject.className]),
-			...subject.objects
-		].map(lower),
+		className: subject.className?.toLowerCase(),
+		objects: subject.objects.map(lower),
 		module: subject.module?.toLowerCase(),
 		elements: propertyElements(subject.propertyPath).map(lower),
 		locationKind: subject.locationKind
@@ -492,14 +491,18 @@ function matches(subject: PreparedSubject, match: TextAudienceMatch): boolean {
 			return subject.namespace === value;
 		case "folder":
 			return subject.folder.startsWith(value);
-		case "object":
-			return subject.names.some((name) =>
+		case "object": {
+			const named = (name: string) =>
 				match.position === "prefix"
 					? name.startsWith(value)
 					: match.position === "suffix"
 						? name.endsWith(value)
-						: name === value
+						: name === value;
+			return (
+				(subject.className !== undefined && named(subject.className)) ||
+				subject.objects.some(named)
 			);
+		}
 		case "module":
 			return (
 				subject.module !== undefined &&
@@ -520,7 +523,13 @@ export function matchTextAudiencePolicy<const Rule extends TextAudienceRule>(
 	subject: TextAudienceSubject,
 	policy: readonly Rule[]
 ): Rule | undefined {
-	const prepared = prepare(subject);
+	return firstRule(prepare(subject), policy);
+}
+
+function firstRule<const Rule extends TextAudienceRule>(
+	prepared: PreparedSubject,
+	policy: readonly Rule[]
+): Rule | undefined {
 	return policy.find((rule) => rule.when.every((match) => matches(prepared, match)));
 }
 
@@ -532,37 +541,48 @@ export type TextAudienceEvidence = {
 	readonly gatherTableEditorOnly?: boolean;
 };
 
-function classified(
-	subject: TextAudienceSubject,
-	evidence: TextAudienceEvidence
-): TextAudienceClassification {
-	if (evidence.gatherTableEditorOnly !== undefined)
-		return evidence.gatherTableEditorOnly
-			? { audience: "editor", reason: "gather_table_editor_only" }
-			: { audience: "player", reason: "gather_table_runtime" };
-	const rule = matchTextAudiencePolicy(subject, TEXT_AUDIENCE_POLICY);
-	return rule
-		? { audience: rule.audience, reason: rule.reason, rule: rule.id }
-		: { audience: "unknown", reason: "no_evidence" };
+// Shared results: classifying allocates only its subject, and nothing with a gather-table bit.
+const GATHER_TABLE_EDITOR_ONLY: TextAudienceClassification = {
+	audience: "editor",
+	reason: "gather_table_editor_only"
+};
+const GATHER_TABLE_RUNTIME: TextAudienceClassification = {
+	audience: "player",
+	reason: "gather_table_runtime"
+};
+const NO_EVIDENCE: TextAudienceClassification = { audience: "unknown", reason: "no_evidence" };
+const RULE_RESULTS = new Map<TextAudienceRule, TextAudienceClassification>(
+	TEXT_AUDIENCE_POLICY.map((rule) => [
+		rule,
+		{ audience: rule.audience, reason: rule.reason, rule: rule.id }
+	])
+);
+
+function gatherTableResult(editorOnly: boolean): TextAudienceClassification {
+	return editorOnly ? GATHER_TABLE_EDITOR_ONLY : GATHER_TABLE_RUNTIME;
+}
+
+function policyResult(subject: TextAudienceSubject): TextAudienceClassification {
+	const rule = firstRule(prepare(subject), TEXT_AUDIENCE_POLICY);
+	return rule === undefined ? NO_EVIDENCE : RULE_RESULTS.get(rule)!;
 }
 
 export function classifyTextAudience(
 	occurrence: TextOccurrence,
 	evidence: TextAudienceEvidence = {}
 ): TextAudienceClassification {
-	return classified(textAudienceSubject(occurrence), evidence);
+	return evidence.gatherTableEditorOnly === undefined
+		? policyResult(textAudienceSubject(occurrence))
+		: gatherTableResult(evidence.gatherTableEditorOnly);
 }
 
 /** A reader package record's occurrence, with its gather-table bit when the reader sent one. */
 export function classifySavedTextAudience(
 	occurrence: SavedTextAudienceInput
 ): TextAudienceClassification {
-	return classified(
-		savedTextAudienceSubject(occurrence),
-		occurrence.gather_editor_only === undefined
-			? {}
-			: { gatherTableEditorOnly: occurrence.gather_editor_only }
-	);
+	return occurrence.gather_editor_only === undefined
+		? policyResult(savedTextAudienceSubject(occurrence))
+		: gatherTableResult(occurrence.gather_editor_only);
 }
 
 /**
