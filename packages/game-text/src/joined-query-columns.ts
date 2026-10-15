@@ -1,11 +1,5 @@
 import { encodeWtf8 } from "./wtf8.js";
-import {
-	absent,
-	unitId,
-	occurrenceLocation,
-	packagePath,
-	type JoinPackages
-} from "./joined-target-input.js";
+import { absent, unitId, packagePath, type JoinPackages } from "./joined-target-input.js";
 import {
 	StringArena,
 	packedStringReader,
@@ -15,7 +9,8 @@ import { snapshotCheck } from "./snapshot-format.js";
 import { textAudienceBit } from "./text-audience.js";
 import { OCCURRENCE_COPY_DIFFERS } from "./package-text-columns.js";
 import { longestSource } from "./source-metrics.js";
-import { DuplicateSources, duplicateOccurrencePlace } from "./duplicate-sources.js";
+import { DuplicateSources } from "./duplicate-sources.js";
+import { joinedDuplicatePlaces } from "./joined-duplicate-places.js";
 
 /** Canonical place IDs keep source overlays numeric without retaining decoded occurrences. */
 export function joinedDuplicateSources(
@@ -25,37 +20,40 @@ export function joinedDuplicateSources(
 	empty: number
 ) {
 	const c = packages.occurrence;
-	const places = new Uint32Array(order.length);
-	const placeIds = new Map<string, number>();
-	const packageFiles = new Map<number, string>();
+	const places = joinedDuplicatePlaces(
+		{
+			occurrence: c,
+			packageRow: packages.packageRow,
+			packageFile: (row) => packagePath(packages, row),
+			string: (id) => packages.strings.string(id),
+			bytes: (id) => packages.strings.bytes(id)
+		},
+		order
+	);
 	const identities = new Uint32Array(order.length);
+	// A source confined to one gathered identity can never have an outside-identity counterpart.
+	let maximumSource = 0;
+	for (const source of c.source) maximumSource = Math.max(maximumSource, source);
+	const sourceIdentities = new Uint32Array(maximumSource + 1).fill(absent);
+	const sharedSources = new Uint8Array(maximumSource + 1);
 	const sources = new DuplicateSources<number, number, number>();
 	for (let row = 0; row < line.source!.length; row++)
 		for (let position = line.occ_start![row]!; position < line.occ_end![row]!; position++) {
 			const member = order[position]!;
-			const packageRow = packages.packageRow[member]!;
-			let packageFile = packageFiles.get(packageRow);
-			if (packageFile === undefined) {
-				packageFile = packagePath(packages, packageRow);
-				packageFiles.set(packageRow, packageFile);
-			}
-			const key = duplicateOccurrencePlace({
-				packageFile,
-				location: occurrenceLocation(packages, member)
-			});
-			let place = placeIds.get(key);
-			if (place === undefined) {
-				place = placeIds.size;
-				placeIds.set(key, place);
-			}
-			places[member] = place;
 			identities[member] = row;
-			if (c.identity[member] === 0 && c.key[member] !== empty)
-				sources.add(c.source[member]!, row, place);
+			if (c.identity[member] === 0 && c.key[member] !== empty) {
+				const source = c.source[member]!;
+				const first = sourceIdentities[source];
+				if (first === absent) sourceIdentities[source] = row;
+				else if (first !== row) sharedSources[source] = 1;
+			}
 		}
+	for (const member of order)
+		if (c.identity[member] === 0 && c.key[member] !== empty && sharedSources[c.source[member]!])
+			sources.add(c.source[member]!, identities[member]!, places[member]!);
 	const duplicate = new Uint8Array(order.length);
 	for (const member of order)
-		if (c.identity[member] === 0 && c.key[member] !== empty)
+		if (c.identity[member] === 0 && c.key[member] !== empty && sharedSources[c.source[member]!])
 			duplicate[member] = Number(
 				sources.hasOther(c.source[member]!, identities[member]!, places[member]!)
 			);
@@ -72,13 +70,14 @@ export function joinedQueryColumns(input: {
 	readonly next: Uint32Array;
 	readonly packageFiles: Uint32Array;
 	readonly empty: number;
+	readonly duplicates: ReturnType<typeof joinedDuplicateSources>;
 }) {
 	const { packages, line, order, rawOrder, representative, next, packageFiles, empty } = input;
 	const c = packages.occurrence,
 		strings = packages.strings;
 	const occurrenceLine = new Uint32Array(order.length);
 	const groupFlags = new Uint8Array(line.source!.length);
-	const { duplicate, places } = joinedDuplicateSources(packages, line, order, empty);
+	const { duplicate, places } = input.duplicates;
 	for (let row = 0; row < line.source!.length; row++) {
 		const sources = new Set<number>();
 		for (let position = line.occ_start![row]!; position < line.occ_end![row]!; position++) {

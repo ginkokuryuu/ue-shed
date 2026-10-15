@@ -875,7 +875,8 @@ export const refreshJoinedTarget = Effect.fn("JoinedTarget.refresh")(function* (
 		row++;
 	}
 	yield* flushSources();
-	const { duplicate } = joinedDuplicateSources(packages, line, order, empty);
+	const duplicates = joinedDuplicateSources(packages, line, order, empty);
+	const { duplicate } = duplicates;
 	const unitFirstLine = new Uint32Array(occurrenceCount).fill(absent);
 	for (let row = 0; row < count; row++)
 		for (let i = line.occ_start![row]!; i < line.occ_end![row]!; i++) {
@@ -902,6 +903,7 @@ export const refreshJoinedTarget = Effect.fn("JoinedTarget.refresh")(function* (
 	const marks = yield* finishJoinedTarget(input, columns, reader, writer);
 	yield* strings.need([c.namespace, c.key]);
 	const queryColumns = joinedQueryColumns({
+		duplicates,
 		packages,
 		line,
 		order,
