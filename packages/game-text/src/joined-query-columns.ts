@@ -37,8 +37,10 @@ export function joinedQueryColumns(input: {
 			if (c.identity[member] === 1) continue;
 			const source = c.source[member]!;
 			sources.add(source);
-			if (sourceFirst[source] === absent) sourceFirst[source] = row;
-			else if (sourceFirst[source] !== row) duplicate[source] = 1;
+			if (c.identity[member] === 0 && c.key[member] !== empty) {
+				if (sourceFirst[source] === absent) sourceFirst[source] = row;
+				else if (sourceFirst[source] !== row) duplicate[source] = 1;
+			}
 		}
 		groupFlags[row] =
 			(line.occ_end![row]! - line.occ_start![row]! > 1 ? 1 : 0) | (sources.size > 1 ? 16 : 0);
@@ -163,7 +165,8 @@ export function joinedQueryColumns(input: {
 			values.add(c.source[member]!);
 			paths.add(packageFiles[packages.packageRow[member]!]!);
 			flags |= groupFlags[gathered === absent ? occurrenceLine[member]! : gathered]!;
-			if (c.identity[member] !== 1 && duplicate[c.source[member]!]) flags |= 2;
+			if (c.identity[member] === 0 && c.key[member] !== empty && duplicate[c.source[member]!])
+				flags |= 2;
 			origins |= 1 << (c.location[member] === 2 ? 0 : c.location[member] === 1 ? 1 : 2);
 			editing |= c.editable[member] ? 1 : 2;
 			audience |= textAudienceBit(c.audience[member]!);

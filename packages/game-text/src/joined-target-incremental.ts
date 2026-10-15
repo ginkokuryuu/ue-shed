@@ -516,6 +516,7 @@ export const incrementJoinedTarget = Effect.fn("JoinedTarget.increment")(functio
 		const lastLine = new Uint32Array(frequencies.length);
 		const sliceLines = yield* u32(layer, "query.slice.line");
 		const sliceIdentities = yield* u32(layer, "query.slice.identity");
+		const sliceFlags = yield* u32(layer, "query.slice.signals");
 		const sliceStart = yield* u32(layer, "query.slice.source_start");
 		const sliceEnd = yield* u32(layer, "query.slice.source_end");
 		const sliceSources = yield* u32(layer, "query.slice.sources");
@@ -525,7 +526,7 @@ export const incrementJoinedTarget = Effect.fn("JoinedTarget.increment")(functio
 			frequencies[source]!++;
 		};
 		for (let row = 0; row < sliceLines.length; row++) {
-			if (sliceIdentities[row] === 1) continue;
+			if (sliceIdentities[row] !== 0 || (sliceFlags[row]! & 8)) continue;
 			const line = sliceLines[row]! + 1;
 			const selected = sourceEdits.slice.get(row);
 			if (selected) for (const source of selected) countSource(source, line);
@@ -542,7 +543,7 @@ export const incrementJoinedTarget = Effect.fn("JoinedTarget.increment")(functio
 			const sources = yield* u32(layer, prefix + "sources");
 			const flags = yield* u32(layer, prefix + "signals");
 			for (let row = 0; row < flags.length; row++) {
-				if (identities[row] === 1) continue;
+				if (identities[row] !== 0 || (flags[row]! & 8)) continue;
 				const selected = sourceEdits[kind].get(row);
 				let dirty = selected !== undefined,
 					duplicate = false;

@@ -118,7 +118,7 @@ export const refreshJoinedTarget = Effect.fn("JoinedTarget.refresh")(function* (
 			.sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))
 	);
 	const key =
-		"joined-v15:" +
+		"joined-v16:" +
 		createHash("sha256")
 			.update(
 				JSON.stringify([
@@ -146,7 +146,7 @@ export const refreshJoinedTarget = Effect.fn("JoinedTarget.refresh")(function* (
 	}
 	const reader = yield* store.open();
 	let incrementalFallback: string | undefined;
-	if (!input.force && (root.active.joined ?? "").startsWith("joined-v15:")) {
+	if (!input.force && (root.active.joined ?? "").startsWith("joined-v16:")) {
 		const incremental = yield* incrementJoinedTarget(
 			input,
 			key,
@@ -885,7 +885,7 @@ export const refreshJoinedTarget = Effect.fn("JoinedTarget.refresh")(function* (
 				line.split_unit![row] = 1;
 				line.split_unit![unitFirstLine[representative]!] = 1;
 			} else unitFirstLine[representative] = row;
-			if (c.identity[occurrence] === 1) continue;
+			if (c.identity[occurrence] !== 0 || c.key[occurrence] === empty) continue;
 			const source = c.source[occurrence]!,
 				previous = sourceFirst[source]!;
 			if (previous === absent) sourceFirst[source] = row;

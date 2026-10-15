@@ -108,7 +108,7 @@ function searchResult(
 	if (
 		unit.occurrences.some(
 			(occurrence) =>
-				occurrence.identity.status !== "string_table" &&
+				occurrence.identity.status === "resolved" &&
 				duplicateSources.has(occurrence.source)
 		)
 	)
@@ -182,6 +182,7 @@ export function textCorpusQuery(
 					group.sources.add(occurrence.source);
 		}
 		groups.set(identity, group);
+		if (row.identity === null) continue;
 		for (const source of group.sources) {
 			const keys = sourceFrequency.get(source) ?? new Set<string>();
 			keys.add(identity);
