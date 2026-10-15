@@ -12,6 +12,12 @@ import {
 	compareReportedLocalizationFindings,
 	enabledLocalizationChecks,
 	localizationDuplicateSources,
+	localizationPropertiesWhereLocalizable,
+	localizationPropertyKey,
+	localizationRuleContext,
+	invariantTextPlace,
+	localizationTranslationVariants,
+	reportableInvariantText,
 	type LocalizationLineCheckContext
 } from "./localization-checks.js";
 import type {
@@ -22,7 +28,15 @@ import type {
 } from "./localization-quality-schema.js";
 import { localizationLinePolicyFindings, localizationPolicyRules } from "./localization-policy.js";
 import { acceptedFindingFilter } from "./localization-review.js";
-import { localizationStates, type LocalizationLine } from "./localization-schema.js";
+import {
+	LocalizationUnknownReason,
+	localizationStates,
+	type LocalizationLine
+} from "./localization-schema.js";
+import {
+	consistentTranslationCandidate,
+	sharedSourceCandidate
+} from "./localization-text-shape.js";
 import {
 	WorkspaceQualityFilter,
 	eligibleLocalizationChange,
@@ -32,7 +46,7 @@ import {
 	type LocalizationFindingList,
 	type LocalizationQuality
 } from "./localization-workspace.js";
-import { localizationLineUnits } from "./gathered-text.js";
+import { gatheredIdentity, gatheredIdentityKey, localizationLineUnits } from "./gathered-text.js";
 import { JoinedQueryData } from "./joined-query-data.js";
 import { u32 } from "./joined-target-input.js";
 import { runJoinedQuery } from "./joined-query-node.js";
@@ -41,6 +55,7 @@ import type { GameTextRuleDocument } from "./quality-rules-v2.js";
 import { TextQualityRuleId } from "./quality-schema.js";
 import type { TextCorpus, TextUnit, TextUnitId } from "./schema.js";
 import { snapshotCheck } from "./snapshot-format.js";
+import { decodeTextAudience } from "./text-audience.js";
 import { encodeWtf8 } from "./wtf8.js";
 
 /**
@@ -50,6 +65,21 @@ import { encodeWtf8 } from "./wtf8.js";
  * 2048-line pages still stalled 2.0 s: hydrating the page is one synchronous block.
  */
 const SCAN_PAGE_LINES = 256;
+/**
+ * Pages shrink while checking one takes longer than this, down to `MINIMUM_PAGE_LINES`, and grow
+ * back to `SCAN_PAGE_LINES` when it is quick. On a shipped project 256-line pages took about
+ * 0.5 s and some stretches of lines 1–1.8 s. A 200 ms budget with 16-line pages kept every stall
+ * under 1 s but made the scan 60% longer: small pages decompress the same string blocks again.
+ */
+const PAGE_BUDGET_MS = 500;
+const MINIMUM_PAGE_LINES = 64;
+
+/** The next page's size after a page of `lines` took `elapsed` milliseconds. */
+function nextPageLines(lines: number, elapsed: number): number {
+	if (elapsed > PAGE_BUDGET_MS) return Math.max(MINIMUM_PAGE_LINES, lines >>> 1);
+	if (elapsed < PAGE_BUDGET_MS / 4) return Math.min(SCAN_PAGE_LINES, lines * 2);
+	return lines;
+}
 /** Positions hydrated per batch when a workspace reads many findings, as an export does. */
 const ITEM_BATCH = 2048;
 
@@ -103,6 +133,61 @@ function fnv32(bytes: Uint8Array, start: number, end: number) {
 
 /** Unit rows by ID through a hash of the ID column; never builds the unit list. */
 function unitIndex(data: JoinedQueryData) {
+	/** Strings of the occurrences the column predicates read, by ID. */
+	const decoded = new Map<number, string>();
+	/** Gathered identity keys by namespace, key and String Table entry. */
+	const gatheredKeys = new Map<string, string>();
+	/** The shard of a global occurrence index. */
+	const shardOf = (member: number) => {
+		const starts = data.joined.meta.packageStarts;
+		let low = 0,
+			high = starts.length - 2;
+		while (low < high) {
+			const middle = (low + high + 1) >>> 1;
+			if (starts[middle]! <= member) low = middle;
+			else high = middle - 1;
+		}
+		return low;
+	};
+	/**
+	 * Visits each occurrence `localizationLineUnits` keeps for the line, without building units:
+	 * a resolved occurrence is kept when its gathered identity is the line's. Stops when `visit`
+	 * returns true.
+	 */
+	const eachKept = (
+		line: LocalizationLine,
+		visit: (column: (field: string) => number) => boolean
+	) => {
+		if (line.origin.kind !== "corpus") return;
+		const lineKey = line.identity && gatheredIdentityKey(line.identity);
+		for (const id of line.origin.unitIds) {
+			const row = find(id);
+			if (row === undefined) continue;
+			for (const member of data.members("raw", row)) {
+				const shard = shardOf(member),
+					index = member - data.joined.meta.packageStarts[shard]!;
+				const column = (field: string) =>
+					data.packageColumn(shard, `occurrence.${field}`)[index]!;
+				if (column("identity") === 0) {
+					const table = column("location") === 2;
+					const memo = `${column("namespace")}\0${column("key")}\0${table}`;
+					let gathered = gatheredKeys.get(memo);
+					if (gathered === undefined) {
+						// A resolved identity without a key is unresolved: kept, as "".
+						const [namespace, key] = data.strings([column("namespace"), column("key")]);
+						gathered =
+							key === ""
+								? ""
+								: gatheredIdentityKey(gatheredIdentity(namespace!, key!, table));
+						if (gatheredKeys.size >= MEMO_LIMIT) gatheredKeys.clear();
+						gatheredKeys.set(memo, gathered);
+					}
+					if (gathered !== "" && gathered !== lineKey) continue;
+				}
+				if (visit(column)) return;
+			}
+		}
+	};
 	const idRows = data.column("query.raw.raw"),
 		starts = data.column("query.raw.id_starts"),
 		words = data.column("query.raw.id_utf8");
@@ -143,16 +228,121 @@ function unitIndex(data: JoinedQueryData) {
 			}
 			return units;
 		},
-		idRow: (row: number) => idRows[row]!
+		idRow: (row: number) => idRows[row]!,
+		/** Drops the string memos; pages and focus after the scan read few lines. */
+		releaseMemos() {
+			decoded.clear();
+			gatheredKeys.clear();
+		},
+		/** Whether a kept occurrence has translator notes; as over `forLine`'s units. */
+		occurrenceNotes(line: LocalizationLine): boolean {
+			let found = false;
+			eachKept(line, (column) => (found = text(column("notes")).trim().length > 0));
+			return found;
+		},
+		/** The String Tables of the kept String Table entries, sorted; as over `forLine`'s units. */
+		stringTables(line: LocalizationLine): string[] {
+			const tables = new Set<string>();
+			eachKept(line, (column) => {
+				if (column("location") === 2) tables.add(text(column("object")));
+				return false;
+			});
+			return [...tables].sort((a, b) => (a < b ? -1 : a > b ? 1 : 0));
+		},
+		/**
+		 * The units a line names hold only culture-invariant occurrences and one of them is
+		 * `reportableInvariantText`, read from the occurrence columns without building the units;
+		 * as `localizationCultureInvariantUnits` and `reportableInvariantText` over `forLine`.
+		 * Lines of thousands of invariant occurrences, such as a label every level repeats, are
+		 * answered without building thousands of occurrences.
+		 */
+		cultureInvariant(
+			line: LocalizationLine,
+			localizableProperties: ReadonlySet<string>
+		): boolean {
+			if (line.origin.kind !== "corpus") return false;
+			const starts = data.joined.meta.packageStarts;
+			let found = false,
+				reportable = false;
+			for (const id of line.origin.unitIds) {
+				const row = find(id);
+				if (row === undefined) continue;
+				for (const member of data.members("raw", row)) {
+					let low = 0,
+						high = starts.length - 2;
+					while (low < high) {
+						const middle = (low + high + 1) >>> 1;
+						if (starts[middle]! <= member) low = middle;
+						else high = middle - 1;
+					}
+					const shard = low,
+						index = member - starts[shard]!;
+					if (
+						data.packageColumn(shard, "occurrence.identity")[index] !==
+						CULTURE_INVARIANT
+					)
+						return false;
+					found = true;
+					reportable ||= placeReportable(shard, index, localizableProperties);
+				}
+			}
+			return found && reportable;
+		}
 	};
+	/** `reportableInvariantText` of one stored occurrence, its strings decoded once each. */
+	function placeReportable(
+		shard: number,
+		index: number,
+		localizableProperties: ReadonlySet<string>
+	): boolean {
+		const column = (field: string) => data.packageColumn(shard, `occurrence.${field}`)[index]!;
+		const kind = column("location");
+		if (kind === 2) return false;
+		const audience = decodeTextAudience(column("audience")).audience;
+		if (audience === "editor") return false;
+		const objectPath = text(column("object")),
+			propertyPath = text(column("property"));
+		return reportableInvariantText(
+			{
+				audience,
+				location:
+					kind === 0
+						? {
+								kind: "asset_property",
+								objectPath,
+								classPath: text(column("class")),
+								propertyPath
+							}
+						: { kind: "data_table_cell", objectPath, row: "", propertyPath }
+			},
+			localizableProperties
+		);
+	}
+	function text(id: number): string {
+		let value = decoded.get(id);
+		if (value === undefined) {
+			if (decoded.size >= MEMO_LIMIT) decoded.clear();
+			decoded.set(id, (value = data.strings([id])[0]!));
+		}
+		return value;
+	}
 }
+
+/** Entries a scan's string memos keep before starting over. */
+const MEMO_LIMIT = 65_536;
+
+/** The occurrence identity column's code for culture-invariant text. */
+const CULTURE_INVARIANT = 2;
 
 /** Positions of rows outside the join. */
 const NOT_JOINED = 0xffffffff;
 
+const CONFLICTING_SOURCE = 1 << LocalizationUnknownReason.literals.indexOf("conflicting_source");
+
 /**
  * Groups duplicate sources from line columns and shared strings, without hydrating lines. Only
- * the join's rows count, and identities that compare equal keep the join's order.
+ * the join's rows count, and identities that compare equal keep the join's order. Also returns
+ * the rows of every shared line, for the translation pass.
  */
 const duplicateSources = Effect.fn("GameText.localizationQuality.duplicates")(function* (
 	data: JoinedQueryData,
@@ -163,6 +353,7 @@ const duplicateSources = Effect.fn("GameText.localizationQuality.duplicates")(fu
 	const namespaces = column("line.namespace"),
 		keys = column("line.key"),
 		sources = column("line.source"),
+		reasons = column("line.reasons"),
 		occurrenceStart = column("line.occ_start"),
 		occurrenceEnd = column("line.occ_end");
 	const states = cultures.map((_, index) => column(`c${index}.state`));
@@ -180,6 +371,8 @@ const duplicateSources = Effect.fn("GameText.localizationQuality.duplicates")(fu
 			// The same conditions as `localizationDuplicateCandidate` on a hydrated line.
 			if (occurrenceEnd[row]! > occurrenceStart[row]! && key[index] === "") continue;
 			if (text[index]!.trim().length === 0) continue;
+			if (!sharedSourceCandidate(text[index]!)) continue;
+			if (reasons[row]! & CONFLICTING_SOURCE) continue;
 			if (states.every((state) => state[row] === outside)) continue;
 			groups.add(
 				text[index]!,
@@ -187,12 +380,210 @@ const duplicateSources = Effect.fn("GameText.localizationQuality.duplicates")(fu
 					namespace: TextNamespace.make(namespace[index]!),
 					key: TextKey.make(key[index]!)
 				}),
-				joinPosition[row]!
+				joinPosition[row]!,
+				row
 			);
 		}
 		yield* Effect.yieldNow;
 	}
 	return groups.finish();
+});
+
+/** Rows whose translations the second pass reads before yielding. */
+const TRANSLATION_PAGE_ROWS = 4096;
+
+/**
+ * The bounded second pass for `inconsistent_translation`: reads only the lines that share a
+ * source, and only their state, facts and shipped translation columns, as line previews do;
+ * hydrating these scattered rows as lines took a page per row. Each culture's shipped translation
+ * is the pending PO text when the culture is `not_synced`, otherwise the archive translation, as
+ * `localizationShippedTranslation` picks it on a hydrated line.
+ */
+const translationVariants = Effect.fn("GameText.localizationQuality.translations")(function* (
+	data: JoinedQueryData,
+	shared: Parameters<typeof localizationTranslationVariants>[0],
+	rows: readonly number[],
+	rowSources: readonly string[]
+) {
+	const target = data.joined.meta.input.target;
+	const variants = localizationTranslationVariants(shared, target.nativeCulture);
+	const outside = localizationStates.indexOf("outside_target"),
+		notSynced = 1 << localizationStates.indexOf("not_synced");
+	const cultures = target.cultures.flatMap((culture, index) =>
+		culture === target.nativeCulture
+			? []
+			: [
+					{
+						culture,
+						state: data.column(`c${index}.state`),
+						facts: data.column(`c${index}.facts`),
+						archive: data.column(`c${index}.archive`),
+						po: data.column(`c${index}.po`),
+						archives: target.outputPaths.archives[culture]!,
+						portableObjects: target.outputPaths.portableObjects[culture]!
+					}
+				]
+	);
+	for (let start = 0; start < rows.length; start += TRANSLATION_PAGE_ROWS) {
+		const ids: number[] = [],
+			sources: string[] = [],
+			names: CultureCode[] = [];
+		for (
+			let index = start;
+			index < Math.min(rows.length, start + TRANSLATION_PAGE_ROWS);
+			index++
+		) {
+			const row = rows[index]!,
+				source = rowSources[index]!;
+			if (!consistentTranslationCandidate(source)) continue;
+			for (const culture of cultures) {
+				if (culture.state[row] === outside) continue;
+				const pending = (culture.facts[row]! & notSynced) !== 0,
+					entry = pending ? culture.po[row]! : culture.archive[row]!;
+				if (!entry) continue;
+				const id = pending
+					? data.translationId(culture.portableObjects, entry - 1, true)
+					: data.translationId(culture.archives, entry - 1);
+				if (id === undefined) continue;
+				ids.push(id);
+				sources.push(source);
+				names.push(culture.culture);
+			}
+		}
+		const translations = data.strings(ids);
+		for (let index = 0; index < ids.length; index++)
+			variants.addTranslation(sources[index]!, names[index]!, translations[index]!);
+		yield* Effect.yieldNow;
+	}
+	return variants.finish();
+});
+
+/** Occurrences whose identity and owner columns the property pass reads before yielding. */
+const PROPERTY_PAGE_ROWS = 16_384;
+
+/**
+ * `localizationLocalizableProperties` from the package occurrence columns, in two passes over
+ * the identity, location and owner columns. The first counts culture-invariant occurrences by
+ * owner (class or DataTable) and property. The second counts keyed and String Table occurrences,
+ * only in owners the first found; their keys are decoded, as `textOccurrenceFromExtraction`
+ * leaves a resolved identity without a key unresolved. Owner and property strings are decoded once
+ * each.
+ */
+const localizableProperties = Effect.fn("GameText.localizationQuality.properties")(function* (
+	data: JoinedQueryData
+) {
+	const starts = data.joined.meta.packageStarts;
+	const shardColumns = (shard: number) => ({
+		audience: data.packageColumn(shard, "occurrence.audience"),
+		identity: data.packageColumn(shard, "occurrence.identity"),
+		location: data.packageColumn(shard, "occurrence.location"),
+		classes: data.packageColumn(shard, "occurrence.class"),
+		objects: data.packageColumn(shard, "occurrence.object"),
+		properties: data.packageColumn(shard, "occurrence.property"),
+		keys: data.packageColumn(shard, "occurrence.key")
+	});
+	/** A class ID times two, or a DataTable object ID times two plus one. */
+	const ownerOf = (columns: ReturnType<typeof shardColumns>, row: number) =>
+		columns.location[row] === 0 ? columns.classes[row]! * 2 : columns.objects[row]! * 2 + 1;
+	const ownerStrings = new Map<number, string>(),
+		propertyStrings = new Map<number, string>(),
+		objectStrings = new Map<number, string>();
+	const decode = (ids: Iterable<number>, into: Map<number, string>, owners: boolean) => {
+		const missing = [...new Set(ids)].filter((id) => !into.has(id));
+		const values = data.strings(
+			owners ? missing.map((owner) => Math.floor(owner / 2)) : missing
+		);
+		missing.forEach((id, index) => into.set(id, values[index]!));
+	};
+	const keyOf = (owner: number, property: number) =>
+		localizationPropertyKey(
+			owner % 2 === 0
+				? {
+						kind: "asset_property",
+						objectPath: "",
+						classPath: ownerStrings.get(owner)!,
+						propertyPath: propertyStrings.get(property)!
+					}
+				: {
+						kind: "data_table_cell",
+						objectPath: ownerStrings.get(owner)!,
+						row: "",
+						propertyPath: propertyStrings.get(property)!
+					}
+		)!;
+	const invariant = new Map<string, number>(),
+		localizable = new Map<string, number>(),
+		invariantOwners = new Set<number>();
+	for (const counting of ["invariant", "localizable"] as const)
+		for (let shard = 0; shard + 1 < starts.length; shard++) {
+			if (starts[shard + 1] === starts[shard]) continue;
+			const columns = shardColumns(shard);
+			for (let start = 0; start < columns.identity.length; start += PROPERTY_PAGE_ROWS) {
+				const owners: number[] = [],
+					names: number[] = [],
+					keyIds: number[] = [],
+					/** Invariant occurrences: object string ID, or -1 for editor text. */
+					places: number[] = [];
+				const end = Math.min(columns.identity.length, start + PROPERTY_PAGE_ROWS);
+				for (let row = start; row < end; row++) {
+					// String Table entries (location 2) have no property.
+					const identity = columns.identity[row]!;
+					if (columns.location[row]! > 1) continue;
+					if (counting === "invariant" ? identity !== CULTURE_INVARIANT : identity > 1)
+						continue;
+					const owner = ownerOf(columns, row);
+					if (counting === "localizable" && !invariantOwners.has(owner)) continue;
+					if (counting === "invariant") {
+						const editor =
+							decodeTextAudience(columns.audience[row]!).audience === "editor";
+						if (editor) continue;
+						places.push(columns.objects[row]!);
+					}
+					owners.push(owner);
+					names.push(columns.properties[row]!);
+					keyIds.push(columns.keys[row]!);
+				}
+				decode(owners, ownerStrings, true);
+				decode(names, propertyStrings, false);
+				if (counting === "invariant") {
+					decode(places, objectStrings, false);
+					for (let index = 0; index < owners.length; index++) {
+						const owner = owners[index]!,
+							propertyPath = propertyStrings.get(names[index]!)!,
+							objectPath = objectStrings.get(places[index]!)!;
+						// Editor text was left out above; the audience no longer matters.
+						const place = invariantTextPlace({
+							audience: "unknown",
+							location:
+								owner % 2 === 0
+									? {
+											kind: "asset_property",
+											objectPath,
+											classPath: ownerStrings.get(owner)!,
+											propertyPath
+										}
+									: { kind: "data_table_cell", objectPath, row: "", propertyPath }
+						});
+						if (!place) continue;
+						invariantOwners.add(owner);
+						const key = keyOf(owner, names[index]!);
+						invariant.set(key, (invariant.get(key) ?? 0) + 1);
+					}
+				} else {
+					const wanted = owners.flatMap((owner, index) =>
+						invariant.has(keyOf(owner, names[index]!)) ? [index] : []
+					);
+					const keys = data.strings(wanted.map((index) => keyIds[index]!));
+					wanted.forEach((index, position) => {
+						if (keys[position] === "") return;
+						const key = keyOf(owners[index]!, names[index]!);
+						localizable.set(key, (localizable.get(key) ?? 0) + 1);
+					});
+				}
+				yield* Effect.yieldNow;
+			}
+		}
+	return localizationPropertiesWhereLocalizable(invariant, localizable);
 });
 
 /**
@@ -231,12 +622,28 @@ export const indexedLocalizationQuality = Effect.fn("GameText.localizationQualit
 	const joinPosition = new Uint32Array(count).fill(NOT_JOINED);
 	for (let position = 0; position < lineCount; position++)
 		joinPosition[joinRows[position]!] = position;
+	const duplicates = yield* duplicateSources(data, target.cultures, joinPosition);
 	const context: LocalizationLineCheckContext = {
 		target: target.name,
 		nativeCulture: target.nativeCulture,
 		options,
 		enabled,
-		duplicates: yield* duplicateSources(data, target.cultures, joinPosition)
+		duplicates: duplicates.shared,
+		translations: enabled.includes("inconsistent_translation")
+			? yield* translationVariants(
+					data,
+					duplicates.shared,
+					duplicates.rows,
+					duplicates.rowSources
+				)
+			: new Map(),
+		...localizationRuleContext(ruleDocument),
+		localizableProperties: enabled.includes("culture_invariant_text")
+			? yield* localizableProperties(data)
+			: new Set(),
+		cultureInvariant: (line) => units.cultureInvariant(line, context.localizableProperties),
+		occurrenceNotes: (line) => units.occurrenceNotes(line),
+		stringTables: (line) => units.stringTables(line)
 	};
 	const units = unitIndex(data);
 	yield* Effect.yieldNow;
@@ -389,7 +796,9 @@ export const indexedLocalizationQuality = Effect.fn("GameText.localizationQualit
 	};
 	const storedFacts = u32Builder(),
 		storedFirst = u32Builder(),
-		storedSecond = u32Builder();
+		storedSecond = u32Builder(),
+		/** Stored findings the rule file's source terminology reports in full, ascending. */
+		storedReported = u32Builder();
 	const blockStart = new Uint32Array(lineCount),
 		blockSize = new Uint32Array(lineCount);
 	let checkedLines = 0;
@@ -404,6 +813,8 @@ export const indexedLocalizationQuality = Effect.fn("GameText.localizationQualit
 			blockSize[rank] = findings.length;
 			for (const finding of findings) {
 				const [first, second] = localizationFindingHash(finding);
+				if (finding.kind === "placeholder_text" && finding.unreportedMatches?.length === 0)
+					storedReported.push(storedFacts.length);
 				storedFacts.push(pack(finding));
 				storedFirst.push(first);
 				storedSecond.push(second);
@@ -423,28 +834,35 @@ export const indexedLocalizationQuality = Effect.fn("GameText.localizationQualit
 			findings: storedFacts.length
 		});
 	};
-	// One-line blocks in storage order, so each page hydrates adjacent rows.
-	let page: number[] = [];
+	// One-line blocks in storage order, so each page hydrates adjacent rows. Which page a line
+	// is checked in does not change its findings or their order.
+	let page: number[] = [],
+		pageLines = SCAN_PAGE_LINES;
+	const checkPage = () => {
+		const started = performance.now();
+		checkBlocks(page);
+		pageLines = nextPageLines(pageLines, performance.now() - started);
+		page = [];
+	};
 	for (let row = 0; row < count; row++) {
 		if (joinPosition[row] === NOT_JOINED) continue;
 		const rank = rankOf[row]!;
 		if (tied[rank] || (rank + 1 < lineCount && tied[rank + 1])) continue;
 		page.push(rank);
-		if (page.length < SCAN_PAGE_LINES) continue;
-		checkBlocks(page);
-		page = [];
+		if (page.length < pageLines) continue;
+		checkPage();
 		yield* Effect.yieldNow;
 	}
 	// Then the rare blocks of several lines.
 	for (let rank = 0; rank + 1 < lineCount; rank++) {
 		if (tied[rank] || !tied[rank + 1]) continue;
 		page.push(rank);
-		if (page.length < SCAN_PAGE_LINES) continue;
-		checkBlocks(page);
-		page = [];
+		if (page.length < pageLines) continue;
+		checkPage();
 		yield* Effect.yieldNow;
 	}
 	if (page.length) checkBlocks(page);
+	units.releaseMemos();
 	page = [];
 
 	const total = storedFacts.length;
@@ -453,6 +871,11 @@ export const indexedLocalizationQuality = Effect.fn("GameText.localizationQualit
 		second = new Uint32Array(total),
 		blockOf = new Uint32Array(total),
 		blockPosition = new Uint32Array(lineCount);
+	// One byte a finding, only when some placeholder is reported in full by the source rules.
+	const storedIsReported = storedReported.length === 0 ? undefined : new Uint8Array(total);
+	for (let index = 0; index < storedReported.length; index++)
+		storedIsReported![storedReported.at(index)] = 1;
+	const reportedBySource = storedIsReported && new Uint8Array(total);
 	let position = 0;
 	for (let rank = 0; rank < lineCount; rank++) {
 		if (tied[rank]) continue;
@@ -463,6 +886,7 @@ export const indexedLocalizationQuality = Effect.fn("GameText.localizationQualit
 			first[position] = storedFirst.at(stored);
 			second[position] = storedSecond.at(stored);
 			blockOf[position] = rank;
+			if (reportedBySource) reportedBySource[position] = storedIsReported![stored]!;
 		}
 	}
 	const limits = new Map(
@@ -524,6 +948,7 @@ export const indexedLocalizationQuality = Effect.fn("GameText.localizationQualit
 		filter: (position) => WorkspaceQualityFilter.literals[(facts[position]! >>> 12) & 0x3f]!,
 		ruleId: (position) => ruleIds[facts[position]! >>> 19]!,
 		eligible: (position) => ((facts[position]! >>> 18) & 1) === 1,
+		reportedBySource: (position) => reportedBySource?.[position] === 1,
 		find(id, culture) {
 			const match = /^localization-finding:([0-9a-f]{8})([0-9a-f]{8})$/u.exec(id);
 			if (!match) return undefined;

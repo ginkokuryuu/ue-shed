@@ -42,12 +42,12 @@ describe("bounded localization workspace", () => {
 		expect(page.counts.all).toBe(page.total);
 		expect(page.counts.character_budget).toBe(2);
 		expect(page.counts.terminology).toBe(1);
-		expect(page.counts.format_arguments).toBe(1);
+		expect(page.counts.format_argument_renamed).toBe(1);
 		expect(
 			workspace.search({ ...request, culture: cultureCode("en") }).counts.terminology
 		).toBe(0);
-		const filtered = workspace.search({ ...request, filter: "format_arguments" });
-		expect(filtered.total).toBe(page.counts.format_arguments);
+		const filtered = workspace.search({ ...request, filter: "format_argument_renamed" });
+		expect(filtered.total).toBe(page.counts.format_argument_renamed);
 		const id = filtered.findings[0]?.id;
 		if (!id) throw new Error("Expected a format argument finding");
 		const result = workspace.focus({ ...request, id });
@@ -73,7 +73,7 @@ describe("bounded localization workspace", () => {
 		const request = {
 			target: files.target.name,
 			culture: cultureCode("de"),
-			filter: "format_arguments"
+			filter: "format_argument_renamed"
 		} as const;
 		const first = workspace.search(request);
 		expect(first.findings).toHaveLength(50);

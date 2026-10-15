@@ -8,7 +8,7 @@ import {
 	LocalizationTargetName
 } from "@ue-shed/localization/browser";
 import { LocalizationLineId, LocalizationUnknownReason } from "./localization-schema.js";
-import { LocalizationCheckId } from "./localization-check-ids.js";
+import { BuiltInCheckId, CheckSeverity } from "./localization-check-ids.js";
 import {
 	TextQualityAffectedOccurrence,
 	TextQualityFinding,
@@ -39,8 +39,18 @@ const Base = {
 	affectedOccurrences: Schema.Array(TextQualityAffectedOccurrence),
 	manifestLocations: Strings,
 	translationOrigin: Schema.Literals(["po", "archive", "absent"]),
-	suggestedChange: Schema.optionalKey(LocalizationChange)
+	suggestedChange: Schema.optionalKey(LocalizationChange),
+	/** The check's severity; never part of the finding's ID. */
+	severity: CheckSeverity,
+	/**
+	 * The line's distinct saved sources when they conflict (one key, several texts), sorted. The
+	 * line's `source` joins them for search; findings list them instead.
+	 */
+	sourceVariants: Schema.optionalKey(Schema.Array(Schema.String).check(Schema.isMinLength(2)))
 };
+/** Source checks also cover text without a key, such as culture-invariant text. */
+const SourceBase = { ...Base, identity: Schema.NullOr(LocalizationIdentity) };
+const Count = Schema.Int.check(Schema.isGreaterThanOrEqualTo(0));
 const Side = Schema.Literals(["source", "translation"]);
 export const LocalizationQualityFinding = Schema.Union([
 	Schema.Struct({
@@ -101,6 +111,155 @@ export const LocalizationQualityFinding = Schema.Union([
 			identities: Schema.Array(LocalizationIdentity).check(Schema.isMaxLength(5))
 		}),
 		expectation: Schema.Struct({ reviewDistinctKeys: Schema.Literal(true) })
+	}),
+	Schema.Struct({
+		...Base,
+		kind: Schema.Literal("format_argument_renamed"),
+		/** `from` is the translation's name, `to` the source's, paired in order of appearance. */
+		actual: Schema.Struct({
+			arguments: Strings,
+			renamed: Schema.Array(Schema.Struct({ from: Schema.String, to: Schema.String }))
+		}),
+		expectation: Schema.Struct({ arguments: Strings })
+	}),
+	Schema.Struct({
+		...Base,
+		kind: Schema.Literal("rich_text_tags"),
+		actual: Schema.Struct({ tags: Strings, missing: Strings, added: Strings }),
+		expectation: Schema.Struct({ tags: Strings })
+	}),
+	Schema.Struct({
+		...Base,
+		kind: Schema.Literal("rich_text_tags_added"),
+		actual: Schema.Struct({ tags: Strings, added: Strings }),
+		expectation: Schema.Struct({ tags: Strings })
+	}),
+	Schema.Struct({
+		...Base,
+		kind: Schema.Literal("rich_text_tag_case"),
+		actual: Schema.Struct({
+			changed: Schema.Array(
+				Schema.Struct({ source: Schema.String, translation: Schema.String })
+			)
+		}),
+		expectation: Schema.Struct({ sameCase: Schema.Literal(true) })
+	}),
+	Schema.Struct({
+		...Base,
+		kind: Schema.Literal("line_breaks"),
+		actual: Schema.Struct({ lineBreaks: Count }),
+		expectation: Schema.Struct({ lineBreaks: Count })
+	}),
+	Schema.Struct({
+		...Base,
+		kind: Schema.Literal("segment_separator"),
+		actual: Schema.Struct({ separator: Schema.String, count: Count }),
+		expectation: Schema.Struct({ separator: Schema.String, count: Count })
+	}),
+	Schema.Struct({
+		...Base,
+		kind: Schema.Literal("length_outlier"),
+		actual: Schema.Struct({ length: Count, ratio: Schema.Number }),
+		expectation: Schema.Struct({
+			sourceLength: Count,
+			minimumRatio: Schema.Number,
+			maximumRatio: Schema.Number
+		})
+	}),
+	Schema.Struct({
+		...Base,
+		kind: Schema.Literal("outdated_translation"),
+		actual: Schema.Struct({ translatedSource: Schema.String }),
+		expectation: Schema.Struct({ source: Schema.String })
+	}),
+	Schema.Struct({
+		...Base,
+		kind: Schema.Literal("source_line_endings_changed"),
+		actual: Schema.Struct({ translatedSource: Schema.String }),
+		expectation: Schema.Struct({ source: Schema.String })
+	}),
+	Schema.Struct({
+		...Base,
+		kind: Schema.Literal("placeholder_translation"),
+		actual: Schema.Struct({ translation: Schema.String }),
+		expectation: Schema.Struct({ translatedText: Schema.Literal(true) })
+	}),
+	Schema.Struct({
+		...Base,
+		kind: Schema.Literal("inconsistent_translation"),
+		actual: Schema.Struct({
+			translation: Schema.String,
+			/**
+			 * The most used translations of this source in the culture, at most five. Lines whose
+			 * translations differ only in case, whitespace or punctuation count as one, shown in
+			 * one of their spellings.
+			 */
+			variants: Schema.Array(
+				Schema.Struct({ translation: Schema.String, lines: Count })
+			).check(Schema.isMaxLength(5)),
+			variantCount: Count,
+			/** This line ships its source text, where other lines translate it. */
+			untranslated: Schema.optionalKey(Schema.Literal(true))
+		}),
+		expectation: Schema.Struct({ consistentTranslation: Schema.Literal(true) })
+	}),
+	Schema.Struct({
+		...SourceBase,
+		kind: Schema.Literal("culture_invariant_text"),
+		actual: Schema.Struct({ source: Schema.String }),
+		expectation: Schema.Struct({ localizable: Schema.Literal(true) })
+	}),
+	Schema.Struct({
+		...SourceBase,
+		kind: Schema.Literal("placeholder_text"),
+		actual: Schema.Struct({ source: Schema.String, matches: Strings }),
+		expectation: Schema.Struct({ finalText: Schema.Literal(true) }),
+		/**
+		 * Present when the rule file's source terminology also reports some of `actual.matches`
+		 * (a discouraged term overlapping the placeholder in this text, at a place of the term's
+		 * role): the matches it does not report, in order, empty when it reports them all. A
+		 * list that shows the rule file's source findings beside this one names only these, and
+		 * leaves the finding out when none are left. Not part of the finding's ID.
+		 */
+		unreportedMatches: Schema.optionalKey(Strings)
+	}),
+	Schema.Struct({
+		...SourceBase,
+		kind: Schema.Literal("source_whitespace"),
+		actual: Schema.Struct({
+			source: Schema.String,
+			leading: Schema.String,
+			trailing: Schema.String,
+			repeatedSpaces: Count
+		}),
+		expectation: Schema.Struct({ trimmed: Schema.Literal(true) })
+	}),
+	Schema.Struct({
+		...SourceBase,
+		kind: Schema.Literal("source_markup"),
+		actual: Schema.Struct({
+			source: Schema.String,
+			richText: UnrealRichTextCounts,
+			braces: Schema.Struct({ opening: Count, closing: Count }),
+			/** XML-style closings such as `</Name>`, which Slate shows as text. */
+			xmlClosings: Schema.optionalKey(Strings)
+		}),
+		expectation: Schema.Struct({ balanced: Schema.Literal(true) })
+	}),
+	Schema.Struct({
+		...SourceBase,
+		kind: Schema.Literal("number_only_text"),
+		actual: Schema.Struct({ source: Schema.String }),
+		expectation: Schema.Struct({ cultureInvariant: Schema.Literal(true) })
+	}),
+	Schema.Struct({
+		...SourceBase,
+		kind: Schema.Literal("string_table_key_collision"),
+		actual: Schema.Struct({
+			tables: Strings.check(Schema.isMaxLength(16)),
+			tableCount: Count
+		}),
+		expectation: Schema.Struct({ oneTablePerKey: Schema.Literal(true) })
 	})
 ]);
 export type LocalizationQualityFinding = typeof LocalizationQualityFinding.Type;
@@ -139,8 +298,8 @@ export type LocalizationRuleDiagnostic = typeof LocalizationRuleDiagnostic.Type;
 
 export const LocalizationCheckOptions = Schema.Struct({
 	culture: Schema.optionalKey(CultureCode),
-	checks: Schema.optionalKey(Schema.Array(LocalizationCheckId)),
-	disabledChecks: Schema.optionalKey(Schema.Array(LocalizationCheckId)),
+	checks: Schema.optionalKey(Schema.Array(BuiltInCheckId)),
+	disabledChecks: Schema.optionalKey(Schema.Array(BuiltInCheckId)),
 	/** Findings accepted in the target's review file are left out while their text is unchanged. */
 	review: Schema.optionalKey(LocalizationReviewFile)
 });

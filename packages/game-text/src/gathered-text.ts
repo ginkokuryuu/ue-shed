@@ -10,12 +10,22 @@ export function gatheredTextOccurrenceIdentity(
 	occurrence: TextOccurrence
 ): typeof LocalizationIdentity.Type | null {
 	if (occurrence.identity.status !== "resolved") return null;
+	return gatheredIdentity(
+		occurrence.identity.namespace,
+		occurrence.identity.key,
+		occurrence.location.kind === "string_table_entry"
+	);
+}
+
+/** The gathered identity of a resolved saved identity; String Table entries keep their namespace. */
+export function gatheredIdentity(
+	namespace: string,
+	key: string,
+	stringTableEntry: boolean
+): typeof LocalizationIdentity.Type {
 	return decodeLocalizationIdentity({
-		...occurrence.identity,
-		namespace:
-			occurrence.location.kind === "string_table_entry"
-				? occurrence.identity.namespace
-				: stripPackageNamespace(occurrence.identity.namespace)
+		namespace: stringTableEntry ? namespace : stripPackageNamespace(namespace),
+		key
 	});
 }
 

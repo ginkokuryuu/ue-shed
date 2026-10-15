@@ -55,6 +55,13 @@ export function localizationLinePolicyFindings(
 	findings: LocalizationPolicyFinding[]
 ) {
 	if (!line.identity || !line.source.trim() || line.origin.kind !== "corpus") return;
+	const checked = (culture: LocalizationLine["cultures"][number]) =>
+		culture.state !== "outside_target" &&
+		(!options.culture || options.culture === culture.culture) &&
+		localizationShippedTranslation(culture).value !== null;
+	// Units are built only for a line with a translation to check: a key saved in thousands of
+	// places, such as an untranslated editor label, takes seconds to build.
+	if (!line.cultures.some(checked)) return;
 	const occurrences = units()
 		.flatMap((unit) => unit.occurrences)
 		.filter((occurrence) => matchesTextRole(occurrence, role))
@@ -78,6 +85,7 @@ export function localizationLinePolicyFindings(
 			ruleId: rule.id,
 			recovery: rule.recovery,
 			translationOrigin: shipped.origin,
+			severity: "normal" as const,
 			affectedOccurrences: occurrences.map(({ id, location, packageFile }) => ({
 				id,
 				location,

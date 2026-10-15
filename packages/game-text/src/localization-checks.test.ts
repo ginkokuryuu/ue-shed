@@ -58,14 +58,17 @@ function findings(report: LocalizationQualityReport): readonly LocalizationQuali
 }
 
 describe("built-in localization quality checks", () => {
-	it("finds missing and added arguments and stages a one-argument rename with PO preconditions", () => {
+	it("finds a renamed argument and stages a one-argument rename with PO preconditions", () => {
 		const { text, files, report } = checked("Hello {Name}", "Hallo {Wrong}");
-		const finding = findings(report).find((finding) => finding.kind === "format_arguments");
+		const finding = findings(report).find(
+			(finding) => finding.kind === "format_argument_renamed"
+		);
 		expect(finding?.actual).toEqual({
 			arguments: ["Wrong"],
-			missing: ["Name"],
-			added: ["Wrong"]
+			renamed: [{ from: "Wrong", to: "Name" }]
 		});
+		expect(finding?.severity).toBe("normal");
+		expect(findings(report).some((finding) => finding.kind === "format_arguments")).toBe(false);
 		expect(report.changes.changes[0]).toMatchObject({
 			culture: "de",
 			namespace: "NS",
@@ -85,7 +88,7 @@ describe("built-in localization quality checks", () => {
 	it("checks pending PO text even when another fact has primary state, and never fixes several renames", () => {
 		const pending = checked("Hello {Name}", "Hallo {Name}", undefined, "Hallo {Wrong}").report;
 		expect(
-			findings(pending).find((finding) => finding.kind === "format_arguments")
+			findings(pending).find((finding) => finding.kind === "format_argument_renamed")
 				?.translationOrigin
 		).toBe("po");
 		expect(pending.changes.changes[0]?.previousTranslation).toBe("Hallo {Wrong}");
@@ -187,7 +190,9 @@ describe("built-in localization quality checks", () => {
 			)
 		).toBe(true);
 		const report = checkLocalizationTarget(text, joined, files, { culture: cultureCode("de") });
-		const finding = findings(report).find((finding) => finding.kind === "format_arguments");
+		const finding = findings(report).find(
+			(finding) => finding.kind === "format_argument_renamed"
+		);
 		expect(finding?.translationOrigin).toBe("po");
 		expect(finding?.affectedOccurrences).toEqual([]);
 		expect(finding?.manifestLocations).toEqual(["Source/Game/Text.cpp - line 12"]);
@@ -267,15 +272,13 @@ describe("built-in localization quality checks", () => {
 		);
 		const joined = joinLocalizationTarget(text, files, files.target);
 		const report = checkLocalizationTarget(text, joined, files);
-		// A fact about the source: once per line, under the native culture, not once per culture.
-		expect(
-			findings(report)
-				.filter((finding) => finding.kind === "duplicate_source")
-				.map((finding) => [finding.identity.key, finding.culture])
-		).toEqual([
-			["A", "en"],
-			["B", "en"]
+		// A fact about the shared text: once per text, on the first key, under the native culture.
+		const shared = findings(report).filter((finding) => finding.kind === "duplicate_source");
+		expect(shared.map((finding) => [finding.identity?.key, finding.culture])).toEqual([
+			["A", "en"]
 		]);
+		expect(shared[0]?.actual).toMatchObject({ identityCount: 2 });
+		expect(shared[0]?.severity).toBe("low");
 		expect(
 			joined.lines.find((line) => line.identity?.key === "B")?.cultures[0]?.archive
 		).toBeNull();
@@ -284,14 +287,14 @@ describe("built-in localization quality checks", () => {
 		).toEqual(report);
 	});
 	it("supports built-in filters and compatible v1 disabling without a rule document", () => {
-		expect(
-			findings(checked("{Name}", "{Wrong}", { checks: ["format_arguments"] }).report).every(
-				(finding) => finding.kind === "format_arguments"
-			)
-		).toBe(true);
+		const selected = findings(
+			checked("{Name}", "{Wrong}", { checks: ["format_argument_renamed"] }).report
+		);
+		expect(selected.length).toBeGreaterThan(0);
+		expect(selected.every((finding) => finding.kind === "format_argument_renamed")).toBe(true);
 		const doc = Schema.decodeUnknownSync(TextQualityRuleDocument)({
 			...STARTER_GAME_TEXT_RULES,
-			disabledLocalizationChecks: ["format_arguments"]
+			disabledLocalizationChecks: ["format_argument_renamed"]
 		});
 		const { text, files } = checked("{Name}", "{Wrong}");
 		const report = checkLocalizationTarget(
@@ -301,7 +304,9 @@ describe("built-in localization quality checks", () => {
 			{},
 			doc
 		);
-		expect(findings(report).some((finding) => finding.kind === "format_arguments")).toBe(false);
+		expect(findings(report).some((finding) => finding.kind === "format_argument_renamed")).toBe(
+			false
+		);
 		expect(report.changes.changes).toEqual([]);
 		expect(
 			Schema.decodeUnknownSync(TextQualityRuleDocument)(STARTER_GAME_TEXT_RULES).schemaVersion

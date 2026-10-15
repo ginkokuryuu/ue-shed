@@ -128,8 +128,8 @@ describe("built-ins against Unreal's recorded validators", () => {
 					(finding) =>
 						"culture" in finding &&
 						finding.culture === entry.culture &&
-						finding.identity.namespace === entry.namespace &&
-						finding.identity.key === entry.key
+						finding.identity?.namespace === entry.namespace &&
+						finding.identity?.key === entry.key
 				);
 				const source = parseUnrealFormatPattern(entry.manifestSource, entry.culture);
 				const engineIssue = (code: (typeof source.issues)[number]["code"]) =>

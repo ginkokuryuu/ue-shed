@@ -834,9 +834,16 @@ facet leaves out the picked cultures, so the picker always shows every culture.
 
 Localization checks are quality findings over the same corpus and report model:
 
-- built-ins now check case-sensitive format argument names, plural/ordinal/gender/Hangul modifiers,
-  rich text tags, unsafe PO escapes, boundary whitespace and line-break counts, existing empty
-  translation entries, missing translator notes, and the same source under different keys;
+- built-ins now check case-sensitive format argument names (renamed apart from dropped or added),
+  plural/ordinal/gender/Hangul modifiers, rich text balance, tags and tag case, unsafe PO escapes,
+  boundary whitespace, line-break counts, a project segment separator, length outliers, existing
+  empty translation entries, translations made for older source, shared source translated
+  inconsistently, missing translator notes, and the same source under different keys;
+- built-in source checks need no rule file: culture-invariant text players will see untranslated,
+  placeholder text, source whitespace, unbalanced source markup, number-only text that could be
+  culture invariant, and keys two String Tables declare;
+- every localization finding has a severity (blocking, normal or low); lists show blocking
+  findings first;
 - missing translation evidence is a check diagnostic rather than a claim that a translation is empty;
 - version-2 project rules add role budgets and glossary terms per culture, evaluated on that
   culture's shipped translation with the same substring and UTF-16 offset evidence as source rules.
@@ -854,13 +861,19 @@ Grammar follows the supported engines' backtick escapes and modifier lexer. Cult
 are fixed to the ICU 64 data used by UE 5.7/5.8, avoiding different results from a host's newer ICU.
 Rich text uses Unreal's compile validator: balanced counts pass, and imbalance passes if opening and
 closing counts match the source. Self-closing tags and lowercase `<br>` do not count; this check does
-not impose tag-name or nesting symmetry beyond Unreal's validator.
+not impose tag-name or nesting symmetry beyond Unreal's validator. Separate checks compare tag names
+without case (`rich_text_tags`) and their case (`rich_text_tag_case`, low: Slate matches style and
+decorator names without case).
 
 UE Shed adds checks the compile validator does not perform: source/translation argument and modifier
 comparison, malformed modifier parameters that Unreal treats as literals, whitespace and line-break
 drift relative to source, PO escape safety, empty entries, notes, and duplicate source identities.
-These are evidence-based built-ins; no rule file is required. Existing version-1 project rule files
-may add `disabledLocalizationChecks`, an array of built-in IDs, without changing their source rules.
+These are evidence-based built-ins; no rule file is required. Version-1 and version-2 project rule
+files may add `disabledLocalizationChecks`, an array of built-in IDs; `segmentSeparator`, text
+such as `"//"` that joins a line's segments and must appear as often in each translation;
+`optionalTags`, rich-text tags a translation may add or leave out; and `optionalArguments`,
+arguments the game always supplies, which a translation may add along with a tag around only
+them. None changes the source rules. The package README lists every check with its severity and rule.
 Hosts whose projects cannot store translator notes (packages saved by UE 4.27 and by UE5 before 5.8;
 String Tables and UE 5.8+ can) can pass `disabledChecks: ["missing_translator_notes"]`.
 
@@ -871,10 +884,13 @@ targets the scan takes minutes, so its options also take `onProgress`, called wi
 known from the first call, so a host can show a percentage. Progress does not change the findings,
 their order or IDs. The callback must be cheap and must not throw.
 
-Notes and shared source text are facts about the source line, not a translation. They report once
-per line, under the target's native culture, or the line's first culture in the target by code when
-it has no native one. The all-cultures list counts each such line once; selecting the native culture
-shows them; selecting another culture does not.
+Notes, shared source text and the source checks are facts about the source line, not a translation.
+They report once per line, under the target's native culture, or the line's first culture in the
+target by code when it has no native one. The all-cultures list counts each such line once;
+selecting the native culture shows them; selecting another culture does not. Shared source text
+reports once per text, on its first key. "Translated inconsistently" reports, per culture, each line
+of a shared source whose translation is not the one most lines use (every line when several tie):
+each finding is one line a translator can open and fix or accept.
 
 ```sh
 ue-shed loc check <project-root> --target <name> [--culture <c>] [--check <id>]...

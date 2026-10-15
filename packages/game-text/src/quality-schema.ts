@@ -1,6 +1,6 @@
 import { TextCorpusDiagnosticSummary } from "./corpus-summary.js";
 import { Effect, Schema } from "effect";
-import { LocalizationCheckId } from "./localization-check-ids.js";
+import { BuiltInCheckId } from "./localization-check-ids.js";
 import { TextCorpus, TextLocation, TextOccurrenceId, TextUnitId } from "./schema.js";
 
 const SafeIdentifier = Schema.Trim.check(Schema.isPattern(/^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/));
@@ -96,7 +96,34 @@ export const TextQualityRule = Schema.Union([
 export type TextQualityRule = Schema.Schema.Type<typeof TextQualityRule>;
 
 export const TextQualityRuleDocument = Schema.Struct({
-	disabledLocalizationChecks: Schema.optionalKey(Schema.Array(LocalizationCheckId)),
+	disabledLocalizationChecks: Schema.optionalKey(Schema.Array(BuiltInCheckId)),
+	/**
+	 * Text the project uses to join segments of one line, such as `"//"`. When set, the
+	 * `segment_separator` check expects each translation to use it as often as its source.
+	 */
+	segmentSeparator: Schema.optionalKey(
+		Schema.String.check(Schema.isNonEmpty(), Schema.isMaxLength(16))
+	),
+	/**
+	 * Rich-text tag names a translation may use or leave out, such as a name style a culture
+	 * applies differently. Compared without case; `rich_text_tags` and `rich_text_tags_added`
+	 * ignore them.
+	 */
+	optionalTags: Schema.optionalKey(
+		Schema.Array(Schema.String.check(Schema.isPattern(/^[A-Za-z_][\w.-]*$/u))).check(
+			Schema.isMaxLength(256)
+		)
+	),
+	/**
+	 * Format argument names the game always supplies, so a translation may add them, such as a
+	 * player's name a culture's grammar asks for. Case-sensitive, as argument names are. Adding
+	 * one, or a rich-text tag wrapped around only that argument, is not reported.
+	 */
+	optionalArguments: Schema.optionalKey(
+		Schema.Array(Schema.String.check(Schema.isNonEmpty(), Schema.isMaxLength(128))).check(
+			Schema.isMaxLength(256)
+		)
+	),
 	rules: Schema.Array(TextQualityRule).check(Schema.isMinLength(1), Schema.isMaxLength(512)),
 	roles: Schema.Array(TextRole).check(Schema.isMinLength(1), Schema.isMaxLength(256)),
 	schemaVersion: Schema.Literal(1)

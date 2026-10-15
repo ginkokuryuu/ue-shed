@@ -1,10 +1,11 @@
 import { textCorpusDiagnosticSummary } from "./corpus-summary.js";
 import type {
+	CultureCode,
 	LocalizationChangeSet,
 	LocalizationIdentity,
 	LocalizationTargetEvidence
 } from "@ue-shed/localization/browser";
-import { LocalizationCheckId } from "./localization-check-ids.js";
+import { BuiltInCheckId, checkSeverity } from "./localization-check-ids.js";
 import { localizationManifestNotes } from "./localization.js";
 import { localizationLineUnits } from "./gathered-text.js";
 import {
@@ -23,6 +24,8 @@ import {
 import { localizationEvidenceFileStatuses } from "./localization-status.js";
 import { TextQualityRuleId, type TextQualityAffectedOccurrence } from "./quality-schema.js";
 import type { GameTextRuleDocument } from "./quality-rules-v2.js";
+import { matchesTextRole, prepareTextQualityRules, termMatches } from "./quality.js";
+import type { TextRole } from "./quality-schema.js";
 import { evaluateLocalizationPolicy } from "./localization-policy.js";
 import { localizationShippedTranslation } from "./localization-shipped-translation.js";
 import { withoutAcceptedFindings } from "./localization-review.js";
@@ -30,7 +33,27 @@ export {
 	localizationShippedTranslation,
 	LocalizationShippedTranslation
 } from "./localization-shipped-translation.js";
-import type { TextCorpus, TextUnit } from "./schema.js";
+import type { TextCorpus, TextOccurrence, TextUnit } from "./schema.js";
+import {
+	LENGTH_OUTLIER,
+	compareRichTextTags,
+	consistentTranslationCandidate,
+	countOccurrences,
+	formatBraceBalance,
+	interiorLineBreaks,
+	lengthOutlier,
+	lengthOutlierMinimumRatio,
+	normalizedLineEndings,
+	numberOnlyText,
+	placeholderMatchRanges,
+	placeholderTranslation,
+	richTextTagBalance,
+	sharedSourceCandidate,
+	sourceWhitespace,
+	translationGroupKey,
+	visibleTextLength,
+	withoutOptionalArgumentTags
+} from "./localization-text-shape.js";
 import {
 	parseUnrealFormatPattern,
 	unrealRichTextCounts,
@@ -41,16 +64,19 @@ import {
 	type UnrealModifierIdentity
 } from "./unreal-text-syntax.js";
 
-type FindingBase = Pick<
-	LocalizationQualityFinding,
-	| "lineId"
-	| "target"
-	| "culture"
-	| "identity"
-	| "affectedOccurrences"
-	| "manifestLocations"
-	| "translationOrigin"
->;
+interface FindingBase {
+	readonly lineId: LocalizationQualityFinding["lineId"];
+	readonly target: LocalizationQualityFinding["target"];
+	readonly culture: LocalizationQualityFinding["culture"];
+	readonly identity: LocalizationIdentity;
+	readonly affectedOccurrences: LocalizationQualityFinding["affectedOccurrences"];
+	readonly manifestLocations: LocalizationQualityFinding["manifestLocations"];
+	readonly translationOrigin: LocalizationQualityFinding["translationOrigin"];
+	readonly sourceVariants?: readonly string[];
+}
+/** A finding before `add` sets its check's severity. */
+type Unrated<F> = F extends unknown ? Omit<F, "severity"> : never;
+type UnratedFinding = Unrated<LocalizationQualityFinding>;
 type LocalizationChange = LocalizationChangeSet["changes"][number];
 type DuplicateSourceActual = Extract<
 	LocalizationQualityFinding,
@@ -117,10 +143,161 @@ export interface LocalizationLineCheckContext {
 	/** Source-level findings belong to this culture when the line has it in the target. */
 	readonly nativeCulture: LocalizationJoin["nativeCulture"];
 	readonly options: LocalizationCheckOptions;
-	readonly enabled: readonly LocalizationCheckId[];
+	readonly enabled: readonly BuiltInCheckId[];
 	/** Shared sources by text; only sources with more than one identity are needed. */
 	readonly duplicates: ReadonlyMap<string, DuplicateSourceActual>;
+	/** Shipped translations of shared sources by source and culture; only those that differ. */
+	readonly translations: ReadonlyMap<
+		string,
+		ReadonlyMap<CultureCode, LocalizationTranslationVariants>
+	>;
+	/** The rule file's `segmentSeparator`, when it has one. */
+	readonly segmentSeparator?: string | undefined;
+	/** The rule file's `optionalTags`, lower-cased. */
+	readonly optionalTags: ReadonlySet<string>;
+	/** The rule file's `optionalArguments`. */
+	readonly optionalArguments: ReadonlySet<string>;
+	/** The rule file's source terminology rules: each role and the terms it discourages. */
+	readonly sourceTerminology: readonly SourceTerminology[];
+
+	/**
+	 * `localizationPropertiesWhereLocalizable` over the project: culture-invariant text is
+	 * reported only in these properties.
+	 */
+	readonly localizableProperties: ReadonlySet<string>;
+	/**
+	 * Whether a saved occurrence of the line has translator notes, and the String Tables that
+	 * declare its key, answered without its units; a scan whose units are costly to build passes
+	 * them. Absent, the line's units answer. Units are built only for lines with findings.
+	 */
+	readonly occurrenceNotes?: ((line: LocalizationLine) => boolean) | undefined;
+	readonly stringTables?: ((line: LocalizationLine) => readonly string[]) | undefined;
+	/**
+	 * Whether a line without an identity holds only culture-invariant text and some of it is
+	 * `reportableInvariantText`, answered without its units; a scan whose units are costly to build
+	 * passes it. Absent, the line's units answer.
+	 */
+	readonly cultureInvariant?: ((line: LocalizationLine) => boolean) | undefined;
 }
+
+/** The String Tables of a line's saved String Table entries, sorted. */
+export function localizationStringTables(lineUnits: readonly TextUnit[]): string[] {
+	const tables = new Set<string>();
+	for (const unit of lineUnits)
+		for (const occurrence of unit.occurrences)
+			if (occurrence.location.kind === "string_table_entry")
+				tables.add(occurrence.location.objectPath);
+	return [...tables].sort(byCodeUnit);
+}
+
+/** Every saved occurrence of the line is culture invariant, and it has one. */
+export function localizationCultureInvariantUnits(lineUnits: readonly TextUnit[]): boolean {
+	let found = false;
+	for (const unit of lineUnits)
+		for (const occurrence of unit.occurrences) {
+			if (
+				occurrence.identity.status !== "unresolved" ||
+				occurrence.identity.reason !== "culture_invariant"
+			)
+				return false;
+			found = true;
+		}
+	return found;
+}
+
+/** Container indexes in a property path: `[3]`, map entries `{2}` and named entries `("Name")`. */
+const PROPERTY_INDEX = /\[[^\]]*\]|\{[^}]*\}|\("[^"]*"\)/gu;
+
+/**
+ * The saved property a text sits in, the same for every instance: an asset property by its class
+ * and property path, a DataTable cell by its table and column, container indexes removed.
+ * Undefined for String Table entries.
+ */
+export function localizationPropertyKey(location: TextOccurrence["location"]): string | undefined {
+	switch (location.kind) {
+		case "asset_property":
+			return `p\0${location.classPath}\0${location.propertyPath.replace(PROPERTY_INDEX, "")}`;
+		case "data_table_cell":
+			return `d\0${location.objectPath}\0${location.propertyPath.replace(PROPERTY_INDEX, "")}`;
+		case "string_table_entry":
+			return undefined;
+	}
+}
+
+/**
+ * Properties holding culture-invariant text (counted where `invariantTextPlace` holds) with at
+ * least as much keyed and String Table text: the invariant text there is likely a slip. A property
+ * mostly invariant, such as a credits column of names with a few localized headings, is invariant
+ * on purpose.
+ */
+export function localizationPropertiesWhereLocalizable(
+	invariant: ReadonlyMap<string, number>,
+	localizable: ReadonlyMap<string, number>
+): Set<string> {
+	const keys = new Set<string>();
+	for (const [key, count] of invariant) if ((localizable.get(key) ?? 0) >= count) keys.add(key);
+	return keys;
+}
+
+/** The localizable properties of a corpus, for `localizableProperties`. */
+export function localizationLocalizableProperties(
+	units: Iterable<Pick<TextUnit, "occurrences">>
+): Set<string> {
+	const invariant = new Map<string, number>(),
+		localizable = new Map<string, number>();
+	for (const unit of units)
+		for (const occurrence of unit.occurrences) {
+			const identity = occurrence.identity;
+			const counts =
+				identity.status !== "unresolved"
+					? localizable
+					: identity.reason === "culture_invariant" && invariantTextPlace(occurrence)
+						? invariant
+						: undefined;
+			const key = counts && localizationPropertyKey(occurrence.location);
+			if (key !== undefined) counts!.set(key, (counts!.get(key) ?? 0) + 1);
+		}
+	return localizationPropertiesWhereLocalizable(invariant, localizable);
+}
+
+/** A package path with "debug" in a folder or asset name: debug menus, saves and test maps. */
+const DEBUG_PACKAGE = /debug/iu;
+/**
+ * World-space text renders: labels on actors placed in levels, sequences and Blueprint templates,
+ * mostly debug labels such as spawner names and waypoint distances.
+ */
+const TEXT_RENDER_CLASS = /\.TextRenderComponent$/u;
+
+/**
+ * A saved place where culture-invariant text could reach players by mistake: not editor text, not
+ * in debug content, not a text render component, not a String Table entry.
+ */
+export function invariantTextPlace(
+	occurrence: Pick<TextOccurrence, "audience" | "location">
+): boolean {
+	if (occurrence.audience === "editor") return false;
+	const location = occurrence.location;
+	if (location.kind === "string_table_entry") return false;
+	const path = location.objectPath,
+		dot = path.indexOf(".", path.lastIndexOf("/") + 1);
+	if (DEBUG_PACKAGE.test(dot < 0 ? path : path.slice(0, dot))) return false;
+	return !(location.kind === "asset_property" && TEXT_RENDER_CLASS.test(location.classPath));
+}
+
+/**
+ * Whether culture-invariant text in this saved place is worth a finding: an `invariantTextPlace`
+ * in a property that mostly holds localizable text elsewhere in the project.
+ */
+export function reportableInvariantText(
+	occurrence: Pick<TextOccurrence, "audience" | "location">,
+	localizableProperties: ReadonlySet<string>
+): boolean {
+	if (!invariantTextPlace(occurrence)) return false;
+	const key = localizationPropertyKey(occurrence.location);
+	return key !== undefined && localizableProperties.has(key);
+}
+
+const BYTECODE_MANIFEST_PATH = "[Script Bytecode]";
 
 export interface LocalizationLineCheckOutput {
 	readonly findings: LocalizationQualityFinding[];
@@ -129,9 +306,9 @@ export interface LocalizationLineCheckOutput {
 }
 
 /**
- * The culture a line's source-level findings (`missing_translator_notes`, `duplicate_source`) are
- * reported under, once per line: the target's native culture when the line has it in the target,
- * otherwise the first of its cultures in the target by code.
+ * The culture a line's source-level findings (`missing_translator_notes`, `duplicate_source` and
+ * the source checks) are reported under, once per line: the target's native culture when the line
+ * has it in the target, otherwise the first of its cultures in the target by code.
  */
 export function localizationSourceCulture(
 	line: Pick<LocalizationLine, "cultures">,
@@ -147,13 +324,85 @@ export function localizationSourceCulture(
 	return first;
 }
 
+/** A source terminology rule as `placeholder_text` reads it: where it applies and what it finds. */
+interface SourceTerminology {
+	readonly role: TextRole;
+	readonly caseSensitive: boolean;
+	/** Forbidden terms and the alternatives of preferred terms, as the source rule matches them. */
+	readonly terms: readonly string[];
+}
+
+/** The rule file's settings the line checks read. */
+export function localizationRuleContext(ruleDocument: GameTextRuleDocument | undefined) {
+	return {
+		segmentSeparator: ruleDocument?.segmentSeparator,
+		optionalTags: new Set((ruleDocument?.optionalTags ?? []).map((tag) => tag.toLowerCase())),
+		optionalArguments: new Set(ruleDocument?.optionalArguments ?? []),
+		sourceTerminology: (ruleDocument ? prepareTextQualityRules(ruleDocument) : []).flatMap(
+			({ rule, role, terms }): SourceTerminology[] =>
+				rule.kind === "terminology"
+					? [
+							{
+								role,
+								caseSensitive: rule.caseSensitive,
+								terms: terms.map(({ term }) => term)
+							}
+						]
+					: []
+		)
+	};
+}
+
+/**
+ * The placeholders of `text` that the rule file's source terminology does not report, when it
+ * reports some: a discouraged term overlapping the placeholder, in an occurrence of the line with
+ * this text at a place of the term's role. That is the source rule's own finding, so a list that
+ * shows both names each placeholder once. Units are read only when a term overlaps a placeholder.
+ */
+function unreportedPlaceholders(
+	text: string,
+	placeholders: ReadonlyArray<{
+		readonly match: string;
+		readonly start: number;
+		readonly end: number;
+	}>,
+	terminology: readonly SourceTerminology[],
+	units: () => readonly TextUnit[]
+): string[] | undefined {
+	const overlaps = (range: { readonly start: number; readonly end: number }) =>
+		placeholders.some(({ start, end }) => range.start < end && start < range.end);
+	const candidates = terminology.flatMap(({ role, caseSensitive, terms }) => {
+		const ranges = terms
+			.flatMap((term) => termMatches(text, term, caseSensitive))
+			.filter(overlaps);
+		return ranges.length ? [{ role, ranges }] : [];
+	});
+	if (candidates.length === 0) return undefined;
+	const reported: Array<{ readonly start: number; readonly end: number }> = [];
+	for (const { role, ranges } of candidates)
+		if (
+			units().some((unit) =>
+				unit.occurrences.some(
+					(occurrence) => occurrence.source === text && matchesTextRole(occurrence, role)
+				)
+			)
+		)
+			reported.push(...ranges);
+	if (reported.length === 0) return undefined;
+	return placeholders
+		.filter(
+			({ start, end }) => !reported.some((range) => range.start < end && start < range.end)
+		)
+		.map(({ match }) => match);
+}
+
 /** Rejects a selection outside the target and lists the built-in checks that run. */
 export function enabledLocalizationChecks(
 	join: Pick<LocalizationJoin, "target" | "cultures">,
 	evidence: LocalizationTargetEvidence,
 	options: LocalizationCheckOptions = {},
 	ruleDocument?: GameTextRuleDocument
-): readonly LocalizationCheckId[] {
+): readonly BuiltInCheckId[] {
 	if (
 		join.target !== evidence.target.name ||
 		(options.culture !== undefined && !join.cultures.includes(options.culture))
@@ -167,44 +416,60 @@ export function enabledLocalizationChecks(
 		...(options.disabledChecks ?? []),
 		...(ruleDocument?.disabledLocalizationChecks ?? [])
 	]);
-	return LocalizationCheckId.literals.filter(
+	// The separator check has nothing to compare until the rule file names a separator.
+	if (ruleDocument?.segmentSeparator === undefined) disabled.add("segment_separator");
+	return BuiltInCheckId.literals.filter(
 		(id) => !disabled.has(id) && (!options.checks || options.checks.includes(id))
 	);
 }
 
-/** Lines with an identity, text and at least one culture in the target can share a source. */
+/** One key with several saved texts; the join's line source joins them for search. */
+export function localizationConflictingSource(line: Pick<LocalizationLine, "cultures">): boolean {
+	return line.cultures.some((culture) => culture.unknownReasons.includes("conflicting_source"));
+}
+
+/**
+ * Lines with an identity, one source with letters and at least one culture in the target can
+ * share a source. Number-only text and keys with conflicting sources are left out.
+ */
 export function localizationDuplicateCandidate(line: LocalizationLine): boolean {
 	return (
 		line.identity !== null &&
 		line.source.trim().length > 0 &&
-		!line.cultures.every((culture) => culture.state === "outside_target")
+		sharedSourceCandidate(line.source) &&
+		!line.cultures.every((culture) => culture.state === "outside_target") &&
+		!localizationConflictingSource(line)
 	);
 }
 
 /**
- * Groups candidate lines by source. Identities are sorted; the first five are kept. Identities
- * that compare equal keep their lines' join order: the order they are added in, unless the caller
- * adds them in another order and passes each line's position in the join.
+ * Groups candidate lines by source. Identities are sorted; the first five are kept, and the first
+ * line carries the group's one finding. Identities that compare equal keep their lines' join order:
+ * the order they are added in, unless the caller adds them in another order and passes each line's
+ * position in the join. `rows` are the callers' row numbers of every line in a shared group, in
+ * ascending order with each row's source in `rowSources`, for a second pass over just those lines.
  */
 export function localizationDuplicateSources() {
-	// Identity and join position, alternating; no object per line.
+	// Identity, join position and row, in turn; no object per line.
 	const groups = new Map<string, Array<LocalizationIdentity | number>>();
 	let added = 0;
 	return {
-		add(source: string, identity: LocalizationIdentity, joinPosition = added) {
+		add(source: string, identity: LocalizationIdentity, joinPosition = added, row = -1) {
 			added++;
 			const group = groups.get(source);
-			if (group) group.push(identity, joinPosition);
-			else groups.set(source, [identity, joinPosition]);
+			if (group) group.push(identity, joinPosition, row);
+			else groups.set(source, [identity, joinPosition, row]);
 		},
-		finish(): ReadonlyMap<string, DuplicateSourceActual> {
+		finish() {
 			const shared = new Map<string, DuplicateSourceActual>();
+			const rows: Array<{ row: number; source: string }> = [];
 			for (const [source, group] of groups) {
-				if (group.length < 4) continue;
-				// SAFETY: `add` is the only writer and pushes an identity, then its position.
-				const identities = Array.from({ length: group.length / 2 }, (_, index) => ({
-					identity: group[index * 2] as LocalizationIdentity,
-					position: group[index * 2 + 1] as number
+				if (group.length < 6) continue;
+				// SAFETY: `add` is the only writer and pushes an identity, its position and row.
+				const identities = Array.from({ length: group.length / 3 }, (_, index) => ({
+					identity: group[index * 3] as LocalizationIdentity,
+					position: group[index * 3 + 1] as number,
+					row: group[index * 3 + 2] as number
 				})).sort(
 					(a, b) =>
 						a.identity.namespace.localeCompare(b.identity.namespace) ||
@@ -216,11 +481,131 @@ export function localizationDuplicateSources() {
 					identityCount: identities.length,
 					identities: identities.slice(0, 5).map(({ identity }) => identity)
 				});
+				for (const { row } of identities) if (row >= 0) rows.push({ row, source });
 			}
 			groups.clear();
-			return shared;
+			rows.sort((a, b) => a.row - b.row);
+			return {
+				shared,
+				rows: rows.map(({ row }) => row),
+				rowSources: rows.map(({ source }) => source)
+			};
 		}
 	};
+}
+
+/** One shared source's shipped translations in one culture, with one most used translation. */
+export interface LocalizationTranslationVariants {
+	/**
+	 * Distinct translations and how many lines ship each, most used first, then by text.
+	 * Translations with the same `translationGroupKey` count as one, shown in the spelling that
+	 * sorts first.
+	 */
+	readonly variants: ReadonlyArray<{ readonly translation: string; readonly lines: number }>;
+	/** The `translationGroupKey` of the most used translation. */
+	readonly majority: string;
+	/** The most used translation is the source text: those lines are the ones to fix. */
+	readonly majorityUntranslated: boolean;
+}
+
+const byCodeUnit = (a: string, b: string) => (a < b ? -1 : a > b ? 1 : 0);
+
+/**
+ * Counts each shared source's shipped translations per culture, for `inconsistent_translation`.
+ * Only lines in `shared` groups with a source worth comparing are counted, and not in the native
+ * culture, so memory follows the distinct translations of shared lines, not the target. Counts do
+ * not depend on the order lines are added in. `finish` keeps the cultures with more than one
+ * translation and one most used.
+ */
+export function localizationTranslationVariants(
+	shared: ReadonlyMap<string, DuplicateSourceActual>,
+	nativeCulture: CultureCode | null
+) {
+	/** Per source and culture: lines and first spelling by group key. */
+	const groups = new Map<
+		string,
+		Map<CultureCode, Map<string, { lines: number; translation: string }>>
+	>();
+	/** One culture's non-empty shipped translation of a candidate line. */
+	const count = (source: string, culture: CultureCode, translation: string) => {
+		if (culture === nativeCulture || translation.trim().length === 0) return;
+		let cultures = groups.get(source);
+		if (!cultures) groups.set(source, (cultures = new Map()));
+		let counts = cultures.get(culture);
+		if (!counts) cultures.set(culture, (counts = new Map()));
+		const key = translationGroupKey(translation),
+			group = counts.get(key);
+		if (!group) counts.set(key, { lines: 1, translation });
+		else {
+			group.lines++;
+			if (translation < group.translation) group.translation = translation;
+		}
+	};
+	return {
+		/** A hydrated line: counted when it is a candidate, for each culture in the target. */
+		add(line: LocalizationLine) {
+			if (!localizationTranslationCandidate(line, shared)) return;
+			for (const culture of line.cultures) {
+				if (culture.state === "outside_target") continue;
+				const translation = localizationShippedTranslation(culture).value;
+				if (translation) count(line.source, culture.culture, translation);
+			}
+		},
+		/**
+		 * One culture of a line the caller read from columns: a line of a shared group whose source
+		 * passes `consistentTranslationCandidate`, in a culture inside the target.
+		 */
+		addTranslation(source: string, culture: CultureCode, translation: string) {
+			count(source, culture, translation);
+		},
+		finish(): ReadonlyMap<string, ReadonlyMap<CultureCode, LocalizationTranslationVariants>> {
+			const result = new Map<string, Map<CultureCode, LocalizationTranslationVariants>>();
+			for (const [source, cultures] of groups) {
+				const sourceKey = translationGroupKey(source);
+				for (const [culture, counts] of cultures) {
+					if (counts.size < 2) continue;
+					const variants = Array.from(counts, ([key, group]) => ({ key, ...group })).sort(
+						(a, b) => b.lines - a.lines || byCodeUnit(a.translation, b.translation)
+					);
+					// A tie names no usual translation to compare with.
+					if (variants[0]!.lines === variants[1]!.lines) continue;
+					const majorityUntranslated = variants[0]!.key === sourceKey;
+					// Most lines ship the source and under half as many translate it: the culture keeps
+					// this text untranslated on purpose, as internal labels and names often are.
+					if (majorityUntranslated) {
+						let translated = 0;
+						for (let index = 1; index < variants.length; index++)
+							translated += variants[index]!.lines;
+						if (translated * 2 < variants[0]!.lines) continue;
+					}
+					let byCulture = result.get(source);
+					if (!byCulture) result.set(source, (byCulture = new Map()));
+					byCulture.set(culture, {
+						variants: variants.map(({ translation, lines }) => ({
+							translation,
+							lines
+						})),
+						majority: variants[0]!.key,
+						majorityUntranslated
+					});
+				}
+			}
+			groups.clear();
+			return result;
+		}
+	};
+}
+
+/** A line whose translations `inconsistent_translation` compares with its shared source's. */
+function localizationTranslationCandidate(
+	line: LocalizationLine,
+	shared: ReadonlyMap<string, DuplicateSourceActual>
+): boolean {
+	return (
+		(shared.get(line.source)?.identityCount ?? 0) > 1 &&
+		localizationDuplicateCandidate(line) &&
+		consistentTranslationCandidate(line.source)
+	);
 }
 
 /** Built-in finding order: line, culture, check, then the observed value. */
@@ -250,6 +635,114 @@ export function compareReportedLocalizationFindings(
 	);
 }
 
+/** Argument names in order of first appearance. */
+function argumentOrder(pattern: UnrealFormatPattern): readonly string[] {
+	return [...new Set(pattern.arguments.map((argument) => argument.name))];
+}
+
+/**
+ * A line's distinct saved sources when they conflict, sorted: the texts its authored occurrences
+ * (String Table references aside, as in the join) carry. Undefined unless there are several.
+ */
+function conflictingSourceVariants(
+	line: LocalizationLine,
+	lineUnits: readonly TextUnit[]
+): readonly string[] | undefined {
+	if (!localizationConflictingSource(line)) return undefined;
+	const authored = lineUnits.filter((unit) => unit.identity.status !== "string_table");
+	const sources = new Set<string>();
+	for (const unit of authored.length ? authored : lineUnits)
+		for (const occurrence of unit.occurrences) sources.add(occurrence.source);
+	return sources.size > 1 ? [...sources].sort(byCodeUnit) : undefined;
+}
+
+const ruleIdOf = (id: BuiltInCheckId) => TextQualityRuleId.make(`localization.${id}`);
+const sameIdentity = (a: LocalizationIdentity | undefined, b: LocalizationIdentity) =>
+	a !== undefined && a.namespace === b.namespace && a.key === b.key;
+const affectedOf = (lineUnits: readonly TextUnit[]): TextQualityAffectedOccurrence[] =>
+	lineUnits
+		.flatMap((unit) =>
+			unit.occurrences.map((occurrence) => ({
+				id: occurrence.id,
+				packageFile: occurrence.packageFile,
+				location: occurrence.location
+			}))
+		)
+		.sort((a, b) => a.id.localeCompare(b.id));
+
+/** Source checks of one text: the line's source, or each of its conflicting sources. */
+function sourceTextFindings(
+	text: string,
+	base: FindingBase,
+	line: {
+		readonly gathered: boolean;
+		readonly bytecode: boolean;
+		readonly terminology: readonly SourceTerminology[];
+		readonly units: () => readonly TextUnit[];
+	},
+	add: (finding: UnratedFinding) => void
+) {
+	const placeholders = placeholderMatchRanges(text);
+	if (placeholders.length) {
+		const unreported = unreportedPlaceholders(text, placeholders, line.terminology, line.units);
+		add({
+			...base,
+			ruleId: ruleIdOf("placeholder_text"),
+			kind: "placeholder_text",
+			actual: { source: text, matches: placeholders.map(({ match }) => match) },
+			expectation: { finalText: true },
+			...(unreported ? { unreportedMatches: unreported } : undefined),
+			recovery:
+				"Replace the placeholder with final text, or keep the line out of the build until it has some."
+		});
+	}
+	// Bytecode fragments keep the spaces they are joined with; text the gather skips is not sent.
+	const space = line.gathered && !line.bytecode ? sourceWhitespace(text) : undefined;
+	if (space && (space.leading || space.trailing || space.repeatedSpaces))
+		add({
+			...base,
+			ruleId: ruleIdOf("source_whitespace"),
+			kind: "source_whitespace",
+			actual: { source: text, ...space },
+			expectation: { trimmed: true },
+			recovery:
+				"Remove spaces and line breaks at the ends and doubled spaces; build spacing into the format pattern instead of joining text."
+		});
+	if (line.bytecode) return;
+	const { xmlClosings, ...richText } = richTextTagBalance(text),
+		braces = formatBraceBalance(text);
+	if (
+		richText.opening !== richText.closing ||
+		braces.opening !== braces.closing ||
+		xmlClosings.length
+	)
+		add({
+			...base,
+			ruleId: ruleIdOf("source_markup"),
+			kind: "source_markup",
+			actual: {
+				source: text,
+				richText,
+				braces,
+				...(xmlClosings.length ? { xmlClosings: [...new Set(xmlClosings)] } : undefined)
+			},
+			expectation: { balanced: true },
+			recovery: xmlClosings.length
+				? "Close rich-text tags with </>; Unreal shows a closing such as </Name> as text."
+				: "Close each rich-text tag with </> and pair each { with }; escape a literal brace with a backtick."
+		});
+	if (numberOnlyText(text))
+		add({
+			...base,
+			ruleId: ruleIdOf("number_only_text"),
+			kind: "number_only_text",
+			actual: { source: text },
+			expectation: { cultureInvariant: true },
+			recovery:
+				"Make number-only text culture invariant, or format the number with FText::AsNumber, so translators are not sent it."
+		});
+}
+
 /** One line's built-in findings, check diagnostics and suggested changes, in check order. */
 export function checkLocalizationLine(
 	line: LocalizationLine,
@@ -258,7 +751,8 @@ export function checkLocalizationLine(
 	{ findings, checkDiagnostics, changes }: LocalizationLineCheckOutput
 ): void {
 	const { target, options, enabled } = context;
-	for (const culture of [...line.cultures].sort((a, b) => a.culture.localeCompare(b.culture))) {
+	const cultures = [...line.cultures].sort((a, b) => a.culture.localeCompare(b.culture));
+	for (const culture of cultures) {
 		if (
 			(options.culture && culture.culture !== options.culture) ||
 			culture.state === "outside_target"
@@ -273,23 +767,83 @@ export function checkLocalizationLine(
 				code: "reduced_source_checking"
 			});
 	}
-	if (!line.identity || line.source.trim().length === 0) return;
-	const lineUnits = units();
-	const affectedOccurrences: TextQualityAffectedOccurrence[] = lineUnits
-		.flatMap((unit) =>
-			unit.occurrences.map((occurrence) => ({
-				id: occurrence.id,
-				packageFile: occurrence.packageFile,
-				location: occurrence.location
-			}))
-		)
-		.sort((a, b) => a.id.localeCompare(b.id));
-	const notes = lineUnits
-		.flatMap((unit) => unit.occurrences.map((occurrence) => occurrence.devNotes))
-		.filter((note) => note.trim().length > 0);
-	const source = line.manifest[0]?.source.Text ?? line.source;
+	// A line's units are built when a finding needs them: a key saved in thousands of places,
+	// such as an editor label, takes seconds to build and usually has no finding.
+	let lineUnits: readonly TextUnit[] | undefined,
+		affected: TextQualityAffectedOccurrence[] | undefined;
+	const unitsOnce = () => (lineUnits ??= units());
+	const add = (finding: UnratedFinding) => {
+		if (enabled.includes(finding.kind))
+			// SAFETY: `finding` is one member of the union without its severity, and the severity
+			// added is the one `checkSeverity` gives that member's kind.
+			findings.push({
+				...finding,
+				affectedOccurrences: (affected ??= affectedOf(unitsOnce())),
+				severity: checkSeverity[finding.kind]
+			} as LocalizationQualityFinding);
+	};
 	const sourceCulture = localizationSourceCulture(line, context.nativeCulture);
-	for (const culture of [...line.cultures].sort((a, b) => a.culture.localeCompare(b.culture))) {
+	if (!line.identity) {
+		if (
+			sourceCulture === undefined ||
+			(options.culture && options.culture !== sourceCulture) ||
+			!enabled.includes("culture_invariant_text") ||
+			!sharedSourceCandidate(line.source)
+		)
+			return;
+		// Most lines without a key are not culture invariant; a scan can say so without units.
+		if (context.cultureInvariant && !context.cultureInvariant(line)) return;
+		const invariantUnits = unitsOnce();
+		if (
+			localizationCultureInvariantUnits(invariantUnits) &&
+			invariantUnits.some((unit) =>
+				unit.occurrences.some((occurrence) =>
+					reportableInvariantText(occurrence, context.localizableProperties)
+				)
+			)
+		)
+			add({
+				lineId: line.id,
+				target,
+				culture: sourceCulture,
+				identity: null,
+				affectedOccurrences: [],
+				manifestLocations: [],
+				translationOrigin: "absent",
+				ruleId: ruleIdOf("culture_invariant_text"),
+				kind: "culture_invariant_text",
+				actual: { source: line.source },
+				expectation: { localizable: true },
+				recovery:
+					"Make the text localizable (clear Culture Invariant, or use NSLOCTEXT/LOCTEXT or a String Table) so the gather collects it; keep it invariant only if players never see it."
+			});
+		return;
+	}
+	const manifestSource = line.manifest[0]?.source.Text;
+	const source = manifestSource ?? line.source;
+	// A partly read package can leave the saved text blank; the manifest's source still counts.
+	if (source.trim().length === 0 && line.source.trim().length === 0) return;
+	const sourceVariants = localizationConflictingSource(line)
+		? conflictingSourceVariants(line, unitsOnce())
+		: undefined;
+	// Conflicting texts without a manifest leave no one source to compare a translation with.
+	const comparable = sourceVariants === undefined || manifestSource !== undefined;
+	const manifestLocations = [...new Set(line.manifest.map((entry) => entry.path))].sort();
+	const candidate = localizationDuplicateCandidate(line);
+	// Blueprint text compiled into script bytecode: the gather records each concatenated fragment,
+	// with its spaces, and no saved place.
+	const bytecode =
+		line.manifest.length > 0 &&
+		line.manifest.every((entry) => entry.path.endsWith(BYTECODE_MANIFEST_PATH));
+	const sourceChecks = {
+		gathered: line.manifest.length > 0,
+		bytecode,
+		terminology: enabled.includes("placeholder_text") ? context.sourceTerminology : [],
+		units: unitsOnce
+	};
+	/** The source's visible length, measured once for every culture. */
+	let sourceLength: number | undefined;
+	for (const culture of cultures) {
 		if (
 			(options.culture && culture.culture !== options.culture) ||
 			culture.state === "outside_target"
@@ -301,21 +855,19 @@ export function checkLocalizationLine(
 			target,
 			culture: culture.culture,
 			identity: line.identity,
-			affectedOccurrences,
-			manifestLocations: [...new Set(line.manifest.map((entry) => entry.path))].sort(),
-			translationOrigin: shipped.origin
+			// `add` fills in the saved places.
+			affectedOccurrences: [],
+			manifestLocations,
+			translationOrigin: shipped.origin,
+			...(sourceVariants ? { sourceVariants } : undefined)
 		};
-		const add = (finding: LocalizationQualityFinding) => {
-			if (enabled.includes(finding.kind)) findings.push(finding);
-		};
-		const ruleId = (id: LocalizationCheckId) => TextQualityRuleId.make(`localization.${id}`);
 		const emptyPO = culture.po?.msgstr["0"] === "";
 		const emptyArchive = culture.archive?.translation.Text === "";
 		if (emptyPO || emptyArchive)
 			add({
 				...base,
 				translationOrigin: emptyPO ? "po" : "archive",
-				ruleId: ruleId("empty_translation"),
+				ruleId: ruleIdOf("empty_translation"),
 				kind: "empty_translation",
 				actual: { entryExists: true, translation: "" },
 				expectation: { nonEmptyTranslation: true },
@@ -323,38 +875,79 @@ export function checkLocalizationLine(
 					"Provide a non-empty translation in the culture's PO entry, then import and compile with Unreal."
 			});
 		// Source-level checks report once per line, under the line's source culture.
-		const sourceLevel = culture.culture === sourceCulture;
-		if (
-			sourceLevel &&
-			notes.length === 0 &&
-			line.manifest.every((entry) => localizationManifestNotes(entry).length === 0)
-		)
-			add({
-				...base,
-				ruleId: ruleId("missing_translator_notes"),
-				kind: "missing_translator_notes",
-				actual: { noteCount: 0 },
-				expectation: { minimumNotes: 1 },
-				recovery:
-					"Add translator context to a source occurrence or manifest-producing source."
-			});
-		const duplicates = sourceLevel ? context.duplicates.get(line.source) : undefined;
-		if (duplicates && duplicates.identityCount > 1)
-			add({
-				...base,
-				ruleId: ruleId("duplicate_source"),
-				kind: "duplicate_source",
-				actual: duplicates,
-				expectation: { reviewDistinctKeys: true },
-				recovery:
-					"Review whether these distinct identities need different context or should share a key. Equal text never links translations."
-			});
+		if (culture.culture === sourceCulture) {
+			if (
+				enabled.includes("missing_translator_notes") &&
+				line.manifest.every((entry) => localizationManifestNotes(entry).length === 0) &&
+				!(context.occurrenceNotes
+					? context.occurrenceNotes(line)
+					: unitsOnce().some((unit) =>
+							unit.occurrences.some(
+								(occurrence) => occurrence.devNotes.trim().length > 0
+							)
+						))
+			)
+				add({
+					...base,
+					ruleId: ruleIdOf("missing_translator_notes"),
+					kind: "missing_translator_notes",
+					actual: { noteCount: 0 },
+					expectation: { minimumNotes: 1 },
+					recovery:
+						"Add translator context to a source occurrence or manifest-producing source."
+				});
+			// One finding per shared text, on the line whose identity sorts first.
+			const duplicates = candidate ? context.duplicates.get(line.source) : undefined;
+			if (
+				duplicates &&
+				duplicates.identityCount > 1 &&
+				sameIdentity(duplicates.identities[0], line.identity)
+			)
+				add({
+					...base,
+					ruleId: ruleIdOf("duplicate_source"),
+					kind: "duplicate_source",
+					actual: duplicates,
+					expectation: { reviewDistinctKeys: true },
+					recovery:
+						"Review whether these distinct identities need different context or should share a key. Equal text never links translations."
+				});
+			for (const text of sourceVariants ?? [line.source.trim() ? line.source : source])
+				sourceTextFindings(text, base, sourceChecks, add);
+			const tables = !enabled.includes("string_table_key_collision")
+				? []
+				: context.stringTables
+					? context.stringTables(line)
+					: localizationStringTables(unitsOnce());
+			if (tables.length > 1)
+				add({
+					...base,
+					ruleId: ruleIdOf("string_table_key_collision"),
+					kind: "string_table_key_collision",
+					actual: {
+						tables: tables.slice(0, 16),
+						tableCount: tables.length
+					},
+					expectation: { oneTablePerKey: true },
+					recovery:
+						"Give each String Table its own namespace or rename the key; Unreal keeps one entry per namespace and key."
+				});
+		}
 		if (!line.manifest.length)
 			checkDiagnostics.push({
 				lineId: line.id,
 				culture: culture.culture,
 				code: "source_unavailable"
 			});
+		if (!comparable) {
+			if (shipped.value === null)
+				checkDiagnostics.push({
+					lineId: line.id,
+					culture: culture.culture,
+					code: "translation_unavailable"
+				});
+			continue;
+		}
 		const sourcePattern = parseUnrealFormatPattern(source, culture.culture);
 		const sourceModifiers = modifiers(sourcePattern);
 		const patternIssues = (pattern: UnrealFormatPattern) => {
@@ -373,7 +966,7 @@ export function checkLocalizationLine(
 		if (sourceIssues.length)
 			add({
 				...base,
-				ruleId: ruleId("argument_modifiers"),
+				ruleId: ruleIdOf("argument_modifiers"),
 				kind: "argument_modifiers",
 				actual: { side: "source", issues: sourceIssues, modifiers: sourceModifiers },
 				expectation: { modifiers: sourceModifiers },
@@ -389,11 +982,46 @@ export function checkLocalizationLine(
 			continue;
 		}
 		const translation = shipped.value;
+		// Shape checks compare text; an empty translation is `empty_translation`'s finding alone.
+		const translated = translation.trim().length > 0;
+		if (
+			translated &&
+			manifestSource !== undefined &&
+			shipped.origin === "archive" &&
+			culture.archive &&
+			culture.culture !== context.nativeCulture &&
+			culture.facts.includes("needs_update")
+		) {
+			const translatedSource = culture.archive.source.Text;
+			if (
+				translatedSource !== manifestSource &&
+				normalizedLineEndings(translatedSource) === normalizedLineEndings(manifestSource)
+			)
+				add({
+					...base,
+					ruleId: ruleIdOf("source_line_endings_changed"),
+					kind: "source_line_endings_changed",
+					actual: { translatedSource },
+					expectation: { source: manifestSource },
+					recovery:
+						"Save the source with the line endings it was translated with, or re-import the translation against the current source."
+				});
+			else
+				add({
+					...base,
+					ruleId: ruleIdOf("outdated_translation"),
+					kind: "outdated_translation",
+					actual: { translatedSource },
+					expectation: { source: manifestSource },
+					recovery:
+						"Translate the current source text and import it; Unreal ships the source instead of a translation made for older text."
+				});
+		}
 		const escapeMatches = [...translation.matchAll(/\\[nrt]/gu)];
 		if (escapeMatches.length)
 			add({
 				...base,
-				ruleId: ruleId("po_escape_safety"),
+				ruleId: ruleIdOf("po_escape_safety"),
 				kind: "po_escape_safety",
 				actual: {
 					positions: escapeMatches.map((match) => match.index),
@@ -406,49 +1034,115 @@ export function checkLocalizationLine(
 		const expectedSpace = unrealWhitespace(source);
 		const actualSpace = unrealWhitespace(translation);
 		if (
-			JSON.stringify(expectedSpace) !== JSON.stringify(actualSpace) ||
+			expectedSpace.leading !== actualSpace.leading ||
+			expectedSpace.trailing !== actualSpace.trailing ||
 			unrealUnsafeWhitespace(translation)
 		)
 			add({
 				...base,
-				ruleId: ruleId("whitespace"),
+				ruleId: ruleIdOf("whitespace"),
 				kind: "whitespace",
 				actual: actualSpace,
 				expectation: expectedSpace,
 				recovery:
-					"Preserve the source's intentional boundary whitespace and line breaks; remove unsafe boundary spaces or tabs."
+					"Preserve the source's intentional boundary whitespace; remove unsafe boundary spaces or tabs."
+			});
+		const expectedBreaks = translated ? interiorLineBreaks(source) : 0,
+			actualBreaks = translated ? interiorLineBreaks(translation) : 0;
+		if (expectedBreaks !== actualBreaks)
+			add({
+				...base,
+				ruleId: ruleIdOf("line_breaks"),
+				kind: "line_breaks",
+				actual: { lineBreaks: actualBreaks },
+				expectation: { lineBreaks: expectedBreaks },
+				recovery:
+					"Use as many line breaks as the source, so the text keeps its layout in the same space."
 			});
 		if (!unrealRichTextValid(source, translation))
 			add({
 				...base,
-				ruleId: ruleId("rich_text"),
+				ruleId: ruleIdOf("rich_text"),
 				kind: "rich_text",
 				actual: unrealRichTextCounts(translation),
 				expectation: unrealRichTextCounts(source),
 				recovery:
 					"Balance opening rich-text tags with </>, retaining intentional source imbalance."
 			});
+		const tags = translated
+			? compareRichTextTags(
+					withoutOptionalArgumentTags(source, context.optionalArguments),
+					withoutOptionalArgumentTags(translation, context.optionalArguments)
+				)
+			: undefined;
+		const required = (name: string) => !context.optionalTags.has(name.toLowerCase());
+		const missingTags = tags?.missing.filter(required) ?? [],
+			addedTags = tags?.added.filter(required) ?? [];
+		if (tags && missingTags.length)
+			add({
+				...base,
+				ruleId: ruleIdOf("rich_text_tags"),
+				kind: "rich_text_tags",
+				actual: { tags: tags.translationTags, missing: missingTags, added: addedTags },
+				expectation: { tags: tags.sourceTags },
+				recovery:
+					"Keep the source's rich-text tags, such as <b>…</> and <img/>, around the matching words; don't add or drop any."
+			});
+		else if (tags && addedTags.length)
+			add({
+				...base,
+				ruleId: ruleIdOf("rich_text_tags_added"),
+				kind: "rich_text_tags_added",
+				actual: { tags: tags.translationTags, added: addedTags },
+				expectation: { tags: tags.sourceTags },
+				recovery:
+					"Style the same words as the source; list a tag a culture may add in the rule file's optionalTags."
+			});
+		if (tags?.changed.length)
+			add({
+				...base,
+				ruleId: ruleIdOf("rich_text_tag_case"),
+				kind: "rich_text_tag_case",
+				actual: { changed: tags.changed },
+				expectation: { sameCase: true },
+				recovery: "Spell rich-text tag names exactly as the source does."
+			});
 		const translationPattern = parseUnrealFormatPattern(translation, culture.culture);
 		const expectedArgs = argumentNames(sourcePattern);
 		const actualArgs = argumentNames(translationPattern);
 		const canComparePattern =
 			sourcePattern.compiled !== null && translationPattern.compiled !== null;
-		const missing = expectedArgs.filter((argument) => !actualArgs.includes(argument));
-		const added = actualArgs.filter((argument) => !expectedArgs.includes(argument));
-		if (canComparePattern && (missing.length || added.length)) {
-			const finding: Extract<LocalizationQualityFinding, { kind: "format_arguments" }> = {
+		const missing = translated
+			? argumentOrder(sourcePattern).filter((name) => !actualArgs.includes(name))
+			: [];
+		// The game always supplies an optional argument, so a translation may add it.
+		const added = argumentOrder(translationPattern).filter(
+			(name) => !expectedArgs.includes(name) && !context.optionalArguments.has(name)
+		);
+		// A dropped and an added name pair up, in order of appearance, as a rename.
+		const pairs = Math.min(missing.length, added.length);
+		if (canComparePattern && pairs > 0) {
+			const finding: Unrated<
+				Extract<LocalizationQualityFinding, { kind: "format_argument_renamed" }>
+			> = {
 				...base,
-				ruleId: ruleId("format_arguments"),
-				kind: "format_arguments",
-				actual: { arguments: actualArgs, missing, added },
+				ruleId: ruleIdOf("format_argument_renamed"),
+				kind: "format_argument_renamed",
+				actual: {
+					arguments: actualArgs,
+					renamed: Array.from({ length: pairs }, (_, index) => ({
+						from: added[index]!,
+						to: missing[index]!
+					}))
+				},
 				expectation: { arguments: expectedArgs },
 				recovery:
-					"Keep the source's case-sensitive format argument names in the translation, including arguments inside modifier forms."
+					"Use the source's argument names unchanged; translate the words around {arguments}, never the names inside them."
 			};
 			const from = added[0];
 			const to = missing[0];
 			if (
-				enabled.includes("format_arguments") &&
+				enabled.includes("format_argument_renamed") &&
 				line.manifest.length > 0 &&
 				!culture.unknownReasons.some(
 					(reason) =>
@@ -483,16 +1177,29 @@ export function checkLocalizationLine(
 			}
 			add(finding);
 		}
+		const dropped = missing.slice(pairs).sort(),
+			extra = added.slice(pairs).sort();
+		if (canComparePattern && (dropped.length || extra.length))
+			add({
+				...base,
+				ruleId: ruleIdOf("format_arguments"),
+				kind: "format_arguments",
+				actual: { arguments: actualArgs, missing: dropped, added: extra },
+				expectation: { arguments: expectedArgs },
+				recovery:
+					"Keep the source's case-sensitive format argument names in the translation, including arguments inside modifier forms."
+			});
 		const translationModifiers = modifiers(translationPattern);
 		const actionable = patternIssues(translationPattern);
 		if (
-			actionable.length ||
-			(canComparePattern &&
-				JSON.stringify(sourceModifiers) !== JSON.stringify(translationModifiers))
+			translated &&
+			(actionable.length ||
+				(canComparePattern &&
+					JSON.stringify(sourceModifiers) !== JSON.stringify(translationModifiers)))
 		)
 			add({
 				...base,
-				ruleId: ruleId("argument_modifiers"),
+				ruleId: ruleIdOf("argument_modifiers"),
 				kind: "argument_modifiers",
 				actual: {
 					side: "translation",
@@ -502,6 +1209,88 @@ export function checkLocalizationLine(
 				expectation: { modifiers: sourceModifiers },
 				recovery:
 					"Repair modifier syntax and culture-required forms; preserve the source's argument modifiers."
+			});
+		const separator = context.segmentSeparator;
+		if (separator !== undefined && translated) {
+			const expected = countOccurrences(source, separator),
+				actual = countOccurrences(translation, separator);
+			if (expected !== actual)
+				add({
+					...base,
+					ruleId: ruleIdOf("segment_separator"),
+					kind: "segment_separator",
+					actual: { separator, count: actual },
+					expectation: { separator, count: expected },
+					recovery: `Keep each "${separator}" segment of the source in the translation, in the same order.`
+				});
+		}
+		const placeholder =
+			translated && culture.culture !== context.nativeCulture
+				? placeholderTranslation(source, translation)
+				: undefined;
+		if (placeholder !== undefined)
+			add({
+				...base,
+				ruleId: ruleIdOf("placeholder_translation"),
+				kind: "placeholder_translation",
+				actual: { translation: placeholder },
+				expectation: { translatedText: true },
+				recovery:
+					"Translate the line; the culture ships this placeholder to players in place of the text."
+			});
+		const minimumRatio = lengthOutlierMinimumRatio(culture.culture);
+		// A placeholder is placeholder_translation's finding, when that check runs.
+		const outlier =
+			translated &&
+			(placeholder === undefined || !enabled.includes("placeholder_translation"))
+				? lengthOutlier(
+						source,
+						translation,
+						(sourceLength ??= visibleTextLength(source)),
+						minimumRatio
+					)
+				: undefined;
+		if (outlier)
+			add({
+				...base,
+				ruleId: ruleIdOf("length_outlier"),
+				kind: "length_outlier",
+				actual: { length: outlier.length, ratio: outlier.ratio },
+				expectation: {
+					sourceLength: outlier.sourceLength,
+					minimumRatio: Math.round(minimumRatio * 100) / 100,
+					maximumRatio: LENGTH_OUTLIER.maximumRatio
+				},
+				recovery:
+					"Check that the translation belongs to this line and is complete; a translation this much shorter or longer is often another line's text."
+			});
+		const variants =
+			candidate && translated && culture.culture !== context.nativeCulture
+				? context.translations.get(line.source)?.get(culture.culture)
+				: undefined;
+		const groupKey = variants && translationGroupKey(translation);
+		// Where most lines ship the source untranslated, those lines are the ones to fix.
+		if (
+			variants &&
+			(variants.majorityUntranslated
+				? groupKey === variants.majority
+				: groupKey !== variants.majority)
+		)
+			add({
+				...base,
+				ruleId: ruleIdOf("inconsistent_translation"),
+				kind: "inconsistent_translation",
+				actual: {
+					translation,
+					variants: variants.variants.slice(0, 5),
+					variantCount: variants.variants.length,
+					...(groupKey === translationGroupKey(line.source)
+						? { untranslated: true as const }
+						: undefined)
+				},
+				expectation: { consistentTranslation: true },
+				recovery:
+					"Use the culture's usual translation of this text, or add translator notes that explain why this key differs."
 			});
 	}
 }
@@ -522,12 +1311,21 @@ export function checkLocalizationTarget(
 	const duplicates = localizationDuplicateSources();
 	for (const line of join.lines)
 		if (localizationDuplicateCandidate(line)) duplicates.add(line.source, line.identity!);
-	const context = {
+	const { shared } = duplicates.finish();
+	const translations = localizationTranslationVariants(shared, join.nativeCulture);
+	if (enabled.includes("inconsistent_translation"))
+		for (const line of join.lines) translations.add(line);
+	const context: LocalizationLineCheckContext = {
 		target: join.target,
 		nativeCulture: join.nativeCulture,
 		options,
 		enabled,
-		duplicates: duplicates.finish()
+		duplicates: shared,
+		translations: translations.finish(),
+		...localizationRuleContext(ruleDocument),
+		localizableProperties: enabled.includes("culture_invariant_text")
+			? localizationLocalizableProperties(corpus.units)
+			: new Set()
 	};
 	for (const line of [...join.lines].sort((a, b) => a.id.localeCompare(b.id)))
 		checkLocalizationLine(line, () => localizationLineUnits(line, byUnit), context, {
@@ -568,7 +1366,7 @@ export function checkLocalizationTarget(
 					}))
 				: []),
 			...enabled.map((id) => ({
-				ruleId: TextQualityRuleId.make(`localization.${id}`),
+				ruleId: ruleIdOf(id),
 				findingCount: visible.findings.filter((finding) => finding.kind === id).length
 			}))
 		],

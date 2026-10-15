@@ -277,15 +277,101 @@ pure. It returns `LocalizationQualityReport`, an additive variant of the existin
 with culture and identity findings, structured evidence, saved occurrences, manifest locations,
 file provenance/diagnostics and unchanged corpus coverage. Source-quality reports share the bounded corpus diagnostics and their totals. Gathered-only findings have empty saved-occurrence lists and evidence line IDs.
 
-The checks are `format_arguments`, `argument_modifiers`, `rich_text`, `po_escape_safety`,
-`whitespace`, `empty_translation`, `missing_translator_notes`, and `duplicate_source`. Pass
-`{ culture?, checks?, disabledChecks? }` to select them. They need no rule document; existing v1
-`Config/UEShed/GameTextRules.json` documents can optionally contain `disabledLocalizationChecks`.
-Version 2 adds per-culture project policy and progress reports, described below.
+Check IDs are stable string literals: `LocalizationCheckId` for checks of a translation against its
+source and `SourceCheckId` for checks of the source itself; `BuiltInCheckId` is both. Review files
+record them as `localization.<id>`. Pass `{ culture?, checks?, disabledChecks? }` to select them.
+They need no rule document; v1 and v2 `Config/UEShed/GameTextRules.json` documents can optionally
+contain `disabledLocalizationChecks` (any built-in ID), `segmentSeparator`, `optionalTags` and
+`optionalArguments`. Version 2 adds
+per-culture project policy and progress reports, described below. Every check is on by default,
+except `segment_separator` until a rule file names a separator.
 
-`missing_translator_notes` and `duplicate_source` are facts about the source line. Each reports once
-per line, under the target's native culture (or the line's first culture in the target by code), so
-a selected non-native culture does not show them.
+Every localization finding has a `severity` from `checkSeverity`: `blocking` (players see wrong or
+untranslated text), `normal` or `low`. It is never part of the finding's ID. Workspace pages list
+blocking findings first, then normal, then low, each in report order, and count findings by
+severity in `severityCounts`; summaries, focus and CSV exports carry the severity.
+
+| Check                         | Severity | Reports                                                                                           |
+| ----------------------------- | -------- | ------------------------------------------------------------------------------------------------- |
+| `format_arguments`            | normal   | Source arguments the translation drops, or arguments it adds                                      |
+| `format_argument_renamed`     | normal   | A dropped and an added argument paired in order, as `{qty}` → `{qté}`; one rename stages a change |
+| `argument_modifiers`          | normal   | Plural, ordinal, gender and Hangul modifier syntax and forms                                      |
+| `rich_text`                   | normal   | Unbalanced tags, as Unreal's compile validator counts them                                        |
+| `rich_text_tags`              | normal   | Tags (`<b>…</>`, `<Name>…</>`, `<img/>`) the translation drops, compared without case             |
+| `rich_text_tags_added`        | low      | Tags the translation adds and drops none                                                          |
+| `rich_text_tag_case`          | low      | The same tag in another case, as `<italic>` for `<Italic>`; Slate matches names without case      |
+| `po_escape_safety`            | normal   | Literal `\n`, `\r`, `\t` that Unreal's PO round trip turns into control characters                |
+| `whitespace`                  | normal   | Leading or trailing whitespace that differs from the source, or unsafe edge spaces                |
+| `line_breaks`                 | normal   | A different number of line breaks inside the text than the source; edges are `whitespace`'s       |
+| `segment_separator`           | normal   | The rule file's `segmentSeparator` used a different number of times than in the source            |
+| `length_outlier`              | normal   | A translation under a third (zh, ja, ko, th: a quarter) or over three times the source's length   |
+| `placeholder_translation`     | normal   | A translation that is only a placeholder ("skip", "TBD", "script lama") or punctuation ("...")    |
+| `empty_translation`           | normal   | An existing empty PO or archive entry                                                             |
+| `outdated_translation`        | blocking | An archive translation recorded for older source text; Unreal ships the source instead            |
+| `source_line_endings_changed` | low      | An archive translation recorded for the same source with other line endings (`\r\n`, `\n`)        |
+| `inconsistent_translation`    | normal   | Short shared source text (up to four words) translated differently in one culture                 |
+| `missing_translator_notes`    | low      | No translator notes on any occurrence or manifest entry                                           |
+| `duplicate_source`            | low      | The same source text under different keys                                                         |
+| `culture_invariant_text`      | low      | Culture-invariant player text in a property that is localizable elsewhere: never translated       |
+| `placeholder_text`            | normal   | `TODO`, `TBD`, `FIXME` (upper case only), "lorem ipsum", "to be translated", "placeholder"        |
+| `source_whitespace`           | low      | Whitespace at either end of a gathered source, or doubled spaces inside it                        |
+| `source_markup`               | normal   | Unclosed rich-text tags, `</Name>` closings or unpaired format braces in the source               |
+| `number_only_text`            | low      | Localizable text with digits and no letters or arguments, which could be culture invariant        |
+| `string_table_key_collision`  | normal   | One namespace and key declared by more than one String Table                                      |
+
+`missing_translator_notes`, `duplicate_source` and the `SourceCheckId` checks are facts about the
+source line. Each reports once per line, under the target's native culture (or the line's first
+culture in the target by code), so a selected non-native culture does not show them.
+`duplicate_source` reports once per shared text, on the line whose identity sorts first, and leaves
+out text without letters. `culture_invariant_text` findings have no identity (`identity: null`), so
+they cannot be accepted in a review file. Most culture-invariant text is invariant on purpose, so it
+is reported only for a saved place that is not editor text (by its audience), not in a package
+whose path has "debug" in it and not a text render component (world-space labels, mostly debug
+names and distances), and only in a
+property (a class's property path, or a DataTable's column, without container indexes) that holds
+at least as much keyed or String Table text in the project as invariant text in such places. A
+column of backer names with a few localized headings, or a label no one localizes, is left alone.
+The localization report keeps every placeholder: it never holds source findings, and `loc check`
+prints only it. A workspace that lists both (`localizationQualityWorkspace(Of)` with a source
+report) shows a placeholder once: a `placeholder_text` finding whose every placeholder a source
+terminology finding already marks in the same text of one of its places is left out of pages,
+counts and exports, and one with others left names only those in its summary. The starter rules
+forbid "placeholder", so without this such text appeared twice. The check records this on the
+finding (`unreportedMatches`: the placeholders the rule file's terminology leaves, empty when it
+leaves none), and the indexed scan keeps it as a fact, so building a workspace reads no finding;
+the workspace expects its source report to come from the same rule document. `placeholder_translation` leaves
+out the native culture, a translation equal to its source, a
+source that is itself a placeholder, and punctuation-only answers ("...") to a source under three
+words, which can be a silent reply. The source checks skip Blueprint bytecode fragments (manifest entries
+`… [Script Bytecode]`, the pieces of joined text the gather records); `source_whitespace` also skips
+lines the gather does not collect. `source_markup` reads tags as Slate does: attributes are
+`name="value"` pairs, `<{Argument}>` opens a tag, and a tag right after an ASCII letter, digit or
+underscore is code (`GetSubsystem<UMySubsystem>()`).
+
+Shape checks leave an empty translation to `empty_translation`. Rule files can list
+`optionalTags`, tag names a translation may add or leave out (compared without case), and
+`optionalArguments`, argument names the game always supplies: a translation may add them, and the
+tags that wrap only such an argument (`<PlayerName>{ParentLabel}</>`), without a finding. An
+optional argument does not pair with a dropped one as a rename.
+
+`length_outlier` measures visible length: rich-text tags, argument modifiers and `{arguments}`
+removed, whitespace runs counted once; East Asian wide characters count two. A source shorter than
+20 visible characters is not checked. `inconsistent_translation` groups lines by source text, like
+`duplicate_source`, but only sources with letters, at least three visible characters and at most
+four words. Per culture other than the native one it counts each line's shipped translation,
+grouping translations that differ only in case, whitespace, punctuation or symbols, and reports,
+once per line, every line whose translation is not the single most used one. When most lines ship
+the source untranslated, it reports those lines instead (`untranslated: true`), unless fewer than
+half as many lines translate it: then the culture keeps the text untranslated on purpose, as
+internal labels often are, and nothing is reported. When the most used translations tie, it reports
+nothing. The finding lists the five most used translations with their
+line counts. An indexed scan counts them in a second pass over the shared lines only, before the
+main pass. A translated source whose recorded text differs from the current one only in line
+endings is `source_line_endings_changed`, not `outdated_translation`.
+
+A key with conflicting saved texts (`conflicting_source`) is never checked or grouped as the join's
+joined text: its findings carry the distinct texts in `sourceVariants`, workspace summaries and
+focus list them, and without a manifest source its translation is not compared.
 
 Checks use the pending non-empty PO text when the culture has a `not_synced` fact, otherwise archive
 text. They compare with manifest source, falling back to corpus source with a diagnostic. Crowdin
@@ -311,8 +397,8 @@ validate matching argument names against source, missing/added modifiers, malfor
 that become literals, source-relative whitespace/line-break drift, empty entries, notes, duplicates
 or PO escape safety; those additional checks are UE Shed findings.
 
-Exactly one missing and one added argument can stage a rename in `report.changes`; nested form
-renames preserve the grammar and revalidate the argument set. Each change records target, culture,
+Exactly one renamed argument, with nothing else dropped or added, can stage a rename in
+`report.changes`; nested form renames preserve the grammar and revalidate the argument set. Each change records target, culture,
 namespace/key, manifest source, current PO translation (archive fallback when absent), and proposed
 translation. The report carries version-1 provenance. No check applies or writes a proposal.
 
@@ -345,8 +431,10 @@ matching the role appear in policy evidence; gathered-only lines cannot acquire 
 Unknown target cultures appear in `ruleDiagnostics` as warnings because rules are project-wide.
 Duplicate culture keys (including escaped JSON keys), duplicate role/rule IDs, undeclared roles,
 empty terms and non-positive budgets fail with typed recovery guidance. Both versions support
-`disabledLocalizationChecks`. See [the v2 example](fixtures/quality-rules.v2.json) for an authored
-document; its limits and terms are examples, not built-ins.
+`disabledLocalizationChecks`, `segmentSeparator` (1–16 characters), `optionalTags` and
+`optionalArguments`. See
+[the v2 example](fixtures/quality-rules.v2.json) for an authored document; its limits and terms are
+examples, not built-ins.
 
 `localizationProgressReport(corpus, joined, evidence, baseline?)` is pure and browser-safe. It
 reports every primary state's line/source-word counts, independent `notSynced` counts including

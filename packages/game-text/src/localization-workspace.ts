@@ -40,6 +40,7 @@ import {
 } from "./localization-status.js";
 import { textCountLabel } from "./csv.js";
 import { textAssetName, spreadsheetCsv } from "./csv.js";
+import { CheckSeverity, checkSeverity } from "./localization-check-ids.js";
 
 const Count = Schema.Int.check(Schema.isGreaterThanOrEqualTo(0));
 const Offset = Schema.optionalKey(Count);
@@ -55,7 +56,24 @@ export const WorkspaceQualityFilter = Schema.Literals([
 	"whitespace",
 	"empty_translation",
 	"missing_translator_notes",
-	"duplicate_source"
+	"duplicate_source",
+	"format_argument_renamed",
+	"rich_text_tags",
+	"rich_text_tag_case",
+	"line_breaks",
+	"segment_separator",
+	"length_outlier",
+	"outdated_translation",
+	"inconsistent_translation",
+	"culture_invariant_text",
+	"placeholder_text",
+	"source_whitespace",
+	"source_markup",
+	"number_only_text",
+	"string_table_key_collision",
+	"rich_text_tags_added",
+	"source_line_endings_changed",
+	"placeholder_translation"
 ]);
 export type WorkspaceQualityFilter = typeof WorkspaceQualityFilter.Type;
 export const workspaceQualityLabels = {
@@ -69,8 +87,31 @@ export const workspaceQualityLabels = {
 	whitespace: "Whitespace",
 	empty_translation: "Empty translation",
 	missing_translator_notes: "No translator notes",
-	duplicate_source: "Same text, different keys"
+	duplicate_source: "Same text, different keys",
+	format_argument_renamed: "Renamed format arguments",
+	rich_text_tags: "Missing tags",
+	rich_text_tag_case: "Tag case changed",
+	line_breaks: "Line breaks",
+	segment_separator: "Segment separators",
+	length_outlier: "Unusual length",
+	outdated_translation: "Translated from older text",
+	inconsistent_translation: "Translated inconsistently",
+	culture_invariant_text: "Won't be translated",
+	placeholder_text: "Placeholder text",
+	source_whitespace: "Source whitespace",
+	source_markup: "Unbalanced source markup",
+	number_only_text: "Number-only text",
+	string_table_key_collision: "String Table key collision",
+	rich_text_tags_added: "Extra tags",
+	source_line_endings_changed: "Source line endings changed",
+	placeholder_translation: "Placeholder translation"
 } satisfies Record<WorkspaceQualityFilter, string>;
+/** A check's severity; every finding of a check shares it. */
+export function workspaceQualitySeverity(
+	filter: Exclude<WorkspaceQualityFilter, "all">
+): CheckSeverity {
+	return checkSeverity[filter];
+}
 const Selection = { target: LocalizationTargetName, culture: Schema.optionalKey(CultureCode) };
 export const WorkspaceQualityRequest = Schema.Struct({
 	...Selection,
@@ -85,10 +126,17 @@ export const WorkspaceQualityFocusRequest = Schema.Struct({
 	poContextOffset: Offset
 });
 export type WorkspaceQualityFocusRequest = typeof WorkspaceQualityFocusRequest.Type;
+const SourceVariants = Schema.Array(Schema.String.check(Schema.isMaxLength(512))).check(
+	Schema.isMinLength(2),
+	Schema.isMaxLength(16)
+);
 export const WorkspaceFinding = Schema.Struct({
 	id: TextQualityFindingId,
 	filter: WorkspaceQualityFilter,
+	severity: CheckSeverity,
 	source: Schema.String.check(Schema.isMaxLength(512)),
+	/** A key's conflicting saved texts, listed apart; `source` is the gathered one or the first. */
+	sourceVariants: Schema.optionalKey(SourceVariants),
 	problem: Schema.String.check(Schema.isMaxLength(1024)),
 	context: Schema.String.check(Schema.isMaxLength(1024)),
 	culture: Schema.optionalKey(CultureCode)
@@ -98,6 +146,8 @@ export const WorkspaceQualityPage = Schema.Struct({
 	findings: Schema.Array(WorkspaceFinding).check(Schema.isMaxLength(50)),
 	total: Count,
 	counts: Schema.Record(WorkspaceQualityFilter, Count),
+	/** Findings by severity in the culture selection, as `counts.all` counts them. */
+	severityCounts: Schema.Record(CheckSeverity, Count),
 	nextOffset: Offset,
 	suggestedFixCount: Count,
 	limits: Schema.Array(
@@ -167,9 +217,11 @@ export const WorkspaceLocalizationFindingFocus = Schema.Struct({
 	sourceRanges: Schema.Array(Range).check(Schema.isMaxLength(64)),
 	translationRanges: Schema.Array(Range).check(Schema.isMaxLength(64)),
 	truncated: Schema.Boolean,
+	sourceVariants: Schema.optionalKey(SourceVariants),
 	problem: WorkspaceFinding.fields.problem,
 	recovery: Schema.String,
 	check: WorkspaceQualityFilter,
+	severity: CheckSeverity,
 	/** The rule a review file records when someone accepts this finding. */
 	ruleId: Schema.String,
 	culture: CultureCode,
@@ -203,21 +255,22 @@ export interface WorkspaceQualityItem {
 	readonly line: LocalizationLine | undefined;
 	readonly summary: WorkspaceFinding;
 }
-export function workspaceQualityFilterOf(finding: Finding | SourceFinding): WorkspaceQualityFilter {
+export function workspaceQualityFilterOf(
+	finding: Finding | SourceFinding
+): Exclude<WorkspaceQualityFilter, "all"> {
 	if (finding.kind === "localization_character_budget") return "character_budget";
 	if (finding.kind === "localization_terminology") return "terminology";
 	return finding.kind;
 }
+const braced = (names: readonly string[]) => names.map((name) => "{" + name + "}").join(", ");
+const tagged = (names: readonly string[]) => names.map((name) => "<" + name + ">").join(", ");
+const quoted = (text: string) => "“" + (text.length > 40 ? text.slice(0, 39) + "…" : text) + "”";
 function problem(finding: Finding): string {
 	switch (finding.kind) {
 		case "format_arguments":
 			return [
-				finding.actual.missing.length
-					? "Missing " + finding.actual.missing.map((name) => "{" + name + "}").join(", ")
-					: "",
-				finding.actual.added.length
-					? "uses " + finding.actual.added.map((name) => "{" + name + "}").join(", ")
-					: ""
+				finding.actual.missing.length ? "Missing " + braced(finding.actual.missing) : "",
+				finding.actual.added.length ? "uses " + braced(finding.actual.added) : ""
 			]
 				.filter(Boolean)
 				.join(" · ");
@@ -238,7 +291,100 @@ function problem(finding: Finding): string {
 		case "missing_translator_notes":
 			return "No translator notes";
 		case "duplicate_source":
-			return "Same text, different keys";
+			return (
+				"Same text, different keys · " + textCountLabel(finding.actual.identityCount, "key")
+			);
+		case "format_argument_renamed":
+			return finding.actual.renamed
+				.map(({ from, to }) => "{" + from + "} should be {" + to + "}")
+				.join(" · ");
+		case "rich_text_tags":
+			return [
+				finding.actual.missing.length ? "Missing " + tagged(finding.actual.missing) : "",
+				finding.actual.added.length ? "adds " + tagged(finding.actual.added) : ""
+			]
+				.filter(Boolean)
+				.join(" · ");
+		case "rich_text_tags_added":
+			return "Adds " + tagged(finding.actual.added);
+		case "rich_text_tag_case":
+			return finding.actual.changed
+				.map(
+					({ source, translation }) => "<" + translation + "> should be <" + source + ">"
+				)
+				.join(" · ");
+		case "line_breaks":
+			return (
+				textCountLabel(finding.actual.lineBreaks, "line break") +
+				", source has " +
+				finding.expectation.lineBreaks
+			);
+		case "segment_separator":
+			return (
+				quoted(finding.actual.separator) +
+				" " +
+				finding.actual.count +
+				"×, source has " +
+				finding.expectation.count +
+				"×"
+			);
+		case "length_outlier":
+			return (
+				(finding.actual.ratio < 1 ? "Much shorter" : "Much longer") +
+				" than the source · " +
+				finding.actual.ratio +
+				"×"
+			);
+		case "outdated_translation":
+			return "Translated from " + quoted(finding.actual.translatedSource);
+		case "source_line_endings_changed":
+			return "Source line endings changed since it was translated";
+		case "placeholder_translation":
+			return "Placeholder translation " + quoted(finding.actual.translation);
+		case "inconsistent_translation":
+			return finding.actual.untranslated &&
+				finding.actual.variants[0]?.translation !== finding.actual.translation
+				? "Not translated · " +
+						textCountLabel(finding.actual.variants[0]?.lines ?? 0, "line") +
+						" use " +
+						quoted(finding.actual.variants[0]?.translation ?? "")
+				: finding.actual.untranslated
+					? "Not translated, while " +
+						textCountLabel(
+							finding.actual.variants
+								.slice(1)
+								.reduce((sum, variant) => sum + variant.lines, 0),
+							"line"
+						) +
+						" translate it"
+					: "Translated inconsistently · " +
+						textCountLabel(finding.actual.variantCount, "translation") +
+						", most use " +
+						quoted(finding.actual.variants[0]?.translation ?? "");
+		case "culture_invariant_text":
+			return "Won’t be translated: culture invariant";
+		case "placeholder_text":
+			return "Placeholder " + finding.actual.matches.map(quoted).join(", ");
+		case "source_whitespace":
+			return finding.actual.leading || finding.actual.trailing
+				? "Space or line break at the start or end"
+				: "Doubled spaces";
+		case "source_markup":
+			return finding.actual.xmlClosings?.length
+				? "Closes with " +
+						finding.actual.xmlClosings.map((name) => "</" + name + ">").join(", ") +
+						"; rich text closes with </>"
+				: finding.actual.richText.opening !== finding.actual.richText.closing
+					? "Unbalanced rich-text tags"
+					: "Unbalanced { }";
+		case "number_only_text":
+			return "Number-only text sent for translation";
+		case "string_table_key_collision":
+			return (
+				"Key in " +
+				textCountLabel(finding.actual.tableCount, "String Table") +
+				" with one namespace"
+			);
 		case "character_budget":
 		case "localization_character_budget":
 			return (
@@ -320,6 +466,23 @@ export function eligibleLocalizationChange(finding: Finding | SourceFinding) {
 		? finding.suggestedChange
 		: undefined;
 }
+/**
+ * The source text a localization finding is about: the checked text for source checks, else the
+ * gathered source, else the first of conflicting texts, never the join's joined text.
+ */
+function findingSource(finding: Finding, line: LocalizationLine | undefined): string {
+	switch (finding.kind) {
+		case "duplicate_source":
+		case "culture_invariant_text":
+		case "placeholder_text":
+		case "source_whitespace":
+		case "source_markup":
+		case "number_only_text":
+			return finding.actual.source;
+	}
+	const variants = "sourceVariants" in finding ? finding.sourceVariants : undefined;
+	return line?.manifest[0]?.source.Text ?? variants?.[0] ?? line?.source ?? "";
+}
 export function workspaceQualityItem(
 	finding: Finding | SourceFinding,
 	line: LocalizationLine | undefined
@@ -335,20 +498,23 @@ export function workspaceQualityItem(
 			: (line?.manifest[0]?.path ?? "Source file")) +
 		" · " +
 		(localized
-			? finding.identity.key
+			? (finding.identity?.key ?? "No key")
 			: (line?.identity?.key ??
 				(location?.kind === "string_table_entry" ? location.entryKey : finding.ruleId))) +
 		" · " +
 		workspaceQualityLabels[workspaceQualityFilterOf(finding)] +
 		" · " +
 		textCountLabel(finding.affectedOccurrences.length, "location");
+	const filter = workspaceQualityFilterOf(finding);
+	const variants = "sourceVariants" in finding ? finding.sourceVariants : undefined;
 	const summary: WorkspaceFinding = {
 		id,
-		filter: workspaceQualityFilterOf(finding),
-		source: (localized
-			? (line?.manifest[0]?.source.Text ?? line?.source ?? "")
-			: finding.actual.source
-		).slice(0, 512),
+		filter,
+		severity: workspaceQualitySeverity(filter),
+		source: (localized ? findingSource(finding, line) : finding.actual.source).slice(0, 512),
+		...(variants
+			? { sourceVariants: variants.slice(0, 16).map((variant) => variant.slice(0, 512)) }
+			: undefined),
 		problem: ((localized ? finding.culture + " · " : "") + problem(finding)).slice(0, 1024),
 		context: context.slice(0, 1024),
 		...(localized ? { culture: finding.culture } : undefined)
@@ -361,33 +527,67 @@ function ranges(text: string, finding: Finding, side: "source" | "translation") 
 		if (matches.length < 64 && start < 4096 && end > start)
 			matches.push({ start, end: Math.min(end, 4096) });
 	};
-	if (finding.kind === "format_arguments") {
-		const names = side === "source" ? finding.actual.missing : finding.actual.added;
-		for (const name of names) {
-			const term = "{" + name + "}";
+	const terms = (values: readonly string[]) => {
+		for (const term of values) {
 			let start = text.indexOf(term);
 			while (start >= 0 && matches.length < 64) {
 				add(start, start + term.length);
 				start = text.indexOf(term, start + term.length);
 			}
 		}
-	} else if (finding.kind === "localization_terminology" && side === "translation")
-		add(finding.actual.start, finding.actual.end);
-	else if (
-		finding.kind === "rich_text" ||
-		finding.kind === "argument_modifiers" ||
-		finding.kind === "po_escape_safety" ||
-		finding.kind === "whitespace"
-	) {
-		const pattern =
-			finding.kind === "rich_text"
-				? /<[^>]*>/gu
-				: finding.kind === "argument_modifiers"
-					? /\|(?:plural|ordinal|gender)\([^)]*\)/gu
-					: finding.kind === "po_escape_safety"
-						? /\\[nrt]/gu
-						: /^\s+|\s+$|[\r\n]+/gu;
-		for (const match of text.matchAll(pattern)) add(match.index, match.index + match[0].length);
+	};
+	const pattern = (expression: RegExp) => {
+		for (const match of text.matchAll(expression))
+			add(match.index, match.index + match[0].length);
+	};
+	switch (finding.kind) {
+		case "format_arguments":
+			terms(
+				(side === "source" ? finding.actual.missing : finding.actual.added).map(
+					(name) => "{" + name + "}"
+				)
+			);
+			break;
+		case "format_argument_renamed":
+			terms(
+				finding.actual.renamed.map(
+					({ from, to }) => "{" + (side === "source" ? to : from) + "}"
+				)
+			);
+			break;
+		case "localization_terminology":
+			if (side === "translation") add(finding.actual.start, finding.actual.end);
+			break;
+		case "rich_text":
+		case "rich_text_tags":
+		case "rich_text_tags_added":
+		case "rich_text_tag_case":
+			pattern(/<[^<>]*>/gu);
+			break;
+		case "argument_modifiers":
+			pattern(/\|(?:plural|ordinal|gender)\([^)]*\)/gu);
+			break;
+		case "po_escape_safety":
+			pattern(/\\[nrt]/gu);
+			break;
+		case "whitespace":
+			pattern(/^\s+|\s+$/gu);
+			break;
+		case "line_breaks":
+			pattern(/\r\n|\r|\n/gu);
+			break;
+		case "segment_separator":
+			terms([finding.actual.separator]);
+			break;
+		case "placeholder_text":
+			if (side === "source") terms(finding.actual.matches);
+			break;
+		case "source_whitespace":
+			if (side === "source") pattern(/^\s+|\s+$| {2,}/gu);
+			break;
+		case "source_markup":
+			if (side === "source") pattern(/<[^<>]*>|[{}]/gu);
+			break;
 	}
 	return matches.sort((a, b) => a.start - b.start);
 }
@@ -399,6 +599,11 @@ export interface LocalizationFindingList {
 	filter(position: number): WorkspaceQualityFilter;
 	ruleId(position: number): RuleId;
 	eligible(position: number): boolean;
+	/**
+	 * A `placeholder_text` finding whose placeholders the rule file's source terminology reports
+	 * in full (`unreportedMatches` is empty), read from the scan's own facts.
+	 */
+	reportedBySource(position: number): boolean;
 	/** The first position with this ID within the culture selection. */
 	find(id: TextQualityFindingId, culture: CultureCode | undefined): number | undefined;
 	items(positions: readonly number[]): readonly WorkspaceQualityItem[];
@@ -459,6 +664,14 @@ export function localizationQuality(
 			ruleId: (position) => items[position]!.finding.ruleId,
 			eligible: (position) =>
 				eligibleLocalizationChange(items[position]!.finding) !== undefined,
+			reportedBySource: (position) => {
+				const { finding } = items[position]!;
+				return (
+					"culture" in finding &&
+					finding.kind === "placeholder_text" &&
+					finding.unreportedMatches?.length === 0
+				);
+			},
 			find: (id, culture) => {
 				const position = items.findIndex(
 					({ summary }) => summary.id === id && (!culture || summary.culture === culture)
@@ -486,7 +699,32 @@ export function localizationQuality(
 	};
 }
 
-/** The workspace over any finding list. Source findings come first, then localization findings. */
+/**
+ * The summary a list showing the rule file's source findings gives an item: a `placeholder_text`
+ * finding names only the placeholders the source terminology does not report. The finding and its
+ * ID are unchanged.
+ */
+function withoutSourceReported(item: WorkspaceQualityItem): WorkspaceQualityItem {
+	const { finding, line } = item;
+	if (!("culture" in finding) || finding.kind !== "placeholder_text") return item;
+	const left = finding.unreportedMatches;
+	if (!left?.length || left.length === finding.actual.matches.length) return item;
+	return {
+		...item,
+		summary: {
+			...workspaceQualityItem(
+				{ ...finding, actual: { ...finding.actual, matches: left } },
+				line
+			).summary,
+			id: item.summary.id
+		}
+	};
+}
+
+/**
+ * The workspace over any finding list. Pages and exports list blocking findings, then normal, then
+ * low; within a severity, source findings come first, then localization findings in report order.
+ */
 export function localizationQualityWorkspaceOf(
 	source: TextQualityReport | undefined,
 	{ findings: list, metadata }: LocalizationQuality
@@ -497,14 +735,24 @@ export function localizationQualityWorkspaceOf(
 	);
 	const sourceCount = sourceItems.length,
 		total = sourceCount + list.length;
+	// One list shows source and localization findings: a placeholder is reported once. The checks
+	// ran with the rule document the source report comes from, and recorded which placeholders
+	// its terminology reports; nothing is hydrated here.
+	const hidden = (position: number) => source !== undefined && list.reportedBySource(position);
+	const withSummary = (item: WorkspaceQualityItem) =>
+		source === undefined ? item : withoutSourceReported(item);
 	const inCulture = (request: { culture?: CultureCode | undefined }, position: number) =>
 		position < sourceCount ||
-		!request.culture ||
-		list.culture(position - sourceCount) === request.culture;
+		(!hidden(position - sourceCount) &&
+			(!request.culture || list.culture(position - sourceCount) === request.culture));
 	const filterAt = (position: number) =>
 		position < sourceCount
 			? sourceItems[position]!.summary.filter
 			: list.filter(position - sourceCount);
+	const severityAt = (position: number) => {
+		const filter = filterAt(position);
+		return filter === "all" ? "normal" : workspaceQualitySeverity(filter);
+	};
 	const ruleAt = (position: number) =>
 		position < sourceCount
 			? sourceItems[position]!.finding.ruleId
@@ -519,7 +767,7 @@ export function localizationQualityWorkspaceOf(
 		);
 		let next = 0;
 		return positions.map((position) =>
-			position < sourceCount ? sourceItems[position]! : localized[next++]!
+			position < sourceCount ? sourceItems[position]! : withSummary(localized[next++]!)
 		);
 	};
 	/** Summaries in batches, so a large export never holds every finding and line at once. */
@@ -530,22 +778,26 @@ export function localizationQualityWorkspaceOf(
 				summaries.push(item.summary);
 		return summaries;
 	};
+	/** Matching positions, blocking findings first, then normal, then low; else in order. */
 	const matched = (request: WorkspaceQualityRequest, wanted = (_position: number) => true) => {
-		const positions: number[] = [];
+		const bySeverity = new Map<CheckSeverity, number[]>(
+			CheckSeverity.literals.map((severity) => [severity, []])
+		);
 		for (let position = 0; position < total; position++)
 			if (
 				inCulture(request, position) &&
 				(request.filter === "all" || request.filter === filterAt(position)) &&
 				wanted(position)
 			)
-				positions.push(position);
-		return positions;
+				bySeverity.get(severityAt(position))!.push(position);
+		return [...bySeverity.values()].flat();
 	};
 	const search = (request: WorkspaceQualityRequest): WorkspaceQualityPage => {
 		const typeCounts = new Map<WorkspaceQualityFilter, number>();
 		const ruleCounts = new Map<string, number>();
-		const offset = request.offset ?? 0,
-			page: number[] = [];
+		const severityCounts = { blocking: 0, normal: 0, low: 0 };
+		const matchedBySeverity = { blocking: 0, normal: 0, low: 0 };
+		const offset = request.offset ?? 0;
 		let cultureCount = 0,
 			matchedCount = 0,
 			suggestedFixCount = 0;
@@ -553,13 +805,36 @@ export function localizationQualityWorkspaceOf(
 			if (!inCulture(request, position)) continue;
 			cultureCount++;
 			const filter = filterAt(position),
-				rule = ruleAt(position);
+				rule = ruleAt(position),
+				severity = severityAt(position);
 			typeCounts.set(filter, (typeCounts.get(filter) ?? 0) + 1);
 			ruleCounts.set(rule, (ruleCounts.get(rule) ?? 0) + 1);
+			severityCounts[severity]++;
 			if (request.filter !== "all" && request.filter !== filter) continue;
-			if (matchedCount >= offset && matchedCount < offset + 50) page.push(position);
+			matchedBySeverity[severity]++;
 			matchedCount++;
 			if (eligibleAt(position)) suggestedFixCount++;
+		}
+		// The page in severity order: skip whole severities before the offset, then read on.
+		const page: number[] = [];
+		let skipped = 0;
+		for (const severity of CheckSeverity.literals) {
+			const count = matchedBySeverity[severity];
+			if (page.length >= 50 || skipped + count <= offset) {
+				skipped += count;
+				continue;
+			}
+			let seen = skipped;
+			for (let position = 0; position < total && page.length < 50; position++) {
+				if (
+					!inCulture(request, position) ||
+					(request.filter !== "all" && request.filter !== filterAt(position)) ||
+					severityAt(position) !== severity
+				)
+					continue;
+				if (seen++ >= offset) page.push(position);
+			}
+			skipped += count;
 		}
 		const counts = Schema.decodeUnknownSync(WorkspaceQualityPage.fields.counts)(
 			Object.fromEntries(
@@ -571,6 +846,7 @@ export function localizationQualityWorkspaceOf(
 		);
 		return {
 			counts,
+			severityCounts,
 			limits: [...list.limits(request.culture)],
 			unsupportedRuleCultures: metadata.unsupportedRuleCultures,
 			total: matchedCount,
@@ -600,7 +876,10 @@ export function localizationQualityWorkspaceOf(
 			let item = sourceItems.find(({ summary }) => summary.id === request.id);
 			if (!item) {
 				const position = list.find(request.id, request.culture);
-				item = position === undefined ? undefined : list.items([position])[0];
+				item =
+					position === undefined || hidden(position)
+						? undefined
+						: withSummary(list.items([position])[0]!);
 			}
 			if (!item) return { status: "not_found" };
 			const { finding, line, summary } = item;
@@ -618,7 +897,7 @@ export function localizationQualityWorkspaceOf(
 			}
 			if (!line) return { status: "not_found" };
 			const mark = line.cultures.find((mark) => mark.culture === finding.culture);
-			const sourceText = line.manifest[0]?.source.Text ?? line.source;
+			const sourceText = findingSource(finding, line);
 			const translation = mark ? localizationShippedTranslation(mark).value : null;
 			const detail = localizationFocusPage(
 				metadata.join,
@@ -645,9 +924,13 @@ export function localizationQualityWorkspaceOf(
 					sourceRanges: ranges(sourceText, finding, "source"),
 					translationRanges: ranges(translation ?? "", finding, "translation"),
 					truncated: sourceText.length > 4096 || (translation?.length ?? 0) > 4096,
+					...(summary.sourceVariants
+						? { sourceVariants: summary.sourceVariants }
+						: undefined),
 					problem: summary.problem,
 					recovery: finding.recovery,
 					check: summary.filter,
+					severity: summary.severity,
 					ruleId: finding.ruleId,
 					culture: finding.culture,
 					affectedOccurrences: finding.affectedOccurrences.slice(
@@ -901,10 +1184,21 @@ export function localizationReportCsv(
 /** A spreadsheet of the same finding summaries the quality list displays. */
 export function workspaceQualityCsv(report: WorkspaceQualityReport): string {
 	return spreadsheetCsv([
-		["Target", "Culture", "Check", "Source", "Problem", "Context", "Finding ID", "Scan status"],
+		[
+			"Target",
+			"Culture",
+			"Severity",
+			"Check",
+			"Source",
+			"Problem",
+			"Context",
+			"Finding ID",
+			"Scan status"
+		],
 		...report.findings.map((finding) => [
 			report.target,
 			finding.culture ?? "Source",
+			finding.severity,
 			workspaceQualityLabels[finding.filter],
 			finding.source,
 			finding.problem,

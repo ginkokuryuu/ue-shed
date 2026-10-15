@@ -552,7 +552,13 @@ export function GameTextLocalizationQuality(props: {
 									)}
 								>
 									<span {...stylex.attrs(styles.rowText)}>{finding.source}</span>
-									<span {...stylex.attrs(styles.context)}>{finding.problem}</span>
+									<span {...stylex.attrs(styles.context)}>
+										<Show when={finding.severity === "blocking"}>
+											<span {...stylex.attrs(styles.danger)}>Blocking</span>
+											{" · "}
+										</Show>
+										{finding.problem}
+									</span>
 									<span {...stylex.attrs(styles.context, styles.mono)}>
 										{finding.context.startsWith(finding.problem + " · ")
 											? finding.context.slice(finding.problem.length + 3)

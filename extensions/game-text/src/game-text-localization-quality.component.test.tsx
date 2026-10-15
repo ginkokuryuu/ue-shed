@@ -194,18 +194,18 @@ describe("localization quality and reports", () => {
 			value: write
 		});
 		mount();
-		await user.click(await screen.findByRole("button", { name: "Format arguments 1" }));
+		await user.click(await screen.findByRole("button", { name: "Renamed format arguments 1" }));
 		const rows = screen.getByRole("region", { name: "Findings" });
 		await user.click(
 			await within(rows).findByRole("button", {
-				name: /de · Missing \{PlayerName\} · uses \{Name\}/u
+				name: /de · \{Name\} should be \{PlayerName\}/u
 			})
 		);
 		const detail = screen.getByRole("complementary", { name: "Finding detail" });
 		await within(detail).findByRole("region", { name: "Suggested fix" });
 		expect(detail.querySelector("h2 mark")?.textContent).toBe("{PlayerName}");
 		expect(detail.querySelectorAll("mark").length).toBeGreaterThanOrEqual(4);
-		expect(rows.textContent).toContain("Table · K0 · Format arguments");
+		expect(rows.textContent).toContain("Table · K0 · Renamed format arguments");
 		const suggested = within(detail).getByRole("region", { name: "Suggested fix" });
 		expect(Array.from(suggested.querySelectorAll("mark"), (mark) => mark.textContent)).toEqual([
 			"{Name}",
@@ -235,13 +235,13 @@ describe("localization quality and reports", () => {
 		if (!capability) throw new Error("Expected changes capability");
 		const changes = vi.fn(capability);
 		mount({ ...client(), localizationChanges: changes });
-		await user.click(await screen.findByRole("button", { name: "Format arguments 1" }));
+		await user.click(await screen.findByRole("button", { name: "Renamed format arguments 1" }));
 		await user.click(
 			await screen.findByRole("button", { name: "Resolve all: copy suggested fixes (1)" })
 		);
 		await screen.findByText("1 suggested fix copied.");
 		expect(changes.mock.calls).toEqual([
-			[{ target: fixture.join.target, culture: "de", filter: "format_arguments" }]
+			[{ target: fixture.join.target, culture: "de", filter: "format_argument_renamed" }]
 		]);
 		expect(JSON.parse(write.mock.calls[0]?.[0] ?? "{}").changes).toHaveLength(1);
 		expect(screen.queryByRole("button", { name: /Apply|Write translation/u })).toBeNull();
@@ -296,10 +296,10 @@ describe("localization quality and reports", () => {
 			api = client(),
 			load = vi.fn(api.loadConfiguredProject);
 		const first = mount({ ...api, loadConfiguredProject: load });
-		await user.click(await screen.findByRole("button", { name: "Format arguments 1" }));
+		await user.click(await screen.findByRole("button", { name: "Renamed format arguments 1" }));
 		await user.click(
 			await within(screen.getByRole("region", { name: "Findings" })).findByRole("button", {
-				name: /de · Missing/u
+				name: /de · \{Name\} should be/u
 			})
 		);
 		await screen.findByRole("region", { name: "Suggested fix" });
@@ -319,9 +319,9 @@ describe("localization quality and reports", () => {
 		await screen.findByRole("table", { name: "Localization report" });
 		await user.click(screen.getByRole("tab", { name: /^Quality checks/u }));
 		expect(
-			(await screen.findByRole("button", { name: "Format arguments 1" })).getAttribute(
-				"aria-pressed"
-			)
+			(
+				await screen.findByRole("button", { name: "Renamed format arguments 1" })
+			).getAttribute("aria-pressed")
 		).toBe("true");
 		await screen.findByRole("region", { name: "Suggested fix" });
 		expect(load.mock.calls).toEqual([[false], [false]]);

@@ -11,6 +11,7 @@ import { checkLocalizationTarget } from "./localization-checks.js";
 import type { LocalizationQualityProgress } from "./localization-quality-index.js";
 import type { LocalizationCheckOptions } from "./localization-quality-schema.js";
 import { localizationLineFingerprint } from "./localization-review.js";
+import { SourceCheckId } from "./localization-check-ids.js";
 import {
 	WorkspaceQualityFilter,
 	localizationQualityWorkspace,
@@ -20,8 +21,12 @@ import {
 import { TextQualityFindingId } from "./quality-query.js";
 import { GameTextRuleDocument, evaluateGameTextSourceQuality } from "./quality-rules-v2.js";
 
-/** One problem per key pattern; German carries the translation problems. */
-const patterns = [
+/**
+ * One problem per key pattern; German carries the translation problems. `deSource` is the source
+ * German's archive entry records, when it was translated from older text; `dePO` is a pending PO
+ * translation that differs from the archive.
+ */
+const patterns: ReadonlyArray<{ source: string; de: string; deSource?: string; dePO?: string }> = [
 	{ source: "Hello {PlayerName}", de: "Hallo {Name}" },
 	{ source: "<Bold>Gold</>", de: "<Bold>Gold" },
 	{ source: "Ready ", de: "Bereit" },
@@ -30,15 +35,43 @@ const patterns = [
 	{ source: "Exit", de: "Beenden" },
 	{ source: "Empty me", de: "" },
 	{ source: "Fine text", de: "Feiner Text" },
-	{ source: "Exit", de: "Verlassen" }
+	{ source: "Exit", de: "Verlassen" },
+	{ source: "Take {Count} {Item}", de: "Nimm {Count}" },
+	{ source: "Press <Key>Space</> now", de: "Jetzt Leertaste drücken" },
+	{ source: "<Italic>Note</>", de: "<italic>Hinweis</>" },
+	{ source: "First\nSecond", de: "Erste Zweite" },
+	{ source: "Yes // No", de: "Ja Nein" },
+	{ source: "A fairly long sentence about the harbour", de: "Hafen" },
+	{ source: "Open the door", de: "Öffne die Tür", deSource: "Open the gate" },
+	{ source: "TODO: final name", de: "TODO: Name" },
+	{ source: "Unclosed <Em>tag", de: "Offenes <Em>Tag" },
+	{ source: "100", de: "100" },
+	{ source: "Save game", de: "Spiel speichern" },
+	{ source: "Save game", de: "Spiel speichern", dePO: "Spiel sichern" },
+	// Groups with "Spiel speichern": case, whitespace and punctuation do not count.
+	{ source: "Save game", de: "Spiel speichern!" },
+	{ source: "Plain words here", de: "<b>Schlichte</> Worte" },
+	{
+		source: "Torn Pages\nA scrap",
+		de: "Seiten\r\nEin Fetzen",
+		deSource: "Torn Pages\r\nA scrap"
+	},
+	{ source: "The rows are like a composition.", de: "script lama" },
+	// The rule file lets a translation add {ParentLabel} and its name tag.
+	{ source: "Thanks for the cookie!", de: "Danke für den Keks, <PlayerName>{ParentLabel}</>!" }
 ];
-const keys = Array.from({ length: 30 }, (_, index) => ({
+const keys = Array.from({ length: 45 }, (_, index) => ({
 	key: `K${String(index).padStart(2, "0")}`,
 	...patterns[index % patterns.length]!
 }));
 /** Gathered keys; the last few keys exist only in the localization files. */
-const gathered = keys.slice(0, 27);
-const po = (text: string) => text.replaceAll("\\", "\\\\").replaceAll('"', '\\"');
+const gathered = keys.slice(0, 42);
+const po = (text: string) =>
+	text
+		.replaceAll("\\", "\\\\")
+		.replaceAll('"', '\\"')
+		.replaceAll("\r", "\\r")
+		.replaceAll("\n", "\\n");
 
 const occurrence = (key: string, source: string, index: number) => ({
 	source,
@@ -55,6 +88,9 @@ const occurrence = (key: string, source: string, index: number) => ({
 
 const document = Schema.decodeUnknownSync(GameTextRuleDocument)({
 	schemaVersion: 2,
+	segmentSeparator: "//",
+	optionalArguments: ["ParentLabel"],
+	optionalTags: ["npcname"],
 	roles: [
 		{
 			id: "menu",
@@ -70,6 +106,15 @@ const document = Schema.decodeUnknownSync(GameTextRuleDocument)({
 			role: "menu",
 			maximumCharacters: 8,
 			recovery: "Shorten the line."
+		},
+		// Reports TODO in menu text, where placeholder_text leaves it out.
+		{
+			id: "source.terms",
+			kind: "terminology",
+			role: "menu",
+			caseSensitive: true,
+			terms: [{ kind: "forbidden", term: "TODO" }],
+			recovery: "Finish the text."
 		}
 	],
 	localizationRules: [
@@ -104,9 +149,9 @@ async function writeLocalization(projectRoot: string, entries: typeof keys) {
 	const archive = (culture: "en" | "de") => ({
 		FormatVersion: 2,
 		Namespace: "UI",
-		Children: entries.map(({ key, source, de }) => ({
+		Children: entries.map(({ key, source, de, deSource }) => ({
 			Key: key,
-			Source: { Text: source },
+			Source: { Text: culture === "de" ? (deSource ?? source) : source },
 			Translation: { Text: culture === "en" ? source : de }
 		}))
 	});
@@ -115,8 +160,8 @@ async function writeLocalization(projectRoot: string, entries: typeof keys) {
 		entries
 			.filter(({ source }) => culture === "en" || source !== "Line one")
 			.map(
-				({ key, source, de }) =>
-					`msgctxt "UI,${key}"\nmsgid "${po(source)}"\nmsgstr "${po(culture === "en" ? source : de)}"\n`
+				({ key, source, de, dePO }) =>
+					`msgctxt "UI,${key}"\nmsgid "${po(source)}"\nmsgstr "${po(culture === "en" ? source : (dePO ?? de))}"\n`
 			)
 			.join("\n");
 	await writeFile(join(projectRoot, "Review.manifest"), JSON.stringify(manifest));
@@ -137,13 +182,55 @@ it.live(
 				// A second location for one key, an ungathered key and a culture-invariant text.
 				occurrence("K00", "Hello {PlayerName}", 1),
 				occurrence("K90", "Only in the asset", 2),
+				// Saved text without a key that is not culture invariant.
+				{
+					...occurrence("", "No key yet", 6),
+					identity: { status: "unresolved" as const, reason: "missing_key" as const }
+				},
+				// Two String Tables declaring one namespace and key.
+				...["/Game/Text/TableA.TableA", "/Game/Text/TableB.TableB"].map((path) => ({
+					...occurrence("Shared", "Shared entry", 5),
+					location: {
+						kind: "string_table_entry" as const,
+						object_path: path,
+						entry_key: "Shared"
+					}
+				})),
 				{
 					...occurrence("", "Invariant", 3),
 					identity: {
 						status: "unresolved" as const,
 						reason: "culture_invariant" as const
 					}
-				}
+				},
+				// Culture-invariant text where it is meant to be: a property no keyed text uses,
+				// and debug content.
+				...[
+					{ source: "Backer Name", object: "/Game/Text/Table.Table", property: "Backer" },
+					{
+						source: "Debug label",
+						object: "/Game/Debug/Panel.Panel",
+						property: "Label3"
+					},
+					// Editor text by its audience: a developer folder.
+					{
+						source: "My test label",
+						object: "/Game/Developers/Me/Panel.Panel",
+						property: "Label3"
+					}
+				].map(({ source, object, property }) => ({
+					...occurrence("", source, 3),
+					identity: {
+						status: "unresolved" as const,
+						reason: "culture_invariant" as const
+					},
+					location: {
+						kind: "asset_property" as const,
+						object_path: object,
+						class_path: "/Script/Engine.DataAsset",
+						property_path: property
+					}
+				}))
 			]);
 			yield* Effect.gen(function* () {
 				const result = yield* (yield* GameTextIndexRefresh).refresh(fixture.request);
@@ -191,10 +278,21 @@ it.live(
 						),
 						join
 					);
-					const indexed = localizationQualityWorkspaceOf(
-						source,
-						yield* result.localizationQuality!(options, document)
-					);
+					// Placeholders the source terminology reports are left out from the scan's
+					// facts: building the workspace hydrates no finding.
+					const quality = yield* result.localizationQuality!(options, document);
+					let hydrated = 0;
+					const indexed = localizationQualityWorkspaceOf(source, {
+						...quality,
+						findings: {
+							...quality.findings,
+							items: (positions) => {
+								hydrated += positions.length;
+								return quality.findings.items(positions);
+							}
+						}
+					});
+					expect(hydrated).toBe(0);
 					const all = legacy.search({ target: join.target, filter: "all" });
 					for (const filter of WorkspaceQualityFilter.literals)
 						expect([filter, all.counts[filter]]).not.toEqual([filter, 0]);
@@ -207,14 +305,55 @@ it.live(
 						filter: "all",
 						culture: other
 					});
-					expect([
-						translated.counts.duplicate_source,
-						translated.counts.missing_translator_notes
-					]).toEqual([0, 0]);
-					for (const filter of [
+					const sourceLevel = [
 						"duplicate_source",
-						"missing_translator_notes"
-					] as const) {
+						"missing_translator_notes",
+						...SourceCheckId.literals
+					] as const;
+					expect(sourceLevel.map((filter) => translated.counts[filter])).toEqual(
+						sourceLevel.map(() => 0)
+					);
+					// Blocking findings lead every page; counts by severity add up.
+					const severities = legacy
+						.export({ target: join.target, filter: "all" })
+						.findings.map(({ severity }) => severity);
+					expect(severities).toEqual([
+						...severities.filter((severity) => severity === "blocking"),
+						...severities.filter((severity) => severity === "normal"),
+						...severities.filter((severity) => severity === "low")
+					]);
+					expect(all.severityCounts.blocking).toBeGreaterThan(0);
+					// Pending PO text counts as the shipped translation in the translation pass.
+					expect(
+						legacy
+							.export({ target: join.target, filter: "inconsistent_translation" })
+							.findings.filter(({ source }) => source === "Save game")
+							.map(({ problem }) => problem)
+					).toEqual([
+						"de · Translated inconsistently · 2 translations, most use “Spiel speichern”"
+					]);
+					// Invariant text in a property no keyed text uses, or in debug content, is meant
+					// to be invariant.
+					expect(
+						legacy
+							.export({ target: join.target, filter: "culture_invariant_text" })
+							.findings.map(({ source }) => source)
+					).toEqual(["Invariant"]);
+					// TODO in menu text is the terminology rule's finding, not placeholder_text's.
+					const contexts = (filter: WorkspaceQualityFilter) =>
+						legacy
+							.export({ target: join.target, filter })
+							.findings.map(({ problem, context }) => problem + " @ " + context);
+					expect(contexts("placeholder_text").length).toBeGreaterThan(0);
+					expect(
+						contexts("placeholder_text").some((text) => text.includes("@ Menu "))
+					).toBe(false);
+					expect(
+						contexts("terminology").some(
+							(text) => text.includes("TODO") && text.includes("@ Menu ")
+						)
+					).toBe(true);
+					for (const filter of sourceLevel) {
 						const found = legacy.export({ target: join.target, filter }).findings;
 						expect(new Set(found.map(({ culture }) => culture))).toEqual(
 							new Set([join.nativeCulture])
@@ -294,6 +433,72 @@ const expectSameQuality = Effect.fn("Test.GameText.sameQuality")(function* (
 				}
 		}
 });
+
+it.live("checks report each place once, its compiled Blueprint copies folded in", () =>
+	Effect.gen(function* () {
+		const fixture = yield* makeIndexRegressionFixture();
+		// The fixture's package as a Widget Blueprint whose compile saved copies of its widgets.
+		const pkg = "/Game/Text/Table";
+		const place = (object: string, key: string | null, source: string) => ({
+			source,
+			dev_notes: "",
+			identity:
+				key === null
+					? { status: "unresolved" as const, reason: "culture_invariant" as const }
+					: { status: "resolved" as const, namespace: "UI", key },
+			location: {
+				kind: "asset_property" as const,
+				object_path: `${pkg}.${object}`,
+				class_path: "/Script/UMG.TextBlock",
+				property_path: "Text"
+			},
+			edit_capability: "read_only" as const
+		});
+		yield* Effect.promise(() =>
+			writeLocalization(fixture.projectRoot, [
+				{ key: "Title", source: "Play now", de: "Jetzt spielen" },
+				{ key: "Label", source: "Shop", de: "<b>Laden</>" }
+			])
+		);
+		fixture.update(
+			[
+				// Keyed text without a copy, so TextBlock text is localizable once.
+				place("Table.WidgetTree.Title", "Title", "Play now"),
+				place("Table.WidgetTree.Label", "Label", "Shop"),
+				place("Table_C.WidgetTree.Label", "Label", "Shop"),
+				// Invariant text and its copy: one place, so as common as keyed text.
+				place("Table.WidgetTree.Name", null, "Shop name"),
+				place("Table_C.WidgetTree.Name", null, "Shop name")
+			],
+			[
+				{
+					blueprint: `${pkg}.Table`,
+					generatedClass: `${pkg}.Table_C`,
+					classDefault: `${pkg}.Default__Table_C`
+				}
+			]
+		);
+		yield* Effect.gen(function* () {
+			const result = yield* (yield* GameTextIndexRefresh).refresh(fixture.request);
+			const join = result.localizationJoin;
+			const report = checkLocalizationTarget(result.corpus, join, result.evidence);
+			const found = (kind: string) =>
+				report.findings.filter((finding) => finding.kind === kind);
+			for (const kind of ["culture_invariant_text", "rich_text_tags_added"]) {
+				expect(found(kind), kind).toHaveLength(1);
+				expect(
+					found(kind)[0]!.affectedOccurrences.map(
+						(occurrence) => occurrence.location.objectPath
+					),
+					kind
+				).toEqual([
+					`${pkg}.Table.WidgetTree.${kind === "culture_invariant_text" ? "Name" : "Label"}`
+				]);
+			}
+			yield* expectSameQuality(result);
+		}).pipe(Effect.provide(fixture.layer()));
+	}).pipe(Effect.scoped)
+);
 
 it.live("rows the query hides are neither checked nor counted in the limits", () =>
 	Effect.gen(function* () {
@@ -528,7 +733,7 @@ it.live("proposals past the first 100 count the rest without reading their lines
 				{ target: join.target, filter: "all" as const },
 				{
 					target: join.target,
-					filter: "format_arguments" as const,
+					filter: "format_argument_renamed" as const,
 					culture: join.cultures[1]!
 				}
 			]) {
