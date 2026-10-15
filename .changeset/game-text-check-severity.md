@@ -24,7 +24,8 @@ Rate Game Text checks by severity and add translation shape, source and consiste
 - Rule files (v1 and v2) take optional `segmentSeparator`, `optionalTags` and `optionalArguments`.
 - `culture_invariant_text` reports only player text outside debug content and text render
   components, in a property that holds at least as much localizable text in the project.
-- `placeholder_text` leaves out a placeholder a rule file's forbidden source term reports.
+- A quality workspace that lists source findings too shows a placeholder once: it leaves out a
+  `placeholder_text` finding a source terminology finding already covers.
 - Indexed scans build a line's units only for its findings, read translator notes and String
   Table entries from occurrence columns, and halve slow pages, so a key saved in thousands of
   places no longer stalls the scan for seconds.

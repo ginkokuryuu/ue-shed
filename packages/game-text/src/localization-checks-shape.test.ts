@@ -9,6 +9,7 @@ import {
 	ftextUnit,
 	manifestEntry,
 	success,
+	target,
 	unit
 } from "./localization.test-support.js";
 import { joinLocalizationTarget } from "./localization.js";
@@ -387,6 +388,14 @@ describe("translation shape checks", () => {
 			translation: "script lama"
 		});
 		expect(kind(value, "length_outlier", "de")).toEqual([]);
+		// Unselected, placeholder_translation leaves the length to length_outlier.
+		const harbour = "A fairly long sentence about the harbour";
+		for (const options of [
+			{ checks: ["length_outlier" as const] },
+			{ disabledChecks: ["placeholder_translation" as const] }
+		])
+			expect(kinds(line(harbour, "skip", options))).toContain("length_outlier");
+		expect(kinds(line(harbour, "skip"))).not.toContain("length_outlier");
 		expect(kinds(line("Your spouse checks the supplies.", "..."))).toContain(
 			"placeholder_translation"
 		);
@@ -609,19 +618,56 @@ describe("built-in source checks", () => {
 			kind(line("TODO", "TODO", { culture: cultureCode("de") }), "placeholder_text")
 		).toEqual([]);
 	});
-	it("leaves a placeholder to the rule file's forbidden source term that reports it", () => {
-		const source = "TODO: placeholder name";
-		// The starter rules forbid "placeholder" in text under /Game/.
+	it("reports placeholders in the localization report whatever the rule file forbids", () => {
+		// The starter rules forbid "placeholder" in text under /Game/, but source quality is
+		// another report: `loc check` prints only this one.
 		const starter = rules({});
 		const matches = (value: LocalizationQualityReport) =>
 			kind(value, "placeholder_text").map((finding) => finding.actual.matches);
-		expect(matches(line(source, source))).toEqual([["TODO", "placeholder"]]);
-		expect(matches(line(source, source, {}, starter))).toEqual([["TODO"]]);
-		const text = corpus([unit("K", source)]);
-		const terms = evaluateGameTextSourceQuality(text, starter).findings.filter(
-			(finding) => finding.kind === "terminology"
-		);
-		expect(terms.map((finding) => finding.actual)).toMatchObject([{ start: 6, end: 17 }]);
+		expect(
+			matches(
+				line("Choose a placeholder name", "x", { checks: ["placeholder_text"] }, starter)
+			)
+		).toEqual([["placeholder"]]);
+		expect(matches(line("TODO: placeholder name", "x", {}, starter))).toEqual([
+			["TODO", "placeholder"]
+		]);
+	});
+	it("lists a placeholder once where the workspace also shows the rule file's source findings", () => {
+		const starter = rules({});
+		const workspace = (source: string, document: TextQualityRuleDocument) => {
+			const text = corpus([unit("K", source)]);
+			const files = evidence(
+				[manifestEntry("K", source)],
+				[archiveEntry("K", source, source)],
+				noPO()
+			);
+			const { joined, report: value } = report(text, files, {}, document);
+			return localizationQualityWorkspace(
+				evaluateGameTextSourceQuality(text, document),
+				value,
+				joined
+			);
+		};
+		const problems = (value: ReturnType<typeof workspace>) =>
+			value
+				.export({ target: target.name, filter: "all" })
+				.findings.filter(
+					(finding) =>
+						finding.filter === "placeholder_text" || finding.filter === "terminology"
+				)
+				.map((finding) => [finding.filter, finding.problem]);
+		// Every placeholder is a forbidden term's finding: the built-in's is left out.
+		const covered = workspace("Choose a placeholder name", starter);
+		expect(problems(covered).map(([filter]) => filter)).toEqual(["terminology"]);
+		const page = covered.search({ target: target.name, filter: "all" });
+		expect(page.counts.placeholder_text).toBe(0);
+		expect(page.total).toBe(page.findings.length);
+		// Some are: the built-in names only the others.
+		expect(problems(workspace("TODO: placeholder name", starter))).toContainEqual([
+			"placeholder_text",
+			"en · Placeholder “TODO”"
+		]);
 		// A role that does not select the line's place leaves the placeholder to the built-in.
 		const elsewhere = Schema.decodeUnknownSync(TextQualityRuleDocument)({
 			...STARTER_GAME_TEXT_RULES,
@@ -649,12 +695,23 @@ describe("built-in source checks", () => {
 				}
 			]
 		});
-		expect(matches(line(source, source, {}, elsewhere))).toEqual([["TODO", "placeholder"]]);
+		expect(problems(workspace("TODO: name", elsewhere))).toEqual([
+			["placeholder_text", "en · Placeholder “TODO”"]
+		]);
 	});
 	it("checks source markup the way Slate reads it", () => {
 		const markup = (source: string) => kind(line(source, source), "source_markup");
 		expect(markup("<{playerColor}>{playerName}</>")).toEqual([]);
 		expect(markup("<invalid requirement type>")).toEqual([]);
+		// A tag right after a letter is still a tag.
+		expect(markup("Hello<b>world</>")).toEqual([]);
+		expect(markup("Hello<b>world").map((finding) => finding.actual.richText)).toEqual([
+			{ opening: 1, closing: 0 }
+		]);
+		expect(markup("こんにちは<NPCName>世界")).toHaveLength(1);
+		// C++ calls and templates are code.
+		expect(markup("UGameplayStatics::GetGameMode<AMyGameMode>(this)")).toEqual([]);
+		expect(markup("Cast<UMyWidget>(Widget)->Init()")).toEqual([]);
 		expect(markup("GetWorld()->GetGameInstance()->GetSubsystem<UC_InputSubsystem>()")).toEqual(
 			[]
 		);

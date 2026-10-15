@@ -331,9 +331,12 @@ names and distances), and only in a
 property (a class's property path, or a DataTable's column, without container indexes) that holds
 at least as much keyed or String Table text in the project as invariant text in such places. A
 column of backer names with a few localized headings, or a label no one localizes, is left alone.
-`placeholder_text` leaves out a placeholder that a rule file's forbidden source term already
-reports where its role selects the line's place (the starter rules forbid "placeholder"), so
-source quality and the built-in never report the same text twice. `placeholder_translation` leaves
+The localization report keeps every placeholder: it never holds source findings, and `loc check`
+prints only it. A workspace that lists both (`localizationQualityWorkspace(Of)` with a source
+report) shows a placeholder once: a `placeholder_text` finding whose every placeholder a source
+terminology finding already marks in the same text of one of its places is left out of pages,
+counts and exports, and one with others left names only those in its summary. The starter rules
+forbid "placeholder", so without this such text appeared twice. `placeholder_translation` leaves
 out the native culture, a translation equal to its source, a
 source that is itself a placeholder, and punctuation-only answers ("...") to a source under three
 words, which can be a silent reply. The source checks skip Blueprint bytecode fragments (manifest entries

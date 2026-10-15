@@ -41,6 +41,7 @@ import {
 import { textCountLabel } from "./csv.js";
 import { textAssetName, spreadsheetCsv } from "./csv.js";
 import { CheckSeverity, checkSeverity } from "./localization-check-ids.js";
+import { placeholderMatchRanges } from "./localization-text-shape.js";
 
 const Count = Schema.Int.check(Schema.isGreaterThanOrEqualTo(0));
 const Offset = Schema.optionalKey(Count);
@@ -690,6 +691,60 @@ export function localizationQuality(
  * The workspace over any finding list. Pages and exports list blocking findings, then normal, then
  * low; within a severity, source findings come first, then localization findings in report order.
  */
+/**
+ * Built-in `placeholder_text` findings whose placeholders the rule file's source terminology
+ * already reports, for a list that shows both: a forbidden term overlapping the placeholder in the
+ * same text of one of the finding's places. A finding all of whose placeholders are reported is
+ * left out (`hidden`, by list position); one with others left names only those (`summaries`).
+ * The localization report itself keeps every placeholder: it never holds source findings.
+ */
+function placeholdersReportedBySource(
+	sourceItems: readonly WorkspaceQualityItem[],
+	list: LocalizationFindingList
+) {
+	const hidden = new Set<number>(),
+		summaries = new Map<number, WorkspaceFinding>();
+	const terms = new Map<string, Array<{ start: number; end: number }>>();
+	for (const { finding } of sourceItems) {
+		if ("culture" in finding || finding.kind !== "terminology") continue;
+		for (const occurrence of finding.affectedOccurrences) {
+			const key = `${occurrence.id}\0${finding.actual.source}`;
+			const ranges = terms.get(key) ?? [];
+			ranges.push({ start: finding.actual.start, end: finding.actual.end });
+			terms.set(key, ranges);
+		}
+	}
+	if (terms.size === 0) return { hidden, summaries };
+	const positions: number[] = [];
+	for (let position = 0; position < list.length; position++)
+		if (list.filter(position) === "placeholder_text") positions.push(position);
+	list.items(positions).forEach(({ finding, line }, index) => {
+		if (!("culture" in finding) || finding.kind !== "placeholder_text") return;
+		const text = finding.actual.source;
+		const reported = finding.affectedOccurrences.flatMap(
+			(occurrence) => terms.get(`${occurrence.id}\0${text}`) ?? []
+		);
+		if (reported.length === 0) return;
+		const left = placeholderMatchRanges(text)
+			.filter(
+				({ start, end }) =>
+					!reported.some((range) => range.start < end && start < range.end)
+			)
+			.map(({ match }) => match);
+		if (left.length === 0) hidden.add(positions[index]!);
+		else if (left.length < finding.actual.matches.length)
+			summaries.set(positions[index]!, {
+				...workspaceQualityItem(
+					{ ...finding, actual: { ...finding.actual, matches: left } },
+					line
+				).summary,
+				// The finding is unchanged; only its summary names fewer placeholders.
+				id: localizationFindingId(localizationFindingHash(finding))
+			});
+	});
+	return { hidden, summaries };
+}
+
 export function localizationQualityWorkspaceOf(
 	source: TextQualityReport | undefined,
 	{ findings: list, metadata }: LocalizationQuality
@@ -700,10 +755,16 @@ export function localizationQualityWorkspaceOf(
 	);
 	const sourceCount = sourceItems.length,
 		total = sourceCount + list.length;
+	// One list shows source and localization findings: a placeholder is reported once.
+	const reportedPlaceholders = placeholdersReportedBySource(sourceItems, list);
+	const withSummary = (position: number, item: WorkspaceQualityItem): WorkspaceQualityItem => {
+		const summary = reportedPlaceholders.summaries.get(position);
+		return summary ? { ...item, summary } : item;
+	};
 	const inCulture = (request: { culture?: CultureCode | undefined }, position: number) =>
 		position < sourceCount ||
-		!request.culture ||
-		list.culture(position - sourceCount) === request.culture;
+		(!reportedPlaceholders.hidden.has(position - sourceCount) &&
+			(!request.culture || list.culture(position - sourceCount) === request.culture));
 	const filterAt = (position: number) =>
 		position < sourceCount
 			? sourceItems[position]!.summary.filter
@@ -726,7 +787,9 @@ export function localizationQualityWorkspaceOf(
 		);
 		let next = 0;
 		return positions.map((position) =>
-			position < sourceCount ? sourceItems[position]! : localized[next++]!
+			position < sourceCount
+				? sourceItems[position]!
+				: withSummary(position - sourceCount, localized[next++]!)
 		);
 	};
 	/** Summaries in batches, so a large export never holds every finding and line at once. */
@@ -835,7 +898,10 @@ export function localizationQualityWorkspaceOf(
 			let item = sourceItems.find(({ summary }) => summary.id === request.id);
 			if (!item) {
 				const position = list.find(request.id, request.culture);
-				item = position === undefined ? undefined : list.items([position])[0];
+				item =
+					position === undefined || reportedPlaceholders.hidden.has(position)
+						? undefined
+						: withSummary(position, list.items([position])[0]!);
 			}
 			if (!item) return { status: "not_found" };
 			const { finding, line, summary } = item;

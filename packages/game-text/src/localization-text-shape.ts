@@ -76,18 +76,35 @@ export function compareRichTextTags(source: string, translation: string) {
 	};
 }
 
+/** C++ member access and scope resolution: text that holds them is code. */
+const CPP_CODE = /->|\w::\w/u;
+
+/**
+ * Whether a tag at `start`, ending at `end`, is C++ template syntax: right after an identifier,
+ * and followed by a call or a scope (`GetSubsystem<UMySubsystem>()`,
+ * `Cast<UWidget>(Widget)`, `TMap<FName, int32>::Find`), or in text with `->` or `::`. A tag
+ * after a letter in prose (`Hello<b>world</>`) is markup.
+ */
+function templateSyntax(text: string, start: number, end: number): boolean {
+	if (start === 0 || !ASCII_IDENTIFIER.test(text[start - 1]!)) return false;
+	return text[end] === "(" || text.startsWith("::", end) || CPP_CODE.test(text);
+}
+
 /**
  * Opening tags (named or `<{argument}>`, not self-closing) and `</>` closings, for source markup
- * balance, and the names of XML-style `</Name>` closings, which Slate shows as text. A tag right
- * after an ASCII letter, digit or underscore is code, as in `GetSubsystem<UMySubsystem>()`.
+ * balance, and the names of XML-style `</Name>` closings, which Slate shows as text. C++
+ * template syntax (`templateSyntax`) is not a tag.
  */
 export function richTextTagBalance(text: string) {
 	const xmlClosings: string[] = [];
 	if (!text.includes("<")) return { opening: 0, closing: 0, xmlClosings };
 	let opening = 0;
-	const code = (index: number) => index > 0 && ASCII_IDENTIFIER.test(text[index - 1]!);
 	for (const match of text.matchAll(TAG))
-		if (!match[0].endsWith("/>") && match[1]!.toLowerCase() !== "br" && !code(match.index))
+		if (
+			!match[0].endsWith("/>") &&
+			match[1]!.toLowerCase() !== "br" &&
+			!templateSyntax(text, match.index, match.index + match[0].length)
+		)
 			opening++;
 	if (text.includes("<{")) opening += [...text.matchAll(ARGUMENT_TAG)].length;
 	for (const match of text.matchAll(XML_CLOSING_TAG)) xmlClosings.push(match[1]!);
@@ -293,12 +310,21 @@ const PLACEHOLDER_ANY = /todo|tbd|fixme|lorem ipsum|to be translated|placeholder
 
 /** Placeholder markers and phrases in source text, in order of appearance. */
 export function placeholderMatches(text: string): string[] {
+	return placeholderMatchRanges(text).map(({ match }) => match);
+}
+
+/** `placeholderMatches` with each match's UTF-16 range in the text. */
+export function placeholderMatchRanges(
+	text: string
+): Array<{ match: string; start: number; end: number }> {
 	if (!PLACEHOLDER_ANY.test(text)) return [];
-	const matches = [
-		...text.matchAll(PLACEHOLDER_MARKERS),
-		...text.matchAll(PLACEHOLDER_PHRASES)
-	].sort((a, b) => a.index - b.index);
-	return matches.map((match) => match[0]);
+	return [...text.matchAll(PLACEHOLDER_MARKERS), ...text.matchAll(PLACEHOLDER_PHRASES)]
+		.sort((a, b) => a.index - b.index)
+		.map((match) => ({
+			match: match[0],
+			start: match.index,
+			end: match.index + match[0].length
+		}));
 }
 
 const LETTER = /\p{L}/u;

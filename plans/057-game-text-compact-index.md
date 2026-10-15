@@ -1987,10 +1987,13 @@ current source only in `\r\n` against `\n`). Several others were noisy. Changes:
   for a source of three words or more, only punctuation, outside the native culture and unless the
   source is itself a placeholder or the translation equals it; `length_outlier` leaves such lines
   to it.
-- **Rule files and built-ins.** `placeholder_text` leaves out a placeholder that a rule file's
-  forbidden source term already reports where its role selects the line's place. The starter rules
-  forbid "placeholder" under `/Game/`, so before this every such text was reported twice, once by
-  source quality (now over the index, #88) and once by the built-in.
+- **Rule files and built-ins.** The starter rules forbid "placeholder" under `/Game/`, so a list
+  showing source quality (now over the index, #88) and the built-ins reported such text twice.
+  The quality workspace, which combines the two, leaves out a `placeholder_text` finding whose
+  every placeholder a source terminology finding marks in the same text of one of its places, and
+  names only the rest in a partly covered one's summary. The localization report keeps them all: it
+  holds no source findings, and `loc check` prints only it. A first version dropped the matches in
+  the check itself, which left `loc check --check placeholder_text` empty with the starter rules.
 - **Stall.** The worst stall (3.7–4.5 s) was not after the last progress call: it was one page
   that held keys saved in thousands of places (`FEventTrackEditor`/`TrackName` "Events" took
   2.3 s, `SCS`/`Default` 2.1 s), whose units every keyed line built for its notes and saved
