@@ -1621,6 +1621,12 @@ This settles the first open item above (source-level checks reported per culture
   line's shipped translation per culture before the main pass: a bounded grouping pass over
   hydrated pages and new oracle cases. It is left for a follow-up.
 
-Verification: the oracle tests (`localization-quality-index.test.ts`) assert that neither check
-appears under a non-native culture and that each finding names a distinct line, on the fixtures that
-cover multi-page scans and collation ties. They and the updated unit tests fail on the previous code.
+Verification: the main oracle test (`localization-quality-index.test.ts`) asserts that neither check
+appears under a non-native culture and that each finding names a distinct line. It and the two
+updated unit tests fail on the previous code. The multi-page and collation-tie oracle cases still
+match on both paths; the tie case now accepts `duplicate_source` under the native culture.
+
+1× scale harness, `--select quality`, Node 26.11.1, one run each: findings 2,027,740 to 227,047
+(missing notes 1,889,060 to 188,906, duplicate sources 111,710 to 11,171; whitespace and empty
+translations unchanged). Scan 95.5 s before and 107.1 s after, peak V8 heap 178 and 209 MiB, 48 MiB
+kept after collection in both. Repeats were not run to separate the time difference from variance.
