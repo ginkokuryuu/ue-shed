@@ -69,7 +69,9 @@ UE 4.26 and older tagged properties require resaving in 4.27 or later. UE 4.27 a
 against engine-saved fixtures and fresh-process Unreal evidence
 ([Plan 050](../../plans/archive/050-legacy-property-tags.md)). UE 5.0–5.2 have synthetic
 version-boundary coverage only. On UE 4.27, packages usually store `None` as their package name, so
-text locations use the bare asset name rather than a mounted `/Game/...` path.
+the reader names their objects relative to the package (`DT_Items`). Game Text completes those paths
+from the package file under `Content/`, which Unreal mounts at `/Game`, so text locations, role
+matchers and exports use the same `/Game/Data/DT_Items.DT_Items` path on every engine version.
 
 Blueprint pins, Sequencer, animation/Skeleton, property bags, InstancedStruct, and actor/component
 native records retain their current version gates. Legacy native struct map/set elements without

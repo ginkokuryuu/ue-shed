@@ -1,7 +1,10 @@
+import { mkdtemp, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
+import { LocalizationEvidenceNodeLive } from "@ue-shed/localization";
 import { SavedAssetTextOccurrence, assetReaderLayer } from "@ue-shed/unreal-assets";
-import { Effect, Schema } from "effect";
+import { Effect, Layer, Schema } from "effect";
 import { describe, expect, it } from "vitest";
 import {
 	expectedLegacyOccurrences,
@@ -9,21 +12,66 @@ import {
 	readLegacyEvidence
 } from "../../../fixtures/legacy-unreal-project/evidence.js";
 import { scanTextCorpus } from "./corpus.js";
+import { typeScriptIndexBuilderLayer } from "./index-builder.js";
+import { GameTextIndexRefresh, gameTextIndexRefreshLayer } from "./index-refresh.js";
+import { gameTextIndexSourceNodeLayer } from "./index-source-node.js";
+import { GameTextRuleDocument, evaluateGameTextSourceQuality } from "./quality-rules-v2.js";
+import type { TextOccurrence } from "./schema.js";
+import { hasSearchableSource } from "./search.js";
 
 const executable = process.env.UE_SHED_UASSET_EXECUTABLE;
 const generated = fileURLToPath(
 	new URL("../../../fixtures/legacy-unreal-project/Generated/", import.meta.url)
 );
+const decodeOccurrence = Schema.decodeUnknownSync(SavedAssetTextOccurrence);
+
+/** The reader's wire spelling, to compare with Unreal's evidence. */
+function wireOccurrence(occurrence: TextOccurrence) {
+	return {
+		source: occurrence.source,
+		dev_notes: occurrence.devNotes,
+		identity:
+			occurrence.identity.status === "string_table"
+				? {
+						status: "string_table",
+						table_id: occurrence.identity.tableId,
+						key: occurrence.identity.key
+					}
+				: occurrence.identity,
+		location:
+			occurrence.location.kind === "string_table_entry"
+				? {
+						kind: "string_table_entry",
+						object_path: occurrence.location.objectPath,
+						entry_key: occurrence.location.entryKey
+					}
+				: occurrence.location.kind === "data_table_cell"
+					? {
+							kind: "data_table_cell",
+							object_path: occurrence.location.objectPath,
+							row: occurrence.location.row,
+							property_path: occurrence.location.propertyPath
+						}
+					: {
+							kind: "asset_property",
+							object_path: occurrence.location.objectPath,
+							class_path: occurrence.location.classPath,
+							property_path: occurrence.location.propertyPath
+						},
+		edit_capability: occurrence.editCapability
+	};
+}
 
 for (const version of legacyVersions) {
 	describe.skipIf(!executable)(`UE ${version} legacy game text corpus`, () => {
-		it("preserves Unreal text occurrences and keeps the native map gap out of coverage", async () => {
-			const root = join(generated, version);
-			const evidence = readLegacyEvidence(root);
-			const decodeOccurrence = Schema.decodeUnknownSync(SavedAssetTextOccurrence);
-			const expected = expectedLegacyOccurrences(evidence).map((occurrence) =>
-				decodeOccurrence(occurrence)
+		const root = join(generated, version);
+		// UE 4.27 saves `None` as the package name; Game Text completes the path Unreal recorded.
+		const expected = () =>
+			expectedLegacyOccurrences(readLegacyEvidence(root), (asset) => asset.object_path).map(
+				(occurrence) => decodeOccurrence(occurrence)
 			);
+
+		it("preserves Unreal text occurrences and keeps the native map gap out of coverage", async () => {
 			const corpus = await Effect.runPromise(
 				scanTextCorpus({ projectRoot: root }).pipe(
 					Effect.provide(assetReaderLayer({ executable: executable! }))
@@ -37,45 +85,87 @@ for (const version of legacyVersions) {
 				failedPackages: 0,
 				partialPackages: 0,
 				unsupportedTextProperties: 0,
-				textOccurrences: expected.length
+				textOccurrences: expected().length
 			});
-			const occurrences = corpus.units.flatMap((unit) => unit.occurrences);
-			const actual = occurrences.map((occurrence) => ({
-				source: occurrence.source,
-				dev_notes: occurrence.devNotes,
-				identity:
-					occurrence.identity.status === "string_table"
-						? {
-								status: "string_table",
-								table_id: occurrence.identity.tableId,
-								key: occurrence.identity.key
-							}
-						: occurrence.identity,
-				location:
-					occurrence.location.kind === "string_table_entry"
-						? {
-								kind: "string_table_entry",
-								object_path: occurrence.location.objectPath,
-								entry_key: occurrence.location.entryKey
-							}
-						: occurrence.location.kind === "data_table_cell"
-							? {
-									kind: "data_table_cell",
-									object_path: occurrence.location.objectPath,
-									row: occurrence.location.row,
-									property_path: occurrence.location.propertyPath
-								}
-							: {
-									kind: "asset_property",
-									object_path: occurrence.location.objectPath,
-									class_path: occurrence.location.classPath,
-									property_path: occurrence.location.propertyPath
-								},
-				edit_capability: occurrence.editCapability
-			}));
-			expect(actual).toHaveLength(expected.length);
-			expect(actual).toEqual(expect.arrayContaining(expected));
+			const actual = corpus.units.flatMap((unit) => unit.occurrences).map(wireOccurrence);
+			expect(actual).toHaveLength(expected().length);
+			expect(actual).toEqual(expect.arrayContaining(expected()));
 			expect(corpus.diagnostics).toEqual([]);
 		});
+
+		it("indexes the same object paths, which object path roles then match", async () => {
+			const cacheRoot = await mkdtemp(join(tmpdir(), "ue-shed-legacy-index-"));
+			const document = Schema.decodeUnknownSync(GameTextRuleDocument)({
+				schemaVersion: 2,
+				roles: [
+					{
+						id: "legacy",
+						scopes: [
+							{
+								matchers: [
+									{
+										kind: "object_path",
+										operator: "prefix",
+										value: "/Game/Legacy/"
+									}
+								]
+							}
+						]
+					}
+				],
+				rules: [
+					{
+						id: "legacy.limit",
+						kind: "character_budget",
+						role: "legacy",
+						maximumCharacters: 1000,
+						recovery: "Shorten the line."
+					}
+				]
+			});
+			try {
+				const indexed = await Effect.runPromise(
+					Effect.scoped(
+						Effect.gen(function* () {
+							const result = yield* (yield* GameTextIndexRefresh).refresh({
+								projectRoot: root
+							});
+							// Rules check only units with source text; every one is under /Game/Legacy/.
+							const checked = result.corpus.units.filter(hasSearchableSource);
+							return {
+								occurrences: result.corpus.units
+									.flatMap((unit) => unit.occurrences)
+									.map(wireOccurrence),
+								checkedUnits: checked.length,
+								checkedOccurrences: checked.flatMap((unit) => unit.occurrences)
+									.length,
+								roles: evaluateGameTextSourceQuality(result.corpus, document).roles
+							};
+						})
+					).pipe(
+						Effect.provide(
+							gameTextIndexRefreshLayer(cacheRoot).pipe(
+								Layer.provide(gameTextIndexSourceNodeLayer(cacheRoot)),
+								Layer.provide(typeScriptIndexBuilderLayer),
+								Layer.provide(assetReaderLayer({ executable: executable! })),
+								Layer.provide(LocalizationEvidenceNodeLive)
+							)
+						)
+					)
+				);
+				expect(indexed.occurrences).toHaveLength(expected().length);
+				expect(indexed.occurrences).toEqual(expect.arrayContaining(expected()));
+				expect(indexed.checkedUnits).toBeGreaterThan(0);
+				expect(indexed.roles).toEqual([
+					{
+						role: "legacy",
+						matchedOccurrences: indexed.checkedOccurrences,
+						matchedTextUnits: indexed.checkedUnits
+					}
+				]);
+			} finally {
+				await rm(cacheRoot, { recursive: true, force: true });
+			}
+		}, 60_000);
 	});
 }
