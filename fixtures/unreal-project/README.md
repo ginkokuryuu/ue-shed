@@ -156,9 +156,10 @@ The duplicated widget is built twice with the same keys, as Unreal's duplicate l
 stale widget is compiled, its designer text block is edited, and it is saved without compiling.
 The pinned counts also hold what the cases imply: every untranslated foreign line and every
 outdated line has an empty PO `msgstr` (`empty_translation`), untranslated lines of a source with
-edge spaces report `whitespace`, and the re-keyed row shares its source with its old key
-(`duplicate_source`) until the next gather. The test reads package records, as the index does, so
-Blueprint compiled copies fold into their places.
+edge spaces report `whitespace`. The re-keyed row and its old gathered key describe the same
+place, so their pairing is no longer reported as Same text, other key (`duplicate_source`);
+the key change remains visible until the next gather. The test reads package records, as the index
+does, so Blueprint compiled copies fold into their places.
 `DA_FixturePartlyRead` keeps text in `FUEShedFixtureNativeText`, a struct with its own serializer
 (`UEShedGameTextProblemTypes.h`, outside the parser source model's headers). Unreal's gather walks
 its properties; the reader cannot decode its bytes, so the gather table has a site it cannot find.

@@ -363,7 +363,7 @@
 	"counts": {
 		"without": {
 			"culture_invariant_text": 1,
-			"duplicate_source": 2,
+			"duplicate_source": 1,
 			"empty_translation": 50,
 			"format_argument_renamed": 1,
 			"format_arguments": 3,
@@ -388,7 +388,7 @@
 		},
 		"with": {
 			"culture_invariant_text": 1,
-			"duplicate_source": 2,
+			"duplicate_source": 1,
 			"empty_translation": 50,
 			"format_argument_renamed": 1,
 			"format_arguments": 2,

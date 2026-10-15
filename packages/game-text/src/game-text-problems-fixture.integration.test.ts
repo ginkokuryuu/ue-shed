@@ -223,6 +223,14 @@ describe.skipIf(!executable)("Game Text problem cases in the saved fixture", () 
 							without: kindCounts(without),
 							with: kindCounts(withRules)
 						}).toEqual(cases.counts);
+						// Only distinct places share text: the re-keyed row's historical identity
+						// is the same place, while the three Back keys remain a genuine group.
+						for (const report of [without, withRules])
+							expect(
+								report.findings
+									.filter((finding) => finding.kind === "duplicate_source")
+									.map((finding) => finding.actual.source)
+							).toEqual(["Back"]);
 
 						// Signals: one key with several texts, stale compiled copies, scope, key
 						// changes and partly read packages.
@@ -324,6 +332,11 @@ describe.skipIf(!executable)("Game Text problem cases in the saved fixture", () 
 							expect(kindCounts(report)).toEqual(
 								ruleDocument ? cases.counts.with : cases.counts.without
 							);
+							expect(
+								report.findings
+									.filter((finding) => finding.kind === "duplicate_source")
+									.map((finding) => finding.actual.source)
+							).toEqual(["Back"]);
 							const memory = localizationQualityWorkspace(
 								indexedSource,
 								report,
