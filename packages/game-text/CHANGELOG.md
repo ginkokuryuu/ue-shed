@@ -1,5 +1,124 @@
 # @ue-shed/game-text
 
+## 0.16.0
+
+### Minor Changes
+
+- dbb471e: Tell player text from editor text in Game Text.
+
+    Every text occurrence now records its `audience` (`player`, `editor` or `unknown`), why
+    (`audienceReason`) and the policy row that decided it (`audienceRule`). Unreal's own evidence comes
+    first: uasset-io v1.11 adds `gather_editor_only` to package text record occurrences, the editor-only
+    bit Unreal saved for that text in the package's gatherable text table. Otherwise the reviewed,
+    studio-agnostic `TEXT_AUDIENCE_POLICY` table decides (reflection tooltips, Blueprint, animation,
+    Niagara and material graph nodes, editor modules, tooltips and categories, the UMG palette
+    category and Niagara script metadata are editor text; String Table entries, DataTable cells,
+    Blueprint enum display names and widget designer trees are player text). Units, search results and
+    localization lines roll their visible occurrences up: player if any is, else unknown if any is,
+    else editor.
+
+    Search and query requests take an `audience` filter clause, `facets.audiences` and
+    `group: "audience"`; Workbench's Filter and Display menus offer them. `gameTextCsv` and
+    `localizationLinesCsv` add an Audience column. With a target that does not gather editor-only data
+    (`ShouldGatherFromEditorOnlyData`, false by default), editor text that would read "Not gathered
+    yet" is "Outside this target" with `outOfScope: "editor_only_data_not_gathered"`, so localization
+    checks skip it; lines outside the gather paths carry `outside_gather_paths`.
+
+    The package text index format moves to `package-text-v4` and joins to `joined-v13`, so existing
+    caches read their packages once more. The audience policy is part of each shard key, so later
+    policy changes re-encode stored shards without reading packages again.
+
+- 7d925d7: Fold compiled Blueprint copies into the text a Blueprint authored.
+
+    Compiling a Blueprint saves its widget tree, animations and defaults again under the generated
+    class (`WBP_X_C`, animations as `Name_INST`), its default object (`Default__WBP_X_C`) and sometimes
+    a skeleton class (`SKEL_WBP_X_C`). Game Text listed each widget text twice, and a Blueprint edited
+    but not compiled read as "Same key, different text".
+
+    uasset-io v1.12 adds `blueprintClasses` to package text records: each Blueprint, the export its saved
+    `GeneratedClass` names, that class's `RF_ClassDefaultObject` export, and a saved skeleton class and
+    its default object. Game Text folds every copy into the occurrence at its authored site with the
+    same property and key, keeping two same-key properties of one object as two places and leaving
+    sites saved only under the class (such as construction-script nodes) as their own places. Nothing
+    is folded from names alone, so an asset whose own name ends in `_C` is untouched.
+
+    Each place keeps the authored text as its source and lists its copies in `copies` (`objectPath`,
+    `kind`: `generated_class`, `instance`, `class_default` or `skeleton`, and `source`). Counts,
+    search, facets, exports, localization joins and the index follow the places. A copy with other text
+    no longer makes its key conflicting. When a copy the game runs (the generated class or class
+    default) holds other text, the unit gets the `compiled_copy_differs` review signal ("Blueprint not
+    compiled since edit") and the Workbench line page says what the game shows; a skeleton-only
+    difference is listed but raises no signal. A place's audience rolls up over the place and its
+    copies, each classified from its own gather-table bit and class, so an editor-only place with a
+    runtime compiled copy stays player text.
+
+    The package text index format moves to `package-text-v5` and joins to `joined-v14`, so existing
+    caches read their packages once more.
+
+- 4feb679: Rate Game Text checks by severity and add translation shape, source and consistency checks.
+    - Every localization finding has a `severity` (`blocking`, `normal` or `low`) from
+      `checkSeverity`, outside its ID. Workspace pages list blocking findings first and count findings
+      by severity in `severityCounts`; summaries, focus and CSV exports carry it. Blocking:
+      `outdated_translation`. Low: `duplicate_source`, `missing_translator_notes`,
+      `number_only_text`, `rich_text_tag_case`, `rich_text_tags_added`, `source_line_endings_changed`,
+      `source_whitespace` and `culture_invariant_text`.
+    - New translation checks: `format_argument_renamed` (split from `format_arguments`, which now
+      reports only dropped and added arguments; the one-rename fix moves with it), `rich_text_tags`,
+      `rich_text_tags_added`, `rich_text_tag_case`, `line_breaks` (split from `whitespace`, which now
+      compares edges only), `segment_separator`, `length_outlier`, `placeholder_translation`,
+      `outdated_translation`, `source_line_endings_changed` and `inconsistent_translation`. Shape
+      checks, `format_arguments` and `argument_modifiers` included, skip empty translations, which
+      `empty_translation` reports.
+    - New source checks that need no rule file, in `SourceCheckId`: `culture_invariant_text`,
+      `placeholder_text`, `source_whitespace`, `source_markup`, `number_only_text` and
+      `string_table_key_collision`. `BuiltInCheckId` names every built-in for `checks`,
+      `disabledChecks`, `disabledLocalizationChecks` and `loc check --check`.
+    - Rule files (v1 and v2) take optional `segmentSeparator`, `optionalTags` and `optionalArguments`.
+    - `culture_invariant_text` reports only player text outside debug content and text render
+      components, in a property that holds at least as much localizable text in the project.
+    - A quality workspace that lists source findings too shows a placeholder once: it leaves out a
+      `placeholder_text` finding a source terminology finding already covers. The check records
+      which placeholders the rule file's terminology leaves (`unreportedMatches`), so the workspace
+      decides from the scan's facts without rechecking findings.
+    - Indexed scans build a line's units only for its findings, read translator notes and String
+      Table entries from occurrence columns, and halve slow pages, so a key saved in thousands of
+      places no longer stalls the scan for seconds.
+    - `duplicate_source` reports once per shared text and leaves out text without letters.
+    - Keys with conflicting saved texts list them in `sourceVariants` on findings, summaries and focus
+      instead of the joined text, and are not compared or grouped by it.
+    - `checkLocalizationTarget` also checks a line whose saved text is blank when its manifest has the
+      source, as a partly read package can leave it, so its empty archive entries are reported.
+
+- cca640f: Evaluate source quality rules over the Game Text index.
+
+    An opened index model's `sourceQuality(ruleDocument, options?)`, also exported as
+    `indexedSourceQuality(joined, corpus, ruleDocument, options?)`, returns the `TextQualityQuery`
+    that `textQualityQuery(evaluateGameTextSourceQuality(corpus, ruleDocument))` gives, with the same
+    summary, pages, cursors, focus, export and finding IDs. It reads roles, character budgets and
+    terminology page by page from index columns, never builds the corpus's units, keeps each finding
+    as a few numbers and rebuilds only the findings a page, focus or export returns. The scan yields
+    between pages and can be interrupted; `onProgress` receives `SourceQualityProgress`
+    (`{ checkedTextUnits, totalTextUnits, findings }`) once before the scan and after each page.
+    `evaluateGameTextSourceQuality` and `textQualityQuery` keep their contracts for hosts without an
+    index. `textQualityQueryOf(report, list)` builds the query over any finding list.
+
+    Roles match a place by its own location. A folded Blueprint place's copies never match by their
+    compiled paths (`X_C`, `Default__X_C`, `SKEL_X_C`); write roles against the authored path.
+
+### Patch Changes
+
+- d3430c8: Report progress from the indexed localization quality scan.
+
+    An opened index model's `localizationQuality` options take `onProgress`, called with
+    `LocalizationQualityProgress` (`{ checkedLines, totalLines, findings }`) once before the scan and
+    after each 256-line page, so hosts can show how far a long scan has got. Results are unchanged.
+
+- Updated dependencies [dbb471e]
+- Updated dependencies [7d925d7]
+- Updated dependencies [6608e6a]
+    - @ue-shed/unreal-assets@0.16.0
+    - @ue-shed/localization@0.16.0
+
 ## 0.15.0
 
 ### Minor Changes

@@ -1,5 +1,60 @@
 # @ue-shed/uasset-win32-x64
 
+## 0.16.0
+
+### Minor Changes
+
+- dbb471e: Tell player text from editor text in Game Text.
+
+    Every text occurrence now records its `audience` (`player`, `editor` or `unknown`), why
+    (`audienceReason`) and the policy row that decided it (`audienceRule`). Unreal's own evidence comes
+    first: uasset-io v1.11 adds `gather_editor_only` to package text record occurrences, the editor-only
+    bit Unreal saved for that text in the package's gatherable text table. Otherwise the reviewed,
+    studio-agnostic `TEXT_AUDIENCE_POLICY` table decides (reflection tooltips, Blueprint, animation,
+    Niagara and material graph nodes, editor modules, tooltips and categories, the UMG palette
+    category and Niagara script metadata are editor text; String Table entries, DataTable cells,
+    Blueprint enum display names and widget designer trees are player text). Units, search results and
+    localization lines roll their visible occurrences up: player if any is, else unknown if any is,
+    else editor.
+
+    Search and query requests take an `audience` filter clause, `facets.audiences` and
+    `group: "audience"`; Workbench's Filter and Display menus offer them. `gameTextCsv` and
+    `localizationLinesCsv` add an Audience column. With a target that does not gather editor-only data
+    (`ShouldGatherFromEditorOnlyData`, false by default), editor text that would read "Not gathered
+    yet" is "Outside this target" with `outOfScope: "editor_only_data_not_gathered"`, so localization
+    checks skip it; lines outside the gather paths carry `outside_gather_paths`.
+
+    The package text index format moves to `package-text-v4` and joins to `joined-v13`, so existing
+    caches read their packages once more. The audience policy is part of each shard key, so later
+    policy changes re-encode stored shards without reading packages again.
+
+- 7d925d7: Fold compiled Blueprint copies into the text a Blueprint authored.
+
+    Compiling a Blueprint saves its widget tree, animations and defaults again under the generated
+    class (`WBP_X_C`, animations as `Name_INST`), its default object (`Default__WBP_X_C`) and sometimes
+    a skeleton class (`SKEL_WBP_X_C`). Game Text listed each widget text twice, and a Blueprint edited
+    but not compiled read as "Same key, different text".
+
+    uasset-io v1.12 adds `blueprintClasses` to package text records: each Blueprint, the export its saved
+    `GeneratedClass` names, that class's `RF_ClassDefaultObject` export, and a saved skeleton class and
+    its default object. Game Text folds every copy into the occurrence at its authored site with the
+    same property and key, keeping two same-key properties of one object as two places and leaving
+    sites saved only under the class (such as construction-script nodes) as their own places. Nothing
+    is folded from names alone, so an asset whose own name ends in `_C` is untouched.
+
+    Each place keeps the authored text as its source and lists its copies in `copies` (`objectPath`,
+    `kind`: `generated_class`, `instance`, `class_default` or `skeleton`, and `source`). Counts,
+    search, facets, exports, localization joins and the index follow the places. A copy with other text
+    no longer makes its key conflicting. When a copy the game runs (the generated class or class
+    default) holds other text, the unit gets the `compiled_copy_differs` review signal ("Blueprint not
+    compiled since edit") and the Workbench line page says what the game shows; a skeleton-only
+    difference is listed but raises no signal. A place's audience rolls up over the place and its
+    copies, each classified from its own gather-table bit and class, so an editor-only place with a
+    runtime compiled copy stays player text.
+
+    The package text index format moves to `package-text-v5` and joins to `joined-v14`, so existing
+    caches read their packages once more.
+
 ## 0.15.0
 
 ## 0.14.0
