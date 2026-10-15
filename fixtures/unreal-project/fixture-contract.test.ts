@@ -808,6 +808,40 @@ describe("fixture project", () => {
 			).toBe(true);
 	});
 
+	it("declares the Game target's problem cases and their committed outputs", () => {
+		const value = readJson(join(fixtureRoot, "fixture-contract.json"));
+		if (!isJsonObject(value) || !isJsonObject(value.gameTextProblems))
+			throw new Error("Missing Game Text problems contract");
+		const problems = value.gameTextProblems;
+		expect(problems.target).toBe("Game");
+		expect(problems.cultures).toEqual(["en", "de", "fr", "ja"]);
+		for (const name of ["dataRoot", "translations", "rules", "intent"]) {
+			const path = problems[name];
+			if (!isJsonString(path)) throw new Error(`Invalid Game Text problems ${name}`);
+			expect(existsSync(resolve(fixtureRoot, path)), path).toBe(true);
+		}
+		const assets = problems.assets;
+		if (!Array.isArray(assets)) throw new Error("Invalid Game Text problems assets");
+		for (const path of assets) {
+			if (!isJsonString(path)) throw new Error("Invalid Game Text problems asset path");
+			const relative = `Content/${path.slice("/Game/".length).split(".")[0]}.uasset`;
+			expect(existsSync(resolve(fixtureRoot, relative)), relative).toBe(true);
+		}
+		for (const operation of ["Gather", "Import", "Export", "Compile", "GenerateReports"])
+			expect(
+				existsSync(join(fixtureRoot, "Config/Localization", `Game_${operation}.ini`))
+			).toBe(true);
+		for (const culture of ["en", "de", "fr", "ja"])
+			for (const extension of ["archive", "po", "locres"])
+				expect(
+					existsSync(
+						join(fixtureRoot, "Content/Localization/Game", culture, `Game.${extension}`)
+					)
+				).toBe(true);
+		for (const filename of ["Game.manifest", "Game.locmeta", "Game.csv", "Game_Conflicts.txt"])
+			expect(existsSync(join(fixtureRoot, "Content/Localization/Game", filename))).toBe(true);
+	});
+
 	it("keeps UE Shed plugins out of the portable project descriptor", () => {
 		const project = readJson(join(fixtureRoot, "UEShedFixture.uproject"));
 		if (!isJsonObject(project) || !Array.isArray(project.Plugins)) {

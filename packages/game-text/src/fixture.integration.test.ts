@@ -16,7 +16,8 @@ describe.skipIf(!executable)("game text fixture corpus", () => {
 			)
 		);
 
-		expect(corpus.status).toBe("complete");
+		// One Game Text problem case is a package the reader only partly decodes.
+		expect(corpus.status).toBe("partial");
 		expect(corpus.coverage).toMatchObject({
 			// The maps, World Partition external actors, animation fixture, and nested-only timeline
 			// carry no text of their own. Every InputAction and InputMappingContext carries one FText
@@ -25,13 +26,16 @@ describe.skipIf(!executable)("game text fixture corpus", () => {
 			// saved variable/component categories, including Review|Settings. The StringTable reference contributes
 			// one additional unit and occurrence with its table/key identity. The localization target's
 			// String Table, DataTable and data asset add twenty-two localized units and occurrences, and
-			// the user-defined enum adds its two display names.
-			discoveredPackages: 84,
-			inspectedPackages: 84,
+			// the user-defined enum adds its two display names. The ten Game Text problem packages add
+			// 46 units and 53 occurrences: this scan does not fold the three Widget Blueprints'
+			// compiled copies (eight occurrences of three keys), and one row is culture invariant.
+			discoveredPackages: 94,
+			inspectedPackages: 94,
+			partialPackages: 1,
 			failedPackages: 0,
-			textUnits: 64,
-			textOccurrences: 73,
-			resolvedOccurrences: 73,
+			textUnits: 110,
+			textOccurrences: 126,
+			resolvedOccurrences: 125,
 			unsupportedTextProperties: 0
 		});
 		const holdMatches = searchTextCorpus(corpus, "Hold to skip");
@@ -76,7 +80,14 @@ describe.skipIf(!executable)("game text fixture corpus", () => {
 				]
 			})
 		);
-		expect(corpus.diagnostics).toEqual([]);
+		expect(
+			corpus.diagnostics.map((item) => [item.code, item.packageFile?.replace(/\\/gu, "/")])
+		).toEqual([
+			[
+				"package_partially_decoded",
+				"Content/Fixture/GameTextProblems/DA_FixturePartlyRead.uasset"
+			]
+		]);
 	});
 
 	it("reports a Blueprint's classes and keeps sites saved only under them", async () => {

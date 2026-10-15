@@ -1,6 +1,6 @@
 {
 	"schemaVersion": 1,
-	"fixtureVersion": "1.11.0",
+	"fixtureVersion": "1.12.0",
 	"engine": {
 		"major": 5,
 		"minor": 7
@@ -25,6 +25,29 @@
 			"/Game/Fixture/Localization/ST_Localization.ST_Localization",
 			"/Game/Fixture/Localization/DT_Localization.DT_Localization",
 			"/Game/Fixture/Localization/DA_Localization.DA_Localization"
+		]
+	},
+	"gameTextProblems": {
+		"target": "Game",
+		"nativeCulture": "en",
+		"cultures": ["en", "de", "fr", "ja"],
+		"contentRoot": "/Game/Fixture/GameTextProblems",
+		"excludedRoot": "/Game/Fixture/GameTextProblems/Excluded",
+		"dataRoot": "Content/Localization/Game",
+		"translations": "FixtureSource/GameTextProblems/translations.json",
+		"rules": "FixtureSource/GameTextProblems/rules.json",
+		"intent": "FixtureSource/GameTextProblems/expected-cases.json",
+		"assets": [
+			"/Game/Fixture/GameTextProblems/ST_FixtureProblemLines.ST_FixtureProblemLines",
+			"/Game/Fixture/GameTextProblems/ST_FixtureMenuA.ST_FixtureMenuA",
+			"/Game/Fixture/GameTextProblems/ST_FixtureMenuB.ST_FixtureMenuB",
+			"/Game/Fixture/GameTextProblems/DT_FixtureItems.DT_FixtureItems",
+			"/Game/Fixture/GameTextProblems/DT_FixtureQuestLog.DT_FixtureQuestLog",
+			"/Game/Fixture/GameTextProblems/WBP_FixtureObjective.WBP_FixtureObjective",
+			"/Game/Fixture/GameTextProblems/WBP_FixtureObjective_Copy.WBP_FixtureObjective_Copy",
+			"/Game/Fixture/GameTextProblems/WBP_FixtureStaleCompile.WBP_FixtureStaleCompile",
+			"/Game/Fixture/GameTextProblems/DA_FixturePartlyRead.DA_FixturePartlyRead",
+			"/Game/Fixture/GameTextProblems/Excluded/DA_FixtureExcluded.DA_FixtureExcluded"
 		]
 	},
 	"blueprintGraph": {

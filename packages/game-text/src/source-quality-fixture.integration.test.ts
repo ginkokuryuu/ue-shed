@@ -3,11 +3,11 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { LocalizationEvidenceNodeLive } from "@ue-shed/localization";
-import { assetReaderLayer } from "@ue-shed/unreal-assets";
-import { Effect, Layer, Schema } from "effect";
+import { assetReaderLayer, extractProjectTextPackages } from "@ue-shed/unreal-assets";
+import { Effect, Layer, Schema, Stream } from "effect";
 import { describe, expect, it } from "vitest";
 import { useSavedFixtureProject } from "../../../fixtures/unreal-project/saved-project.test-support.js";
-import { scanTextCorpus } from "./corpus.js";
+import { textCorpusFromExtractionEvents } from "./corpus.js";
 import { typeScriptIndexBuilderLayer } from "./index-builder.js";
 import { GameTextIndexRefresh, gameTextIndexRefreshLayer } from "./index-refresh.js";
 import { gameTextIndexSourceNodeLayer } from "./index-source-node.js";
@@ -151,7 +151,14 @@ describe.skipIf(!executable)("source quality over the saved fixture's index", ()
 			const findings = await Effect.runPromise(
 				Effect.scoped(
 					Effect.gen(function* () {
-						const memory = yield* scanTextCorpus({ projectRoot: fixture.root });
+						// Package records, as the index reads them: Blueprint compiled copies fold into
+						// their places. `scanTextCorpus` reads occurrences and keeps them apart.
+						const memory = textCorpusFromExtractionEvents({
+							projectRoot: fixture.root,
+							events: yield* Stream.runCollect(
+								extractProjectTextPackages({ projectRoot: fixture.root })
+							)
+						});
 						const result = yield* (yield* GameTextIndexRefresh).refresh({
 							projectRoot: fixture.root
 						});

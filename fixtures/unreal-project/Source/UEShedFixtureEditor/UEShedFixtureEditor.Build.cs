@@ -25,6 +25,8 @@ public class UEShedFixtureEditor : ModuleRules
 				"MovieScene",
 				"MovieSceneTracks",
 				"UEShedFixture",
+				"UMG",
+				"UMGEditor",
 				"UnrealEd"
 			}
 		);
