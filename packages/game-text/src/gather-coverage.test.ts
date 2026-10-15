@@ -160,7 +160,7 @@ describe("gather coverage", () => {
 		}
 	}, 15000);
 
-	it.each(["package-text-v1", "package-text-v2"])(
+	it.each(["package-text-v1", "package-text-v2", "package-text-v3"])(
 		"reads packages again when the cache holds %s shards",
 		async (format) => {
 			const root = await mkdtemp(join(tmpdir(), "ue-shed-gather-upgrade-"));
@@ -200,12 +200,16 @@ describe("gather coverage", () => {
 					}
 				}
 			]);
-			// v1 shards were written before the gather columns existed.
+			// v1 shards were written before the gather columns existed, v1 to v3 before the
+			// occurrence audience columns.
 			const stale = {
 				columns: previous.columns.filter(
 					(column) =>
-						format !== "package-text-v1" ||
-						!/^(?:package\.gather|package\.missing_start|missing\.)/u.test(column.name)
+						!/^occurrence\.(?:gather|audience)$/u.test(column.name) &&
+						(format !== "package-text-v1" ||
+							!/^(?:package\.gather|package\.missing_start|missing\.)/u.test(
+								column.name
+							))
 				)
 			};
 			const reads: string[] = [];

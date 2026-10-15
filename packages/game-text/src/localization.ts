@@ -24,6 +24,9 @@ import {
 	gatheredTextGroups,
 	gatheredTextOccurrenceIdentity
 } from "./gathered-text.js";
+import { hasSearchableSource } from "./search.js";
+import { isEditorOnlyText, lineTextAudience, occurrenceTextAudience } from "./text-audience.js";
+import type { TextOutOfScopeReason } from "./text-audience-schema.js";
 
 /** FString matching is case insensitive; ? consumes zero or one character, * any number. */
 export function matchesUnrealWildcard(value: string, pattern: string): boolean {
@@ -365,8 +368,11 @@ export function joinLocalizationTarget(
 				: []
 		)
 	}));
+	// Unreal skips editor-only text when the target does not gather editor-only data.
+	const skipsEditorOnlyData = localizationGathersEditorOnlyData(target) === false;
 	const lines: LocalizationLine[] = [];
 	for (const [key, row] of rows) {
+		let outOfScope: TextOutOfScopeReason | undefined;
 		const entries = manifest.get(key) ?? [];
 		const first = entries[0];
 		const reasons: LocalizationUnknownReason[] = [];
@@ -392,13 +398,26 @@ export function joinLocalizationTarget(
 			const coverage = occurrences.map((occurrence) =>
 				localizationGatherCoverage(target, occurrence)
 			);
-			if (coverage.every((item) => item.status === "outside"))
+			if (coverage.every((item) => item.status === "outside")) {
 				structural.push("outside_target");
-			else if (!coverage.some((item) => item.status === "inside")) {
+				outOfScope = "outside_gather_paths";
+			} else if (!coverage.some((item) => item.status === "inside")) {
 				for (const item of coverage)
 					if (item.status === "unknown") reasons.push(item.reason);
-			} else if (!first && evidence.manifest.status === "read" && row.identity)
-				structural.push("not_gathered");
+			} else if (!first && evidence.manifest.status === "read" && row.identity) {
+				// Not gathered because the gather skips editor-only data, not because it is stale.
+				if (
+					skipsEditorOnlyData &&
+					occurrences.every(
+						(occurrence, index) =>
+							coverage[index]!.status === "outside" ||
+							isEditorOnlyText(occurrenceTextAudience(occurrence))
+					)
+				) {
+					structural.push("outside_target");
+					outOfScope = "editor_only_data_not_gathered";
+				} else structural.push("not_gathered");
+			}
 			if (first && sources.length === 1 && sources[0] !== first.source.Text)
 				structural.push("changed_since_gather");
 			// A global identity match does not prove that the manifest's original package still has it.
@@ -530,7 +549,17 @@ export function joinLocalizationTarget(
 			identity: row.identity,
 			source,
 			manifest: entries,
-			cultures
+			cultures,
+			audience: lineTextAudience(
+				row.units
+					.filter(hasSearchableSource)
+					.flatMap((unit) =>
+						unit.occurrences.map(
+							(occurrence) => occurrenceTextAudience(occurrence).audience
+						)
+					)
+			),
+			...(outOfScope === undefined ? undefined : { outOfScope })
 		});
 	}
 	return {

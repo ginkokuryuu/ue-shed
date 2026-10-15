@@ -1,6 +1,7 @@
 import type { LocalizationCultureMark } from "./localization-schema.js";
 import {
 	TextProblem,
+	type TextAudience,
 	type TextEditing,
 	type TextFilter,
 	type TextFilterClause,
@@ -27,6 +28,8 @@ export interface TextFacts {
 	readonly namespace: string | undefined;
 	readonly editing: readonly TextEditing[];
 	readonly notes: TextNotes;
+	/** Player if any saved place is player text, else unknown if any is, else editor. */
+	readonly audience: TextAudience;
 }
 
 export const TEXT_PROBLEM_LABELS = {
@@ -122,6 +125,8 @@ function clauseHas(facts: TextFacts, clause: TextFilterClause): boolean {
 			return clause.values.some((value) => facts.editing.includes(value));
 		case "notes":
 			return clause.values.includes(facts.notes);
+		case "audience":
+			return clause.values.includes(facts.audience);
 	}
 }
 

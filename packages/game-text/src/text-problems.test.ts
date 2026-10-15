@@ -23,7 +23,8 @@ const facts: TextFacts = {
 	files: ["Content/UI/DT_Menu"],
 	namespace: "Menu",
 	editing: ["editable"],
-	notes: "missing"
+	notes: "missing",
+	audience: "player"
 };
 
 describe("text problems", () => {
@@ -49,6 +50,9 @@ describe("text problems", () => {
 		expect(is([{ field: "folder", op: "is", values: ["Content\\UI\\"] }])).toBe(true);
 		expect(is([{ field: "folder", op: "is_not", values: ["/Game/UI/"] }])).toBe(false);
 		expect(is([{ field: "notes", op: "is", values: ["missing"] }])).toBe(true);
+		expect(is([{ field: "audience", op: "is", values: ["player", "unknown"] }])).toBe(true);
+		expect(is([{ field: "audience", op: "is_not", values: ["player"] }])).toBe(false);
+		expect(is([{ field: "audience", op: "is", values: ["editor"] }])).toBe(false);
 		const both: TextFilter = [
 			{ field: "origin", op: "is", values: ["data_table"] },
 			{ field: "problem", op: "is", values: ["translation"] }

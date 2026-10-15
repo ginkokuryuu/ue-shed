@@ -143,6 +143,56 @@ overwritten.
 See [ADOPTING.md](ADOPTING.md) and [adoption.manifest.json](adoption.manifest.json) when integrating
 Game Text into an established trusted host.
 
+## Player and editor text
+
+Every `TextOccurrence` from a scan or the index carries `audience` (`player`, `editor` or
+`unknown`), `audienceReason` and, for policy matches, `audienceRule`. The reader's gather-table
+editor-only bit (uasset-io 1.11 `gather_editor_only`) decides first; otherwise the first matching
+row of `TEXT_AUDIENCE_POLICY` does; otherwise the text is `unknown`. Units, search results
+(`TextUnitSearchResult.audience`) and localization lines (`LocalizationLine.audience`) roll their
+visible occurrences up: player if any is, else unknown if any is, else editor.
+
+```ts
+// Hide editor text, and count lines by audience.
+query.search({
+	query: "",
+	capability: "all",
+	pageSize: 50,
+	filter: [{ field: "audience", op: "is_not", values: ["editor"] }],
+	facets: { audiences: true }
+});
+```
+
+`group: "audience"` groups by it, and `gameTextCsv` and `localizationLinesCsv` have an Audience
+column. With a target that does not gather editor-only data (`ShouldGatherFromEditorOnlyData`,
+false by default), a line that would be `not_gathered` and whose every in-scope place is editor
+text is `outside_target` with `outOfScope: "editor_only_data_not_gathered"`; developer-folder text
+stays in scope. `classifyTextAudience`, `classifySavedTextAudience`, `occurrenceTextAudience`,
+`lineTextAudience`, `textGatherScope` and `localizationGathersEditorOnlyData` are exported for
+hosts.
+
+The policy table, first match wins, editor rows first:
+
+| Rule                                                                               | Audience | Match                                                                                    |
+| ---------------------------------------------------------------------------------- | -------- | ---------------------------------------------------------------------------------------- |
+| `developers_folder`, `dev_folder`                                                  | editor   | package under `/Game/Developers/` or `/Game/Dev/`                                        |
+| `uobject_tooltips`, `uobject_display_names`, `uobject_categories`                  | editor   | namespace `UObjectToolTips`, `…DisplayNames`, `…Categories`                              |
+| `k2_node`, `anim_graph_node`, `anim_state_node`, `ed_graph`, `scs_node`            | editor   | object or class `K2Node_*`, `AnimGraphNode_*`, `AnimStateNode*`, `EdGraph*`, `SCS_Node*` |
+| `niagara_node`, `niagara_graph`, `material_expression`, `material_graph`           | editor   | object or class `NiagaraNode*`, `NiagaraGraph*`, `MaterialExpression*`, `MaterialGraph*` |
+| `editor_module`, `unreal_ed_module`, `blueprint_graph_module`, `anim_graph_module` | editor   | class module `*Editor`, `UnrealEd`, `BlueprintGraph`, `AnimGraph`                        |
+| `property_tooltip`, `tooltip`, `pin_tooltip`                                       | editor   | property leaf `PropertyTooltip`, `ToolTip`, `PinToolTip`                                 |
+| `category`, `category_name`, `palette_category`                                    | editor   | property leaf `Category`, `CategoryName`, `PaletteCategory`                              |
+| `niagara_version_data`, `niagara_cached_script_vm`                                 | editor   | module `Niagara`, inside `VersionData` or `CachedScriptVM`                               |
+| `objects_to_display_names`, `niagara_signature_description`                        | editor   | property `ObjectsToDisplayNames`, path ending `Signature.Description`                    |
+| `movie_scene_display_name`, `movie_scene_tracks_display_name`                      | editor   | module `MovieScene` or `MovieSceneTracks`, leaf `DisplayName`                            |
+| `string_table`, `data_table`                                                       | player   | String Table entry, DataTable cell                                                       |
+| `user_defined_enum_display_name`                                                   | player   | class `UserDefinedEnum`, leaf `DisplayNameMap`                                           |
+| `widget_tree`                                                                      | player   | object `WidgetTree` in the outer chain                                                   |
+
+See [player and editor text](../../docs/products/game-text.md#player-and-editor-text) for each
+row's reason and evidence. Changing the table re-encodes stored index shards from their saved
+evidence; packages are not read again.
+
 ## Read-only localization
 
 `joinLocalizationTarget(corpus, evidence, target)` joins Unreal namespace and key only. String Table

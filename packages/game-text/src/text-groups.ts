@@ -1,6 +1,7 @@
 import type { LocalizationCultureMark } from "./localization-schema.js";
 import {
 	MAX_TEXT_GROUPS,
+	TEXT_AUDIENCE_LABELS,
 	TextProblem,
 	type TextCultureFacet,
 	type TextGroup,
@@ -21,7 +22,10 @@ interface Placed {
 	readonly label: string;
 }
 
-/** The group a line falls in: its worst problem, first file's folder or file, origin or namespace. */
+/**
+ * The group a line falls in: its worst problem, first file's folder or file, origin, namespace or
+ * audience.
+ */
 export function textGroupOf(facts: TextFacts, by: TextGroupBy): Placed {
 	switch (by) {
 		case "problem": {
@@ -47,6 +51,8 @@ export function textGroupOf(facts: TextFacts, by: TextGroupBy): Placed {
 			const namespace = facts.namespace ?? "";
 			return { key: namespace, label: namespace };
 		}
+		case "audience":
+			return { key: facts.audience, label: TEXT_AUDIENCE_LABELS[facts.audience] };
 	}
 }
 
@@ -145,6 +151,14 @@ export function textOriginFacet(facts: Iterable<TextFacts>): TextGroupList {
 	for (const item of facts)
 		for (const origin of item.origins)
 			tallies.add({ key: origin, label: TEXT_ORIGIN_LABELS[origin] }, item);
+	return tallies.list();
+}
+
+/** Who the lines are for: player, editor or unknown text. Each line counts once. */
+export function textAudienceFacet(facts: Iterable<TextFacts>): TextGroupList {
+	const tallies = new Tallies();
+	for (const item of facts)
+		tallies.add({ key: item.audience, label: TEXT_AUDIENCE_LABELS[item.audience] }, item);
 	return tallies.list();
 }
 

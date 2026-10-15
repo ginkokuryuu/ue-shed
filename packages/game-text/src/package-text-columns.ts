@@ -10,6 +10,7 @@ import { snapshotStringTableBuilder, snapshotCheck, snapshotFailure } from "./sn
 import { snapshotColumnsSource } from "./snapshot-file.js";
 import type { SnapshotColumn } from "./snapshot-format.js";
 import type { SnapshotReader } from "./snapshot-store.js";
+import { classifySavedTextAudience, encodeTextAudience } from "./text-audience.js";
 
 export const packageTextGapReasons = [
 	"unsupported_text_history",
@@ -65,6 +66,10 @@ const numberFields = [
 	"occurrence.identity",
 	"occurrence.location",
 	"occurrence.editable",
+	// The reader's gather-table bit (0 none, 1 runtime, 2 editor-only) and the audience it and the
+	// policy table give the occurrence (encodeTextAudience), so joins never re-read path strings.
+	"occurrence.gather",
+	"occurrence.audience",
 	"gap.reason"
 ];
 
@@ -152,6 +157,18 @@ export function packageTextColumns(records: readonly PackageTextStored[]) {
 			);
 			number("occurrence.location", locations.indexOf(location.kind));
 			number("occurrence.editable", Number(occurrence.edit_capability === "source_editable"));
+			number(
+				"occurrence.gather",
+				occurrence.gather_editor_only === undefined
+					? 0
+					: occurrence.gather_editor_only
+						? 2
+						: 1
+			);
+			number(
+				"occurrence.audience",
+				encodeTextAudience(classifySavedTextAudience(occurrence))
+			);
 			occurrenceCount++;
 		}
 		for (const sample of record.gapSamples) {
@@ -289,7 +306,10 @@ export const decodePackageTextColumns = Effect.fn("PackageText.decodeColumns")(f
 										},
 						edit_capability: value("occurrence.editable", index)
 							? "source_editable"
-							: "read_only"
+							: "read_only",
+						...(value("occurrence.gather", index) === 0
+							? undefined
+							: { gather_editor_only: value("occurrence.gather", index) === 2 })
 					});
 				}
 				const gapStart = value("package.gap_start", row),

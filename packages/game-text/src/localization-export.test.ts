@@ -48,6 +48,7 @@ describe("all-languages spreadsheet", () => {
 			"Source",
 			"Where",
 			"Kind",
+			"Audience",
 			"en",
 			"en state",
 			"de",
@@ -59,14 +60,17 @@ describe("all-languages spreadsheet", () => {
 		// Spreadsheet formulas never run from source text.
 		expect(alpha[2]).toBe("'=SUM(1,2)");
 		expect(alpha[4]).toBe("String table");
-		expect(alpha[7]).toBe("");
-		expect(alpha[8]).toBe("Not translated");
+		// String Table entries are player text; gathered C++ text has no saved place to judge.
+		expect(alpha[5]).toBe("Player text");
+		expect(alpha[8]).toBe("");
+		expect(alpha[9]).toBe("Not translated");
 		const code = table[2] ?? [];
 		expect(code[3]).toBe("Source/Game/Private/Menu.cpp(12)");
 		expect(code[4]).toBe("C++");
+		expect(code[5]).toBe("Unknown");
 		const zeta = table[3] ?? [];
-		expect(zeta[7]).toBe("Letzte Zeile");
-		expect(zeta[8]).toBe("Translated");
+		expect(zeta[8]).toBe("Letzte Zeile");
+		expect(zeta[9]).toBe("Translated");
 	});
 
 	it("exports only the picked lines and cultures", () => {
@@ -105,7 +109,7 @@ describe("all-languages spreadsheet", () => {
 				cultures: pickedLocalizationCultures(selection)
 			}).csv
 		);
-		expect(table[0]?.slice(5)).toEqual(["en", "en state"]);
+		expect(table[0]?.slice(6)).toEqual(["en", "en state"]);
 		expect(table).toHaveLength(2);
 	});
 });

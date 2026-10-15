@@ -57,7 +57,7 @@ interface Field {
 
 const CHOICE_ORDER: readonly ChoiceField[] = ["problem", "translation", "finding"];
 const AFTER_PLACES: readonly ChoiceField[] = ["origin"];
-const ATTRIBUTES: readonly ChoiceField[] = ["editing", "notes"];
+const ATTRIBUTES: readonly ChoiceField[] = ["audience", "editing", "notes"];
 
 const matches = (typed: string, text: string) => {
 	const needle = typed.trim().toLocaleLowerCase();
@@ -461,6 +461,8 @@ function fromChoice(field: ChoiceField, value: string): TextFilterClause {
 			return { field, op, values: CHOICE_FIELDS.editing.values.filter(same) };
 		case "notes":
 			return { field, op, values: CHOICE_FIELDS.notes.values.filter(same) };
+		case "audience":
+			return { field, op, values: CHOICE_FIELDS.audience.values.filter(same) };
 	}
 }
 

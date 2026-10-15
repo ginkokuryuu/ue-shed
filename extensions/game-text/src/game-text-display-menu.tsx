@@ -9,10 +9,14 @@ const GROUP_LABELS = {
 	folder: "Folder",
 	asset: "Asset",
 	origin: "Origin",
-	namespace: "Namespace"
+	namespace: "Namespace",
+	audience: "Audience"
 } satisfies Record<TextGroupBy, string>;
 
-/** How the list is laid out: grouped by problem (the default), folder, asset, origin or namespace. */
+/**
+ * How the list is laid out: grouped by problem (the default), folder, asset, origin, namespace or
+ * audience.
+ */
 export function DisplayMenu(props: {
 	readonly group: TextGroupBy | undefined;
 	readonly disabled: boolean;

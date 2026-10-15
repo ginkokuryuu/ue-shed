@@ -2,6 +2,8 @@ import type { TextCorpus, TextIdentity, TextLocation, TextReviewSignal } from ".
 import type { TextQualityFinding, TextQualityReport } from "./quality-schema.js";
 import { textCorpusQuery } from "./query.js";
 import { hasSearchableSource } from "./search.js";
+import { TEXT_AUDIENCE_LABELS } from "./text-audience-schema.js";
+import { occurrenceTextAudience } from "./text-audience.js";
 
 export function textReviewSignalLabel(signal: TextReviewSignal): string {
 	switch (signal) {
@@ -98,6 +100,7 @@ export function gameTextCsv(corpus: TextCorpus, reviewCorpus: TextCorpus = corpu
 				"Characters",
 				"Words",
 				"Review signals",
+				"Audience",
 				"Text unit ID",
 				"Package file"
 			];
@@ -123,6 +126,7 @@ export function gameTextCsv(corpus: TextCorpus, reviewCorpus: TextCorpus = corpu
 							.filter((signal) => signal !== "evidence_only")
 							.map(textReviewSignalLabel)
 							.join("; "),
+						TEXT_AUDIENCE_LABELS[occurrenceTextAudience(occurrence).audience],
 						unit.id,
 						occurrence.packageFile
 					];

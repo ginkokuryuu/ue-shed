@@ -2,37 +2,18 @@ import { Schema } from "effect";
 import type { LocalizationTarget } from "@ue-shed/localization/browser";
 import { localizationGatherCoverage, localizationGathersEditorOnlyData } from "./localization.js";
 import type { TextOccurrence } from "./schema.js";
-
-/**
- * Who a piece of saved text is for. `player` text ships to players and needs writers and
- * localizers; `editor` text is Unreal editor text (tooltips, categories, graph nodes) or developer
- * content; `unknown` has no evidence either way.
- */
-export const TextAudience = Schema.Literals(["player", "editor", "unknown"]);
-export type TextAudience = typeof TextAudience.Type;
-
-/** Why an occurrence has its audience, from the strongest evidence that applied. */
-export const TextAudienceReason = Schema.Literals([
-	// Unreal's saved gather table marked the site editor-only, or runtime.
-	"gather_table_editor_only",
-	"gather_table_runtime",
-	// The fallback policy table below.
-	"developer_folder",
-	"editor_namespace",
-	"editor_object",
-	"editor_property",
-	"player_asset",
-	"no_evidence"
-]);
-export type TextAudienceReason = typeof TextAudienceReason.Type;
+import {
+	TextAudience as TextAudienceSchema,
+	TextAudienceReason as TextAudienceReasonSchema,
+	TextOutOfScopeReason,
+	type TextAudience,
+	type TextAudienceReason
+} from "./text-audience-schema.js";
 
 /** Whether a selected target's gather would collect the occurrence. */
 export const TextGatherScope = Schema.Union([
 	Schema.Struct({ status: Schema.Literals(["in_scope", "no_target"]) }),
-	Schema.Struct({
-		status: Schema.Literal("out_of_scope"),
-		reason: Schema.Literals(["outside_gather_paths", "editor_only_data_not_gathered"])
-	}),
+	Schema.Struct({ status: Schema.Literal("out_of_scope"), reason: TextOutOfScopeReason }),
 	Schema.Struct({ status: Schema.Literal("unknown") })
 ]);
 export type TextGatherScope = typeof TextGatherScope.Type;
@@ -54,7 +35,8 @@ export type TextAudienceClassification = {
  *   so one pattern covers both.
  * - `module`: the class's script module equals `value`, or ends with it when `suffix` is set.
  * - `property`: the property path's last element equals `value` (array and map suffixes ignored),
- *   or the path ends with `value` when it holds a `.`.
+ *   or the path ends with `value` when it holds a `.`. With `anywhere`, any element of the path
+ *   equals `value`: the text sits somewhere inside that property.
  * - `location`: the occurrence's location kind.
  */
 export type TextAudienceMatch =
@@ -66,7 +48,7 @@ export type TextAudienceMatch =
 			readonly position: "prefix" | "suffix" | "equals";
 	  }
 	| { readonly kind: "module"; readonly value: string; readonly suffix?: boolean }
-	| { readonly kind: "property"; readonly value: string }
+	| { readonly kind: "property"; readonly value: string; readonly anywhere?: boolean }
 	| {
 			readonly kind: "location";
 			readonly value: "data_table_cell" | "string_table_entry";
@@ -253,6 +235,33 @@ export const TEXT_AUDIENCE_POLICY = [
 		why: "Blueprint and SCS category names."
 	},
 	{
+		id: "palette_category",
+		audience: "editor",
+		reason: "editor_property",
+		when: [{ kind: "property", value: "PaletteCategory" }],
+		why: "The UMG designer palette category of a widget."
+	},
+	{
+		id: "niagara_version_data",
+		audience: "editor",
+		reason: "editor_property",
+		when: [
+			{ kind: "module", value: "Niagara" },
+			{ kind: "property", value: "VersionData", anywhere: true }
+		],
+		why: "Niagara script version metadata: descriptions, categories and keywords for the editor."
+	},
+	{
+		id: "niagara_cached_script_vm",
+		audience: "editor",
+		reason: "editor_property",
+		when: [
+			{ kind: "module", value: "Niagara" },
+			{ kind: "property", value: "CachedScriptVM", anywhere: true }
+		],
+		why: "Compiled Niagara script data cached with the asset."
+	},
+	{
 		id: "objects_to_display_names",
 		audience: "editor",
 		reason: "editor_property",
@@ -301,6 +310,16 @@ export const TEXT_AUDIENCE_POLICY = [
 		why: "DataTable text cells are game data."
 	},
 	{
+		id: "user_defined_enum_display_name",
+		audience: "player",
+		reason: "player_asset",
+		when: [
+			{ kind: "object", value: "UserDefinedEnum", position: "equals" },
+			{ kind: "property", value: "DisplayNameMap" }
+		],
+		why: "A Blueprint enum's display names, usually shown in menus and item text."
+	},
+	{
 		id: "widget_tree",
 		audience: "player",
 		reason: "player_asset",
@@ -345,25 +364,86 @@ function objectParts(objectPath: string) {
 	return { packagePath, objects };
 }
 
-export function textAudienceSubject(occurrence: TextOccurrence): TextAudienceSubject {
-	const location = occurrence.location;
-	const { packagePath, objects } = objectParts(location.objectPath);
-	const classPath = location.kind === "asset_property" ? location.classPath : undefined;
+function subject(input: {
+	readonly namespace: string | undefined;
+	readonly objectPath: string;
+	readonly classPath: string | undefined;
+	readonly propertyPath: string;
+	readonly locationKind: TextOccurrence["location"]["kind"];
+}): TextAudienceSubject {
+	const { packagePath, objects } = objectParts(input.objectPath);
+	const classPath = input.classPath;
 	const classDot = classPath?.lastIndexOf(".") ?? -1;
 	const module =
 		classPath?.startsWith("/Script/") && classDot > 0
 			? classPath.slice("/Script/".length, classDot)
 			: undefined;
 	return {
-		namespace:
-			occurrence.identity.status === "resolved" ? occurrence.identity.namespace : undefined,
+		namespace: input.namespace,
 		packagePath,
 		objects,
 		className: classPath === undefined ? undefined : classPath.slice(classDot + 1),
 		module,
+		propertyPath: input.propertyPath,
+		locationKind: input.locationKind
+	};
+}
+
+export function textAudienceSubject(occurrence: TextOccurrence): TextAudienceSubject {
+	const location = occurrence.location;
+	return subject({
+		namespace:
+			occurrence.identity.status === "resolved" ? occurrence.identity.namespace : undefined,
+		objectPath: location.objectPath,
+		classPath: location.kind === "asset_property" ? location.classPath : undefined,
 		propertyPath: location.kind === "string_table_entry" ? "" : location.propertyPath,
 		locationKind: location.kind
-	};
+	});
+}
+
+/**
+ * The fields of a reader package record occurrence (`SavedAssetTextOccurrence` from
+ * `@ue-shed/unreal-assets`) the policy reads, kept structural so this browser-safe module does not
+ * depend on the Node reader.
+ */
+export type SavedTextAudienceInput = {
+	readonly identity:
+		| { readonly status: "resolved"; readonly namespace: string; readonly key: string }
+		| { readonly status: "string_table" | "unresolved" };
+	readonly location:
+		| {
+				readonly kind: "asset_property";
+				readonly object_path: string;
+				readonly class_path: string;
+				readonly property_path: string;
+		  }
+		| {
+				readonly kind: "data_table_cell";
+				readonly object_path: string;
+				readonly property_path: string;
+		  }
+		| { readonly kind: "string_table_entry"; readonly object_path: string };
+	readonly gather_editor_only?: boolean | undefined;
+};
+
+/**
+ * The same subject read straight from the reader's package record, so the index classifies the
+ * occurrence it stores exactly as the corpus classifies the occurrence it builds from that record.
+ */
+export function savedTextAudienceSubject(occurrence: SavedTextAudienceInput): TextAudienceSubject {
+	const location = occurrence.location;
+	const identity = occurrence.identity;
+	return subject({
+		// textOccurrenceFromExtraction leaves a resolved identity without a key unresolved.
+		namespace:
+			identity.status === "resolved" && identity.key.length > 0
+				? identity.namespace
+				: undefined,
+		objectPath: location.object_path,
+		classPath: location.kind === "asset_property" ? location.class_path : undefined,
+		propertyPath: location.kind === "string_table_entry" ? "" : location.property_path,
+		locationKind: location.kind
+	});
 }
 
 function equalsIgnoringCase(left: string, right: string): boolean {
@@ -403,6 +483,8 @@ function matches(subject: TextAudienceSubject, match: TextAudienceMatch): boolea
 			);
 		case "property": {
 			const elements = propertyElements(subject.propertyPath);
+			if (match.anywhere)
+				return elements.some((element) => equalsIgnoringCase(element, match.value));
 			const wanted = match.value.split(".");
 			if (elements.length < wanted.length) return false;
 			const tail = elements.slice(elements.length - wanted.length);
@@ -429,18 +511,70 @@ export type TextAudienceEvidence = {
 	readonly gatherTableEditorOnly?: boolean;
 };
 
-export function classifyTextAudience(
-	occurrence: TextOccurrence,
-	evidence: TextAudienceEvidence = {}
+function classified(
+	subject: TextAudienceSubject,
+	evidence: TextAudienceEvidence
 ): TextAudienceClassification {
 	if (evidence.gatherTableEditorOnly !== undefined)
 		return evidence.gatherTableEditorOnly
 			? { audience: "editor", reason: "gather_table_editor_only" }
 			: { audience: "player", reason: "gather_table_runtime" };
-	const rule = matchTextAudiencePolicy(textAudienceSubject(occurrence), TEXT_AUDIENCE_POLICY);
+	const rule = matchTextAudiencePolicy(subject, TEXT_AUDIENCE_POLICY);
 	return rule
 		? { audience: rule.audience, reason: rule.reason, rule: rule.id }
 		: { audience: "unknown", reason: "no_evidence" };
+}
+
+export function classifyTextAudience(
+	occurrence: TextOccurrence,
+	evidence: TextAudienceEvidence = {}
+): TextAudienceClassification {
+	return classified(textAudienceSubject(occurrence), evidence);
+}
+
+/** A reader package record's occurrence, with its gather-table bit when the reader sent one. */
+export function classifySavedTextAudience(
+	occurrence: SavedTextAudienceInput
+): TextAudienceClassification {
+	return classified(
+		savedTextAudienceSubject(occurrence),
+		occurrence.gather_editor_only === undefined
+			? {}
+			: { gatherTableEditorOnly: occurrence.gather_editor_only }
+	);
+}
+
+/**
+ * The occurrence's audience: the one the corpus or index recorded, or the policy table's answer for
+ * an occurrence built without one (no gather-table evidence).
+ */
+export function occurrenceTextAudience(occurrence: TextOccurrence): TextAudienceClassification {
+	if (occurrence.audience !== undefined && occurrence.audienceReason !== undefined) {
+		const rule = TEXT_AUDIENCE_POLICY.find((row) => row.id === occurrence.audienceRule)?.id;
+		return {
+			audience: occurrence.audience,
+			reason: occurrence.audienceReason,
+			...(rule === undefined ? undefined : { rule })
+		};
+	}
+	return classifyTextAudience(occurrence);
+}
+
+/** The public occurrence fields for a classification. */
+export function textAudienceFields(classification: TextAudienceClassification) {
+	return {
+		audience: classification.audience,
+		audienceReason: classification.reason,
+		...(classification.rule === undefined ? undefined : { audienceRule: classification.rule })
+	} satisfies Pick<TextOccurrence, "audience" | "audienceReason" | "audienceRule">;
+}
+
+/**
+ * Editor text a target that does not gather editor-only data would skip. Developer folders are
+ * editor text by convention, not editor-only data, so their text stays in scope.
+ */
+export function isEditorOnlyText(classification: TextAudienceClassification): boolean {
+	return classification.audience === "editor" && classification.reason !== "developer_folder";
 }
 
 /**
@@ -457,11 +591,7 @@ export function textGatherScope(
 	const coverage = localizationGatherCoverage(target, occurrence);
 	if (coverage.status === "outside")
 		return { status: "out_of_scope", reason: "outside_gather_paths" };
-	if (
-		classification.audience === "editor" &&
-		classification.reason !== "developer_folder" &&
-		localizationGathersEditorOnlyData(target) === false
-	)
+	if (isEditorOnlyText(classification) && localizationGathersEditorOnlyData(target) === false)
 		return { status: "out_of_scope", reason: "editor_only_data_not_gathered" };
 	return coverage.status === "inside" ? { status: "in_scope" } : { status: "unknown" };
 }
@@ -480,3 +610,54 @@ export function lineTextAudience(audiences: Iterable<TextAudience>): TextAudienc
 	}
 	return best ?? "unknown";
 }
+
+// Compact index encoding. One u32 per occurrence: the audience's index in TextAudience (2 bits),
+// the reason's index in TextAudienceReason (4 bits from bit 2) and the policy row's index plus one
+// (8 bits from bit 8; zero for no row). Line, unit and slice rows store a mask of the audiences
+// their occurrences have (one bit per TextAudience index), and lines the out-of-scope reason's
+// index plus one from bit 4.
+const AUDIENCES = TextAudienceSchema.literals;
+const REASONS = TextAudienceReasonSchema.literals;
+
+export function encodeTextAudience(classification: TextAudienceClassification): number {
+	const rule =
+		classification.rule === undefined
+			? 0
+			: TEXT_AUDIENCE_POLICY.findIndex((row) => row.id === classification.rule) + 1;
+	return (
+		AUDIENCES.indexOf(classification.audience) |
+		(REASONS.indexOf(classification.reason) << 2) |
+		(rule << 8)
+	);
+}
+
+export function decodeTextAudience(code: number): TextAudienceClassification {
+	const audience = AUDIENCES[code & 3];
+	const reason = REASONS[(code >>> 2) & 15];
+	const rule = (code >>> 8) & 255;
+	if (audience === undefined || reason === undefined || rule > TEXT_AUDIENCE_POLICY.length)
+		throw new Error(`Invalid text audience code ${code}.`);
+	return rule === 0
+		? { audience, reason }
+		: { audience, reason, rule: TEXT_AUDIENCE_POLICY[rule - 1]!.id };
+}
+
+/** isEditorOnlyText for an encoded occurrence. */
+export function isEditorOnlyTextCode(code: number): boolean {
+	return (
+		(code & 3) === AUDIENCES.indexOf("editor") &&
+		((code >>> 2) & 15) !== REASONS.indexOf("developer_folder")
+	);
+}
+
+/** The audience bit for an encoded occurrence, for a row's audience mask. */
+export function textAudienceBit(code: number): number {
+	return 1 << (code & 3);
+}
+
+/** A row's audience from its mask: player, else unknown, else editor; unknown when empty. */
+export function textAudienceOfMask(mask: number): TextAudience {
+	return mask & 1 ? "player" : mask & 4 || !(mask & 2) ? "unknown" : "editor";
+}
+
+export const TEXT_OUT_OF_SCOPE_REASONS = TextOutOfScopeReason.literals;

@@ -132,6 +132,84 @@ mentions excluded packages there as matching Unreal's own gather. Fixture audits
 excluding packages hides no coverage problem: the opaque `OpaqueValue.Value` package has no
 gatherable text, so the full reader reads it completely too.
 
+### Player and editor text
+
+Most of the `FText` a saved-package reader finds is Unreal editor text: pin and variable tooltips,
+details and palette categories, graph nodes, reflection metadata. Every occurrence therefore
+records who it is for, `audience` (`player`, `editor` or `unknown`), why (`audienceReason`) and,
+for policy matches, the policy row (`audienceRule`). The evidence, strongest first:
+
+1. **Unreal's gather table.** Since uasset-io 1.11 the reader sends the editor-only bit Unreal
+   saved for each text in the package's gatherable text table (`gather_editor_only`), where the
+   table is trusted under the coverage rule above. Text is editor-only only when every site with
+   its namespace, key and source is, because a gather that skips editor-only data still collects
+   text from one runtime site. Reasons: `gather_table_editor_only`, `gather_table_runtime`.
+   Blueprints with bytecode have no trusted table, so their text falls through to the policy.
+2. **The policy table** below (`TEXT_AUDIENCE_POLICY`): first matching row wins, and editor rows
+   come before player rows, so a K2 node inside a Widget Blueprint graph stays editor text.
+3. Otherwise `unknown` (`no_evidence`).
+
+A line or unit is player text if any of its saved places with visible text is, else unknown if any
+is, else editor. Lines without a saved place (C++, config) are unknown. The audience is a filter
+field and a facet (`facets.audiences`, which leaves out its own clause like the others), a
+grouping (`group: "audience"`), a column in both spreadsheet exports, and part of the exported JSON
+occurrences and lines.
+
+With a selected target, editor text is out of scope when the target does not gather editor-only
+data: `ShouldGatherFromEditorOnlyData` on its `GatherTextFromAssets` steps (or the dashboard's
+`GatherFromPackages`) is false, Unreal's default. A line that would otherwise be "Not gathered
+yet", whose every place inside the gather paths is such editor text, is "Outside this target"
+instead, with `outOfScope: "editor_only_data_not_gathered"`; lines outside the include and exclude
+paths carry `outside_gather_paths`. Lines Unreal did gather keep their state, and developer-folder
+text is editor text by convention, not editor-only data, so it stays in scope. Localization checks
+skip out-of-scope lines, as before.
+
+Names compare case-insensitively. `object` matches the class name or any object name in the
+occurrence's outer chain (graph objects are named after their class). `property` matches the last
+element(s) of the property path, ignoring array and map suffixes; "in" matches any element.
+
+| Rule                              | Audience | Reason             | Match                                             | Why                                 |
+| --------------------------------- | -------- | ------------------ | ------------------------------------------------- | ----------------------------------- |
+| `developers_folder`               | editor   | `developer_folder` | package under `/Game/Developers/`                 | Per-user developer folders          |
+| `dev_folder`                      | editor   | `developer_folder` | package under `/Game/Dev/`                        | Test and prototype content          |
+| `uobject_tooltips`                | editor   | `editor_namespace` | namespace `UObjectToolTips`                       | Reflection tooltips                 |
+| `uobject_display_names`           | editor   | `editor_namespace` | namespace `UObjectDisplayNames`                   | Reflection display names            |
+| `uobject_categories`              | editor   | `editor_namespace` | namespace `UObjectCategories`                     | Reflection categories               |
+| `k2_node`                         | editor   | `editor_object`    | object/class `K2Node_*`                           | Blueprint graph nodes               |
+| `anim_graph_node`                 | editor   | `editor_object`    | object/class `AnimGraphNode_*`                    | Anim graph nodes                    |
+| `anim_state_node`                 | editor   | `editor_object`    | object/class `AnimStateNode*`                     | State machine nodes                 |
+| `ed_graph`                        | editor   | `editor_object`    | object/class `EdGraph*`                           | Editor graphs and comments          |
+| `scs_node`                        | editor   | `editor_object`    | object/class `SCS_Node*`                          | Component tree entries              |
+| `niagara_node`                    | editor   | `editor_object`    | object/class `NiagaraNode*`                       | Niagara graph nodes                 |
+| `niagara_graph`                   | editor   | `editor_object`    | object/class `NiagaraGraph*`                      | Niagara graphs                      |
+| `material_expression`             | editor   | `editor_object`    | object/class `MaterialExpression*`                | Material expressions                |
+| `material_graph`                  | editor   | `editor_object`    | object/class `MaterialGraph*`                     | Material graphs                     |
+| `editor_module`                   | editor   | `editor_object`    | class module `*Editor`                            | UMGEditor, NiagaraEditor, ...       |
+| `unreal_ed_module`                | editor   | `editor_object`    | class module `UnrealEd`                           | UnrealEd classes                    |
+| `blueprint_graph_module`          | editor   | `editor_object`    | class module `BlueprintGraph`                     | Blueprint graph classes             |
+| `anim_graph_module`               | editor   | `editor_object`    | class module `AnimGraph`                          | Animation graph classes             |
+| `property_tooltip`                | editor   | `editor_property`  | leaf `PropertyTooltip`                            | Variable tooltips                   |
+| `tooltip`                         | editor   | `editor_property`  | leaf `ToolTip`                                    | Function, variable and pin tooltips |
+| `pin_tooltip`                     | editor   | `editor_property`  | leaf `PinToolTip`                                 | Pin tooltips                        |
+| `category`                        | editor   | `editor_property`  | leaf `Category`                                   | Details and palette categories      |
+| `category_name`                   | editor   | `editor_property`  | leaf `CategoryName`                               | Blueprint and SCS categories        |
+| `palette_category`                | editor   | `editor_property`  | leaf `PaletteCategory`                            | UMG designer palette category       |
+| `niagara_version_data`            | editor   | `editor_property`  | module `Niagara` and in `VersionData`             | Niagara script version metadata     |
+| `niagara_cached_script_vm`        | editor   | `editor_property`  | module `Niagara` and in `CachedScriptVM`          | Compiled Niagara script data        |
+| `objects_to_display_names`        | editor   | `editor_property`  | leaf `ObjectsToDisplayNames`                      | Animation binding names             |
+| `niagara_signature_description`   | editor   | `editor_property`  | path ends `Signature.Description`                 | Niagara function descriptions       |
+| `movie_scene_display_name`        | editor   | `editor_property`  | module `MovieScene` and leaf `DisplayName`        | Sequencer track names               |
+| `movie_scene_tracks_display_name` | editor   | `editor_property`  | module `MovieSceneTracks` and leaf `DisplayName`  | Sequencer track names               |
+| `string_table`                    | player   | `player_asset`     | String Table entry                                | String Tables exist to be displayed |
+| `data_table`                      | player   | `player_asset`     | DataTable cell                                    | Game data                           |
+| `user_defined_enum_display_name`  | player   | `player_asset`     | class `UserDefinedEnum` and leaf `DisplayNameMap` | Blueprint enum display names        |
+| `widget_tree`                     | player   | `player_asset`     | object `WidgetTree` in the outer chain            | Widget designer tree                |
+
+The table is studio-agnostic. Project conventions, such as debug or demo folders, belong in the
+project's rules, not here. The compact index stores each occurrence's audience; the policy table
+is part of every package shard's key, so changing it re-encodes the stored shards from their saved
+evidence without reading packages again.
+
 The compact corpus path is governed by Plan 033:
 
 - the shared project index performs the only project-wide enumeration;
@@ -231,6 +309,9 @@ typing at the first level finds values across every field:
   opens the folders inside it, and "‹" goes back up. Typing narrows the level shown and offers
   "Path starts with …", which matches object paths, package files and gathered source paths,
   ignoring case and slash direction.
+- **Audience** (Player text, Editor text, Unknown), from
+  [player and editor text](#player-and-editor-text). Choosing "is not Editor text" hides editor
+  text.
 - **Editing** (editable, read only) and **Translator notes** (none, some). No translator notes
   means blank notes, after trimming, at every saved location.
 - **Review** and **Line state** (gathered only, not found, outside the target, unknown) pick one
@@ -254,8 +335,8 @@ immediately. New searches cancel obsolete scans while independent group pages ca
 Case-insensitive source matching reuses prepared source bytes. Completed query pages remain cached
 when another request is cancelled.
 
-**Display** groups the list by problem (the default), folder, asset, origin or namespace, or not at
-all. Its choices are one radio group: it opens on the current grouping and arrow keys change it.
+**Display** groups the list by problem (the default), folder, asset, origin, namespace or audience,
+or not at all. Its choices are one radio group: it opens on the current grouping and arrow keys change it.
 Groups are listed worst first with their line counts and, outside problem grouping, how many lines
 need work. At most 200 groups are listed, with a count of the rest. When every line fits on
 one page all groups start open, otherwise the worst one does; each open group loads a page of its
@@ -609,18 +690,18 @@ custom commandlets and asset-repair settings are rejected until their writes can
 States are computed per line and culture from evidence. Each one names its evidence and is never
 guessed.
 
-| State                    | Meaning                                                                      |
-| ------------------------ | ---------------------------------------------------------------------------- |
-| Translated               | The archive has a translation whose recorded source matches the manifest     |
-| Not translated           | No translation, or an empty one, for the culture                             |
-| Needs update             | The translation was written for a different source than the manifest now has |
-| Not synced               | The PO file holds a translation Unreal has not imported and compiled yet     |
-| Not gathered yet         | In the project and inside the target's gather paths, but not in the manifest |
-| Changed since gather     | The project's current source differs from the manifest source for the key    |
-| Not found in the project | In the manifest, and its package was fully read, but the key was not found   |
-| Gathered only            | In the manifest from a source the asset scan does not read, such as C++ code |
-| Outside this target      | In the project but excluded by the target's include or exclude paths         |
-| Unknown                  | Available evidence cannot prove a more specific state                        |
+| State                    | Meaning                                                                                      |
+| ------------------------ | -------------------------------------------------------------------------------------------- |
+| Translated               | The archive has a translation whose recorded source matches the manifest                     |
+| Not translated           | No translation, or an empty one, for the culture                                             |
+| Needs update             | The translation was written for a different source than the manifest now has                 |
+| Not synced               | The PO file holds a translation Unreal has not imported and compiled yet                     |
+| Not gathered yet         | In the project and inside the target's gather paths, but not in the manifest                 |
+| Changed since gather     | The project's current source differs from the manifest source for the key                    |
+| Not found in the project | In the manifest, and its package was fully read, but the key was not found                   |
+| Gathered only            | In the manifest from a source the asset scan does not read, such as C++ code                 |
+| Outside this target      | Excluded by the target's include or exclude paths, or editor text the target does not gather |
+| Unknown                  | Available evidence cannot prove a more specific state                                        |
 
 "Not gathered yet" requires an observed identity inside the target's gather scope and a readable
 manifest without that identity. "Not found" requires explicit completion of the manifest's named

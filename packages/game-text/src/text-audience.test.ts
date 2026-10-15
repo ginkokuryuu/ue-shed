@@ -4,10 +4,20 @@ import { LocalizationTarget, discoverLocalizationTargets } from "@ue-shed/locali
 import { localizationGathersEditorOnlyData } from "./localization.js";
 import { success } from "./localization.test-support.js";
 import { TextOccurrence } from "./schema.js";
+import type { SavedAssetTextOccurrence } from "@ue-shed/unreal-assets";
+import { textOccurrenceFromExtraction } from "./corpus.js";
 import {
 	TEXT_AUDIENCE_POLICY,
+	classifySavedTextAudience,
 	classifyTextAudience,
+	decodeTextAudience,
+	encodeTextAudience,
+	isEditorOnlyText,
+	isEditorOnlyTextCode,
 	lineTextAudience,
+	occurrenceTextAudience,
+	textAudienceBit,
+	textAudienceOfMask,
 	textAudienceSubject,
 	textGatherScope
 } from "./text-audience.js";
@@ -186,6 +196,42 @@ describe("text audience policy table", () => {
 		["developers folder", cell("/Game/Developers/alex/DT_Test.DT_Test"), "developers_folder"],
 		["dev folder", cell("/Game/Dev/DT_Test.DT_Test"), "dev_folder"],
 		[
+			"widget palette category",
+			property(
+				"/Game/UI/WBP_Menu.WBP_Menu:WidgetTree.Button_Play",
+				"PaletteCategory",
+				"/Script/UMG.Button"
+			),
+			"palette_category"
+		],
+		[
+			"blank Niagara script version metadata",
+			property(
+				"/Game/FX/NS_Fire.NS_Fire:NiagaraScript_2",
+				"VersionData[0].VersionChangeDescription",
+				"/Script/Niagara.NiagaraScript"
+			),
+			"niagara_version_data"
+		],
+		[
+			"Niagara emitter version metadata",
+			property(
+				"/Game/FX/NE_Smoke.NE_Smoke",
+				"VersionData[1].Keywords",
+				"/Script/Niagara.NiagaraEmitter"
+			),
+			"niagara_version_data"
+		],
+		[
+			"cached Niagara script data",
+			property(
+				"/Game/FX/NS_Fire.NS_Fire:NiagaraScript_2",
+				"CachedScriptVM.DataInterfaceInfo[0].Name",
+				"/Script/Niagara.NiagaraScript"
+			),
+			"niagara_cached_script_vm"
+		],
+		[
 			"K2 node inside a widget graph stays editor",
 			property(
 				"/Game/UI/WBP_Menu.WBP_Menu:WidgetTree.EventGraph.K2Node_Event_0",
@@ -207,6 +253,15 @@ describe("text audience policy table", () => {
 				"/Script/UMG.TextBlock"
 			),
 			"widget_tree"
+		],
+		[
+			"user defined enum display name",
+			property(
+				"/Game/Data/E_Rarity.E_Rarity",
+				"DisplayNameMap",
+				"/Script/Engine.UserDefinedEnum"
+			),
+			"user_defined_enum_display_name"
 		],
 		[
 			"generated class widget tree copy",
@@ -326,5 +381,124 @@ describe("target gather scope", () => {
 		expect(textGatherScope(undefined, devTest, classifyTextAudience(devTest))).toEqual({
 			status: "no_target"
 		});
+	});
+});
+
+describe("saved occurrences", () => {
+	const saved = (
+		location: SavedAssetTextOccurrence["location"],
+		gather?: boolean
+	): SavedAssetTextOccurrence => ({
+		source: "Text",
+		dev_notes: "",
+		identity: { status: "resolved", namespace: "NS", key: "K" },
+		location,
+		edit_capability: "read_only",
+		...(gather === undefined ? undefined : { gather_editor_only: gather })
+	});
+	const samples = [
+		saved({
+			kind: "asset_property",
+			object_path: "/Game/BP/BP_Hero.BP_Hero:EventGraph.K2Node_Event_0",
+			class_path: "/Script/BlueprintGraph.K2Node_Event",
+			property_path: "NodeComment"
+		}),
+		saved({
+			kind: "data_table_cell",
+			object_path: "/Game/D/DT.DT",
+			row: "R",
+			property_path: "N"
+		}),
+		saved({ kind: "string_table_entry", object_path: "/Game/S/ST.ST", entry_key: "K" }),
+		saved({
+			kind: "asset_property",
+			object_path: "/Game/Dev/L_Test.L_Test:PersistentLevel.Sign",
+			class_path: "/Script/Engine.TextRenderComponent",
+			property_path: "Text"
+		}),
+		saved(
+			{
+				kind: "asset_property",
+				object_path: "/Game/UI/W.W",
+				class_path: "/Script/UMG.TextBlock",
+				property_path: "ToolTip"
+			},
+			false
+		),
+		saved(
+			{
+				kind: "asset_property",
+				object_path: "/Game/UI/W.W:WidgetTree.TextBlock_0",
+				class_path: "/Script/UMG.TextBlock",
+				property_path: "Text"
+			},
+			true
+		)
+	];
+
+	it("classifies a reader record exactly as the corpus occurrence built from it", () => {
+		for (const occurrence of samples) {
+			const built = textOccurrenceFromExtraction({
+				occurrence,
+				packageFile: "Content/X.uasset"
+			});
+			const classification = classifySavedTextAudience(occurrence);
+			expect(occurrenceTextAudience(built)).toEqual(classification);
+			expect(
+				classifyTextAudience(
+					built,
+					occurrence.gather_editor_only === undefined
+						? {}
+						: { gatherTableEditorOnly: occurrence.gather_editor_only }
+				)
+			).toEqual(classification);
+		}
+		// Unreal's bit outranks the policy table both ways.
+		expect(classifySavedTextAudience(samples[4]!)).toEqual({
+			audience: "player",
+			reason: "gather_table_runtime"
+		});
+		expect(classifySavedTextAudience(samples[5]!)).toEqual({
+			audience: "editor",
+			reason: "gather_table_editor_only"
+		});
+	});
+
+	it("round-trips every policy row and evidence through the index encoding", () => {
+		const classifications = [
+			...samples.map(classifySavedTextAudience),
+			{ audience: "unknown", reason: "no_evidence" } as const,
+			...TEXT_AUDIENCE_POLICY.map((rule) => ({
+				audience: rule.audience,
+				reason: rule.reason,
+				rule: rule.id
+			}))
+		];
+		for (const classification of classifications) {
+			const code = encodeTextAudience(classification);
+			expect(decodeTextAudience(code)).toEqual(classification);
+			expect(isEditorOnlyTextCode(code)).toBe(isEditorOnlyText(classification));
+		}
+		expect(() => decodeTextAudience(3)).toThrow();
+	});
+
+	it("rolls a mask of audiences up like the line rule", () => {
+		const mask = (...audiences: ("player" | "editor" | "unknown")[]) =>
+			audiences.reduce(
+				(bits, audience) =>
+					bits | textAudienceBit(encodeTextAudience({ audience, reason: "no_evidence" })),
+				0
+			);
+		for (const audiences of [
+			[],
+			["editor"],
+			["unknown"],
+			["player"],
+			["editor", "unknown"],
+			["editor", "player"],
+			["unknown", "player"],
+			["editor", "unknown", "player"]
+		] as const)
+			expect(textAudienceOfMask(mask(...audiences))).toBe(lineTextAudience(audiences));
 	});
 });

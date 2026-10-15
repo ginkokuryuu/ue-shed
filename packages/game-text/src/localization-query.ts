@@ -36,6 +36,8 @@ export function localizationLinePreview(line: LocalizationLine): LocalizationLin
 		manifestLocations: line.manifest.slice(0, 3).map((entry) => entry.path),
 		remainingLocationCount: Math.max(0, line.manifest.length - 3),
 		...(line.keyChange === undefined ? undefined : { keyChange: line.keyChange }),
+		...(line.audience === undefined ? undefined : { audience: line.audience }),
+		...(line.outOfScope === undefined ? undefined : { outOfScope: line.outOfScope }),
 		cultures: line.cultures.map(
 			({
 				culture,
