@@ -71,3 +71,28 @@ describe("finding IDs of unchanged checks", () => {
 			expect([name, ids[name]]).toEqual([name, id]);
 	});
 });
+
+describe("finding places", () => {
+	it("name the first place a finding affects and how many it affects", () => {
+		const text = corpus(cases.map(([key, source]) => unit(key, source)));
+		const files = evidence(
+			cases.map(([key, source]) => manifestEntry(key, source)),
+			cases.map(([key, source, translation]) => archiveEntry(key, source, translation)),
+			success(parsePO(new TextEncoder().encode("")))
+		);
+		const join = joinLocalizationTarget(text, files, files.target);
+		const report = checkLocalizationTarget(text, join, files);
+		const workspace = localizationQualityWorkspace(undefined, report, join);
+		const { findings } = workspace.export({ target: join.target, filter: "all" });
+		expect(findings.length).toBeGreaterThan(0);
+		for (const finding of findings) {
+			const unitOf = text.units.find(
+				(candidate) =>
+					candidate.identity.status === "resolved" &&
+					candidate.identity.key === finding.context.split(" · ")[1]
+			);
+			expect(finding.locations).toBe(unitOf?.occurrences.length);
+			expect(finding.location).toEqual(unitOf?.occurrences[0]?.location);
+		}
+	});
+});
