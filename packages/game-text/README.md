@@ -204,10 +204,10 @@ contain `disabledLocalizationChecks` (any built-in ID) and `segmentSeparator`. V
 per-culture project policy and progress reports, described below. Every check is on by default,
 except `segment_separator` until a rule file names a separator.
 
-Every localization finding has a `severity` from `checkSeverity`: `blocking` (players see wrong or untranslated
-text), `normal` or `low`. It is never part of the finding's ID. Workspace pages list blocking
-findings first, then normal, then low, each in report order, and count findings by severity in
-`severityCounts`; summaries, focus and CSV exports carry the severity.
+Every localization finding has a `severity` from `checkSeverity`: `blocking` (players see wrong or
+untranslated text), `normal` or `low`. It is never part of the finding's ID. Workspace pages list
+blocking findings first, then normal, then low, each in report order, and count findings by
+severity in `severityCounts`; summaries, focus and CSV exports carry the severity.
 
 | Check                        | Severity | Reports                                                                                           |
 | ---------------------------- | -------- | ------------------------------------------------------------------------------------------------- |

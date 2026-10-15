@@ -709,7 +709,8 @@ Localization checks are quality findings over the same corpus and report model:
 - built-in source checks need no rule file: culture-invariant text players will see untranslated,
   placeholder text, source whitespace, unbalanced source markup, number-only text that could be
   culture invariant, and keys two String Tables declare;
-- every finding has a severity (blocking, normal or low); lists show blocking findings first;
+- every localization finding has a severity (blocking, normal or low); lists show blocking
+  findings first;
 - missing translation evidence is a check diagnostic rather than a claim that a translation is empty;
 - version-2 project rules add role budgets and glossary terms per culture, evaluated on that
   culture's shipped translation with the same substring and UTF-16 offset evidence as source rules.

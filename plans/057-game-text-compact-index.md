@@ -1630,3 +1630,95 @@ match on both paths; the tie case now accepts `duplicate_source` under the nativ
 (missing notes 1,889,060 to 188,906, duplicate sources 111,710 to 11,171; whitespace and empty
 translations unchanged). Scan 95.5 s before and 107.1 s after, peak V8 heap 178 and 209 MiB, 48 MiB
 kept after collection in both. Repeats were not run to separate the time difference from variance.
+
+### Follow-up: check severity, shape and source checks (P1.5–P1.7)
+
+A review of shipped projects asked for three things: rank findings by how much they matter, check a
+translation's shape against its source, and check source text without a rule file. This change
+also adds "Translated inconsistently", left open above.
+
+- **Severity.** Every built-in check has a severity in `checkSeverity`, and every localization
+  finding carries it (`severity`, outside the finding's ID). Blocking: `culture_invariant_text`
+  (players see it untranslated in every culture) and `outdated_translation` (an archive
+  translation recorded for older source; Unreal's resource compile drops it and ships the source).
+  Low: `duplicate_source`, `missing_translator_notes`, `number_only_text` and `rich_text_tag_case`
+  (Slate matches style and decorator names without case). Everything else, budgets and terminology
+  included, is normal. Severity is a function of the check, so the index stores nothing new: the
+  workspace derives it from each finding's packed filter. Pages and exports list blocking findings
+  first, then normal, then low, each in report order, on both paths; pages count findings by
+  severity in `severityCounts`, and summaries, focus and CSV rows carry it.
+- **`duplicate_source`** now reports once per shared text, on the line whose identity sorts first,
+  and leaves out text without letters.
+- **Conflicting sources.** A key with several saved texts (`conflicting_source`) is joined into one
+  space-separated string for the line's `source` by the in-memory join
+  (`localization.ts`, `joinLocalizationTarget`), the index build (`joined-target.ts`) and its
+  incremental refresh (`joined-target-incremental.ts`); search and browse rows use that string.
+  The checks no longer do: findings on such a line carry the distinct texts in `sourceVariants`,
+  workspace summaries and focus show them as a list (`source` is the gathered source or the first
+  text), the line is left out of shared-source grouping, and without a manifest source its
+  translation is not compared. The joined `source` stays for search; changing it is an index
+  format change, left for the work that owns the format.
+- **Shape checks.** `format_argument_renamed` pairs dropped and added names in order of appearance
+  and owns the one-rename fix; `format_arguments` keeps the rest. `rich_text_tags` compares tag
+  names without case, `rich_text_tag_case` their case. `line_breaks` is split from `whitespace`,
+  which compares edges only. `segment_separator` counts the rule file's new optional
+  `segmentSeparator`. `length_outlier` flags translations under a third or over three times the
+  source's visible length (tags, modifiers and arguments removed, wide East Asian characters
+  counted twice), for sources of at least 20 visible characters. Empty archive entries of keys a
+  partly read package did not yield were already reported (the line falls back to the manifest
+  source); a test now covers it. A line whose saved text is blank but whose manifest has the source
+  is now checked too, where the join keeps it: the in-memory join does, the index hides such lines
+  from the query and so from the scan, unchanged here.
+- **Source checks**, with no rule file: `culture_invariant_text`, `placeholder_text`,
+  `source_whitespace`, `source_markup`, `number_only_text` and `string_table_key_collision`. They
+  run inside the line scan, once per line under the source culture, so the indexed scan keeps its
+  pages and memory; the rule file's v1 source report (`evaluateGameTextSourceQuality`) is unchanged
+  and adds budgets and terminology on top. Lines without a key used to be skipped before their
+  units were built; the indexed scan now asks the occurrence identity column whether such a line
+  is culture invariant, so only those lines build units.
+- **`inconsistent_translation`.** Lines are grouped by source as for `duplicate_source`, but only
+  sources with letters and at least three visible characters. Per culture, every line whose shipped
+  translation is not the single most used one gets a finding; when several tie, every line does.
+  One finding per line and culture is what the list can act on: it opens that line, and accepting
+  it is a per-line review record. The finding lists the five most used translations with their
+  line counts. The indexed scan adds a second pass before the main one: the duplicate pass already
+  returns the rows of shared lines, and the translation pass reads only their state, facts and
+  shipped-translation columns, 4,096 rows per yield. Hydrating those scattered rows as lines took a
+  page per row: on the 1× project the first version's scan took 196 s with 3–4 s stalls. Memory
+  follows the distinct translations of shared lines.
+- **Finding IDs.** Hashes are unchanged; a finding of a check whose evidence did not change keeps
+  its ID. `localization-finding-ids.test.ts` pins IDs recorded from main for format arguments,
+  rich text, whitespace, escapes, empty translations, modifiers and notes.
+
+1× scale harness, `--select quality`, Node 26.12.0, default heap, on the generated 1× project
+(583,507 lines, 10 cultures; 386,000 keyless lines). The machine was shared with other work, so
+main and this branch were built and run alternately, twice each, after the index cache was warm:
+
+| Run    |    Scan | Peak V8 heap | Kept after GC | Stall p50 / p95 / max | Findings |
+| ------ | ------: | -----------: | ------------: | --------------------: | -------: |
+| main   | 125.7 s |      177 MiB |        49 MiB |     18 / 185 / 579 ms |  227,047 |
+| branch | 136.8 s |      172 MiB |        50 MiB |     13 / 199 / 616 ms |  225,093 |
+| main   | 126.1 s |      185 MiB |        49 MiB |     18 / 192 / 623 ms |  227,047 |
+| branch | 128.7 s |      183 MiB |        50 MiB |     13 / 199 / 681 ms |  225,093 |
+
+The scan is 2–9% slower and memory is unchanged. Findings per check, main → branch:
+`missing_translator_notes` 188,906 → 188,906; `empty_translation` 13,680 → 13,680; `whitespace`
+13,290 → 13,290 (no line-break-only differences at 1×); `duplicate_source` 11,171 → 5,532 (one per
+shared text); `source_whitespace` 1,915; `inconsistent_translation` 1,620; `length_outlier` 150.
+The generator makes none of the other new checks' cases (no placeholders, tags, culture-invariant
+text, String Table collisions, outdated archives or number-only text), so they report 0 here; the
+oracle fixtures produce each of them on both paths. Every check stays on by default:
+`source_whitespace` and `inconsistent_translation` are under 1% of lines at 1×, and the noisy pair
+(`missing_translator_notes`, `duplicate_source`) is rated low rather than disabled. Real projects
+are needed to judge `length_outlier`, `culture_invariant_text` and `source_markup` noise.
+
+Earlier runs of this branch, each against the same warm cache but not interleaved: with the
+translation pass hydrating lines, 196.4 s and stalls up to 3.9 s; with the column pass, 158.8 s and
+127.5 s; with the text helpers' fast paths but keyless lines still building units, 150.2 s and
+132.8 s. A CPU profile of that last version put 30% of the scan in building units for checks, the
+new text checks each under 1 s, and the translation pass under 0.1 s.
+
+Verification: `pnpm exec vitest run packages/game-text` passes 421 tests (6 skipped); the
+Workbench Game Text host tests (44 in five files), the Game Text extension tests (146) and the CLI
+tests pass, as do `pnpm run typecheck`, `lint`, `format:check` and `effect:architecture`. Unreal
+was not run.

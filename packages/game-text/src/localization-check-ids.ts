@@ -1,8 +1,9 @@
 import { Schema } from "effect";
 
 /**
- * Built-in checks that compare a line's shipped translation with its source, per culture. IDs are
- * stable: review files record them as `localization.<id>`. New checks are appended.
+ * Built-in localization checks: a line's shipped translation against its source, per culture, plus
+ * translator notes and shared source text. IDs are stable: review files record them as
+ * `localization.<id>`. New checks are appended.
  */
 export const LocalizationCheckId = Schema.Literals([
 	"format_arguments",
