@@ -192,6 +192,59 @@ describe("persisted joined source cache", () => {
 		}
 	});
 
+	it("reads published sources whose segments the caller has not loaded", async () => {
+		const root = await mkdtemp(join(tmpdir(), "ue-shed-source-cache-unloaded-"));
+		try {
+			await Effect.runPromise(
+				Effect.scoped(
+					Effect.gen(function* () {
+						const store = yield* SharedIndex,
+							writer = yield* store.writer();
+						const values = ["", "alpha", "é"],
+							ids = yield* writer.intern("source", values);
+						yield* writer.publishIds(
+							"input",
+							"input",
+							{
+								columns: [
+									{
+										name: "entry.source",
+										kind: "stringIds",
+										domain: "source",
+										load: async () => ids
+									}
+								]
+							},
+							writer.manifest().generation
+						);
+						// No strings.need() here: preparation must request published segments itself.
+						const strings = new JoinStrings(yield* store.open(), ids[0]!);
+						const prepared = yield* prepareJoinedSourceCache(writer, strings, [ids], {
+							minimumEntries: 0
+						});
+						expect(prepared?.meta).toMatchObject({
+							count: ids.length,
+							bytes: values.reduce(
+								(size, value) => size + encodeWtf8(value).length,
+								0
+							)
+						});
+					})
+				).pipe(
+					Effect.provide(
+						sharedIndexNodeLayer({
+							cacheRoot: root,
+							projectKey: "source-cache-unloaded-fixture",
+							targetKey: "Fixture"
+						})
+					)
+				)
+			);
+		} finally {
+			await rm(root, { recursive: true, force: true });
+		}
+	});
+
 	it("reopens cached sources after ASCII and Unicode edits while retaining the previous reader", async () => {
 		const root = await mkdtemp(join(tmpdir(), "ue-shed-cached-source-refresh-"));
 		let value = "originalsource zero with enough characters for a bounded source overlay",
