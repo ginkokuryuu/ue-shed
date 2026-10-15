@@ -192,7 +192,7 @@ describe("gather coverage", () => {
 									kind: "asset_property",
 									object_path: "E_Style",
 									class_path: "/Script/Engine.UserDefinedEnum",
-									property_path: "DisplayNameMap"
+									property_path: "DisplayNameMap{0}.value"
 								},
 								edit_capability: "read_only"
 							}

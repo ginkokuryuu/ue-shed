@@ -166,7 +166,8 @@ skip out-of-scope lines, as before.
 
 Names compare case-insensitively. `object` matches the class name or any object name in the
 occurrence's outer chain (graph objects are named after their class). `property` matches the last
-element(s) of the property path, ignoring array and map suffixes; "in" matches any element.
+element(s) of the property path, ignoring container indexes; "in" matches any element. Map entries
+(`DisplayNameMap{0}.value`, `{0}.key`) match as the map property (`DisplayNameMap`).
 
 | Rule                              | Audience | Reason             | Match                                             | Why                                 |
 | --------------------------------- | -------- | ------------------ | ------------------------------------------------- | ----------------------------------- |

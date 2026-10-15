@@ -131,3 +131,46 @@ fn reports_runtime_gather_entries_that_were_not_decoded() {
         "/Game/Fixture/Text/DA_TextOccurrences.DA_TextOccurrences.SharedPrimary"
     );
 }
+
+/// Game Text's audience policy matches enum display names by property path, so the map entry
+/// shape the projection emits is pinned here and mirrored in `text-audience.test.ts`.
+#[test]
+fn saved_enum_display_names_are_map_values() {
+    use uasset_inspection::projection::TextLocation;
+
+    let (bytes, package) = fixture("unreal-project/Content/Fixture/Text/E_TextDisplayNames.uasset");
+    let context = AssetDecodeContext {
+        source: &bytes,
+        package: &package,
+        schemas: uasset_parser::schema::embedded_source_model(),
+    };
+    let mut places = Vec::new();
+    for export in &package.exports {
+        if let Ok(Some(asset)) = decode_export(export, &context) {
+            for text in project_text_asset(&package, &asset).occurrences {
+                if let TextLocation::AssetProperty {
+                    object_path,
+                    class_path,
+                    property_path,
+                } = text.location
+                {
+                    places.push((object_path, class_path, property_path));
+                }
+            }
+        }
+    }
+    let object = "/Game/Fixture/Text/E_TextDisplayNames.E_TextDisplayNames";
+    let class = "/Script/Engine.UserDefinedEnum";
+    assert_eq!(
+        places,
+        [
+            (object, class, "DisplayNameMap{0}.value"),
+            (object, class, "DisplayNameMap{1}.value"),
+        ]
+        .map(|(object, class, path)| (
+            object.to_owned(),
+            class.to_owned(),
+            path.to_owned()
+        ))
+    );
+}

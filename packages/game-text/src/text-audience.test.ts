@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 import { Schema } from "effect";
 import { describe, expect, it } from "vitest";
 import { LocalizationTarget, discoverLocalizationTargets } from "@ue-shed/localization/browser";
@@ -8,6 +9,7 @@ import type { SavedAssetTextOccurrence } from "@ue-shed/unreal-assets";
 import { textOccurrenceFromExtraction } from "./corpus.js";
 import {
 	TEXT_AUDIENCE_POLICY,
+	type TextAudienceRule,
 	classifySavedTextAudience,
 	classifyTextAudience,
 	decodeTextAudience,
@@ -15,6 +17,7 @@ import {
 	isEditorOnlyText,
 	isEditorOnlyTextCode,
 	lineTextAudience,
+	matchTextAudiencePolicy,
 	occurrenceTextAudience,
 	textAudienceBit,
 	textAudienceOfMask,
@@ -168,7 +171,7 @@ describe("text audience policy table", () => {
 			"widget animation display names",
 			property(
 				"/Game/UI/WBP_Menu.WBP_Menu:HoverAnim.MovieScene_0",
-				"ObjectsToDisplayNames",
+				"ObjectsToDisplayNames{0}.value",
 				"/Script/MovieScene.MovieScene"
 			),
 			"objects_to_display_names"
@@ -257,7 +260,7 @@ describe("text audience policy table", () => {
 			"user defined enum display name",
 			property(
 				"/Game/Data/E_Rarity.E_Rarity",
-				"DisplayNameMap",
+				"DisplayNameMap{0}.value",
 				"/Script/Engine.UserDefinedEnum"
 			),
 			"user_defined_enum_display_name"
@@ -311,6 +314,114 @@ describe("text audience policy table", () => {
 		expect(
 			classifyTextAudience(property("/Game/Developer/B.B", "Label", "/Script/Game.Item"))
 		).toMatchObject({ audience: "unknown" });
+	});
+});
+
+describe("container property paths the reader writes", () => {
+	// The reader writes array and set elements as `Name[N]` and map entries as `Name{N}.key` and
+	// `Name{N}.value` (uasset-inspection projection.rs). The enum paths are pinned against the
+	// saved fixture by `saved_enum_display_names_are_map_values` in uasset-inspection.
+	const enumPath = "/Game/Fixture/Text/E_TextDisplayNames.E_TextDisplayNames";
+	const enumClass = "/Script/Engine.UserDefinedEnum";
+
+	it.each(["DisplayNameMap{0}.value", "DisplayNameMap{1}.value"])(
+		"reads the saved enum display name %s as player text",
+		(propertyPath) => {
+			const expected = {
+				audience: "player",
+				reason: "player_asset",
+				rule: "user_defined_enum_display_name"
+			};
+			expect(classifyTextAudience(property(enumPath, propertyPath, enumClass))).toEqual(
+				expected
+			);
+			const saved: SavedAssetTextOccurrence = {
+				source: "Common Item",
+				dev_notes: "",
+				identity: { status: "resolved", namespace: "Fixture.Enum", key: "CommonItem" },
+				location: {
+					kind: "asset_property",
+					object_path: enumPath,
+					class_path: enumClass,
+					property_path: propertyPath
+				},
+				edit_capability: "read_only"
+			};
+			expect(classifySavedTextAudience(saved)).toEqual(expected);
+		}
+	);
+
+	it.each(["ObjectsToDisplayNames{0}.value", "ObjectsToDisplayNames{3}.key"])(
+		"reads the widget animation map entry %s as editor text",
+		(propertyPath) => {
+			expect(
+				classifyTextAudience(
+					property(
+						"/Game/UI/WBP_Menu.WBP_Menu:HoverAnim.MovieScene_0",
+						propertyPath,
+						"/Script/MovieScene.MovieScene"
+					)
+				)
+			).toMatchObject({ audience: "editor", rule: "objects_to_display_names" });
+		}
+	);
+
+	it("matches every map path in the legacy fixture evidence as its map property", () => {
+		const paths = new Set<string>();
+		for (const engine of ["4.27", "5.3"]) {
+			const evidence = readFileSync(
+				new URL(
+					`../../../fixtures/legacy-unreal-project/Generated/${engine}/evidence.json`,
+					import.meta.url
+				),
+				"utf8"
+			);
+			for (const [, path] of evidence.matchAll(/"property_path": "([^"]*\{[^"]*)"/gu))
+				paths.add(path!);
+		}
+		const expected = (path: string) =>
+			path.startsWith("TextMap")
+				? "TextMap"
+				: path.endsWith(".Text")
+					? "NestedMap.Text"
+					: "NestedMap.Texts";
+		expect([...paths].sort()).toEqual([
+			"NestedMap{0}.value.Text",
+			"NestedMap{0}.value.Texts[0]",
+			"NestedMap{0}.value.Texts[1]",
+			"NestedMap{1}.value.Text",
+			"NestedMap{1}.value.Texts[0]",
+			"NestedMap{1}.value.Texts[1]",
+			"TextMap{0}.value",
+			"TextMap{1}.value"
+		]);
+		const rule = (value: string): TextAudienceRule => ({
+			id: value,
+			audience: "editor",
+			reason: "editor_property",
+			when: [{ kind: "property", value }],
+			why: "Test."
+		});
+		for (const path of paths) {
+			const subject = textAudienceSubject(property("/Game/Legacy/DA.DA", path));
+			expect(matchTextAudiencePolicy(subject, [rule(expected(path))])?.id, path).toBe(
+				expected(path)
+			);
+			// The entry side is not a property name.
+			expect(matchTextAudiencePolicy(subject, [rule("value")]), path).toBeUndefined();
+		}
+	});
+
+	it("keeps a struct field named Value inside an array element", () => {
+		const subject = textAudienceSubject(property("/Game/A/B.B", "Entries[0].Value"));
+		const rule: TextAudienceRule = {
+			id: "entries_value",
+			audience: "editor",
+			reason: "editor_property",
+			when: [{ kind: "property", value: "Entries.Value" }],
+			why: "Test."
+		};
+		expect(matchTextAudiencePolicy(subject, [rule])?.id).toBe("entries_value");
 	});
 });
 

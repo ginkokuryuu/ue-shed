@@ -62,11 +62,18 @@ const saved: Occurrence[] = [
 	}),
 	// Policy: developer folders are editor text, but not editor-only data a gather skips.
 	occurrence("Dev", "Test level sign", { object_path: "/Game/Dev/Test.Test" }),
-	// Policy: a Blueprint enum's display names are player text.
+	// Policy: a Blueprint enum's display names are player text. The reader writes them as map
+	// values (`saved_enum_display_names_are_map_values` in uasset-inspection).
 	occurrence("Enum", "Rare item", {
 		object_path: "/Game/Text/Table.Table",
 		class_path: "/Script/Engine.UserDefinedEnum",
-		property_path: "DisplayNameMap"
+		property_path: "DisplayNameMap{0}.value"
+	}),
+	// Policy: a widget animation's editor display names, a `TMap<FString, FText>`.
+	occurrence("Anim", "Hover target", {
+		object_path: "/Game/Text/Table.Table:HoverAnim.MovieScene_0",
+		class_path: "/Script/MovieScene.MovieScene",
+		property_path: "ObjectsToDisplayNames{0}.value"
 	}),
 	// Policy: DataTable cells are player text.
 	{
@@ -95,6 +102,7 @@ const expectedAudiences = {
 	Palette: ["editor", "editor_property", "palette_category"],
 	Dev: ["editor", "developer_folder", "dev_folder"],
 	Enum: ["player", "player_asset", "user_defined_enum_display_name"],
+	Anim: ["editor", "editor_property", "objects_to_display_names"],
 	Cell: ["player", "player_asset", "data_table"],
 	Plain: ["unknown", "no_evidence", undefined],
 	Mixed: ["editor", "editor_property", "tooltip"],
@@ -215,6 +223,7 @@ it.live("audience is stored, filtered, faceted and grouped the same through the 
 				// A developer folder is editor text by convention, not editor-only data.
 				Dev: ["editor", undefined, "not_gathered"],
 				Enum: ["player", undefined, "not_translated,translated"],
+				Anim: ["editor", "editor_only_data_not_gathered", "outside_target"],
 				Cell: ["player", undefined, "not_translated,translated"],
 				Plain: ["unknown", undefined, "not_translated,translated"],
 				Mixed: ["unknown", undefined, "not_gathered"],
@@ -286,6 +295,7 @@ it.live("audience is stored, filtered, faceted and grouped the same through the 
 			} as const;
 			const memoryLines = inMemory.localizationLines(exported);
 			expect(memoryLines.map((line) => line.identity?.key).sort()).toEqual([
+				"Anim",
 				"Dev",
 				"EditorOnly",
 				"Mixed",
@@ -315,7 +325,7 @@ it.live("audience is stored, filtered, faceted and grouped the same through the 
 				Object.fromEntries(
 					player.facets!.audiences!.entries.map((entry) => [entry.key, entry.count])
 				)
-			).toEqual({ player: 3, editor: 4, unknown: 2 });
+			).toEqual({ player: 3, editor: 5, unknown: 2 });
 			// Without a target, units are listed by their own audience.
 			const editor = yield* result.search({
 				query: "",
@@ -324,6 +334,7 @@ it.live("audience is stored, filtered, faceted and grouped the same through the 
 				filter: [{ field: "audience", op: "is", values: ["editor"] }]
 			});
 			expect(editor.units.map((unit) => keyOfUnit(memory, unit.id)).sort()).toEqual([
+				"Anim",
 				"Dev",
 				"EditorOnly",
 				"Node",

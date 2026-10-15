@@ -65,6 +65,13 @@ export type TextAudienceRule = {
 };
 
 /**
+ * The version of how subjects are read and matched (property path normalization, name matching).
+ * Bump it with any matcher change: indexes key their stored audience on it and the policy table.
+ * 2: map entries (`Map{N}.value`) match as their map property.
+ */
+export const TEXT_AUDIENCE_MATCHER_VERSION = 2;
+
+/**
  * The reviewed fallback policy, used when Unreal's gather table has no answer for an occurrence.
  * Rows apply in order; the first match wins. Editor rows come before player rows, so a K2 node
  * inside a Widget Blueprint graph stays editor text. Changes here change every project's counts:
@@ -339,13 +346,27 @@ export type TextAudienceSubject = {
 	readonly locationKind: TextOccurrence["location"]["kind"];
 };
 
-const PROPERTY_SUFFIX = /(?:\[[^\]]*\]|\("[^"]*"\))+$/u;
+/** Container indexes the reader appends to a property name: `[N]` for array and set elements,
+ * `{N}` for map entries, and `("…")` for named entries. */
+const PROPERTY_SUFFIX = /(?:\[[^\]]*\]|\{[^}]*\}|\("[^"]*"\))+$/u;
+const MAP_ENTRY = /\{[^}]*\}$/u;
 
+/**
+ * A property path's property names, without container indexes. The reader writes a map entry's
+ * key and value as `Map{N}.key` and `Map{N}.value`; those two elements name the entry, not a
+ * property, so they are dropped and the text matches as the map property (`Map`).
+ */
 function propertyElements(path: string): readonly string[] {
-	return path
-		.split(".")
-		.map((element) => element.replace(PROPERTY_SUFFIX, ""))
-		.filter((element) => element !== "");
+	const elements: string[] = [];
+	let afterMapEntry = false;
+	for (const element of path.split(".")) {
+		const mapEntrySide = afterMapEntry && (element === "key" || element === "value");
+		afterMapEntry = MAP_ENTRY.test(element);
+		if (mapEntrySide) continue;
+		const name = element.replace(PROPERTY_SUFFIX, "");
+		if (name !== "") elements.push(name);
+	}
+	return elements;
 }
 
 /** Splits an Unreal object path into its package and the object names below it. */
