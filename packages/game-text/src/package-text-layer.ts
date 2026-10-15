@@ -35,8 +35,10 @@ export const PackageTextInventoryEntry = Schema.Struct({
 	headerData: ProjectIndexHeader.fields.headerData
 });
 export type PackageTextInventoryEntry = typeof PackageTextInventoryEntry.Type;
-/** Bump when package text columns change; older shards are read again instead of decoded. */
-export const PACKAGE_TEXT_FORMAT = "package-text-v2";
+/** Bump when package text columns change; older shards are read again instead of decoded.
+ * v3: object paths are completed with the package name; v2 shards from UE 4.27 projects held
+ * package-relative names. */
+export const PACKAGE_TEXT_FORMAT = "package-text-v3";
 export const PACKAGE_TEXT_SHARDS = 256;
 export function packageTextShard(path: string) {
 	let hash = 2166136261;

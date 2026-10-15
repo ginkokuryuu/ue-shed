@@ -27,6 +27,7 @@ import {
 	type TextPackageCoverage,
 	type TextUnit
 } from "./schema.js";
+import { mountPackageTextEvent } from "./package-object-path.js";
 
 const makeOccurrenceId = TextOccurrenceId.make;
 const makeUnitId = TextUnitId.make;
@@ -623,8 +624,10 @@ function missingMessage(missing: SavedAssetGatherCoverage): string {
 function foldTextExtractionEvent(
 	projectRoot: string,
 	accumulator: TextExtractionAccumulator,
-	event: SavedAssetTextExtractionEvent | SavedAssetPackageTextEvent
+	extracted: SavedAssetTextExtractionEvent | SavedAssetPackageTextEvent
 ): TextExtractionAccumulator {
+	// The index completes the same paths when it stores records, so both corpora agree.
+	const event = mountPackageTextEvent(projectRoot, extracted);
 	if (event.event === "text_package_record") {
 		const packageFile = relative(projectRoot, event.path);
 		for (const occurrence of event.occurrences) {

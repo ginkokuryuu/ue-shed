@@ -160,77 +160,104 @@ describe("gather coverage", () => {
 		}
 	}, 15000);
 
-	it("reads packages again when the cache holds shards from the previous column format", async () => {
-		const root = await mkdtemp(join(tmpdir(), "ue-shed-gather-upgrade-"));
-		const path = "Content/UI/E_Style.uasset";
-		const entry: PackageTextInventoryEntry = {
-			path,
-			signature: "unchanged",
-			headerData: {
-				packageFlags: 0x40000,
-				gatherableTextDataCount: 1,
-				gatherableTextDataOffset: 1,
-				hasTextProperty: true
-			}
-		};
-		// A v1 shard: the same package, before the gather columns existed.
-		const v1 = packageTextColumns([
-			{ path, signature: "unchanged", evidence: emptyPackageTextRecord(path) }
-		]);
-		const v1Source = {
-			columns: v1.columns.filter(
-				(column) =>
-					!/^(?:package\.gather|package\.missing_start|missing\.)/u.test(column.name)
-			)
-		};
-		const reads: string[] = [];
-		try {
-			const stored = await Effect.runPromise(
-				Effect.scoped(
-					Effect.gen(function* () {
-						const index = yield* SharedIndex;
-						yield* Effect.scoped(
-							Effect.gen(function* () {
-								const writer = yield* index.writer();
-								yield* writer.publishCold([
-									{
-										name: `package-text.${packageTextShard(path)}`,
-										key: `package-text-v1:${packageTextShard(path)}:old`,
-										source: v1Source
-									}
-								]);
-							})
-						);
-						yield* Effect.scoped(
-							refreshPackageTextLayer({
-								inventory: [entry],
-								read: (paths) => {
-									reads.push(...paths);
-									return Stream.fromIterable(
-										paths.map(() => missingEnumNames(path))
-									);
-								}
-							})
-						);
-						const reader = yield* index.open();
-						return yield* decodePackageTextColumns(
-							yield* reader.layer(`package-text.${packageTextShard(path)}`)
-						);
-					})
-				).pipe(
-					Effect.provide(
-						sharedIndexNodeLayer({
-							cacheRoot: root,
-							projectKey: root,
-							targetKey: "upgrade"
-						})
-					)
+	it.each(["package-text-v1", "package-text-v2"])(
+		"reads packages again when the cache holds %s shards",
+		async (format) => {
+			const root = await mkdtemp(join(tmpdir(), "ue-shed-gather-upgrade-"));
+			const path = "Content/UI/E_Style.uasset";
+			const entry: PackageTextInventoryEntry = {
+				path,
+				signature: "unchanged",
+				headerData: {
+					packageFlags: 0x40000,
+					gatherableTextDataCount: 1,
+					gatherableTextDataOffset: 1,
+					hasTextProperty: true
+				}
+			};
+			// The same package as an older format stored it.
+			const previous = packageTextColumns([
+				{
+					path,
+					signature: "unchanged",
+					evidence: {
+						...emptyPackageTextRecord(path),
+						// v2 kept the package-relative object paths UE 4.27 packages are read with.
+						occurrences: [
+							{
+								source: "White",
+								dev_notes: "",
+								identity: { status: "resolved", namespace: "", key: "KEY0" },
+								location: {
+									kind: "asset_property",
+									object_path: "E_Style",
+									class_path: "/Script/Engine.UserDefinedEnum",
+									property_path: "DisplayNameMap"
+								},
+								edit_capability: "read_only"
+							}
+						]
+					}
+				}
+			]);
+			// v1 shards were written before the gather columns existed.
+			const stale = {
+				columns: previous.columns.filter(
+					(column) =>
+						format !== "package-text-v1" ||
+						!/^(?:package\.gather|package\.missing_start|missing\.)/u.test(column.name)
 				)
-			);
-			expect(reads).toEqual([path]);
-			expect(stored.map((record) => record.evidence)).toEqual([missingEnumNames(path)]);
-		} finally {
-			await rm(root, { recursive: true, force: true });
-		}
-	}, 15000);
+			};
+			const reads: string[] = [];
+			try {
+				const stored = await Effect.runPromise(
+					Effect.scoped(
+						Effect.gen(function* () {
+							const index = yield* SharedIndex;
+							yield* Effect.scoped(
+								Effect.gen(function* () {
+									const writer = yield* index.writer();
+									yield* writer.publishCold([
+										{
+											name: `package-text.${packageTextShard(path)}`,
+											key: `${format}:${packageTextShard(path)}:old`,
+											source: stale
+										}
+									]);
+								})
+							);
+							yield* Effect.scoped(
+								refreshPackageTextLayer({
+									inventory: [entry],
+									read: (paths) => {
+										reads.push(...paths);
+										return Stream.fromIterable(
+											paths.map(() => missingEnumNames(path))
+										);
+									}
+								})
+							);
+							const reader = yield* index.open();
+							return yield* decodePackageTextColumns(
+								yield* reader.layer(`package-text.${packageTextShard(path)}`)
+							);
+						})
+					).pipe(
+						Effect.provide(
+							sharedIndexNodeLayer({
+								cacheRoot: root,
+								projectKey: root,
+								targetKey: "upgrade"
+							})
+						)
+					)
+				);
+				expect(reads).toEqual([path]);
+				expect(stored.map((record) => record.evidence)).toEqual([missingEnumNames(path)]);
+			} finally {
+				await rm(root, { recursive: true, force: true });
+			}
+		},
+		15000
+	);
 });

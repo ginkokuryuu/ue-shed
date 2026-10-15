@@ -11,6 +11,7 @@ import {
 	Schema,
 	Semaphore,
 	RcMap,
+	Stream,
 	Struct,
 	Scope
 } from "effect";
@@ -60,6 +61,7 @@ import type { refreshJoinedTarget, JoinedTargetInput } from "./joined-target.js"
 import type { LocalizationReviewSnapshot } from "@ue-shed/localization";
 import type { GameTextProjectView } from "./project-index-view.js";
 import { encodeWtf8 } from "./wtf8.js";
+import { mountPackageTextEvent } from "./package-object-path.js";
 import {
 	observeGameTextImport,
 	checkRetainedImportObservations
@@ -351,11 +353,16 @@ export const makeGameTextIndexSteps = (
 						);
 					const packageRequest = {
 						inventory,
+						// Stored records carry Unreal's object paths, as the in-memory corpus does.
 						read: (paths) =>
-							source.read(
-								projectRoot,
-								paths.map((path) => byPath.get(path)!)
-							)
+							source
+								.read(
+									projectRoot,
+									paths.map((path) => byPath.get(path)!)
+								)
+								.pipe(
+									Stream.map((event) => mountPackageTextEvent(projectRoot, event))
+								)
 					} satisfies Parameters<typeof refreshPackageTextLayer>[0];
 					if (request.changedFiles !== undefined)
 						Object.assign(packageRequest, { changedFiles: request.changedFiles });
