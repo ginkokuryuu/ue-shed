@@ -51,7 +51,7 @@ describe.skipIf(!executable)("localization check CLI with the real reader", () =
 				"--culture",
 				"de",
 				"--check",
-				"format_arguments",
+				"format_argument_renamed",
 				"--check",
 				"rich_text",
 				"--changes",
@@ -68,7 +68,7 @@ describe.skipIf(!executable)("localization check CLI with the real reader", () =
 					(finding) =>
 						"culture" in finding &&
 						finding.culture === "de" &&
-						["format_arguments", "rich_text"].includes(finding.kind)
+						["format_argument_renamed", "rich_text"].includes(finding.kind)
 				)
 			).toBe(true);
 			expect(
