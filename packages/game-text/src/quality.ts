@@ -96,12 +96,20 @@ function escapedRegExp(value: string): string {
 	return value.replace(/[.*+?^${}()|[\]\\]/gu, "\\$&");
 }
 
+/** Literal terms bounded by Unicode letters/numbers; punctuation inside a term stays literal. */
+function terminologyExpression(term: string, caseSensitive: boolean): RegExp {
+	return new RegExp(
+		"(?<![\\p{L}\\p{N}])" + escapedRegExp(term) + "(?![\\p{L}\\p{N}])",
+		caseSensitive ? "gu" : "giu"
+	);
+}
+
 export function termMatches(
 	source: string,
 	term: string,
 	caseSensitive: boolean
 ): ReadonlyArray<{ readonly end: number; readonly matched: string; readonly start: number }> {
-	const expression = new RegExp(escapedRegExp(term), caseSensitive ? "gu" : "giu");
+	const expression = terminologyExpression(term, caseSensitive);
 	return matchesExpression(source, expression);
 }
 
@@ -127,7 +135,7 @@ function prepareTerminology(rule: TerminologyRule) {
 			entry,
 			term,
 			asciiTerm: /^\p{ASCII}*$/u.test(term) ? term.toLowerCase() : undefined,
-			expression: new RegExp(escapedRegExp(term), rule.caseSensitive ? "gu" : "giu")
+			expression: terminologyExpression(term, rule.caseSensitive)
 		}));
 	});
 }
