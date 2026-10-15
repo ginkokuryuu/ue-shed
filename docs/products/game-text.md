@@ -489,6 +489,10 @@ of which must match the same occurrence. Scopes are alternatives: an occurrence 
 when any complete scope matches. Matchers may use location kind, object path, DataTable row/property
 evidence, asset class/property evidence, or String Table identity. Empty roles, empty scopes, empty
 path values, unknown matcher kinds, duplicate IDs, and rules referencing unknown roles are invalid.
+Matchers read the place's own location. A Blueprint place's folded copies
+([compiled Blueprint copies](#compiled-blueprint-copies)) never match by their compiled paths, so a
+role selects the authored site, whose text is the line's; a site saved only under the generated
+class stays a place at that path and matches there.
 Invalid configuration fails as a typed, actionable decode/validation error and never falls back to
 an unscoped or whole-project role.
 
@@ -544,11 +548,15 @@ starter and offers to load an existing file.
 The CLI surface is `ue-shed text review <project-root> --rules <file>`, with the existing optional
 reader selection. Rule-file IO and decoding are typed boundary failures with safe recovery text.
 The evaluator itself is a pure exported function over a decoded rule document and `TextCorpus`.
+Hosts with an opened index evaluate the same rules over it instead (`sourceQuality`): the scan
+reads units in pages of index columns, yields between them, reports progress, keeps each finding
+as a few numbers and rebuilds only the findings a page, focus or export shows. Its summary,
+pages, focus, export and finding IDs equal the in-memory evaluation's.
 
 Browser-safe rule, report, finding, and query schemas live in `@ue-shed/game-text/browser` for
 trusted host presentation. Workbench exposes quality review through the existing `GameTextClient`
-and corpus query boundary. Its trusted main process retains the active corpus, decoded rules,
-evaluated report, and rule-file path; the renderer receives the bounded decoded rule document, a
+and corpus query boundary. Its trusted main process retains the active index, decoded rules,
+the rules' indexed findings, and rule-file path; the renderer receives the bounded decoded rule document, a
 summary, bounded finding pages, and bounded focused occurrence evidence. It never receives
 filesystem authority, the rule-file path, a complete report, or a complete corpus.
 

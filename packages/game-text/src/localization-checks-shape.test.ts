@@ -38,6 +38,7 @@ import {
 	workspaceQualityCsv
 } from "./localization-workspace.js";
 import { STARTER_GAME_TEXT_RULES } from "./starter-rules.js";
+import { evaluateGameTextSourceQuality } from "./quality-rules-v2.js";
 import { TextQualityRuleDocument } from "./quality-schema.js";
 import { TextUnit, type TextCorpus } from "./schema.js";
 
@@ -602,6 +603,47 @@ describe("built-in source checks", () => {
 		expect(
 			kind(line("TODO", "TODO", { culture: cultureCode("de") }), "placeholder_text")
 		).toEqual([]);
+	});
+	it("leaves a placeholder to the rule file's forbidden source term that reports it", () => {
+		const source = "TODO: placeholder name";
+		// The starter rules forbid "placeholder" in text under /Game/.
+		const starter = rules({});
+		const matches = (value: LocalizationQualityReport) =>
+			kind(value, "placeholder_text").map((finding) => finding.actual.matches);
+		expect(matches(line(source, source))).toEqual([["TODO", "placeholder"]]);
+		expect(matches(line(source, source, {}, starter))).toEqual([["TODO"]]);
+		const text = corpus([unit("K", source)]);
+		const terms = evaluateGameTextSourceQuality(text, starter).findings.filter(
+			(finding) => finding.kind === "terminology"
+		);
+		expect(terms.map((finding) => finding.actual)).toMatchObject([{ start: 6, end: 17 }]);
+		// A role that does not select the line's place leaves the placeholder to the built-in.
+		const elsewhere = rules({
+			roles: [
+				...STARTER_GAME_TEXT_RULES.roles,
+				{
+					id: "elsewhere",
+					scopes: [
+						{
+							matchers: [
+								{ kind: "object_path", operator: "prefix", value: "/Other/" }
+							]
+						}
+					]
+				}
+			],
+			rules: [
+				{
+					id: "elsewhere-terms",
+					kind: "terminology",
+					role: "elsewhere",
+					caseSensitive: true,
+					terms: [{ kind: "forbidden", term: "TODO" }],
+					recovery: "Finish the text."
+				}
+			]
+		} as unknown as Partial<TextQualityRuleDocument>);
+		expect(matches(line(source, source, {}, elsewhere))).toEqual([["TODO", "placeholder"]]);
 	});
 	it("checks source markup the way Slate reads it", () => {
 		const markup = (source: string) => kind(line(source, source), "source_markup");

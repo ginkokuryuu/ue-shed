@@ -355,11 +355,35 @@ export class JoinedQueryData {
 		}
 		return value;
 	}
-	occurrence(global: number): TextOccurrence {
+	/** The package shard holding a global occurrence row, and the row within it. */
+	occurrenceShard(global: number) {
+		// The last shard starting at or before the row, past any empty shards.
 		const starts = this.joined.meta.packageStarts;
-		let shard = 0;
-		while (starts[shard + 1]! <= global) shard++;
-		const row = global - starts[shard]!;
+		let shard = 0,
+			high = starts.length - 1;
+		while (shard < high) {
+			const middle = (shard + high + 1) >>> 1;
+			if (starts[middle]! <= global) shard = middle;
+			else high = middle - 1;
+		}
+		return { shard, row: global - starts[shard]! };
+	}
+	/** The project-relative package file of a shard's occurrence row, as `TextOccurrence` has it. */
+	occurrencePackageFile(shard: number, row: number): string {
+		const packageStarts = this.packageColumn(shard, "package.occurrence_start");
+		let low = 0,
+			high = packageStarts.length - 2;
+		while (low < high) {
+			const mid = (low + high + 1) >>> 1;
+			if (packageStarts[mid]! <= row) low = mid;
+			else high = mid - 1;
+		}
+		const path = this.strings([this.packageColumn(shard, "package.path")[low]!])[0]!;
+		const projectRoot = this.joined.meta.input.projectRoot;
+		return relative(projectRoot, resolve(projectRoot, path));
+	}
+	occurrence(global: number): TextOccurrence {
+		const { shard, row } = this.occurrenceShard(global);
 		const c = (field: string) => this.packageColumn(shard, `occurrence.${field}`)[row]!;
 		const fields = [
 			"source",
@@ -373,21 +397,11 @@ export class JoinedQueryData {
 		];
 		const values = this.strings(fields.map(c));
 		const s = (field: string) => values[fields.indexOf(field)]!;
-		const packageStarts = this.packageColumn(shard, "package.occurrence_start");
-		let low = 0,
-			high = packageStarts.length - 2;
-		while (low < high) {
-			const mid = (low + high + 1) >>> 1;
-			if (packageStarts[mid]! <= row) low = mid;
-			else high = mid - 1;
-		}
-		const path = this.strings([this.packageColumn(shard, "package.path")[low]!])[0]!;
-		const projectRoot = this.joined.meta.input.projectRoot;
 		const identity = c("identity"),
 			location = c("location"),
 			gather = c("gather");
 		const occurrence = textOccurrenceFromExtraction({
-			packageFile: relative(projectRoot, resolve(projectRoot, path)),
+			packageFile: this.occurrencePackageFile(shard, row),
 			occurrence: {
 				source: s("source"),
 				dev_notes: s("notes"),

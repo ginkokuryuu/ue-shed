@@ -15,6 +15,8 @@ import type { TextCorpus, TextCorpusSearchRequest, TextCorpusSearchPage } from "
 import type { LocalizationJoin } from "./localization-schema.js";
 import type { IndexedLocalizationQualityOptions } from "./localization-quality-index.js";
 import type { LocalizationQuality } from "./localization-workspace.js";
+import type { IndexedSourceQualityOptions } from "./source-quality-index.js";
+import type { TextQualityQuery } from "./quality-query.js";
 import type { GameTextRuleDocument } from "./quality-rules-v2.js";
 import { LocalizationKeyChangePair } from "./localization-key-changes.js";
 import type { refreshJoinedTarget } from "./joined-target.js";
@@ -93,6 +95,18 @@ export interface GameTextIndexRefreshResult {
 				options?: IndexedLocalizationQualityOptions,
 				ruleDocument?: GameTextRuleDocument
 		  ) => Effect.Effect<LocalizationQuality>)
+		| undefined;
+	/**
+	 * Source quality rules evaluated over the index in bounded pages: the query
+	 * `textQualityQuery(evaluateGameTextSourceQuality(corpus, ruleDocument))` gives, without
+	 * building the corpus's units. The scan yields between pages and can be interrupted. Absent on
+	 * adapters without an index; hosts then evaluate `corpus` in memory.
+	 */
+	readonly sourceQuality?:
+		| ((
+				ruleDocument: GameTextRuleDocument,
+				options?: IndexedSourceQualityOptions
+		  ) => Effect.Effect<TextQualityQuery>)
 		| undefined;
 }
 

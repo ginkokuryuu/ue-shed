@@ -74,6 +74,16 @@ fresh child and 10× refusal apply; this child also loads `tsx` to read the pack
 node scripts/benchmark-game-text-scale.ts --project test-results/game-text-scale/project-1x --select quality --cache test-results/game-text-scale/quality-cache-1x --records test-results/game-text-scale/phase4-records-1x --output test-results/game-text-scale/quality-1x.json
 ```
 
+`--select source-quality` runs the same `open` stage, then `source_quality`: the opened index's
+`sourceQuality` with `scaleSourceRules` (`game-text-scale-quality.ts`), five roles over the
+generated paths, rows, String Table keys and properties, with two character budgets and three
+terminology rules. Every generated source holds each of the generator's eight words, so the
+terminology rules match in every line their roles select. Counts add the finding counts, units
+per role, the first 50-finding page's and its last finding's focus time, and the same stall probe.
+`--select source-quality-memory` evaluates the same rules the way hosts did before:
+`textQualityQuery(evaluateGameTextSourceQuality(result.corpus, rules))`, which builds every unit of
+the index's corpus first.
+
 `localization-join-oracle.test-support.ts` is Phase 5's semantic comparator. It compares all join
 fields by stable line ID, reports a bounded readable list and uncapped counts, and documents
 which arrays are sets, multisets or ordered values. It accepts already decoded `LocalizationJoin`

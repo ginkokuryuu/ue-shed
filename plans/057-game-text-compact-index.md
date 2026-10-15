@@ -1782,6 +1782,73 @@ times are within the spread one commit shows (the plan's earlier records range o
 the copies variant's cold build reads 81% more raw occurrences. No 10× run was made; Unreal was not
 run, and the UE 5.7/5.8 engine matrix was not run (no parser change).
 
+### Follow-up: source quality rules over the index
+
+Hosts evaluated source rules with `evaluateGameTextSourceQuality(result.corpus, rules)` and paged
+them with `textQualityQuery`. Reading `corpus.units` hydrates every unit of the index (each
+occurrence's eight strings, its package file and its audience), and the evaluation then runs in one
+synchronous block. A desktop host on a 238k-line project reported about 55 s blocked and 1.3 GB
+added each time rules load or the project refreshes.
+
+- **Indexed scan.** An opened index model's `sourceQuality(ruleDocument, { onProgress? })` (and
+  `indexedSourceQuality(joined, corpus, ruleDocument, options?)`) returns the `TextQualityQuery`
+  the in-memory pair gives. It reads units in `query.raw.order`, which is the report's unit order,
+  in pages of 256 units or 1,024 occurrences, yielding after each. Roles match locations built
+  from the occurrence columns with the same `matchesTextRole`; sources are read only for
+  occurrences a rule's role selects, and package files only for a finding's occurrences. Budget
+  and terminology findings come from `textQualityUnitFindings`, which the in-memory evaluation now
+  also uses, so both paths share every rule's logic.
+- **Compact findings.** Each finding keeps its rule, unit rank, place among that unit's findings and
+  its ID's 64-bit hash: 18 bytes. A stable counting sort by rule gives the report's order. Search
+  pages, focus and export rebuild the findings they return from their units and check each
+  against its hash. `textQualityQueryOf(report, list)` is the query over any finding list;
+  `textQualityQuery` is it over an array. Finding IDs hash with two u32 halves instead of BigInt,
+  with the same IDs.
+- **Progress.** `SourceQualityProgress` is `{ checkedTextUnits, totalTextUnits, findings }`: once
+  before the scan, after each page, the last call with every unit checked.
+- **Copies.** Roles match a place by its own location in both paths; a folded Blueprint place's
+  copies never match by their compiled paths. A role selects the authored site, whose text is the
+  line's. A site saved only under a generated class stays a place at that path and matches there.
+- **Hosts.** Workbench's rules report and its localization workspace's source findings use the
+  index when the model has one; adapters without an index keep the in-memory functions.
+
+The oracle (`source-quality-index.test.ts`) compares the summary, every export, every search page
+by cursor at three page sizes, and every focus and occurrence page between the indexed query and
+the in-memory query over the index's corpus, and that report with the one over the reader's own
+corpus. It covers five rule documents, including the checked-in v1 and v2 examples, every matcher
+kind exact and prefix, both rule kinds, shared and conflicting keys, blank and invariant text, a
+partial package's diagnostics, a 703-unit target over several pages and a Blueprint with copies.
+`source-quality-fixture.integration.test.ts` runs the same comparison on the saved fixture
+project's index with the native reader, for the example documents and a document of roles read
+from the fixture's own evidence.
+
+1× scale harness, `--select source-quality` (and `source-quality-memory` for the previous path),
+Node 26.12.0, default heap, a freshly generated `--seed 57` project and its converted records.
+`scaleSourceRules` has five roles and five rules (two budgets, three terminology rules); every
+generated source holds each word the terminology rules look for, so their roles' lines all report.
+Both paths return 779,602 findings (627,073 budget, 152,529 terminology).
+
+| Source rules, 1×                      | In memory (before) |                 Indexed, warm |
+| ------------------------------------- | -----------------: | ----------------------------: |
+| Evaluation                            |             74.9 s |                28.7, 29.2 s ¹ |
+| Peak V8 heap during it                |          1,718 MiB |                  102, 102 MiB |
+| V8 heap kept after collection         |          1,587 MiB | 46, 46 MiB (44 after opening) |
+| Peak RSS (after opening: 826–862 MiB) |          2,817 MiB |                  955, 943 MiB |
+| Event-loop stalls p50 / p95           |      one of 74.4 s |                 16 / 33–34 ms |
+| Longest stall / over 100 ms           |         74.4 s / 1 |            260–268 ms / 1–2 ² |
+| First 50-finding page / its focus     |  23.0 ms / 0.20 ms |   22.8–26.0 ms / 0.36–0.38 ms |
+
+¹ The first run on an empty cache built the index in 104.9 s, then scanned in 33.1 s (longest
+stall 0.37 s), before two changes: each shard's occurrence columns are looked up once per scan
+instead of per field read, and the scan yields before and after reading the diagnostics.
+² The longest stall is the last step: `metadataReport`, the corpus's bounded diagnostics, about
+0.25 s over 166,518 packages. The other over 100 ms is the first column loads at 0.1 s.
+
+The indexed scan's RSS above the opened index (about 120 MiB of array buffers) is the occurrence
+and unit columns it reads, which the returned query keeps to rebuild findings, and the findings'
+columns (13 MiB at 779,602 findings). The in-memory path keeps the hydrated corpus because the
+index's `corpus.units` caches it. No 10× run was made; Unreal was not run.
+
 ### Follow-up: check severity, shape and source checks (P1.5–P1.7)
 
 A review of shipped projects asked for three things: rank findings by how much they matter, check a

@@ -84,6 +84,7 @@ export * from "./index-steps.js";
 export * from "./index-source-node.js";
 export * from "./index-context.js";
 export * from "./localization-quality-index.js";
+export * from "./source-quality-index.js";
 export * from "./index-retained.js";
 export { makeGameTextSearchWorker } from "./search-worker-node.js";
 export { columnarTextCorpusQuery } from "./columnar-query.js";

@@ -27,7 +27,15 @@ const Memory = Schema.Struct({
 	rss: Schema.Number,
 	arrayBuffers: Schema.Number
 });
-const Stage = Schema.Literals(["evidence", "corpus", "join", "status", "open", "quality"]);
+const Stage = Schema.Literals([
+	"evidence",
+	"corpus",
+	"join",
+	"status",
+	"open",
+	"quality",
+	"source_quality"
+]);
 const Message = Schema.Struct({
 	kind: Schema.Literals(["start", "sample", "complete", "failure", "done"]),
 	stage: Stage,
@@ -56,10 +64,14 @@ const { values } = parseArgs({
 if (values.project === undefined)
 	throw new Error("Provide --project with a generated project directory.");
 const project = repositoryPath(values.project);
-const select = Schema.decodeUnknownSync(Schema.Literals(["pipeline", "quality"]))(values.select);
-if (select === "quality" && (values.cache === undefined || values.records === undefined))
+const select = Schema.decodeUnknownSync(
+	Schema.Literals(["pipeline", "quality", "source-quality", "source-quality-memory"])
+)(values.select);
+/** Selections that open the generated target's index and scan it. */
+const overIndex = select !== "pipeline";
+if (overIndex && (values.cache === undefined || values.records === undefined))
 	throw new Error(
-		"The quality stage needs --cache (index cache) and --records (package records)."
+		"The quality stages need --cache (index cache) and --records (package records)."
 	);
 const cache = values.cache === undefined ? undefined : repositoryPath(values.cache);
 const records = values.records === undefined ? undefined : repositoryPath(values.records);
@@ -137,13 +149,22 @@ if (values.worker) {
 	}
 	/** The index hosts open, then the quality scan they run over it, timed and probed apart. */
 	async function qualityStages() {
-		const { openScaleIndex, scaleQuality } = await import("./game-text-scale-quality.ts");
+		const { openScaleIndex, scaleQuality, scaleSourceQuality } =
+			await import("./game-text-scale-quality.ts");
 		// Reuses the index in --cache, or builds it there when the cache is empty.
 		const index = await measure("open", () => openScaleIndex(project, cache!, records!));
 		try {
-			const { quality: _, ...scan } = await measure("quality", () =>
-				scaleQuality(index.result)
-			);
+			const scan =
+				select === "quality"
+					? await measure("quality", () => scaleQuality(index.result)).then(
+							({ quality: _, ...counts }) => counts
+						)
+					: await measure("source_quality", () =>
+							scaleSourceQuality(
+								index.result,
+								select === "source-quality" ? "indexed" : "memory"
+							)
+						).then(({ query: _, ...counts }) => counts);
 			send("done", {
 				counts: {
 					heapLimitBytes: getHeapStatistics().heap_size_limit,
@@ -156,7 +177,7 @@ if (values.worker) {
 		}
 	}
 	try {
-		if (select === "quality") await qualityStages();
+		if (overIndex) await qualityStages();
 		else await pipelineStages();
 	} catch (cause) {
 		send("sample");
@@ -200,10 +221,10 @@ if (values.worker) {
 					stageTimeoutSeconds: timeout / 1000,
 					sampling:
 						"Heap: 25 ms timer/checkpoints plus V8 pre-GC trace peaks (including synchronous stages). RSS: timer and independent parent OS poll. Array buffers: timer/checkpoint lower bound during synchronous stages. Final GC per stage. Peaks include retained inputs from prior stages.",
-					...(select === "quality"
+					...(overIndex
 						? {
 								stallProbe:
-									"Quality stage: gaps between ticks of a 10 ms interval timer during the scan, as counts stallP50Ms, stallP95Ms and stallMaxMs."
+									"Quality stages: gaps between ticks of a 10 ms interval timer during the scan, as counts stallP50Ms, stallP95Ms and stallMaxMs."
 							}
 						: undefined),
 					results
@@ -245,7 +266,7 @@ if (values.worker) {
 			{
 				execArgv: [
 					// The quality stage reads retained package records with the package's helpers.
-					...(select === "quality" ? ["--import", "tsx"] : []),
+					...(overIndex ? ["--import", "tsx"] : []),
 					"--expose-gc",
 					"--trace-gc-nvp",
 					...(heap === "default" ? [] : [`--max-old-space-size=${heap}`]),

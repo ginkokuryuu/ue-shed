@@ -22,8 +22,12 @@ Rate Game Text checks by severity and add translation shape, source and consiste
   `string_table_key_collision`. `BuiltInCheckId` names every built-in for `checks`,
   `disabledChecks`, `disabledLocalizationChecks` and `loc check --check`.
 - Rule files (v1 and v2) take optional `segmentSeparator`, `optionalTags` and `optionalArguments`.
-- `culture_invariant_text` reports only player text outside debug content and placed text renders,
-  in a property that is localizable elsewhere in the project.
+- `culture_invariant_text` reports only player text outside debug content and text render
+  components, in a property that holds at least as much localizable text in the project.
+- `placeholder_text` leaves out a placeholder a rule file's forbidden source term reports.
+- Indexed scans build a line's units only for its findings, read translator notes and String
+  Table entries from occurrence columns, and halve slow pages, so a key saved in thousands of
+  places no longer stalls the scan for seconds.
 - `duplicate_source` reports once per shared text and leaves out text without letters.
 - Keys with conflicting saved texts list them in `sourceVariants` on findings, summaries and focus
   instead of the joined text, and are not compared or grouped by it.

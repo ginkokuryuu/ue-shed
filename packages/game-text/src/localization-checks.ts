@@ -22,7 +22,12 @@ import {
 	type LocalizationCheckDiagnostic
 } from "./localization-quality-schema.js";
 import { localizationEvidenceFileStatuses } from "./localization-status.js";
-import { TextQualityRuleId, type TextQualityAffectedOccurrence } from "./quality-schema.js";
+import {
+	TextQualityRuleId,
+	type TextQualityAffectedOccurrence,
+	type TextRole
+} from "./quality-schema.js";
+import { matchesTextRole, termMatches } from "./quality.js";
 import type { GameTextRuleDocument } from "./quality-rules-v2.js";
 import { evaluateLocalizationPolicy } from "./localization-policy.js";
 import { localizationShippedTranslation } from "./localization-shipped-translation.js";
@@ -155,6 +160,15 @@ export interface LocalizationLineCheckContext {
 	readonly optionalTags: ReadonlySet<string>;
 	/** The rule file's `optionalArguments`. */
 	readonly optionalArguments: ReadonlySet<string>;
+	/**
+	 * Forbidden terms of the rule file's source terminology rules, with their roles. Source quality
+	 * reports them; `placeholder_text` leaves out a placeholder they already report.
+	 */
+	readonly forbiddenSourceTerms: ReadonlyArray<{
+		readonly role: TextRole;
+		readonly terms: readonly string[];
+		readonly caseSensitive: boolean;
+	}>;
 	/**
 	 * `localizationPropertiesWhereLocalizable` over the project: culture-invariant text is
 	 * reported only in these properties.
@@ -321,10 +335,19 @@ export function localizationSourceCulture(
 
 /** The rule file's settings the line checks read. */
 export function localizationRuleContext(ruleDocument: GameTextRuleDocument | undefined) {
+	const roles = new Map((ruleDocument?.roles ?? []).map((role) => [role.id, role]));
 	return {
 		segmentSeparator: ruleDocument?.segmentSeparator,
 		optionalTags: new Set((ruleDocument?.optionalTags ?? []).map((tag) => tag.toLowerCase())),
-		optionalArguments: new Set(ruleDocument?.optionalArguments ?? [])
+		optionalArguments: new Set(ruleDocument?.optionalArguments ?? []),
+		forbiddenSourceTerms: (ruleDocument?.rules ?? []).flatMap((rule) => {
+			if (rule.kind !== "terminology") return [];
+			const role = roles.get(rule.role);
+			const terms = rule.terms.flatMap((entry) =>
+				entry.kind === "forbidden" ? [entry.term] : []
+			);
+			return role && terms.length ? [{ role, terms, caseSensitive: rule.caseSensitive }] : [];
+		})
 	};
 }
 
@@ -606,10 +629,15 @@ const affectedOf = (lineUnits: readonly TextUnit[]): TextQualityAffectedOccurren
 function sourceTextFindings(
 	text: string,
 	base: FindingBase,
-	line: { readonly gathered: boolean; readonly bytecode: boolean },
+	line: {
+		readonly gathered: boolean;
+		readonly bytecode: boolean;
+		/** Whether a rule file's forbidden source term already reports this placeholder. */
+		readonly reported: (text: string, match: string) => boolean;
+	},
 	add: (finding: UnratedFinding) => void
 ) {
-	const matches = placeholderMatches(text);
+	const matches = placeholderMatches(text).filter((match) => !line.reported(text, match));
 	if (matches.length)
 		add({
 			...base,
@@ -759,7 +787,28 @@ export function checkLocalizationLine(
 	const bytecode =
 		line.manifest.length > 0 &&
 		line.manifest.every((entry) => entry.path.endsWith(BYTECODE_MANIFEST_PATH));
-	const sourceChecks = { gathered: line.manifest.length > 0, bytecode };
+	const sourceChecks = {
+		gathered: line.manifest.length > 0,
+		bytecode,
+		// A forbidden term overlapping the placeholder, in a rule whose role selects a saved place
+		// with this text: source quality reports it there.
+		reported: (text: string, match: string) =>
+			context.forbiddenSourceTerms.some(
+				({ role, terms, caseSensitive }) =>
+					terms.some(
+						(term) =>
+							(termMatches(match, term, caseSensitive).length > 0 ||
+								termMatches(term, match, caseSensitive).length > 0) &&
+							termMatches(text, term, caseSensitive).length > 0
+					) &&
+					unitsOnce().some((unit) =>
+						unit.occurrences.some(
+							(occurrence) =>
+								occurrence.source === text && matchesTextRole(occurrence, role)
+						)
+					)
+			)
+	};
 	/** The source's visible length, measured once for every culture. */
 	let sourceLength: number | undefined;
 	for (const culture of cultures) {

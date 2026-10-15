@@ -106,6 +106,15 @@ const document = Schema.decodeUnknownSync(GameTextRuleDocument)({
 			role: "menu",
 			maximumCharacters: 8,
 			recovery: "Shorten the line."
+		},
+		// Reports TODO in menu text, where placeholder_text leaves it out.
+		{
+			id: "source.terms",
+			kind: "terminology",
+			role: "menu",
+			caseSensitive: true,
+			terms: [{ kind: "forbidden", term: "TODO" }],
+			recovery: "Finish the text."
 		}
 	],
 	localizationRules: [
@@ -319,6 +328,20 @@ it.live(
 							.export({ target: join.target, filter: "culture_invariant_text" })
 							.findings.map(({ source }) => source)
 					).toEqual(["Invariant"]);
+					// TODO in menu text is the terminology rule's finding, not placeholder_text's.
+					const contexts = (filter: WorkspaceQualityFilter) =>
+						legacy
+							.export({ target: join.target, filter })
+							.findings.map(({ problem, context }) => problem + " @ " + context);
+					expect(contexts("placeholder_text").length).toBeGreaterThan(0);
+					expect(
+						contexts("placeholder_text").some((text) => text.includes("@ Menu "))
+					).toBe(false);
+					expect(
+						contexts("terminology").some(
+							(text) => text.includes("TODO") && text.includes("@ Menu ")
+						)
+					).toBe(true);
 					for (const filter of sourceLevel) {
 						const found = legacy.export({ target: join.target, filter }).findings;
 						expect(new Set(found.map(({ culture }) => culture))).toEqual(

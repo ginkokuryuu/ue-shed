@@ -145,6 +145,7 @@ export const makeGameTextLocalization = Effect.fn("Workbench.GameText.localizati
 				readonly corpus: TextCorpus;
 				readonly join: LocalizationJoin;
 				readonly quality: GameTextIndexRefreshResult["localizationQuality"];
+				readonly sourceQuality: GameTextIndexRefreshResult["sourceQuality"];
 				readonly evidence: LocalizationTargetEvidence;
 				readonly review: LocalizationReviewSnapshot | undefined;
 				readonly model: TextCorpusQuery;
@@ -346,6 +347,7 @@ export const makeGameTextLocalization = Effect.fn("Workbench.GameText.localizati
 					corpus,
 					join,
 					quality: indexed.success.localizationQuality,
+					sourceQuality: indexed.success.sourceQuality,
 					model,
 					search: indexed.success.search,
 					borrow: indexed.success.borrow,
@@ -426,9 +428,12 @@ export const makeGameTextLocalization = Effect.fn("Workbench.GameText.localizati
 					Effect.gen(function* () {
 						// The scan pins the index itself while it reads.
 						yield* retained.borrow;
-						const source = document
-							? evaluateGameTextSourceQuality(retained.corpus, document)
-							: undefined;
+						// Indexed source rules read only the units their findings name.
+						const source = !document
+							? undefined
+							: retained.sourceQuality
+								? (yield* retained.sourceQuality(document)).export("all")
+								: evaluateGameTextSourceQuality(retained.corpus, document);
 						// Indexed targets check page by page, yielding between pages.
 						return localizationQualityWorkspaceOf(
 							source,
