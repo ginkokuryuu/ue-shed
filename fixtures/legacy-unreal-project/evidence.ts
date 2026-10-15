@@ -92,9 +92,13 @@ const decodeNeutralEvidence = Schema.decodeUnknownSync(
 	{ onExcessProperty: "error" }
 );
 
-export function expectedLegacyOccurrences(evidence: LegacyEvidence): Schema.Json[] {
+/** The reader's occurrences by default; callers that complete paths pass Unreal's `object_path`. */
+export function expectedLegacyOccurrences(
+	evidence: LegacyEvidence,
+	objectPathOf: (asset: LegacyEvidence["packages"][number]) => string = legacySerializedObjectPath
+): Schema.Json[] {
 	return evidence.packages.flatMap((asset): Schema.Json[] => {
-		const objectPath = legacySerializedObjectPath(asset);
+		const objectPath = objectPathOf(asset);
 		if (asset.asset_name === "ST_LegacyText") {
 			return asset.entries.map((entry) => ({
 				source: entry.source,

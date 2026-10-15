@@ -22,6 +22,7 @@ import {
 	packageTextShard,
 	textCorpusFromPackageTextLayer
 } from "../packages/game-text/src/package-text-layer.ts";
+import { mountPackageTextEvent } from "../packages/game-text/src/package-object-path.ts";
 import { compareLocalizationJoins } from "./localization-join-oracle.test-support.ts";
 import {
 	comparePackageTextLayerWithEvents,
@@ -1148,15 +1149,17 @@ describe("columnar join", () => {
 					const run = <A, E>(effect: Parameters<typeof runJoinIn<A, E>>[3]) =>
 						runJoinIn(projectRoot, cache, evidence.target.name, effect);
 					await importJoinEvidence(projectRoot, cache, evidence);
+					// The index's refresh step completes package-relative object paths as it reads.
 					await run(
 						refreshPackageTextLayer({
 							inventory,
 							read: (selected) =>
 								Stream.fromIterable(
-									packageEvents.filter(
-										(event) =>
-											event.event !== "text_summary" &&
-											selected.includes(event.path)
+									packageEvents.flatMap((event) =>
+										event.event !== "text_summary" &&
+										selected.includes(event.path)
+											? [mountPackageTextEvent(projectRoot, event)]
+											: []
 									)
 								)
 						})
