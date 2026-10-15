@@ -368,75 +368,97 @@ export const WorkbenchGameTextLive = Layer.effect(
 					Effect.flatMap((indexed) =>
 						Effect.gen(function* () {
 							const report = indexed.corpus;
-							const latest = yield* project.current();
-							if (
-								(yield* Ref.get(scanRevision)) !== revision ||
-								latest.status !== "ready" ||
-								latest.project.projectRoot !== projectRoot ||
-								(latest.project.generation ?? 0) !== index.generation
-							)
-								return unavailableQueryProject(
+							/** This scan is still the latest for the selected project generation. */
+							const owned = Effect.gen(function* () {
+								const latest = yield* project.current();
+								return (
+									(yield* Ref.get(scanRevision)) === revision &&
+									latest.status === "ready" &&
+									latest.project.projectRoot === projectRoot &&
+									(latest.project.generation ?? 0) === index.generation
+								);
+							});
+							const superseded = () =>
+								unavailableQueryProject(
 									"The project changed during the scan.",
 									"Refresh to read the current project generation."
 								);
-							const previous = yield* Ref.get(modelSelection);
-							const unchangedPackages =
-								previous?.projectRoot === projectRoot &&
-								indexed.project !== undefined &&
-								previous.indexed.project?.packageKey ===
-									indexed.project.packageKey &&
-								previous.indexed.project.generation === indexed.project.generation;
-							yield* localization.reset(unchangedPackages);
-							return yield* Effect.gen(function* () {
-								const latest = yield* project.current();
-								if (
-									(yield* Ref.get(scanRevision)) !== revision ||
-									latest.status !== "ready" ||
-									latest.project.projectRoot !== projectRoot ||
-									(latest.project.generation ?? 0) !== index.generation
-								)
-									return unavailableQueryProject(
-										"The project changed during the scan.",
-										"Refresh to read the current project generation."
-									);
-								const next = indexed.query;
+							/** The rules the published model of this project carries over to the new one. */
+							const carriedRules = Effect.gen(function* () {
 								const owner = yield* Ref.get(modelSelection);
-								const rules =
-									owner?.projectRoot === projectRoot
-										? yield* Ref.get(qualityDocument)
-										: undefined;
-								const rulePath =
-									owner?.projectRoot === projectRoot
-										? yield* Ref.get(qualityRulePath)
-										: undefined;
-								yield* Ref.set(investigationSnapshot, {
-									source: {
-										projectRoot,
-										generation: index.generation,
-										authority: "project_files"
-									},
-									corpus: report,
-									...(rules ? { rules } : undefined)
-								});
-								yield* Effect.all([
-									Ref.set(
-										qualityModel,
-										rules
-											? yield* sourceQualityModel(indexed, rules)
-											: undefined
-									),
-									Ref.set(qualityDocument, rules),
-									Ref.set(qualityRulePath, rulePath)
-								]);
-								yield* Ref.set(modelSelection, {
-									projectRoot,
-									generation: index.generation,
-									indexed
-								});
-								yield* indexed.retain;
-								return { summary: next.summary(), status: "completed" as const };
-							}).pipe(publication.withPermit);
-						}).pipe(Effect.uninterruptible)
+								return owner?.projectRoot === projectRoot
+									? yield* Ref.get(qualityDocument)
+									: undefined;
+							});
+							// Ends once the project, its generation or a newer scan supersedes this one.
+							const supersession = Effect.gen(function* () {
+								while (yield* owned) yield* Effect.sleep("100 millis");
+							});
+							while (true) {
+								if (!(yield* owned)) return superseded();
+								// Source rules are evaluated before anything is published, and interruptibly: a scan
+								// superseded meanwhile stops evaluating, publishes nothing and retains nothing.
+								const rules = yield* carriedRules;
+								const evaluated = rules
+									? yield* Effect.race(
+											sourceQualityModel(indexed, rules).pipe(
+												Effect.map((model) => ({ model }))
+											),
+											supersession.pipe(Effect.as(undefined))
+										)
+									: { model: undefined };
+								if (!evaluated) return superseded();
+								const published = yield* Effect.gen(function* () {
+									if (!(yield* owned)) return superseded();
+									// Rules previewed during the evaluation: evaluate those instead.
+									if ((yield* carriedRules) !== rules) return undefined;
+									const previous = yield* Ref.get(modelSelection);
+									const unchangedPackages =
+										previous?.projectRoot === projectRoot &&
+										indexed.project !== undefined &&
+										previous.indexed.project?.packageKey ===
+											indexed.project.packageKey &&
+										previous.indexed.project.generation ===
+											indexed.project.generation;
+									yield* localization.reset(unchangedPackages);
+									return yield* Effect.gen(function* () {
+										if (!(yield* owned)) return superseded();
+										if ((yield* carriedRules) !== rules) return undefined;
+										const next = indexed.query;
+										const owner = yield* Ref.get(modelSelection);
+										const rulePath =
+											owner?.projectRoot === projectRoot
+												? yield* Ref.get(qualityRulePath)
+												: undefined;
+										yield* Ref.set(investigationSnapshot, {
+											source: {
+												projectRoot,
+												generation: index.generation,
+												authority: "project_files"
+											},
+											corpus: report,
+											...(rules ? { rules } : undefined)
+										});
+										yield* Effect.all([
+											Ref.set(qualityModel, evaluated.model),
+											Ref.set(qualityDocument, rules),
+											Ref.set(qualityRulePath, rulePath)
+										]);
+										yield* Ref.set(modelSelection, {
+											projectRoot,
+											generation: index.generation,
+											indexed
+										});
+										yield* indexed.retain;
+										return {
+											summary: next.summary(),
+											status: "completed" as const
+										};
+									}).pipe(publication.withPermit);
+								}).pipe(Effect.uninterruptible);
+								if (published) return published;
+							}
+						})
 					),
 					Effect.catch((error) =>
 						Effect.succeed({
@@ -622,7 +644,9 @@ export const WorkbenchGameTextLive = Layer.effect(
 							? ("attached" as const)
 							: ("none" as const)
 				};
-			}
+			},
+			// Atomic with a rescan's publication, which carries the published rules over.
+			publication.withPermit
 		);
 
 		const createStarterRules = Effect.fn("Workbench.WorkbenchGameText.createStarterRules")(
