@@ -46,12 +46,35 @@ describe("occurrence card", () => {
 		expect(
 			screen.getByText(/Blueprint not compiled since this text was edited/u).textContent
 		).toContain('The game shows "Play".');
-		expect(screen.getByText(`${compiled} (compiled class copy)`)).toBeTruthy();
+		expect(screen.getByText(`${compiled} (compiled class copy, holds "Play")`)).toBeTruthy();
 	});
 
 	it("lists an up-to-date copy without a warning", () => {
 		mount(place([{ objectPath: compiled, kind: "generated_class", source: "Play now" }]));
 		expect(screen.queryByText(/Blueprint not compiled/u)).toBeNull();
 		expect(screen.getByText(`${compiled} (compiled class copy)`)).toBeTruthy();
+	});
+
+	const skeleton = "/Game/UI/WBP_Menu.SKEL_WBP_Menu_C.WidgetTree.Title";
+
+	it("lists a skeleton-only difference without claiming what the game shows", () => {
+		mount(
+			place([
+				{ objectPath: compiled, kind: "generated_class", source: "Play now" },
+				{ objectPath: skeleton, kind: "skeleton", source: "Play" }
+			])
+		);
+		expect(screen.queryByText(/The game shows/u)).toBeNull();
+		expect(screen.getByText(`${skeleton} (skeleton class copy, holds "Play")`)).toBeTruthy();
+	});
+
+	it("takes what the game shows from the compiled class, not an earlier skeleton", () => {
+		mount(
+			place([
+				{ objectPath: skeleton, kind: "skeleton", source: "Play" },
+				{ objectPath: compiled, kind: "generated_class", source: "Play again" }
+			])
+		);
+		expect(screen.getByText(/The game shows/u).textContent).toContain('"Play again"');
 	});
 });

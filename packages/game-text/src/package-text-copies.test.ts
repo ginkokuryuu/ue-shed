@@ -31,11 +31,23 @@ function record(path: string, row: number, version = ""): SavedAssetPackageTextR
 	return {
 		...emptyPackageTextRecord(path),
 		occurrences: [
-			text(`${name}_C.WidgetTree.Title`, "Text", "Play"),
-			text(`${name}.WidgetTree.Title`, "Text", `Play${version}`),
+			// Each copy keeps its own audience evidence through storage: gather bit and class.
+			{ ...text(`${name}_C.WidgetTree.Title`, "Text", "Play"), gather_editor_only: false },
+			{
+				...text(`${name}.WidgetTree.Title`, "Text", `Play${version}`),
+				gather_editor_only: true
+			},
 			text(`${name}_C.SimpleConstructionScript_0.SCS_Node_0`, "CategoryName", "Default"),
 			text(`${name}.WidgetTree.Hint`, "ToolTipText", "Press A"),
-			text(`${name}_C.WidgetTree.Hint`, "ToolTipText", "Press A")
+			{
+				...text(`${name}_C.WidgetTree.Hint`, "ToolTipText", "Press A"),
+				location: {
+					kind: "asset_property" as const,
+					object_path: `${pkg}.${name}_C.WidgetTree.Hint`,
+					class_path: "/Script/UMG.Border",
+					property_path: "ToolTipText"
+				}
+			}
 		],
 		blueprintClasses: [
 			{

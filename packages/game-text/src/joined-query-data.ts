@@ -460,7 +460,9 @@ export class JoinedQueryData {
 				kinds[start + index]!,
 				values[index]!,
 				values[end - start + index]!,
-				placeSource
+				// The public copy keeps no class; the stored audience already rolled it up.
+				"",
+				{ source: placeSource, classPath: undefined }
 			)
 		);
 	}

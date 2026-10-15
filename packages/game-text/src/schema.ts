@@ -272,8 +272,9 @@ export const TextReviewSignal = Schema.Literals([
 	"conflicting",
 	"evidence_only",
 	/**
-	 * A Blueprint was edited since it last compiled: a compiled copy of one of the line's places
-	 * holds other text, which is what the game shows. Each place lists its copies.
+	 * A Blueprint was edited since it last compiled: a copy the game runs (the generated class or
+	 * class default) of one of the line's places holds other text, which is what the game shows.
+	 * A skeleton copy never raises it. Each place lists its copies.
 	 */
 	"compiled_copy_differs"
 ]);

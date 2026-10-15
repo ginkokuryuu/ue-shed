@@ -60,6 +60,8 @@ const stringFields = {
 	"missing.site": "paths",
 	"copy.object": "paths",
 	"copy.source": "source",
+	// A copy's own class, empty when it is its place's (COPY_SAME_CLASS) or not a property.
+	"copy.class": "paths",
 	// The reader's `blueprintClasses` as JSON, or empty: one section, not one per field.
 	"package.blueprints": "paths"
 } as const;
@@ -72,26 +74,59 @@ export const OCCURRENCE_HAS_COPIES = 1;
 export const OCCURRENCE_COPY_DIFFERS = 2;
 /** `occurrence.copies` holds the place's copy count from this bit; its copies follow in order. */
 const COPY_COUNT_SHIFT = 2;
-/** `copy.kind` bit for a copy with its place's text; its `copy.source` is then empty. */
+/** `copy.kind`: the kind's index in its low two bits, then these flags. */
+const COPY_KIND_MASK = 3;
+/** A copy with its place's text; its `copy.source` is then empty. */
 const COPY_SAME_SOURCE = 4;
+/** The gather table's bit for the copy's own text: runtime, or editor-only. */
+const COPY_GATHER_RUNTIME = 8;
+const COPY_GATHER_EDITOR_ONLY = 16;
+/** A property copy with its place's class; its `copy.class` is then empty. */
+const COPY_SAME_CLASS = 32;
 
 export function occurrenceCopyCount(flags: number): number {
 	return flags >>> COPY_COUNT_SHIFT;
 }
 
-/** One stored copy; a copy with its place's text stores no source of its own. */
+function encodeStoredCopy(copy: SavedTextRepresentationCopy, place: PackageTextOccurrence) {
+	const sameSource = copy.source === place.source;
+	const placeClass =
+		place.location.kind === "asset_property" ? place.location.class_path : undefined;
+	const sameClass = copy.class_path !== undefined && copy.class_path === placeClass;
+	return {
+		code:
+			copyKinds.indexOf(copy.kind) |
+			(sameSource ? COPY_SAME_SOURCE : 0) |
+			(copy.gather_editor_only === undefined
+				? 0
+				: copy.gather_editor_only
+					? COPY_GATHER_EDITOR_ONLY
+					: COPY_GATHER_RUNTIME) |
+			(sameClass ? COPY_SAME_CLASS : 0),
+		source: sameSource ? "" : copy.source,
+		className: sameClass ? "" : (copy.class_path ?? "")
+	};
+}
+
+/** One stored copy, with the text and class it shares with its place filled back in. */
 export function decodeStoredCopy(
 	code: number,
 	objectPath: string,
 	source: string,
-	placeSource: string
+	className: string,
+	place: { readonly source: string; readonly classPath: string | undefined }
 ): SavedTextRepresentationCopy {
-	const kind = copyKinds[code & ~COPY_SAME_SOURCE];
+	const kind = copyKinds[code & COPY_KIND_MASK];
 	snapshotCheck(kind !== undefined, "copy", "Invalid kind");
+	const class_path = code & COPY_SAME_CLASS ? place.classPath : className || undefined;
 	return {
 		object_path: objectPath,
 		kind,
-		source: code & COPY_SAME_SOURCE ? placeSource : source
+		source: code & COPY_SAME_SOURCE ? place.source : source,
+		...(class_path === undefined ? undefined : { class_path }),
+		...(code & (COPY_GATHER_RUNTIME | COPY_GATHER_EDITOR_ONLY)
+			? { gather_editor_only: Boolean(code & COPY_GATHER_EDITOR_ONLY) }
+			: undefined)
 	};
 }
 const fieldDomains = new Map<string, string>(Object.entries(stringFields));
@@ -236,10 +271,11 @@ export function packageTextColumns(records: readonly PackageTextStored[]) {
 							(hasDifferingCopy(occurrence) ? OCCURRENCE_COPY_DIFFERS : 0)
 			);
 			for (const copy of occurrence.copies ?? []) {
-				const same = copy.source === occurrence.source;
+				const stored = encodeStoredCopy(copy, occurrence);
 				string("copy.object", copy.object_path);
-				string("copy.source", same ? "" : copy.source);
-				number("copy.kind", copyKinds.indexOf(copy.kind) | (same ? COPY_SAME_SOURCE : 0));
+				string("copy.source", stored.source);
+				string("copy.class", stored.className);
+				number("copy.kind", stored.code);
 			}
 			occurrenceCount++;
 		}
@@ -361,7 +397,14 @@ export const decodePackageTextColumns = Effect.fn("PackageText.decodeColumns")(f
 								value("copy.kind", copyRow),
 								string("copy.object", copyRow),
 								string("copy.source", copyRow),
-								string("occurrence.source", index)
+								string("copy.class", copyRow),
+								{
+									source: string("occurrence.source", index),
+									classPath:
+										location === "asset_property"
+											? string("occurrence.class", index)
+											: undefined
+								}
 							)
 						);
 					const object_path = string("occurrence.object", index),

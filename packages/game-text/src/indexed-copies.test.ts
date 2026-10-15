@@ -22,7 +22,8 @@ const classes = [
 	{
 		blueprint: `${pkg}.Table`,
 		generatedClass: `${pkg}.Table_C`,
-		classDefault: `${pkg}.Default__Table_C`
+		classDefault: `${pkg}.Default__Table_C`,
+		skeletonClass: `${pkg}.SKEL_Table_C`
 	}
 ];
 const at = (
@@ -82,7 +83,27 @@ const saved: Occurrence[] = [
 	at("Default__Table_C", "Tab0", "01", "ButtonTooltipText[0]", `${pkg}.Table_C`),
 	// Culture-invariant text is a unit per place; its copy folds and is no unit of its own.
 	at("Table.WidgetTree.Version", null, "v1.2"),
-	at("Table_C.WidgetTree.Version", null, "v1.1")
+	at("Table_C.WidgetTree.Version", null, "v1.1"),
+	// The gather table calls the edited tooltip editor-only and the text the compiled class
+	// still runs runtime: the line stays player text, so the target still expects it.
+	{
+		...at("Table.WidgetTree.Hint", "Hint", "New tooltip", "ToolTipText"),
+		gather_editor_only: true
+	},
+	{
+		...at(
+			"Table_C.WidgetTree.Hint",
+			"Hint",
+			"Old tooltip",
+			"ToolTipText",
+			"/Script/UMG.Border"
+		),
+		gather_editor_only: false
+	},
+	// Compiled; only a saved skeleton class holds older text. The game shows the new text.
+	at("Table.WidgetTree.Quit", "Quit", "Quit now"),
+	at("Table_C.WidgetTree.Quit", "Quit", "Quit now"),
+	at("SKEL_Table_C.WidgetTree.Quit", "Quit", "Quit")
 ];
 
 async function writeLocalization(projectRoot: string) {
@@ -221,12 +242,27 @@ it.live("folded copies agree between the index and the in-memory corpus and join
 						[]
 					],
 					[`${pkg}.Default__Table_C`, "ButtonText[0]", "01", []],
-					[`${pkg}.Default__Table_C`, "ButtonTooltipText[0]", "01", []]
+					[`${pkg}.Default__Table_C`, "ButtonTooltipText[0]", "01", []],
+					[
+						`${pkg}.Table.WidgetTree.Hint`,
+						"ToolTipText",
+						"New tooltip",
+						[["generated_class", `${pkg}.Table_C.WidgetTree.Hint`, "Old tooltip"]]
+					],
+					[
+						`${pkg}.Table.WidgetTree.Quit`,
+						"Text",
+						"Quit now",
+						[
+							["generated_class", `${pkg}.Table_C.WidgetTree.Quit`, "Quit now"],
+							["skeleton", `${pkg}.SKEL_Table_C.WidgetTree.Quit`, "Quit"]
+						]
+					]
 				]
 					.map((place) => JSON.stringify(place))
 					.sort()
 			);
-			expect(memory.coverage).toMatchObject({ textUnits: 6, textOccurrences: 7 });
+			expect(memory.coverage).toMatchObject({ textUnits: 8, textOccurrences: 9 });
 			expect(result.corpus.coverage).toEqual(memory.coverage);
 			expect(result.corpus.units).toEqual(memory.units);
 
@@ -254,6 +290,18 @@ it.live("folded copies agree between the index and the in-memory corpus and join
 			const lines = lineFacts(memoryJoin);
 			expect(JSON.stringify(lines)).not.toContain("conflicting_source");
 			expect(lines.Title?.[0]).toBe("Play now");
+			// A runtime compiled copy keeps an editor-only place's line player text and in scope.
+			expect(lines.Hint?.slice(0, 2)).toEqual(["New tooltip", "player"]);
+			expect(lines.Hint?.[2]).not.toContain("outside_target");
+			const hint = memoryJoin.lines.find((line) => line.identity?.key === "Hint")!;
+			expect(hint.outOfScope).toBeUndefined();
+			// A skeleton-only difference is not stale runtime text.
+			const quit = memory.units.find(
+				(unit) => unit.identity.status === "resolved" && unit.identity.key === "Quit"
+			)!;
+			expect(
+				result.query.focus({ id: quit.id, pageSize: 1 })!.unit.reviewSignals
+			).not.toContain("compiled_copy_differs");
 			expect(lineFacts(result.localizationJoin)).toEqual(lines);
 
 			// Search, lenses, problems, facets and groups agree, without a target and with one.
@@ -288,6 +336,7 @@ it.live("folded copies agree between the index and the in-memory corpus and join
 					.map((unit) => unit.source)
 					.sort((a, b) => JSON.stringify(a).localeCompare(JSON.stringify(b)))
 			).toEqual([
+				{ status: "consistent", value: "New tooltip" },
 				{ status: "consistent", value: "Play now" },
 				{ status: "consistent", value: "v1.2" }
 			]);
@@ -304,7 +353,7 @@ it.live("folded copies agree between the index and the in-memory corpus and join
 			expect(result.query.localizationLines(exported).map((line) => line.id)).toEqual(
 				inMemory.localizationLines(exported).map((line) => line.id)
 			);
-			expect(gameTextCsv(memory).split("\r\n").filter(Boolean)).toHaveLength(1 + 7);
+			expect(gameTextCsv(memory).split("\r\n").filter(Boolean)).toHaveLength(1 + 9);
 
 			// Edit the authored title again, still without compiling: only place text changes, so
 			// the join refreshes incrementally and keeps the signal. Then compile: the copy catches
@@ -327,10 +376,10 @@ it.live("folded copies agree between the index and the in-memory corpus and join
 			const long = "Press any button to begin a new adventure";
 			const longer = "Press any button to begin your next adventure";
 			for (const [title, compiled, expected, strategy] of [
-				[long, "Play", [long, "v1.2"], "full"],
-				[longer, "Play", [longer, "v1.2"], "incremental"],
+				[long, "Play", ["New tooltip", long, "v1.2"], "full"],
+				[longer, "Play", ["New tooltip", longer, "v1.2"], "incremental"],
 				// The copy's text and the place's copy flags change: a full join.
-				[longer, longer, ["v1.2"], "full"]
+				[longer, longer, ["New tooltip", "v1.2"], "full"]
 			] as const) {
 				fixture.update(edit(title, compiled), classes);
 				const next = yield* (yield* GameTextIndexRefresh).refresh(fixture.request);

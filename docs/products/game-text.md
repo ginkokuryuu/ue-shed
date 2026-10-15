@@ -240,9 +240,15 @@ The place keeps its own text: the line's source, search, counts, facets, exports
 joins all use the authored text, which is what the next compile and gather will use. Each copy is
 kept on the place's `copies` (`objectPath`, `kind`: `generated_class`, `instance`, `class_default`
 or `skeleton`, and its own `source`). When a copy's text differs, the place never makes its key
-"Same key, different text"; its unit instead has the `compiled_copy_differs` review signal
-("Blueprint not compiled since edit"), and the line page says what the game shows until the
-Blueprint is compiled. A place's audience is the line rollup over the place and its copies.
+"Same key, different text". When a copy the game runs, the generated class's (including its
+animation instances) or the class default object's, holds other text, the unit has the
+`compiled_copy_differs` review signal ("Blueprint not compiled since edit"), and the line page says
+what that copy shows until the Blueprint is compiled. A skeleton class only serves the editor while
+a Blueprint compiles, so a skeleton copy with other text raises no signal and makes no claim about
+the game; the line page lists it with its text. A place's audience is the line rollup over the
+place and its copies, each classified from its own evidence: its path, its class and the gather
+table's editor-only bit for its own text. A place the table calls editor-only whose compiled copy
+is runtime text stays player text, so a target that skips editor-only data still expects it.
 
 Folding happens per package record, the same way in the in-memory corpus and in the index
 (`package-text-v5`), and is idempotent. Records from readers before 1.12 and streamed

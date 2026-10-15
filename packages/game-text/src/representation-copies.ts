@@ -5,7 +5,7 @@ import {
 	type SavedAssetBlueprintClasses
 } from "@ue-shed/unreal-assets";
 import { TextCopyKind } from "./schema.js";
-export { hasDifferingCopy } from "./text-copies.js";
+export { hasDifferingCopy, staleRuntimeCopy } from "./text-copies.js";
 import {
 	classifySavedTextAudience,
 	lineTextAudience,
@@ -20,7 +20,11 @@ import {
 export const SavedTextRepresentationCopy = Schema.Struct({
 	object_path: Schema.String,
 	kind: TextCopyKind,
-	source: Schema.String
+	source: Schema.String,
+	// The copy's own audience evidence: its saved class and the gather table's editor-only bit
+	// for its text, which can differ from the place's when the texts differ.
+	class_path: Schema.optionalKey(Schema.String),
+	gather_editor_only: Schema.optionalKey(Schema.Boolean)
 });
 export type SavedTextRepresentationCopy = typeof SavedTextRepresentationCopy.Type;
 
@@ -187,7 +191,13 @@ export function foldRepresentationCopies<
 			copies.push({
 				object_path: copy.location.object_path,
 				kind: sites[member]!.kind,
-				source: copy.source
+				source: copy.source,
+				...(copy.location.kind === "asset_property"
+					? { class_path: copy.location.class_path }
+					: undefined),
+				...(copy.gather_editor_only === undefined
+					? undefined
+					: { gather_editor_only: copy.gather_editor_only })
 			});
 			copies.push(...(copy.copies ?? []));
 		}
@@ -198,20 +208,33 @@ export function foldRepresentationCopies<
 
 /**
  * The audience of a folded place: the line rollup (player, else unknown, else editor) over the
- * place and its copies, each classified like a saved occurrence at its own path. The place's own
- * classification wins ties, so a place without copies is classified exactly as before.
+ * place and its copies, each classified from its own evidence: its path, its class and the gather
+ * table's bit for its text. A runtime compiled copy of a place the table calls editor-only keeps
+ * the line player text. The place's own classification wins ties, so a place without copies is
+ * classified exactly as before.
  */
 export function classifyFoldedTextAudience(
 	occurrence: PackageTextOccurrence
 ): TextAudienceClassification {
 	const own = classifySavedTextAudience(occurrence);
 	if (occurrence.copies === undefined) return own;
+	const { gather_editor_only: _place, copies, ...place } = occurrence;
 	const all = [
 		own,
-		...occurrence.copies.map((copy) =>
+		...copies.map((copy) =>
 			classifySavedTextAudience({
-				...occurrence,
-				location: { ...occurrence.location, object_path: copy.object_path }
+				...place,
+				location:
+					place.location.kind === "asset_property"
+						? {
+								...place.location,
+								object_path: copy.object_path,
+								class_path: copy.class_path ?? place.location.class_path
+							}
+						: { ...place.location, object_path: copy.object_path },
+				...(copy.gather_editor_only === undefined
+					? undefined
+					: { gather_editor_only: copy.gather_editor_only })
 			})
 		)
 	];

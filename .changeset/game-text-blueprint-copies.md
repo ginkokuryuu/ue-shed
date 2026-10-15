@@ -23,9 +23,12 @@ is folded from names alone, so an asset whose own name ends in `_C` is untouched
 Each place keeps the authored text as its source and lists its copies in `copies` (`objectPath`,
 `kind`: `generated_class`, `instance`, `class_default` or `skeleton`, and `source`). Counts,
 search, facets, exports, localization joins and the index follow the places. A copy with other text
-no longer makes its key conflicting; the unit gets the `compiled_copy_differs` review signal
-("Blueprint not compiled since edit"), and the Workbench line page says what the game shows. A
-place's audience rolls up over the place and its copies.
+no longer makes its key conflicting. When a copy the game runs (the generated class or class
+default) holds other text, the unit gets the `compiled_copy_differs` review signal ("Blueprint not
+compiled since edit") and the Workbench line page says what the game shows; a skeleton-only
+difference is listed but raises no signal. A place's audience rolls up over the place and its
+copies, each classified from its own gather-table bit and class, so an editor-only place with a
+runtime compiled copy stays player text.
 
 The package text index format moves to `package-text-v5` and joins to `joined-v14`, so existing
 caches read their packages once more.

@@ -3,7 +3,12 @@ import type { SavedAssetPackageTextRecord } from "@ue-shed/unreal-assets";
 import { textCorpusFromExtractionEvents } from "./corpus.js";
 import { mountPackageTextEvent } from "./package-object-path.js";
 import { emptyPackageTextRecord } from "./package-text-record.js";
-import { foldRepresentationCopies, representationSite } from "./representation-copies.js";
+import {
+	classifyFoldedTextAudience,
+	foldRepresentationCopies,
+	representationSite,
+	staleRuntimeCopy
+} from "./representation-copies.js";
 import { textCorpusQuery } from "./query.js";
 
 type Occurrence = SavedAssetPackageTextRecord["occurrences"][number];
@@ -103,7 +108,8 @@ describe("foldRepresentationCopies", () => {
 					{
 						object_path: "/Game/UI/WBP_Menu.WBP_Menu_C.WidgetTree.Title",
 						kind: "generated_class",
-						source: "Play"
+						source: "Play",
+						class_path: "/Script/UMG.TextBlock"
 					}
 				]
 			},
@@ -124,7 +130,8 @@ describe("foldRepresentationCopies", () => {
 					{
 						object_path: compiledTitle.location.object_path,
 						kind: "generated_class",
-						source: "Play"
+						source: "Play",
+						class_path: "/Script/UMG.TextBlock"
 					}
 				]
 			}
@@ -214,7 +221,8 @@ describe("foldRepresentationCopies", () => {
 					{
 						object_path: skeletonTitle.location.object_path,
 						kind: "skeleton",
-						source: "Play"
+						source: "Play",
+						class_path: "/Script/UMG.TextBlock"
 					}
 				]
 			},
@@ -224,7 +232,8 @@ describe("foldRepresentationCopies", () => {
 					{
 						object_path: skeletonDefaults.location.object_path,
 						kind: "skeleton",
-						source: "Hold"
+						source: "Hold",
+						class_path: "/Script/UMG.TextBlock"
 					}
 				]
 			}
@@ -277,7 +286,8 @@ describe("foldRepresentationCopies", () => {
 						object_path:
 							"/Game/UI/WBP_Menu.WBP_Menu_C.FadeIn_INST.FadeIn.MovieSceneFloatTrack_0",
 						kind: "instance",
-						source: "Render Opacity"
+						source: "Render Opacity",
+						class_path: "/Script/MovieSceneTracks.MovieSceneFloatTrack"
 					}
 				]
 			})
@@ -352,5 +362,95 @@ describe("folded corpus", () => {
 				events: [menu([tooltip], null)]
 			}).units[0]!.occurrences[0]!.audience
 		);
+	});
+
+	it("classifies each copy from its own evidence: a runtime compiled copy keeps the line player text", () => {
+		// The gather table matches text by namespace, key and source, so an edited place and its
+		// stale compiled copy can carry different bits: the new tooltip is editor-only, the text
+		// the game still runs is runtime.
+		const place = {
+			...property(
+				"/Game/UI/WBP_Menu.WBP_Menu.WidgetTree.Hint",
+				"ToolTipText",
+				"New tooltip",
+				"Hint"
+			),
+			gather_editor_only: true
+		};
+		const compiled = {
+			...property(
+				"/Game/UI/WBP_Menu.WBP_Menu_C.WidgetTree.Hint",
+				"ToolTipText",
+				"Old tooltip",
+				"Hint",
+				"/Script/UMG.Border"
+			),
+			gather_editor_only: false
+		};
+		const folded = foldRepresentationCopies(menu([place, compiled])).occurrences[0]!;
+		expect(folded.copies).toEqual([
+			{
+				object_path: compiled.location.object_path,
+				kind: "generated_class",
+				source: "Old tooltip",
+				class_path: "/Script/UMG.Border",
+				gather_editor_only: false
+			}
+		]);
+		expect(classifyFoldedTextAudience(folded)).toEqual({
+			audience: "player",
+			reason: "gather_table_runtime"
+		});
+		const corpus = textCorpusFromExtractionEvents({
+			projectRoot: "/project",
+			events: [menu([place, compiled])]
+		});
+		expect(corpus.units[0]!.occurrences[0]).toMatchObject({
+			audience: "player",
+			audienceReason: "gather_table_runtime"
+		});
+		// The place alone stays editor text.
+		expect(
+			textCorpusFromExtractionEvents({ projectRoot: "/project", events: [menu([place])] })
+				.units[0]!.occurrences[0]!.audience
+		).toBe("editor");
+	});
+
+	it("only claims what the game shows from the generated class or class defaults", () => {
+		const skeletonClasses = [
+			{ ...classes, skeletonClass: "/Game/UI/WBP_Menu.SKEL_WBP_Menu_C" }
+		];
+		const skeletonTitle = property(
+			"/Game/UI/WBP_Menu.SKEL_WBP_Menu_C.WidgetTree.Title",
+			"Text",
+			"Play",
+			"Title"
+		);
+		const signals = (occurrences: Occurrence[]) => {
+			const corpus = textCorpusFromExtractionEvents({
+				projectRoot: "/project",
+				events: [menu(occurrences, skeletonClasses)]
+			});
+			const unit = corpus.units[0]!;
+			return {
+				signals: textCorpusQuery(corpus).focus({ id: unit.id, pageSize: 1 })!.unit
+					.reviewSignals,
+				stale: staleRuntimeCopy(unit.occurrences[0]!)?.objectPath
+			};
+		};
+		const now = { ...title, source: "Play now" };
+		// Compiled and up to date; only a saved skeleton still holds the old text.
+		const skeletonOnly = signals([
+			now,
+			{ ...compiledTitle, source: "Play now" },
+			skeletonTitle
+		]);
+		expect(skeletonOnly.signals).not.toContain("compiled_copy_differs");
+		expect(skeletonOnly.signals).not.toContain("conflicting");
+		expect(skeletonOnly.stale).toBeUndefined();
+		// Not compiled: the generated class's text is what the game shows, even after a skeleton.
+		const runtime = signals([now, skeletonTitle, { ...compiledTitle, source: "Play again" }]);
+		expect(runtime.signals).toContain("compiled_copy_differs");
+		expect(runtime.stale).toBe(compiledTitle.location.object_path);
 	});
 });

@@ -3,6 +3,7 @@ import {
 	textLocationLabel,
 	textCountLabel,
 	textReviewSignalLabel,
+	staleRuntimeCopy,
 	type GameTextInvestigationPreset,
 	type TextCorpusFocus,
 	type TextCorpusQueryRunResult,
@@ -2006,9 +2007,9 @@ export function OccurrenceCard(props: {
 	readonly conflicting: boolean;
 	readonly onOpenDataAuthoring?: ((objectPath: string) => void) | undefined;
 }) {
-	// The game runs the compiled class: a copy with other text is what players see.
-	const staleCopy = () =>
-		props.occurrence.copies?.find((copy) => copy.source !== props.occurrence.source);
+	// The game runs the generated class and its defaults: only their text is what players see.
+	// A skeleton class serves the editor, so its other text is listed below, not claimed here.
+	const staleCopy = () => staleRuntimeCopy(props.occurrence);
 	return (
 		<article {...stylex.attrs(styles.card)}>
 			<div {...stylex.attrs(styles.bar)}>
@@ -2044,7 +2045,11 @@ export function OccurrenceCard(props: {
 				<For each={props.occurrence.copies ?? []}>
 					{(copy) => (
 						<code {...stylex.attrs(styles.mono)}>
-							{copy.objectPath} ({COPY_KIND_LABELS[copy.kind]})
+							{copy.objectPath} ({COPY_KIND_LABELS[copy.kind]}
+							{copy.source === props.occurrence.source
+								? ""
+								: `, holds "${copy.source}"`}
+							)
 						</code>
 					)}
 				</For>

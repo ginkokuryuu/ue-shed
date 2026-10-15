@@ -1722,15 +1722,18 @@ places, and a Blueprint edited but not compiled read as "Same key, different tex
   occurrence at its authored site with the same location kind, property path and key. Same-key
   properties of one object stay two places; a copy under another key stays a place; sites saved
   only under the class stay places at their own path. The place keeps the authored text as the
-  line's source and lists its copies (`objectPath`, `kind`, `source`). A differing copy sets the
-  `compiled_copy_differs` review signal instead of a conflicting source. The in-memory corpus folds
+  line's source and lists its copies (`objectPath`, `kind`, `source`). A differing copy the game
+  runs (generated class, its animation instances, class default) sets the
+  `compiled_copy_differs` review signal instead of a conflicting source; a skeleton-only
+  difference is listed but raises nothing. The in-memory corpus folds
   each record as it is read; the index folds in `packageTextColumns`, so cold, warm and worker
   paths agree.
 - **Package text, `package-text-v5`.** Occurrence rows are places. `occurrence.copies` holds bit 0
   (has copies), bit 1 (a copy differs) and the copy count from bit 2; copies are sparse rows in
   place order (`copy.object`, `copy.kind`, `copy.source`, the source empty when it is the
   place's). `package.blueprints` keeps the reader's classes as JSON. A place's audience is the
-  rollup over the place and its copies.
+  rollup over the place and its copies, each classified from its own gather bit and class, which
+  `copy.kind` and `copy.class` keep.
 - **Join, `joined-v14`.** Query signal bit 6 is `compiled_copy_differs`. Copy text or flag changes
   rebuild the join in full; place text edits stay incremental and keep the bit. Indexed
   occurrences decode their copies on first access.
