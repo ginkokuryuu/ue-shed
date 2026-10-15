@@ -12,6 +12,8 @@ import {
 	compareReportedLocalizationFindings,
 	enabledLocalizationChecks,
 	localizationDuplicateSources,
+	localizationPropertyKey,
+	localizationRuleContext,
 	localizationTranslationVariants,
 	type LocalizationLineCheckContext
 } from "./localization-checks.js";
@@ -255,18 +257,24 @@ const translationVariants = Effect.fn("GameText.localizationQuality.translations
 	rowSources: readonly string[]
 ) {
 	const target = data.joined.meta.input.target;
-	const variants = localizationTranslationVariants(shared);
+	const variants = localizationTranslationVariants(shared, target.nativeCulture);
 	const outside = localizationStates.indexOf("outside_target"),
 		notSynced = 1 << localizationStates.indexOf("not_synced");
-	const cultures = target.cultures.map((culture, index) => ({
-		culture,
-		state: data.column(`c${index}.state`),
-		facts: data.column(`c${index}.facts`),
-		archive: data.column(`c${index}.archive`),
-		po: data.column(`c${index}.po`),
-		archives: target.outputPaths.archives[culture]!,
-		portableObjects: target.outputPaths.portableObjects[culture]!
-	}));
+	const cultures = target.cultures.flatMap((culture, index) =>
+		culture === target.nativeCulture
+			? []
+			: [
+					{
+						culture,
+						state: data.column(`c${index}.state`),
+						facts: data.column(`c${index}.facts`),
+						archive: data.column(`c${index}.archive`),
+						po: data.column(`c${index}.po`),
+						archives: target.outputPaths.archives[culture]!,
+						portableObjects: target.outputPaths.portableObjects[culture]!
+					}
+				]
+	);
 	for (let start = 0; start < rows.length; start += TRANSLATION_PAGE_ROWS) {
 		const ids: number[] = [],
 			sources: string[] = [],
@@ -299,6 +307,82 @@ const translationVariants = Effect.fn("GameText.localizationQuality.translations
 		yield* Effect.yieldNow;
 	}
 	return variants.finish();
+});
+
+/** Occurrences whose identity and owner columns the property pass reads before yielding. */
+const PROPERTY_PAGE_ROWS = 16_384;
+
+/**
+ * `localizationLocalizableProperties` from the package occurrence columns. A keyed or String
+ * Table occurrence makes its owner (class or DataTable) and property localizable; each pair's key
+ * is decoded until one is non-empty, as `textOccurrenceFromExtraction` leaves a keyless resolved
+ * identity unresolved, and each distinct owner and property string is decoded once.
+ */
+const localizableProperties = Effect.fn("GameText.localizationQuality.properties")(function* (
+	data: JoinedQueryData
+) {
+	const starts = data.joined.meta.packageStarts;
+	/** Property string IDs by owner: a class ID times two, or a DataTable object ID times two plus one. */
+	const pairs = new Map<number, Set<number>>();
+	const known = (owner: number, property: number) => pairs.get(owner)?.has(property) === true;
+	for (let shard = 0; shard + 1 < starts.length; shard++) {
+		if (starts[shard + 1] === starts[shard]) continue;
+		const identity = data.packageColumn(shard, "occurrence.identity"),
+			location = data.packageColumn(shard, "occurrence.location"),
+			classes = data.packageColumn(shard, "occurrence.class"),
+			objects = data.packageColumn(shard, "occurrence.object"),
+			properties = data.packageColumn(shard, "occurrence.property"),
+			keys = data.packageColumn(shard, "occurrence.key");
+		for (let start = 0; start < identity.length; start += PROPERTY_PAGE_ROWS) {
+			const owners: number[] = [],
+				names: number[] = [],
+				keyIds: number[] = [];
+			for (
+				let row = start;
+				row < Math.min(identity.length, start + PROPERTY_PAGE_ROWS);
+				row++
+			) {
+				// Resolved (0) or String Table (1) identities; String Table entries (2) have no property.
+				if (identity[row]! > 1 || location[row]! > 1) continue;
+				const owner = location[row] === 0 ? classes[row]! * 2 : objects[row]! * 2 + 1;
+				if (known(owner, properties[row]!)) continue;
+				owners.push(owner);
+				names.push(properties[row]!);
+				keyIds.push(keys[row]!);
+			}
+			const decoded = data.strings(keyIds);
+			for (let index = 0; index < owners.length; index++) {
+				if (decoded[index] === "") continue;
+				let ownerNames = pairs.get(owners[index]!);
+				if (!ownerNames) pairs.set(owners[index]!, (ownerNames = new Set()));
+				ownerNames.add(names[index]!);
+			}
+			yield* Effect.yieldNow;
+		}
+	}
+	const ownerIds = [...pairs.keys()];
+	const ownerStrings = data.strings(ownerIds.map((owner) => Math.floor(owner / 2)));
+	const propertyIds = [...new Set([...pairs.values()].flatMap((names) => [...names]))];
+	const decodedProperties = data.strings(propertyIds);
+	const propertyStrings = new Map(
+		propertyIds.map((id, index) => [id, decodedProperties[index]!] as const)
+	);
+	yield* Effect.yieldNow;
+	const result = new Set<string>();
+	for (let index = 0; index < ownerIds.length; index++) {
+		const owner = ownerIds[index]!,
+			path = ownerStrings[index]!;
+		for (const name of pairs.get(owner)!) {
+			const propertyPath = propertyStrings.get(name)!;
+			const key = localizationPropertyKey(
+				owner % 2 === 0
+					? { kind: "asset_property", objectPath: "", classPath: path, propertyPath }
+					: { kind: "data_table_cell", objectPath: path, row: "", propertyPath }
+			);
+			if (key !== undefined) result.add(key);
+		}
+	}
+	return result;
 });
 
 /**
@@ -352,7 +436,10 @@ export const indexedLocalizationQuality = Effect.fn("GameText.localizationQualit
 					duplicates.rowSources
 				)
 			: new Map(),
-		segmentSeparator: ruleDocument?.segmentSeparator,
+		...localizationRuleContext(ruleDocument),
+		localizableProperties: enabled.includes("culture_invariant_text")
+			? yield* localizableProperties(data)
+			: new Set(),
 		cultureInvariant: (line) => units.cultureInvariant(line)
 	};
 	const units = unitIndex(data);

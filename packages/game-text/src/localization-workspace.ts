@@ -70,7 +70,10 @@ export const WorkspaceQualityFilter = Schema.Literals([
 	"source_whitespace",
 	"source_markup",
 	"number_only_text",
-	"string_table_key_collision"
+	"string_table_key_collision",
+	"rich_text_tags_added",
+	"source_line_endings_changed",
+	"placeholder_translation"
 ]);
 export type WorkspaceQualityFilter = typeof WorkspaceQualityFilter.Type;
 export const workspaceQualityLabels = {
@@ -86,7 +89,7 @@ export const workspaceQualityLabels = {
 	missing_translator_notes: "No translator notes",
 	duplicate_source: "Same text, different keys",
 	format_argument_renamed: "Renamed format arguments",
-	rich_text_tags: "Missing or extra tags",
+	rich_text_tags: "Missing tags",
 	rich_text_tag_case: "Tag case changed",
 	line_breaks: "Line breaks",
 	segment_separator: "Segment separators",
@@ -98,7 +101,10 @@ export const workspaceQualityLabels = {
 	source_whitespace: "Source whitespace",
 	source_markup: "Unbalanced source markup",
 	number_only_text: "Number-only text",
-	string_table_key_collision: "String Table key collision"
+	string_table_key_collision: "String Table key collision",
+	rich_text_tags_added: "Extra tags",
+	source_line_endings_changed: "Source line endings changed",
+	placeholder_translation: "Placeholder translation"
 } satisfies Record<WorkspaceQualityFilter, string>;
 /** A check's severity; every finding of a check shares it. */
 export function workspaceQualitySeverity(
@@ -299,6 +305,8 @@ function problem(finding: Finding): string {
 			]
 				.filter(Boolean)
 				.join(" · ");
+		case "rich_text_tags_added":
+			return "Adds " + tagged(finding.actual.added);
 		case "rich_text_tag_case":
 			return finding.actual.changed
 				.map(
@@ -329,14 +337,30 @@ function problem(finding: Finding): string {
 			);
 		case "outdated_translation":
 			return "Translated from " + quoted(finding.actual.translatedSource);
+		case "source_line_endings_changed":
+			return "Source line endings changed since it was translated";
+		case "placeholder_translation":
+			return "Placeholder translation " + quoted(finding.actual.translation);
 		case "inconsistent_translation":
-			return (
-				"Translated inconsistently · " +
-				textCountLabel(finding.actual.variantCount, "translation") +
-				((finding.actual.variants[0]?.lines ?? 0) > (finding.actual.variants[1]?.lines ?? 0)
-					? ", most use " + quoted(finding.actual.variants[0]!.translation)
-					: "")
-			);
+			return finding.actual.untranslated &&
+				finding.actual.variants[0]?.translation !== finding.actual.translation
+				? "Not translated · " +
+						textCountLabel(finding.actual.variants[0]?.lines ?? 0, "line") +
+						" use " +
+						quoted(finding.actual.variants[0]?.translation ?? "")
+				: finding.actual.untranslated
+					? "Not translated, while " +
+						textCountLabel(
+							finding.actual.variants
+								.slice(1)
+								.reduce((sum, variant) => sum + variant.lines, 0),
+							"line"
+						) +
+						" translate it"
+					: "Translated inconsistently · " +
+						textCountLabel(finding.actual.variantCount, "translation") +
+						", most use " +
+						quoted(finding.actual.variants[0]?.translation ?? "");
 		case "culture_invariant_text":
 			return "Won’t be translated: culture invariant";
 		case "placeholder_text":
@@ -346,9 +370,13 @@ function problem(finding: Finding): string {
 				? "Space or line break at the start or end"
 				: "Doubled spaces";
 		case "source_markup":
-			return finding.actual.richText.opening !== finding.actual.richText.closing
-				? "Unbalanced rich-text tags"
-				: "Unbalanced { }";
+			return finding.actual.xmlClosings?.length
+				? "Closes with " +
+						finding.actual.xmlClosings.map((name) => "</" + name + ">").join(", ") +
+						"; rich text closes with </>"
+				: finding.actual.richText.opening !== finding.actual.richText.closing
+					? "Unbalanced rich-text tags"
+					: "Unbalanced { }";
 		case "number_only_text":
 			return "Number-only text sent for translation";
 		case "string_table_key_collision":
@@ -532,6 +560,7 @@ function ranges(text: string, finding: Finding, side: "source" | "translation") 
 			break;
 		case "rich_text":
 		case "rich_text_tags":
+		case "rich_text_tags_added":
 		case "rich_text_tag_case":
 			pattern(/<[^<>]*>/gu);
 			break;

@@ -130,6 +130,12 @@ export const LocalizationQualityFinding = Schema.Union([
 	}),
 	Schema.Struct({
 		...Base,
+		kind: Schema.Literal("rich_text_tags_added"),
+		actual: Schema.Struct({ tags: Strings, added: Strings }),
+		expectation: Schema.Struct({ tags: Strings })
+	}),
+	Schema.Struct({
+		...Base,
 		kind: Schema.Literal("rich_text_tag_case"),
 		actual: Schema.Struct({
 			changed: Schema.Array(
@@ -168,14 +174,32 @@ export const LocalizationQualityFinding = Schema.Union([
 	}),
 	Schema.Struct({
 		...Base,
+		kind: Schema.Literal("source_line_endings_changed"),
+		actual: Schema.Struct({ translatedSource: Schema.String }),
+		expectation: Schema.Struct({ source: Schema.String })
+	}),
+	Schema.Struct({
+		...Base,
+		kind: Schema.Literal("placeholder_translation"),
+		actual: Schema.Struct({ translation: Schema.String }),
+		expectation: Schema.Struct({ translatedText: Schema.Literal(true) })
+	}),
+	Schema.Struct({
+		...Base,
 		kind: Schema.Literal("inconsistent_translation"),
 		actual: Schema.Struct({
 			translation: Schema.String,
-			/** The most used translations of this source in the culture, at most five. */
+			/**
+			 * The most used translations of this source in the culture, at most five. Lines whose
+			 * translations differ only in case, whitespace or punctuation count as one, shown in
+			 * one of their spellings.
+			 */
 			variants: Schema.Array(
 				Schema.Struct({ translation: Schema.String, lines: Count })
 			).check(Schema.isMaxLength(5)),
-			variantCount: Count
+			variantCount: Count,
+			/** This line ships its source text, where other lines translate it. */
+			untranslated: Schema.optionalKey(Schema.Literal(true))
 		}),
 		expectation: Schema.Struct({ consistentTranslation: Schema.Literal(true) })
 	}),
@@ -208,7 +232,9 @@ export const LocalizationQualityFinding = Schema.Union([
 		actual: Schema.Struct({
 			source: Schema.String,
 			richText: UnrealRichTextCounts,
-			braces: Schema.Struct({ opening: Count, closing: Count })
+			braces: Schema.Struct({ opening: Count, closing: Count }),
+			/** XML-style closings such as `</Name>`, which Slate shows as text. */
+			xmlClosings: Schema.optionalKey(Strings)
 		}),
 		expectation: Schema.Struct({ balanced: Schema.Literal(true) })
 	}),

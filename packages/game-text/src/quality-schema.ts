@@ -104,6 +104,26 @@ export const TextQualityRuleDocument = Schema.Struct({
 	segmentSeparator: Schema.optionalKey(
 		Schema.String.check(Schema.isNonEmpty(), Schema.isMaxLength(16))
 	),
+	/**
+	 * Rich-text tag names a translation may use or leave out, such as a name style a culture
+	 * applies differently. Compared without case; `rich_text_tags` and `rich_text_tags_added`
+	 * ignore them.
+	 */
+	optionalTags: Schema.optionalKey(
+		Schema.Array(Schema.String.check(Schema.isPattern(/^[A-Za-z_][\w.-]*$/u))).check(
+			Schema.isMaxLength(256)
+		)
+	),
+	/**
+	 * Format argument names the game always supplies, so a translation may add them, such as a
+	 * player's name a culture's grammar asks for. Case-sensitive, as argument names are. Adding
+	 * one, or a rich-text tag wrapped around only that argument, is not reported.
+	 */
+	optionalArguments: Schema.optionalKey(
+		Schema.Array(Schema.String.check(Schema.isNonEmpty(), Schema.isMaxLength(128))).check(
+			Schema.isMaxLength(256)
+		)
+	),
 	rules: Schema.Array(TextQualityRule).check(Schema.isMinLength(1), Schema.isMaxLength(512)),
 	roles: Schema.Array(TextRole).check(Schema.isMinLength(1), Schema.isMaxLength(256)),
 	schemaVersion: Schema.Literal(1)

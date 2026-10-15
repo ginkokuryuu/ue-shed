@@ -47,7 +47,18 @@ const patterns: ReadonlyArray<{ source: string; de: string; deSource?: string; d
 	{ source: "Unclosed <Em>tag", de: "Offenes <Em>Tag" },
 	{ source: "100", de: "100" },
 	{ source: "Save game", de: "Spiel speichern" },
-	{ source: "Save game", de: "Spiel speichern", dePO: "Spiel sichern" }
+	{ source: "Save game", de: "Spiel speichern", dePO: "Spiel sichern" },
+	// Groups with "Spiel speichern": case, whitespace and punctuation do not count.
+	{ source: "Save game", de: "Spiel speichern!" },
+	{ source: "Plain words here", de: "<b>Schlichte</> Worte" },
+	{
+		source: "Torn Pages\nA scrap",
+		de: "Seiten\r\nEin Fetzen",
+		deSource: "Torn Pages\r\nA scrap"
+	},
+	{ source: "The rows are like a composition.", de: "script lama" },
+	// The rule file lets a translation add {ParentLabel} and its name tag.
+	{ source: "Thanks for the cookie!", de: "Danke für den Keks, <PlayerName>{ParentLabel}</>!" }
 ];
 const keys = Array.from({ length: 45 }, (_, index) => ({
 	key: `K${String(index).padStart(2, "0")}`,
@@ -56,7 +67,11 @@ const keys = Array.from({ length: 45 }, (_, index) => ({
 /** Gathered keys; the last few keys exist only in the localization files. */
 const gathered = keys.slice(0, 42);
 const po = (text: string) =>
-	text.replaceAll("\\", "\\\\").replaceAll('"', '\\"').replaceAll("\n", "\\n");
+	text
+		.replaceAll("\\", "\\\\")
+		.replaceAll('"', '\\"')
+		.replaceAll("\r", "\\r")
+		.replaceAll("\n", "\\n");
 
 const occurrence = (key: string, source: string, index: number) => ({
 	source,
@@ -74,6 +89,8 @@ const occurrence = (key: string, source: string, index: number) => ({
 const document = Schema.decodeUnknownSync(GameTextRuleDocument)({
 	schemaVersion: 2,
 	segmentSeparator: "//",
+	optionalArguments: ["ParentLabel"],
+	optionalTags: ["npcname"],
 	roles: [
 		{
 			id: "menu",
@@ -176,7 +193,25 @@ it.live(
 						status: "unresolved" as const,
 						reason: "culture_invariant" as const
 					}
-				}
+				},
+				// Culture-invariant text where it is meant to be: a property no keyed text uses,
+				// and debug content.
+				...[
+					{ source: "Backer Name", object: "/Game/Text/Table.Table", property: "Backer" },
+					{ source: "Debug label", object: "/Game/Debug/Panel.Panel", property: "Label3" }
+				].map(({ source, object, property }) => ({
+					...occurrence("", source, 3),
+					identity: {
+						status: "unresolved" as const,
+						reason: "culture_invariant" as const
+					},
+					location: {
+						kind: "asset_property" as const,
+						object_path: object,
+						class_path: "/Script/Engine.DataAsset",
+						property_path: property
+					}
+				}))
 			]);
 			yield* Effect.gen(function* () {
 				const result = yield* (yield* GameTextIndexRefresh).refresh(fixture.request);
@@ -264,7 +299,16 @@ it.live(
 							.export({ target: join.target, filter: "inconsistent_translation" })
 							.findings.filter(({ source }) => source === "Save game")
 							.map(({ problem }) => problem)
-					).toEqual(Array(4).fill("de · Translated inconsistently · 2 translations"));
+					).toEqual([
+						"de · Translated inconsistently · 2 translations, most use “Spiel speichern”"
+					]);
+					// Invariant text in a property no keyed text uses, or in debug content, is meant
+					// to be invariant.
+					expect(
+						legacy
+							.export({ target: join.target, filter: "culture_invariant_text" })
+							.findings.map(({ source }) => source)
+					).toEqual(["Invariant"]);
 					for (const filter of sourceLevel) {
 						const found = legacy.export({ target: join.target, filter }).findings;
 						expect(new Set(found.map(({ culture }) => culture))).toEqual(

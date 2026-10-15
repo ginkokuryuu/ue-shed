@@ -21,7 +21,10 @@ export const LocalizationCheckId = Schema.Literals([
 	"segment_separator",
 	"length_outlier",
 	"outdated_translation",
-	"inconsistent_translation"
+	"inconsistent_translation",
+	"rich_text_tags_added",
+	"source_line_endings_changed",
+	"placeholder_translation"
 ]);
 export type LocalizationCheckId = typeof LocalizationCheckId.Type;
 
@@ -64,7 +67,9 @@ export const checkSeverity = {
 	missing_translator_notes: "low",
 	duplicate_source: "low",
 	format_argument_renamed: "normal",
+	// A dropped tag loses styling or an inline image; an added one only styles more text.
 	rich_text_tags: "normal",
+	rich_text_tags_added: "low",
 	// Slate matches style and decorator names without case, so a case change usually still renders.
 	rich_text_tag_case: "low",
 	line_breaks: "normal",
@@ -72,11 +77,15 @@ export const checkSeverity = {
 	length_outlier: "normal",
 	// Unreal drops an archive translation whose recorded source differs: players see the source.
 	outdated_translation: "blocking",
+	// The recorded source differs from the current one only in CRLF against LF line endings.
+	source_line_endings_changed: "low",
 	inconsistent_translation: "normal",
-	// Culture-invariant text is never gathered, so players see it untranslated in every culture.
-	culture_invariant_text: "blocking",
+	placeholder_translation: "normal",
+	// Culture-invariant text is never gathered. Most of it is developer or data text no player
+	// reads, so a finding only asks for a look.
+	culture_invariant_text: "low",
 	placeholder_text: "normal",
-	source_whitespace: "normal",
+	source_whitespace: "low",
 	source_markup: "normal",
 	number_only_text: "low",
 	string_table_key_collision: "normal",

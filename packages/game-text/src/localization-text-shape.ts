@@ -3,9 +3,18 @@
  * one source/translation pair, so in-memory and indexed scans share them line by line.
  */
 
-/** Opening and self-closing Slate rich-text tags: `<b>`, `<Name attr="x">`, `<img id="x"/>`. */
-const TAG = /<([A-Za-z_][A-Za-z0-9_.-]*)(?:\s[^<>]*)?\/?>/gu;
+/**
+ * Opening and self-closing Slate rich-text tags: `<b>`, `<Name attr="x">`, `<img id="x"/>`. As in
+ * Slate's markup parser, attributes are `name="value"` pairs, so `<invalid requirement type>` is
+ * text, not a tag.
+ */
+const TAG = /<([A-Za-z_][\w.-]*)(?:\s+[\w.-]+\s*=\s*(?:"[^"]*"|'[^']*'))*\s*\/?>/gu;
 const CLOSING_TAG = /<\/>/gu;
+/** A tag whose name is a format argument, `<{Color}>`: the game picks the style at runtime. */
+const ARGUMENT_TAG = /<\{[^{}<>]+\}>/gu;
+/** XML-style closing tags, `</Name>`; Slate closes rich text only with `</>`. */
+const XML_CLOSING_TAG = /<\/([A-Za-z_][\w.-]*)\s*>/gu;
+const ASCII_IDENTIFIER = /[A-Za-z0-9_]/u;
 
 /** Tag names in order of appearance; closing `</>` tags have no name and are not listed. */
 export function richTextTagNames(text: string): string[] {
@@ -67,13 +76,39 @@ export function compareRichTextTags(source: string, translation: string) {
 	};
 }
 
-/** Opening tags (named, not self-closing) and `</>` closings, for source markup balance. */
+/**
+ * Opening tags (named or `<{argument}>`, not self-closing) and `</>` closings, for source markup
+ * balance, and the names of XML-style `</Name>` closings, which Slate shows as text. A tag right
+ * after an ASCII letter, digit or underscore is code, as in `GetSubsystem<UMySubsystem>()`.
+ */
 export function richTextTagBalance(text: string) {
-	if (!text.includes("<")) return { opening: 0, closing: 0 };
+	const xmlClosings: string[] = [];
+	if (!text.includes("<")) return { opening: 0, closing: 0, xmlClosings };
 	let opening = 0;
+	const code = (index: number) => index > 0 && ASCII_IDENTIFIER.test(text[index - 1]!);
 	for (const match of text.matchAll(TAG))
-		if (!match[0].endsWith("/>") && match[1]!.toLowerCase() !== "br") opening++;
-	return { opening, closing: [...text.matchAll(CLOSING_TAG)].length };
+		if (!match[0].endsWith("/>") && match[1]!.toLowerCase() !== "br" && !code(match.index))
+			opening++;
+	if (text.includes("<{")) opening += [...text.matchAll(ARGUMENT_TAG)].length;
+	for (const match of text.matchAll(XML_CLOSING_TAG)) xmlClosings.push(match[1]!);
+	return { opening, closing: [...text.matchAll(CLOSING_TAG)].length, xmlClosings };
+}
+
+/** A rich-text tag around nothing but one format argument: `<PlayerName>{ParentLabel}</>`. */
+const ARGUMENT_WRAPPER = /<[A-Za-z_][\w.-]*>\{([^{}<>|]+)\}<\/>/gu;
+
+/**
+ * The text with each tag that wraps only an optional argument removed, the argument kept, so tag
+ * comparison leaves those tags out.
+ */
+export function withoutOptionalArgumentTags(
+	text: string,
+	optionalArguments: ReadonlySet<string>
+): string {
+	if (optionalArguments.size === 0 || !text.includes("<")) return text;
+	return text.replace(ARGUMENT_WRAPPER, (whole, argument: string) =>
+		optionalArguments.has(argument) ? `{${argument}}` : whole
+	);
 }
 
 /** Format-pattern braces that Unreal's backtick does not escape. */
@@ -176,19 +211,64 @@ export function visibleTextLength(text: string): number {
  */
 export const LENGTH_OUTLIER = { minimumSourceLength: 20, minimumRatio: 1 / 3, maximumRatio: 3 };
 
+/**
+ * Chinese, Japanese, Korean and Thai translations often run shorter than wide characters counted
+ * twice allow for, so their minimum ratio is a quarter.
+ */
+const COMPACT_CULTURE = /^(?:zh|ja|ko|th)(?:-|$)/iu;
+export const COMPACT_MINIMUM_RATIO = 0.25;
+
+/** The shortest translation, relative to its source, that is not a length outlier. */
+export function lengthOutlierMinimumRatio(culture: string): number {
+	return COMPACT_CULTURE.test(culture) ? COMPACT_MINIMUM_RATIO : LENGTH_OUTLIER.minimumRatio;
+}
+
 /** `sourceLength` lets a caller measure one source once for every culture. */
 export function lengthOutlier(
 	source: string,
 	translation: string,
-	sourceLength = visibleTextLength(source)
+	sourceLength = visibleTextLength(source),
+	minimumRatio = LENGTH_OUTLIER.minimumRatio
 ) {
 	if (sourceLength < LENGTH_OUTLIER.minimumSourceLength) return undefined;
 	const length = visibleTextLength(translation);
 	if (length === 0) return undefined;
 	const ratio = length / sourceLength;
-	if (ratio >= LENGTH_OUTLIER.minimumRatio && ratio <= LENGTH_OUTLIER.maximumRatio)
-		return undefined;
+	if (ratio >= minimumRatio && ratio <= LENGTH_OUTLIER.maximumRatio) return undefined;
 	return { length, sourceLength, ratio: Math.round(ratio * 100) / 100 };
+}
+
+/**
+ * Words translators leave in place of a translation, compared trimmed, lower-cased and without
+ * trailing punctuation. "script lama" is Indonesian for "old script".
+ */
+const PLACEHOLDER_TRANSLATIONS = new Set([
+	"skip",
+	"skipped",
+	"script lama",
+	"tbd",
+	"tba",
+	"todo",
+	"fixme",
+	"placeholder",
+	"to be translated",
+	"untranslated",
+	"not translated",
+	"n/a",
+	"xxx"
+]);
+const LETTER_OR_NUMBER = /[\p{L}\p{N}]/u;
+
+/**
+ * A translation that is only a placeholder word or only punctuation ("...", ".", "-") while its
+ * source has letters, as written; undefined otherwise.
+ */
+export function placeholderTranslation(source: string, translation: string): string | undefined {
+	const trimmed = translation.trim();
+	if (trimmed.length === 0 || trimmed.length > 24 || !LETTER.test(source)) return undefined;
+	if (!LETTER_OR_NUMBER.test(trimmed)) return trimmed;
+	const word = trimmed.toLowerCase().replace(/[\p{P}\s]+$/u, "");
+	return PLACEHOLDER_TRANSLATIONS.has(word) ? trimmed : undefined;
 }
 
 // Upper-case markers only: "todo" is Spanish and Portuguese for "all".
@@ -219,9 +299,58 @@ export function sharedSourceCandidate(text: string): boolean {
 	return LETTER.test(text);
 }
 
-/** Sources whose translations should agree: letters and at least three visible characters. */
+/** Words in the text a reader sees: runs without whitespace, rich-text tags removed. */
+export function visibleWordCount(text: string): number {
+	const visible = text.includes("<") ? text.replace(TAG, " ").replace(CLOSING_TAG, " ") : text;
+	return visible.match(/\S+/gu)?.length ?? 0;
+}
+
+/** The most words a source may have for `inconsistent_translation`: names, labels, short UI text. */
+export const CONSISTENT_TRANSLATION_MAXIMUM_WORDS = 4;
+
+/**
+ * Sources whose translations should agree: letters, at least three visible characters and at
+ * most four words. Longer sentences are often translated to fit their scene.
+ */
 export function consistentTranslationCandidate(text: string): boolean {
-	return LETTER.test(text) && visibleTextLength(text) >= 3;
+	return (
+		LETTER.test(text) &&
+		visibleTextLength(text) >= 3 &&
+		visibleWordCount(text) <= CONSISTENT_TRANSLATION_MAXIMUM_WORDS
+	);
+}
+
+/**
+ * The form translations are grouped by: lower-cased, without whitespace, punctuation and symbols,
+ * so "Danke!" and "danke" count as one translation. Text that is only those keeps its trimmed
+ * form.
+ */
+export function translationGroupKey(text: string): string {
+	const key = text.toLowerCase().replace(/[\p{P}\p{S}\p{Z}\s]+/gu, "");
+	return key.length ? key : text.trim();
+}
+
+/** Line breaks between the first and last visible characters; edges are the whitespace check's. */
+export function interiorLineBreaks(text: string): number {
+	let start = 0,
+		end = text.length;
+	while (start < end && space(text.charCodeAt(start))) start++;
+	while (end > start && space(text.charCodeAt(end - 1))) end--;
+	let count = 0;
+	for (let index = start; index < end; index++) {
+		const code = text.charCodeAt(index);
+		if (code === 0x0a) count++;
+		else if (code === 0x0d) {
+			count++;
+			if (text.charCodeAt(index + 1) === 0x0a) index++;
+		}
+	}
+	return count;
+}
+
+/** The text with `\r\n` and lone `\r` written as `\n`. */
+export function normalizedLineEndings(text: string): string {
+	return text.includes("\r") ? text.replace(/\r\n?/gu, "\n") : text;
 }
 
 /** Leading and trailing whitespace and runs of two or more spaces inside the text. */

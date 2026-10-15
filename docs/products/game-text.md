@@ -818,9 +818,11 @@ UE Shed adds checks the compile validator does not perform: source/translation a
 comparison, malformed modifier parameters that Unreal treats as literals, whitespace and line-break
 drift relative to source, PO escape safety, empty entries, notes, and duplicate source identities.
 These are evidence-based built-ins; no rule file is required. Version-1 and version-2 project rule
-files may add `disabledLocalizationChecks`, an array of built-in IDs, and `segmentSeparator`, text
-such as `"//"` that joins a line's segments and must appear as often in each translation, without
-changing their source rules. The package README lists every check with its severity and rule.
+files may add `disabledLocalizationChecks`, an array of built-in IDs; `segmentSeparator`, text
+such as `"//"` that joins a line's segments and must appear as often in each translation;
+`optionalTags`, rich-text tags a translation may add or leave out; and `optionalArguments`,
+arguments the game always supplies, which a translation may add along with a tag around only
+them. None changes the source rules. The package README lists every check with its severity and rule.
 Hosts whose projects cannot store translator notes (packages saved by UE 4.27 and by UE5 before 5.8;
 String Tables and UE 5.8+ can) can pass `disabledChecks: ["missing_translator_notes"]`.
 
