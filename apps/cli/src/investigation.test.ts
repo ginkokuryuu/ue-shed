@@ -122,7 +122,7 @@ describe.skipIf(!process.env.UE_SHED_UASSET_EXECUTABLE)("localization quality pr
 				capability: "all",
 				lens: "all",
 				qualityFilter: "all",
-				workspaceFilter: "format_arguments",
+				workspaceFilter: "format_argument_renamed",
 				localization: { target: "FixtureGame", culture: "de" }
 			}
 		};
@@ -135,7 +135,7 @@ describe.skipIf(!process.env.UE_SHED_UASSET_EXECUTABLE)("localization quality pr
 		expect(before.preset.schemaVersion).toBe(2);
 		expect(before.result).toMatchObject({
 			mode: "localization_quality",
-			report: { target: "FixtureGame", culture: "de", filter: "format_arguments" }
+			report: { target: "FixtureGame", culture: "de", filter: "format_argument_renamed" }
 		});
 		expect(before.result.report.findings.length).toBeGreaterThan(0);
 		const csv = await run([...args, "--format", "csv"]);
@@ -151,7 +151,7 @@ describe.skipIf(!process.env.UE_SHED_UASSET_EXECUTABLE)("localization quality pr
 			"--culture",
 			"de",
 			"--check",
-			"localization.format_arguments",
+			"localization.format_argument_renamed",
 			"--line",
 			"Fixture.Localization.Table,NamedArgument"
 		]);
