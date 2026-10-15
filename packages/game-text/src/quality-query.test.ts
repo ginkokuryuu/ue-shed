@@ -1,6 +1,12 @@
 import { Schema } from "effect";
 import { describe, expect, it } from "vitest";
-import { TextQualitySearchPage, textQualityQuery } from "./quality-query.js";
+import {
+	TextQualitySearchPage,
+	textQualityEvidenceHash,
+	textQualityFindingIdHash,
+	textQualityFindingIdOf,
+	textQualityQuery
+} from "./quality-query.js";
 import { TextQualityRuleId, TextRoleId, type TextQualityReport } from "./quality-schema.js";
 import { makeTextOccurrenceId, makeTextUnitId } from "./schema.js";
 
@@ -199,4 +205,36 @@ it("exports all matching quality findings with complete evidence", () => {
 	expect(exported.findings[0]).toEqual(findings[1]);
 	expect(exported.coverage).toEqual(report.coverage);
 	expect(exported.diagnostics).toEqual(report.diagnostics);
+});
+
+it("hashes finding evidence as 64-bit FNV-1a, and finding IDs round-trip to their hash", () => {
+	const reference = (text: string) => {
+		let hash = 0xcbf29ce484222325n;
+		for (let index = 0; index < text.length; index++)
+			hash = BigInt.asUintN(64, (hash ^ BigInt(text.charCodeAt(index))) * 0x100000001b3n);
+		return "quality-finding:" + hash.toString(16);
+	};
+	const samples = ["", "a", "Old old OLD", "Ölkanne 🚀 \u{10ffff}￿", "\u0000".repeat(9)];
+	let seed = 57;
+	for (let sample = 0; sample < 500; sample++) {
+		let text = "";
+		const length = sample % 40;
+		for (let index = 0; index < length; index++) {
+			seed = (Math.imul(seed, 1103515245) + 12345) >>> 0;
+			text += String.fromCharCode(seed >>> 16);
+		}
+		samples.push(text);
+	}
+	for (const text of samples) {
+		const [high, low] = textQualityEvidenceHash(text);
+		const id = textQualityFindingIdOf(high, low);
+		expect(id).toBe(reference(text));
+		expect(textQualityFindingIdHash(id)).toEqual([high, low]);
+	}
+	// IDs hash with leading zeros dropped, as BigInt prints them; other spellings name nothing.
+	expect(textQualityFindingIdOf(0, 0xff)).toBe("quality-finding:ff");
+	expect(textQualityFindingIdOf(1, 0xff)).toBe("quality-finding:1000000ff");
+	for (const id of ["quality-finding:0ff", "quality-finding:FF", "quality-finding:", "ff"])
+		expect(textQualityFindingIdHash(id)).toBeUndefined();
+	expect(textQualityFindingIdHash("quality-finding:0")).toEqual([0, 0]);
 });

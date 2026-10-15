@@ -231,6 +231,16 @@ export const WorkbenchGameTextLive = Layer.effect(
 				})
 			);
 		const retainedCorpus = (index: RetainedGameTextIndexResult) => index.corpus;
+		/** Source rules over the index page by page, or over the corpus where there is no index. */
+		const sourceQualityModel = (
+			index: RetainedGameTextIndexResult,
+			rules: GameTextRuleDocument
+		) =>
+			index.sourceQuality
+				? index.sourceQuality(rules)
+				: Effect.sync(() =>
+						textQualityQuery(evaluateGameTextSourceQuality(index.corpus, rules))
+					);
 		const queryModel = (index: RetainedGameTextIndexResult) => index.query;
 		const querySearch = (index: RetainedGameTextIndexResult) => index.search;
 		const qualityModel = yield* Ref.make<TextQualityQuery | undefined>(undefined);
@@ -412,9 +422,7 @@ export const WorkbenchGameTextLive = Layer.effect(
 									Ref.set(
 										qualityModel,
 										rules
-											? textQualityQuery(
-													evaluateGameTextSourceQuality(report, rules)
-												)
+											? yield* sourceQualityModel(indexed, rules)
 											: undefined
 									),
 									Ref.set(qualityDocument, rules),
@@ -560,8 +568,9 @@ export const WorkbenchGameTextLive = Layer.effect(
 
 		const prepareQualityRules = Effect.fn("Workbench.WorkbenchGameText.prepareQualityRules")(
 			function* (input: GameTextRuleDocument) {
-				const corpus = yield* currentModel(retainedCorpus);
-				if (corpus === undefined) return { status: "not_ready" as const };
+				const index = yield* currentIndex();
+				if (index === undefined) return { status: "not_ready" as const };
+				const corpus = index.corpus;
 				const document = yield* decodeGameTextRuleDocumentJson(JSON.stringify(input)).pipe(
 					Effect.match({
 						onFailure: (error) => ({ error, status: "failed" as const }),
@@ -579,9 +588,7 @@ export const WorkbenchGameTextLive = Layer.effect(
 						status: "failed" as const
 					};
 				}
-				const model = textQualityQuery(
-					evaluateGameTextSourceQuality(corpus, document.value)
-				);
+				const model = yield* sourceQualityModel(index, document.value);
 				return { corpus, document: document.value, model, status: "ready" as const };
 			}
 		);

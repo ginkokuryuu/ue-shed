@@ -1,5 +1,5 @@
 import { textCorpusDiagnosticSummary } from "./corpus-summary.js";
-import type { TextCorpus, TextLocation, TextOccurrence, TextUnit } from "./schema.js";
+import type { TextCorpus, TextLocation, TextOccurrence, TextUnitId } from "./schema.js";
 import { hasSearchableSource } from "./search.js";
 import type {
 	TextQualityAffectedOccurrence,
@@ -44,10 +44,24 @@ export function matchesTextRoleMatcher(location: TextLocation, matcher: TextRole
 	}
 }
 
-export function matchesTextRole(occurrence: TextOccurrence, role: TextRole): boolean {
+/**
+ * Whether an occurrence belongs to a role: any scope whose matchers all match its location. Only
+ * the place's own location is read. Its folded copies (`TextOccurrence.copies`) never match by
+ * their own paths: a role selects authored sites, whose text is the line's text.
+ */
+export function matchesTextRole(
+	occurrence: { readonly location: TextLocation },
+	role: TextRole
+): boolean {
 	return role.scopes.some((scope) =>
 		scope.matchers.every((matcher) => matchesTextRoleMatcher(occurrence.location, matcher))
 	);
+}
+
+/** What a source rule reads of an occurrence: where it is and its text. */
+export interface TextQualityOccurrence {
+	readonly location: TextLocation;
+	readonly source: string;
 }
 
 function affectedOccurrence(occurrence: TextOccurrence): TextQualityAffectedOccurrence {
@@ -58,15 +72,16 @@ function affectedOccurrence(occurrence: TextOccurrence): TextQualityAffectedOccu
 	};
 }
 
-function occurrenceGroups(
-	unit: TextUnit,
+/**
+ * The role's occurrences of a unit grouped by source, in source order. Each group keeps the
+ * unit's occurrence order; sources equal under collation keep first-seen order.
+ */
+function occurrenceGroups<O extends TextQualityOccurrence>(
+	occurrences: readonly O[],
 	role: TextRole
-): ReadonlyArray<{
-	readonly occurrences: readonly TextOccurrence[];
-	readonly source: string;
-}> {
-	const groups = new Map<string, TextOccurrence[]>();
-	for (const occurrence of unit.occurrences) {
+): ReadonlyArray<{ readonly occurrences: readonly O[]; readonly source: string }> {
+	const groups = new Map<string, O[]>();
+	for (const occurrence of occurrences) {
 		if (!matchesTextRole(occurrence, role)) continue;
 		const group = groups.get(occurrence.source);
 		if (group) group.push(occurrence);
@@ -74,36 +89,7 @@ function occurrenceGroups(
 	}
 	return [...groups]
 		.sort(([left], [right]) => left.localeCompare(right))
-		.map(([source, occurrences]) => ({
-			occurrences: [...occurrences].sort((left, right) => left.id.localeCompare(right.id)),
-			source
-		}));
-}
-
-function characterBudgetFindings(options: {
-	readonly role: TextRole;
-	readonly rule: Extract<TextQualityRule, { readonly kind: "character_budget" }>;
-	readonly unit: TextUnit;
-}): readonly TextQualityFinding[] {
-	return occurrenceGroups(options.unit, options.role).flatMap(({ occurrences, source }) =>
-		source.length > options.rule.maximumCharacters
-			? [
-					{
-						actual: { characterCount: source.length, kind: "character_count", source },
-						affectedOccurrences: occurrences.map(affectedOccurrence),
-						expectation: {
-							kind: "maximum_characters",
-							maximumCharacters: options.rule.maximumCharacters
-						},
-						kind: "character_budget" as const,
-						recovery: options.rule.recovery,
-						role: options.role.id,
-						ruleId: options.rule.id,
-						textUnitId: options.unit.id
-					}
-				]
-			: []
-	);
+		.map(([source, occurrences]) => ({ occurrences, source }));
 }
 
 function escapedRegExp(value: string): string {
@@ -146,68 +132,107 @@ function prepareTerminology(rule: TerminologyRule) {
 	});
 }
 
-function terminologyFindings(options: {
+/** A rule with its role and, for terminology, its prepared terms. */
+export interface PreparedTextQualityRule {
+	readonly rule: TextQualityRule;
 	readonly role: TextRole;
-	readonly rule: Extract<TextQualityRule, { readonly kind: "terminology" }>;
-	readonly unit: TextUnit;
 	readonly terms: ReturnType<typeof prepareTerminology>;
-}): readonly TextQualityFinding[] {
-	return occurrenceGroups(options.unit, options.role).flatMap(({ occurrences, source }) => {
+}
+
+/** The document's rules in report order (by ID), each with its role; a rule without one drops. */
+export function prepareTextQualityRules(
+	document: Pick<TextQualityRuleDocument, "roles" | "rules">
+): readonly PreparedTextQualityRule[] {
+	const roleById = new Map(document.roles.map((role) => [role.id, role]));
+	return [...document.rules]
+		.sort((left, right) => left.id.localeCompare(right.id))
+		.flatMap((rule) => {
+			const role = roleById.get(rule.role);
+			if (role === undefined) return [];
+			const terms = rule.kind === "terminology" ? prepareTerminology(rule) : [];
+			return [{ rule, role, terms }];
+		});
+}
+
+/**
+ * One unit's findings for one rule, in report order. `affected` turns a finding's occurrences
+ * into their evidence; it runs only for occurrences that produce a finding, and the evidence is
+ * then ordered by occurrence ID. The in-memory and indexed evaluations share this function.
+ */
+export function textQualityUnitFindings<O extends TextQualityOccurrence>(
+	prepared: PreparedTextQualityRule,
+	textUnitId: TextUnitId,
+	occurrences: readonly O[],
+	affected: (occurrences: readonly O[]) => readonly TextQualityAffectedOccurrence[]
+): TextQualityFinding[] {
+	const { role, rule } = prepared;
+	const findings: TextQualityFinding[] = [];
+	const evidence = (group: readonly O[]) =>
+		[...affected(group)].sort((left, right) => left.id.localeCompare(right.id));
+	for (const group of occurrenceGroups(occurrences, role)) {
+		const { source } = group;
+		if (rule.kind === "character_budget") {
+			if (source.length <= rule.maximumCharacters) continue;
+			findings.push({
+				actual: { characterCount: source.length, kind: "character_count", source },
+				affectedOccurrences: evidence(group.occurrences),
+				expectation: {
+					kind: "maximum_characters",
+					maximumCharacters: rule.maximumCharacters
+				},
+				kind: "character_budget",
+				recovery: rule.recovery,
+				role: role.id,
+				ruleId: rule.id,
+				textUnitId
+			});
+			continue;
+		}
 		const asciiSource =
-			!options.rule.caseSensitive && /^\p{ASCII}*$/u.test(source)
-				? source.toLowerCase()
-				: undefined;
-		return options.terms.flatMap(
-			({ entry, term, asciiTerm, expression }): readonly TextQualityFinding[] => {
-				// A negative literal test is safe for case-sensitive terms, and for ASCII-only
-				// case folding. Unicode /iu behavior and all positive match offsets stay with RegExp.
-				if (
-					options.rule.caseSensitive
-						? !source.includes(term)
-						: asciiSource !== undefined &&
-							asciiTerm !== undefined &&
-							!asciiSource.includes(asciiTerm)
-				)
-					return [];
-				return matchesExpression(source, expression).map((match) => ({
+			!rule.caseSensitive && /^\p{ASCII}*$/u.test(source) ? source.toLowerCase() : undefined;
+		let groupEvidence: TextQualityAffectedOccurrence[] | undefined;
+		for (const { entry, term, asciiTerm, expression } of prepared.terms) {
+			// A negative literal test is safe for case-sensitive terms, and for ASCII-only
+			// case folding. Unicode /iu behavior and all positive match offsets stay with RegExp.
+			if (
+				rule.caseSensitive
+					? !source.includes(term)
+					: asciiSource !== undefined &&
+						asciiTerm !== undefined &&
+						!asciiSource.includes(asciiTerm)
+			)
+				continue;
+			for (const match of matchesExpression(source, expression))
+				findings.push({
 					actual: {
 						end: match.end,
-						kind: "terminology_match" as const,
+						kind: "terminology_match",
 						source,
 						start: match.start,
 						term: match.matched
 					},
-					affectedOccurrences: occurrences.map(affectedOccurrence),
+					affectedOccurrences: (groupEvidence ??= evidence(group.occurrences)),
 					expectation:
 						entry.kind === "forbidden"
-							? { kind: "forbidden_term" as const, term: entry.term }
+							? { kind: "forbidden_term", term: entry.term }
 							: {
 									discouragedTerm: term,
-									kind: "preferred_term" as const,
+									kind: "preferred_term",
 									preferredTerm: entry.term
 								},
-					kind: "terminology" as const,
-					recovery: options.rule.recovery,
-					role: options.role.id,
-					ruleId: options.rule.id,
-					textUnitId: options.unit.id
-				}));
-			}
-		);
-	});
+					kind: "terminology",
+					recovery: rule.recovery,
+					role: role.id,
+					ruleId: rule.id,
+					textUnitId
+				});
+		}
+	}
+	return findings;
 }
 
-function findingsForRule(options: {
-	readonly role: TextRole;
-	readonly rule: TextQualityRule;
-	readonly units: readonly TextUnit[];
-}): readonly TextQualityFinding[] {
-	const { role, rule, units } = options;
-	if (rule.kind === "character_budget")
-		return units.flatMap((unit) => characterBudgetFindings({ role, rule, unit }));
-	const terms = prepareTerminology(rule);
-	return units.flatMap((unit) => terminologyFindings({ role, rule, unit, terms }));
-}
+const inMemoryEvidence = (occurrences: readonly TextOccurrence[]) =>
+	occurrences.map(affectedOccurrence);
 
 /** Pure quality evaluation over an already-built TextCorpus. */
 export function evaluateTextQuality(
@@ -218,33 +243,28 @@ export function evaluateTextQuality(
 		.filter(hasSearchableSource)
 		.sort((left, right) => left.id.localeCompare(right.id));
 	const roles = [...document.roles].sort((left, right) => left.id.localeCompare(right.id));
-	const roleById = new Map(roles.map((role) => [role.id, role]));
 	const rules = [...document.rules].sort((left, right) => left.id.localeCompare(right.id));
-	const findings = rules.flatMap((rule) => {
-		const role = roleById.get(rule.role);
-		if (role === undefined) return [];
-		return findingsForRule({ role, rule, units });
-	});
+	const findings = prepareTextQualityRules(document).flatMap((prepared) =>
+		units.flatMap((unit) =>
+			textQualityUnitFindings(prepared, unit.id, unit.occurrences, inMemoryEvidence)
+		)
+	);
 
 	return {
 		coverage: corpus.coverage,
 		...textCorpusDiagnosticSummary(corpus.diagnostics),
 		findings,
 		roles: roles.map((role) => {
-			const matchedUnits = units.filter((unit) =>
-				unit.occurrences.some((occurrence) => matchesTextRole(occurrence, role))
-			);
-			return {
-				matchedOccurrences: matchedUnits.reduce(
-					(count, unit) =>
-						count +
-						unit.occurrences.filter((occurrence) => matchesTextRole(occurrence, role))
-							.length,
-					0
-				),
-				matchedTextUnits: matchedUnits.length,
-				role: role.id
-			};
+			let matchedOccurrences = 0,
+				matchedTextUnits = 0;
+			for (const unit of units) {
+				let matched = 0;
+				for (const occurrence of unit.occurrences)
+					if (matchesTextRole(occurrence, role)) matched++;
+				matchedOccurrences += matched;
+				if (matched > 0) matchedTextUnits++;
+			}
+			return { matchedOccurrences, matchedTextUnits, role: role.id };
 		}),
 		ruleDocumentVersion: document.schemaVersion,
 		rules: rules.map((rule) => ({

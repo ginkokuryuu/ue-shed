@@ -129,6 +129,37 @@ the finding selection. Version-1 corpus and source quality investigations remain
 keep their version when replayed. A version-1 preset cannot carry `workspaceFilter`, and an export
 uses the same version as its preset.
 
+### Source quality over the index
+
+`evaluateGameTextSourceQuality(corpus, ruleDocument)` evaluates source rules over a corpus in
+memory, and `textQualityQuery(report)` pages it. An opened index model's
+`sourceQuality(ruleDocument, options?)` returns that same `TextQualityQuery` from the index,
+without building the corpus's units: the same summary, role and rule counts, pages, cursors,
+focus, export and finding IDs. Hosts with an index replace
+`textQualityQuery(evaluateGameTextSourceQuality(result.corpus, document))` with
+`yield* result.sourceQuality(document)`; adapters without one keep the in-memory functions.
+`indexedSourceQuality(joined, corpus, ruleDocument, options?)` is the same scan over a pinned
+joined reader.
+
+The scan reads text units in report order, in pages of up to 256 units or 1,024 occurrences, and
+yields between pages, so it can be interrupted. Roles match each occurrence's stored location;
+only occurrences a rule's role selects have their source read. Each finding is kept as its rule,
+unit, place among the unit's findings and ID hash, 18 bytes. Search pages, focus and export
+rebuild only the findings they return from their units and check each against its hash; `export`
+rebuilds every matching finding, in batches. `options.onProgress` receives `SourceQualityProgress`
+(`{ checkedTextUnits, totalTextUnits, findings }`): once before the scan with nothing checked and
+`totalTextUnits` already known, then after each page, the last call with every unit checked and the
+scan's finding count. It runs inside the scan; keep it cheap and do not throw from it.
+
+Roles match a place by its own location, in memory and over the index alike. A folded Blueprint
+place's copies (`occurrence.copies`) never match by their compiled paths (`X_C`, `X_C.Name_INST`,
+`Default__X_C`, `SKEL_X_C`): the place is the authored site and holds the line's text. Write roles
+against authored paths. A site saved only under a generated class has no authored site and stays a
+place at its compiled path, where object path roles match it.
+
+`textQualityQueryOf(report, list)` builds the query over any `TextQualityFindingList`, a report's
+findings by position that may be rebuilt on demand.
+
 `STARTER_GAME_TEXT_RULES` contains neutral v1 examples to customize. A trusted Node host can use
 `createStarterTextRules(projectRoot, output?)` to create it exclusively, or use the CLI:
 

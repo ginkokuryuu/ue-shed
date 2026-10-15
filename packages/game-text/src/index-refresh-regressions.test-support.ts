@@ -151,6 +151,11 @@ export const makeIndexRegressionFixture = Effect.fn("Test.GameText.indexFixture"
 			};
 			signature++;
 		},
+		/** Replaces record fields other than the path, such as its status and coverage gaps. */
+		patchRecord: (patch: Partial<Omit<SavedAssetPackageTextRecord, "path">>) => {
+			record = { ...record, ...patch };
+			signature++;
+		},
 		update: (
 			occurrences: SavedAssetPackageTextRecord["occurrences"],
 			blueprintClasses?: SavedAssetPackageTextRecord["blueprintClasses"]

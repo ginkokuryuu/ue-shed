@@ -53,6 +53,7 @@ import {
 	readIndexedLocalizationEvidence
 } from "./index-context.js";
 import { indexedLocalizationQuality } from "./localization-quality-index.js";
+import { indexedSourceQuality } from "./source-quality-index.js";
 import { openJoinedTarget, readJoinedTarget } from "./joined-target-reader.js";
 import type { TextCorpusSearchRequest } from "./schema.js";
 import type { importLocalizationTarget } from "./localization-import.js";
@@ -699,6 +700,10 @@ export const makeGameTextIndexSteps = (
 							options,
 							ruleDocument
 						)
+					),
+				sourceQuality: (ruleDocument, options) =>
+					Effect.suspend(() =>
+						indexedSourceQuality(joined, corpus, ruleDocument, options)
 					)
 			};
 		}, normalizeFailure);

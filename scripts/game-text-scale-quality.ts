@@ -5,9 +5,12 @@ import {
 	GameTextIndexError,
 	GameTextIndexRefresh,
 	GameTextIndexSource,
+	GameTextRuleDocument,
 	PackageTextStored,
+	evaluateGameTextSourceQuality,
 	gameTextIndexRefreshLayer,
 	packageTextShard,
+	textQualityQuery,
 	typeScriptIndexBuilderLayer,
 	type GameTextIndexRefreshResult
 } from "../packages/game-text/dist/index.js";
@@ -149,6 +152,144 @@ export async function scaleQuality(result: GameTextIndexRefreshResult) {
 			byCheck[key] = (byCheck[key] ?? 0) + 1;
 		}
 		return { quality, findings: quality.findings.length, ...measured, ...byCheck };
+	} catch (cause) {
+		stalls();
+		throw cause;
+	}
+}
+
+/**
+ * Source rules over the generated project's evidence. Every generated source holds each of the
+ * generator's eight words, so the terminology rules match in every line their roles select.
+ */
+export const scaleSourceRules = Schema.decodeUnknownSync(GameTextRuleDocument)({
+	schemaVersion: 1,
+	roles: [
+		{
+			id: "labels",
+			scopes: [
+				{
+					matchers: [
+						{
+							kind: "class_path",
+							operator: "exact",
+							value: "/Script/Engine.DataAsset"
+						},
+						{ kind: "property_path", operator: "prefix", value: "Label" }
+					]
+				}
+			]
+		},
+		{
+			id: "cells",
+			scopes: [
+				{
+					matchers: [
+						{ kind: "location_kind", value: "data_table_cell" },
+						{ kind: "row", operator: "prefix", value: "Mirava" }
+					]
+				}
+			]
+		},
+		{
+			id: "entries",
+			scopes: [
+				{ matchers: [{ kind: "string_table_entry", operator: "prefix", value: "Taluma" }] }
+			]
+		},
+		{
+			id: "editor",
+			scopes: [
+				{ matchers: [{ kind: "property_path", operator: "prefix", value: "NodeTitle" }] }
+			]
+		},
+		{
+			id: "l10n",
+			scopes: [
+				{ matchers: [{ kind: "object_path", operator: "prefix", value: "/Game/L10N/" }] }
+			]
+		}
+	],
+	rules: [
+		{
+			kind: "character_budget",
+			id: "labels.limit",
+			role: "labels",
+			maximumCharacters: 130,
+			recovery: "Shorten the label."
+		},
+		{
+			kind: "character_budget",
+			id: "cells.limit",
+			role: "cells",
+			maximumCharacters: 100,
+			recovery: "Shorten the cell."
+		},
+		{
+			kind: "terminology",
+			id: "entries.terms",
+			role: "entries",
+			caseSensitive: true,
+			terms: [{ kind: "preferred", term: "Taluma", alternatives: ["taluma"] }],
+			recovery: "Capitalize the name."
+		},
+		{
+			kind: "terminology",
+			id: "editor.terms",
+			role: "editor",
+			caseSensitive: false,
+			terms: [{ kind: "forbidden", term: "nimblet" }],
+			recovery: "Remove the placeholder."
+		},
+		{
+			kind: "terminology",
+			id: "l10n.terms",
+			role: "l10n",
+			caseSensitive: false,
+			terms: [{ kind: "preferred", term: "Solune", alternatives: ["solune", "lumeko"] }],
+			recovery: "Use the preferred name."
+		}
+	]
+});
+
+/**
+ * Source rules over the opened index, as a host evaluates them: `indexed` scans the index in
+ * pages; `memory` evaluates the index's corpus in memory, the path hosts used before.
+ */
+export async function scaleSourceQuality(
+	result: GameTextIndexRefreshResult,
+	mode: "indexed" | "memory"
+) {
+	if (mode === "indexed" && !result.sourceQuality)
+		throw new Error("The opened index does not offer source quality.");
+	const stalls = eventLoopGaps();
+	try {
+		const query =
+			mode === "indexed"
+				? await Effect.runPromise(result.sourceQuality!(scaleSourceRules))
+				: textQualityQuery(evaluateGameTextSourceQuality(result.corpus, scaleSourceRules));
+		const measured = stalls();
+		const summary = query.summary();
+		// A first page and its last finding's focus, as a host shows them.
+		const pageStarted = performance.now();
+		const page = query.search({ filter: "all", pageSize: 50 });
+		const pageMs = performance.now() - pageStarted;
+		const focusStarted = performance.now();
+		const last = page.findings.at(-1);
+		if (last) query.focus({ id: last.id, pageSize: 50 });
+		const focusMs = performance.now() - focusStarted;
+		return {
+			query,
+			findings: summary.findingCount,
+			characterBudget: summary.characterBudgetCount,
+			terminology: summary.terminologyCount,
+			...Object.fromEntries(
+				summary.roles.map((role) => [`units.${role.role}`, role.matchedTextUnits])
+			),
+			firstPageMs: pageMs,
+			focusMs,
+			...measured
+		};
 	} catch (cause) {
 		stalls();
 		throw cause;
