@@ -129,6 +129,11 @@ function occurrenceId(packageFile: string, location: TextLocation): string {
 	return `occurrence:${location.objectPath}:${suffix}:${packageFile}`;
 }
 
+/** The ID of the occurrence at a location in a project-relative package file. */
+export function textOccurrenceId(packageFile: string, location: TextLocation) {
+	return makeOccurrenceId(occurrenceId(packageFile, location));
+}
+
 function addTextOccurrence(options: {
 	readonly output: TextOccurrence[];
 	readonly packageFile: string;

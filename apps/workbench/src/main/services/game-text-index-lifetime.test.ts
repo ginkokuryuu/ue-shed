@@ -3,7 +3,7 @@ import { Deferred, Effect, Fiber, Layer, Metric, Ref } from "effect";
 import { writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { expect } from "vitest";
-import { GameTextIndexSteps } from "@ue-shed/game-text";
+import { GameTextIndexSteps, STARTER_GAME_TEXT_RULES } from "@ue-shed/game-text";
 import { makeIndexRegressionFixture } from "../../../../../packages/game-text/dist/index-refresh-regressions.test-support.js";
 import { WorkbenchGameText, WorkbenchGameTextLive } from "./game-text.js";
 import { makeWorkbenchProjectTestLayer } from "./project-workspace.js";
@@ -12,7 +12,7 @@ import { makeLocalFilesTestLayer } from "../adapters/local-files.js";
 import { makeGameTextLocalization } from "./game-text-localization.js";
 
 const makeHost = Effect.fn("Test.GameText.productionHost")(function* (
-	mode: "retirement" | "search" | "rejected" | "localization" | "pipeline"
+	mode: "retirement" | "search" | "rejected" | "localization" | "pipeline" | "source"
 ) {
 	const fixture = yield* makeIndexRegressionFixture();
 	const retiring = yield* Deferred.make<void>();
@@ -21,6 +21,10 @@ const makeHost = Effect.fn("Test.GameText.productionHost")(function* (
 	const allowSearch = yield* Deferred.make<void>();
 	const prepared = yield* Deferred.make<void>();
 	const allowPublication = yield* Deferred.make<void>();
+	const evaluating = yield* Deferred.make<void>();
+	const allowEvaluation = yield* Deferred.make<void>();
+	const evaluationInterrupted = yield* Deferred.make<void>();
+	const secondRetired = yield* Deferred.make<void>();
 	const generation = yield* Ref.make(0);
 	let calls = 0;
 	let pauseRetirement = false;
@@ -55,13 +59,31 @@ const makeHost = Effect.fn("Test.GameText.productionHost")(function* (
 								)
 							)
 						);
+					if (call === 2 && mode === "source")
+						yield* Effect.addFinalizer(() =>
+							Deferred.succeed(secondRetired, undefined)
+						);
 					const result = yield* real.openTarget(request);
 					if (call === 2 && mode === "rejected") {
 						yield* Deferred.succeed(prepared, undefined);
 						yield* Deferred.await(allowPublication);
 					}
+					const sourceQuality = result.sourceQuality;
 					return {
 						...result,
+						// The second model's source rules wait for the test before evaluating.
+						...(call === 2 && mode === "source" && sourceQuality
+							? {
+									sourceQuality: (...args: Parameters<typeof sourceQuality>) =>
+										Deferred.succeed(evaluating, undefined).pipe(
+											Effect.andThen(Deferred.await(allowEvaluation)),
+											Effect.onInterrupt(() =>
+												Deferred.succeed(evaluationInterrupted, undefined)
+											),
+											Effect.andThen(sourceQuality(...args))
+										)
+								}
+							: undefined),
 						search: Effect.fn("Test.GameText.productionSearch")(function* (request) {
 							if (call === 1 && mode === "search") {
 								yield* Deferred.succeed(searching, undefined);
@@ -140,6 +162,10 @@ const makeHost = Effect.fn("Test.GameText.productionHost")(function* (
 		allowSearch,
 		prepared,
 		allowPublication,
+		evaluating,
+		allowEvaluation,
+		evaluationInterrupted,
+		secondRetired,
 		generation,
 		layer: WorkbenchGameTextLive.pipe(
 			Layer.provide(indexed),
@@ -446,3 +472,50 @@ it.live(
 		}),
 	15000
 );
+
+for (const release of [true, false])
+	it.live(
+		release
+			? "a refresh superseded during source rule evaluation publishes and retains nothing"
+			: "a superseded source rule evaluation is abandoned without waiting for it",
+		() =>
+			Effect.gen(function* () {
+				const test = yield* makeHost("source");
+				yield* Effect.gen(function* () {
+					const host = yield* WorkbenchGameText;
+					expect((yield* host.configuredRefresh()).status).toBe("completed");
+					expect((yield* host.previewQualityRules(STARTER_GAME_TEXT_RULES)).status).toBe(
+						"completed"
+					);
+					const published = yield* host.qualitySearch({ filter: "all", pageSize: 50 });
+					expect(published.status).toBe("ready");
+					// The rescan carries the rules over and evaluates them on its new model.
+					const pending = yield* host.configuredRefresh().pipe(Effect.forkChild);
+					yield* Deferred.await(test.evaluating);
+					yield* Ref.set(test.generation, 1);
+					if (release) yield* Deferred.succeed(test.allowEvaluation, undefined);
+					expect(yield* Fiber.join(pending)).toEqual({
+						status: "failed",
+						error: {
+							code: "invalid_project",
+							message: "The project changed during the scan.",
+							recovery: "Refresh to read the current project generation.",
+							retrySafe: true
+						}
+					});
+					if (!release) yield* Deferred.await(test.evaluationInterrupted);
+					// The superseded model retires; the published one stays, with its rules.
+					yield* Deferred.await(test.secondRetired);
+					yield* Ref.set(test.generation, 0);
+					expect(yield* Deferred.isDone(test.retiring)).toBe(false);
+					expect((yield* host.search(request)).status).toBe("ready");
+					expect(yield* host.qualitySearch({ filter: "all", pageSize: 50 })).toEqual(
+						published
+					);
+				}).pipe(
+					Effect.ensuring(Deferred.succeed(test.allowEvaluation, undefined)),
+					Effect.provide(test.layer)
+				);
+			}),
+		15000
+	);
