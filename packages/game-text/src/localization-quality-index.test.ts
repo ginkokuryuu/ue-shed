@@ -54,7 +54,6 @@ const occurrence = (key: string, source: string, index: number) => ({
 
 const document = Schema.decodeUnknownSync(GameTextRuleDocument)({
 	schemaVersion: 2,
-	enabledLocalizationChecks: ["missing_translator_notes"],
 	roles: [
 		{
 			id: "menu",
@@ -277,12 +276,6 @@ const expectSameQuality = Effect.fn("Test.GameText.sameQuality")(function* (
 				source,
 				yield* result.localizationQuality!(options, rules)
 			);
-			// Without a rule document asking for it, translator notes are not checked.
-			if (!rules)
-				expect(
-					indexed.search({ target: join.target, filter: "all" }).counts
-						.missing_translator_notes
-				).toBe(0);
 			for (const culture of [undefined, ...join.cultures])
 				for (const filter of WorkspaceQualityFilter.literals) {
 					const request: WorkspaceQualityRequest = {
@@ -451,10 +444,7 @@ it.live("the indexed scan yields between pages and stops when interrupted", () =
 					step: () => undefined
 				})
 			);
-			// The fixture's only findings are missing notes, which run when asked for.
-			const quality = yield* result.localizationQuality!({
-				checks: ["missing_translator_notes"]
-			});
+			const quality = yield* result.localizationQuality!();
 			done = true;
 			yield* Fiber.join(other);
 			expect(quality.findings.length).toBeGreaterThan(0);

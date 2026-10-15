@@ -128,21 +128,10 @@ export interface LocalizationLineCheckOutput {
 	readonly changes: LocalizationChange[];
 }
 
-/** Checks that run only when a rule document or the options ask for them. */
-export const optInLocalizationChecks: readonly LocalizationCheckId[] = ["missing_translator_notes"];
-
 /**
- * Checks about the source line rather than a translation. Each reports once per line, under the
- * line's source culture (see `localizationSourceCulture`), not once per culture.
- */
-export const sourceLevelLocalizationChecks: readonly LocalizationCheckId[] = [
-	"missing_translator_notes",
-	"duplicate_source"
-];
-
-/**
- * The culture a line's source-level findings are reported under: the target's native culture when
- * the line has it in the target, otherwise the first of its cultures in the target by code.
+ * The culture a line's source-level findings (`missing_translator_notes`, `duplicate_source`) are
+ * reported under, once per line: the target's native culture when the line has it in the target,
+ * otherwise the first of its cultures in the target by code.
  */
 export function localizationSourceCulture(
 	line: Pick<LocalizationLine, "cultures">,
@@ -178,15 +167,8 @@ export function enabledLocalizationChecks(
 		...(options.disabledChecks ?? []),
 		...(ruleDocument?.disabledLocalizationChecks ?? [])
 	]);
-	const optedIn = new Set([
-		...(options.checks ?? []),
-		...(ruleDocument?.enabledLocalizationChecks ?? [])
-	]);
 	return LocalizationCheckId.literals.filter(
-		(id) =>
-			!disabled.has(id) &&
-			(!options.checks || options.checks.includes(id)) &&
-			(!optInLocalizationChecks.includes(id) || optedIn.has(id))
+		(id) => !disabled.has(id) && (!options.checks || options.checks.includes(id))
 	);
 }
 

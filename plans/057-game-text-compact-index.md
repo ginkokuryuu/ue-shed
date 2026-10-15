@@ -1607,22 +1607,20 @@ Workbench Game Text host tests 29 in three files, and `pnpm run check:precommit`
 
 The released project's 3,210,415 findings were 1,921,650 missing translator notes and 1,249,240
 duplicate sources, both facts about the source line repeated for each of 9 translated cultures.
-Packages saved by UE 4.27 and by UE5 before 5.8 cannot store translator notes, so the notes check
-was true for every line. This settles the first open item above (source-level checks per culture).
+This settles the first open item above (source-level checks reported per culture).
 
-- **Once per line.** `duplicate_source` and `missing_translator_notes` report once per line, under
+- **Once per line.** `missing_translator_notes` and `duplicate_source` report once per line, under
   the target's native culture, or the line's first culture in the target by code. Both paths run
   the same `checkLocalizationLine`, so the scan's pages, yields and memory are unchanged. Under a
   culture filter they show only for that culture; review acceptances for them use that culture.
-- **Notes opt-in.** `missing_translator_notes` runs only when a rule document lists it in
-  `enabledLocalizationChecks` or the options' `checks` do. A diagnostic that says once when the
-  project's packages cannot store notes is not added yet.
-- **Not in this change:** the "Translated inconsistently" check (`inconsistent_translation`) that
-  would replace `duplicate_source` as a default finding. The indexed scan needs each line's shipped
-  translation per culture before the main pass, which means a bounded grouping pass over translation
-  columns and new oracle cases; it was cut to fit the release.
+- **Defaults unchanged.** Every check still runs by default. Hosts choose with `checks`,
+  `disabledChecks` or `disabledLocalizationChecks`; for example, a host whose packages cannot store
+  translator notes (UE 4.27, UE5 before 5.8) disables `missing_translator_notes`.
+- **Not in this change:** a "Translated inconsistently" check (`inconsistent_translation`) for shared
+  source text whose shipped translations differ within a culture. The indexed scan needs each shared
+  line's shipped translation per culture before the main pass: a bounded grouping pass over
+  hydrated pages and new oracle cases. It is left for a follow-up.
 
 Verification: the oracle tests (`localization-quality-index.test.ts`) assert that neither check
-appears under a non-native culture, that each finding names a distinct line, and that notes do not
-run without opt-in, across the multi-page and collation-tie fixtures. They and the updated unit tests
-fail on the previous code.
+appears under a non-native culture and that each finding names a distinct line, on the fixtures that
+cover multi-page scans and collation ties. They and the updated unit tests fail on the previous code.

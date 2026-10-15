@@ -216,37 +216,15 @@ describe("built-in localization quality checks", () => {
 			checkLocalizationTarget(text, joined, files, { culture: cultureCode("fr") })
 		).toThrow("selection is invalid");
 	});
-	it("finds missing notes only when asked, once per line, and accepts occurrence and manifest notes", () => {
-		expect(
-			findings(checked("Source", "Translation").report).some(
-				(finding) => finding.kind === "missing_translator_notes"
-			)
-		).toBe(false);
-		const optedIn = (options: LocalizationCheckOptions) =>
+	it("finds missing notes once per line and accepts occurrence and manifest notes", () => {
+		const noteCultures = (options: LocalizationCheckOptions) =>
 			findings(checked("Source", "Translation", options).report)
 				.filter((finding) => finding.kind === "missing_translator_notes")
 				.map((finding) => finding.culture);
 		// The native culture carries the line's one finding; another culture's selection has none.
-		expect(optedIn({ checks: ["missing_translator_notes"] })).toEqual(["en"]);
-		expect(
-			optedIn({ checks: ["missing_translator_notes"], culture: cultureCode("de") })
-		).toEqual([]);
-		const { text: optText, files: optFiles } = checked("Source", "Translation");
-		const doc = Schema.decodeUnknownSync(TextQualityRuleDocument)({
-			...STARTER_GAME_TEXT_RULES,
-			enabledLocalizationChecks: ["missing_translator_notes"]
-		});
-		expect(
-			findings(
-				checkLocalizationTarget(
-					optText,
-					joinLocalizationTarget(optText, optFiles, optFiles.target),
-					optFiles,
-					{},
-					doc
-				)
-			).filter((finding) => finding.kind === "missing_translator_notes")
-		).toHaveLength(1);
+		expect(noteCultures({})).toEqual(["en"]);
+		expect(noteCultures({ culture: cultureCode("en") })).toEqual(["en"]);
+		expect(noteCultures({ culture: cultureCode("de") })).toEqual([]);
 		const original = unit();
 		const text = corpus([
 			{
@@ -263,8 +241,7 @@ describe("built-in localization quality checks", () => {
 				checkLocalizationTarget(
 					text,
 					joinLocalizationTarget(text, files, files.target),
-					files,
-					{ checks: ["missing_translator_notes"] }
+					files
 				)
 			).some((finding) => finding.kind === "missing_translator_notes")
 		).toBe(false);
@@ -276,8 +253,7 @@ describe("built-in localization quality checks", () => {
 				checkLocalizationTarget(
 					corpus(),
 					joinLocalizationTarget(corpus(), notes, notes.target),
-					notes,
-					{ checks: ["missing_translator_notes"] }
+					notes
 				)
 			).some((finding) => finding.kind === "missing_translator_notes")
 		).toBe(false);
