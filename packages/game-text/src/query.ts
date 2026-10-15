@@ -63,6 +63,7 @@ import { localizationManifestNotes } from "./localization.js";
 import { gatheredTextGroups, localizationLineUnits } from "./gathered-text.js";
 import { hasDifferingCopy } from "./text-copies.js";
 import { longestSource } from "./source-metrics.js";
+import { DuplicateSources, duplicateOccurrencePlace } from "./duplicate-sources.js";
 import {
 	localizationQueryPage,
 	matchesLocalizationLine,
@@ -95,7 +96,7 @@ function wordCount(value: string): number {
 
 function searchResult(
 	unit: TextUnit,
-	duplicateSources: ReadonlySet<string>,
+	duplicateSources: ReadonlySet<TextUnit["occurrences"][number]>,
 	groups: readonly { readonly occurrences: number; readonly sources: ReadonlySet<string> }[]
 ): TextUnitSearchResult {
 	const contexts = unit.occurrences.slice(0, 3).map((occurrence) => ({
@@ -108,8 +109,7 @@ function searchResult(
 	if (
 		unit.occurrences.some(
 			(occurrence) =>
-				occurrence.identity.status === "resolved" &&
-				duplicateSources.has(occurrence.source)
+				occurrence.identity.status === "resolved" && duplicateSources.has(occurrence)
 		)
 	)
 		reviewSignals.push("duplicate_source");
@@ -171,7 +171,8 @@ export function textCorpusQuery(
 	// Units retain saved identities; findings count the localization identities Unreal gathers.
 	const identities = new Map<TextUnit["id"], string[]>();
 	const groups = new Map<string, { occurrences: number; sources: Set<string> }>();
-	const sourceFrequency = new Map<string, Set<string>>();
+	const sourcePlaces = new DuplicateSources<string, string, string>();
+	const candidates: Array<{ occurrence: TextUnit["occurrences"][number]; identity: string }> = [];
 	for (const [identity, row] of gatheredTextGroups(corpus)) {
 		const group = { occurrences: 0, sources: new Set<string>() };
 		for (const unit of row.units) {
@@ -183,14 +184,27 @@ export function textCorpusQuery(
 		}
 		groups.set(identity, group);
 		if (row.identity === null) continue;
-		for (const source of group.sources) {
-			const keys = sourceFrequency.get(source) ?? new Set<string>();
-			keys.add(identity);
-			sourceFrequency.set(source, keys);
-		}
+		for (const unit of row.units)
+			for (const occurrence of unit.occurrences)
+				if (occurrence.identity.status === "resolved") {
+					sourcePlaces.add(
+						occurrence.source,
+						identity,
+						duplicateOccurrencePlace(occurrence)
+					);
+					candidates.push({ occurrence, identity });
+				}
 	}
 	const duplicateSources = new Set(
-		[...sourceFrequency].filter(([, keys]) => keys.size > 1).map(([source]) => source)
+		candidates
+			.filter(({ occurrence, identity }) =>
+				sourcePlaces.hasOther(
+					occurrence.source,
+					identity,
+					duplicateOccurrencePlace(occurrence)
+				)
+			)
+			.map(({ occurrence }) => occurrence)
 	);
 	const indexUnit = (unit: TextUnit, keys = identities.get(unit.id) ?? []) => {
 		const presentation = searchResult(

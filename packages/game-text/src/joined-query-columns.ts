@@ -1,5 +1,11 @@
 import { encodeWtf8 } from "./wtf8.js";
-import { absent, unitId, type JoinPackages } from "./joined-target-input.js";
+import {
+	absent,
+	unitId,
+	occurrenceLocation,
+	packagePath,
+	type JoinPackages
+} from "./joined-target-input.js";
 import {
 	StringArena,
 	packedStringReader,
@@ -9,6 +15,52 @@ import { snapshotCheck } from "./snapshot-format.js";
 import { textAudienceBit } from "./text-audience.js";
 import { OCCURRENCE_COPY_DIFFERS } from "./package-text-columns.js";
 import { longestSource } from "./source-metrics.js";
+import { DuplicateSources, duplicateOccurrencePlace } from "./duplicate-sources.js";
+
+/** Canonical place IDs keep source overlays numeric without retaining decoded occurrences. */
+export function joinedDuplicateSources(
+	packages: JoinPackages,
+	line: Record<string, Uint32Array>,
+	order: Uint32Array,
+	empty: number
+) {
+	const c = packages.occurrence;
+	const places = new Uint32Array(order.length);
+	const placeIds = new Map<string, number>();
+	const packageFiles = new Map<number, string>();
+	const identities = new Uint32Array(order.length);
+	const sources = new DuplicateSources<number, number, number>();
+	for (let row = 0; row < line.source!.length; row++)
+		for (let position = line.occ_start![row]!; position < line.occ_end![row]!; position++) {
+			const member = order[position]!;
+			const packageRow = packages.packageRow[member]!;
+			let packageFile = packageFiles.get(packageRow);
+			if (packageFile === undefined) {
+				packageFile = packagePath(packages, packageRow);
+				packageFiles.set(packageRow, packageFile);
+			}
+			const key = duplicateOccurrencePlace({
+				packageFile,
+				location: occurrenceLocation(packages, member)
+			});
+			let place = placeIds.get(key);
+			if (place === undefined) {
+				place = placeIds.size;
+				placeIds.set(key, place);
+			}
+			places[member] = place;
+			identities[member] = row;
+			if (c.identity[member] === 0 && c.key[member] !== empty)
+				sources.add(c.source[member]!, row, place);
+		}
+	const duplicate = new Uint8Array(order.length);
+	for (const member of order)
+		if (c.identity[member] === 0 && c.key[member] !== empty)
+			duplicate[member] = Number(
+				sources.hasOther(c.source[member]!, identities[member]!, places[member]!)
+			);
+	return { duplicate, places };
+}
 
 /** Numeric query entries retain raw-unit predicates and each gathered occurrence slice. */
 export function joinedQueryColumns(input: {
@@ -26,9 +78,7 @@ export function joinedQueryColumns(input: {
 		strings = packages.strings;
 	const occurrenceLine = new Uint32Array(order.length);
 	const groupFlags = new Uint8Array(line.source!.length);
-	const last = strings.reader.manifest.segments.at(-1);
-	const sourceFirst = new Uint32Array(last ? last.start + last.count : 0).fill(absent);
-	const duplicate = new Uint8Array(sourceFirst.length);
+	const { duplicate, places } = joinedDuplicateSources(packages, line, order, empty);
 	for (let row = 0; row < line.source!.length; row++) {
 		const sources = new Set<number>();
 		for (let position = line.occ_start![row]!; position < line.occ_end![row]!; position++) {
@@ -37,10 +87,6 @@ export function joinedQueryColumns(input: {
 			if (c.identity[member] === 1) continue;
 			const source = c.source[member]!;
 			sources.add(source);
-			if (c.identity[member] === 0 && c.key[member] !== empty) {
-				if (sourceFirst[source] === absent) sourceFirst[source] = row;
-				else if (sourceFirst[source] !== row) duplicate[source] = 1;
-			}
 		}
 		groupFlags[row] =
 			(line.occ_end![row]! - line.occ_start![row]! > 1 ? 1 : 0) | (sources.size > 1 ? 16 : 0);
@@ -165,8 +211,7 @@ export function joinedQueryColumns(input: {
 			values.add(c.source[member]!);
 			paths.add(packageFiles[packages.packageRow[member]!]!);
 			flags |= groupFlags[gathered === absent ? occurrenceLine[member]! : gathered]!;
-			if (c.identity[member] === 0 && c.key[member] !== empty && duplicate[c.source[member]!])
-				flags |= 2;
+			if (duplicate[member]) flags |= 2;
 			origins |= 1 << (c.location[member] === 2 ? 0 : c.location[member] === 1 ? 1 : 2);
 			editing |= c.editable[member] ? 1 : 2;
 			audience |= textAudienceBit(c.audience[member]!);
@@ -245,5 +290,6 @@ export function joinedQueryColumns(input: {
 	result["query.raw.id_utf8"] = idBytes;
 	result["query.raw.id_starts"] = Uint32Array.from(packedIds.offsets);
 	result["query.line.starts"] = lineStarts;
+	result["query.occurrence.places"] = places;
 	return result;
 }

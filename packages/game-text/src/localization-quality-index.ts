@@ -12,6 +12,7 @@ import {
 	compareReportedLocalizationFindings,
 	enabledLocalizationChecks,
 	localizationDuplicateSources,
+	localizationDuplicatePlaces,
 	localizationPropertiesWhereLocalizable,
 	localizationPropertyKey,
 	localizationRuleContext,
@@ -381,7 +382,17 @@ const duplicateSources = Effect.fn("GameText.localizationQuality.duplicates")(fu
 					key: TextKey.make(key[index]!)
 				}),
 				joinPosition[row]!,
-				row
+				row,
+				() => {
+					const occurrences = [];
+					const members = data.column("occurrence.rows");
+					for (let offset = occurrenceStart[row]!; offset < occurrenceEnd[row]!; offset++)
+						occurrences.push(data.occurrence(members[offset]!));
+					return localizationDuplicatePlaces(
+						occurrences.length ? { manifest: [] } : data.line(row),
+						occurrences
+					);
+				}
 			);
 		}
 		yield* Effect.yieldNow;

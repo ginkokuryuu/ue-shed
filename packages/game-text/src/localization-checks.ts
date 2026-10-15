@@ -9,6 +9,11 @@ import { BuiltInCheckId, checkSeverity } from "./localization-check-ids.js";
 import { localizationManifestNotes } from "./localization.js";
 import { localizationLineUnits } from "./gathered-text.js";
 import {
+	DuplicateSources,
+	duplicateOccurrencePlace,
+	duplicateManifestPlace
+} from "./duplicate-sources.js";
+import {
 	GameTextLocalizationError,
 	type LocalizationJoin,
 	type LocalizationLine,
@@ -452,9 +457,17 @@ export function localizationDuplicateCandidate(line: LocalizationLine): boolean 
 export function localizationDuplicateSources() {
 	// Identity, join position and row, in turn; no object per line.
 	const groups = new Map<string, Array<LocalizationIdentity | number>>();
+	const places = new Map<number, () => readonly string[]>();
 	let added = 0;
 	return {
-		add(source: string, identity: LocalizationIdentity, joinPosition = added, row = -1) {
+		add(
+			source: string,
+			identity: LocalizationIdentity,
+			joinPosition = added,
+			row = -1,
+			locations?: () => readonly string[]
+		) {
+			if (locations) places.set(joinPosition, locations);
 			added++;
 			const group = groups.get(source);
 			if (group) group.push(identity, joinPosition, row);
@@ -466,7 +479,7 @@ export function localizationDuplicateSources() {
 			for (const [source, group] of groups) {
 				if (group.length < 6) continue;
 				// SAFETY: `add` is the only writer and pushes an identity, its position and row.
-				const identities = Array.from({ length: group.length / 3 }, (_, index) => ({
+				let identities = Array.from({ length: group.length / 3 }, (_, index) => ({
 					identity: group[index * 3] as LocalizationIdentity,
 					position: group[index * 3 + 1] as number,
 					row: group[index * 3 + 2] as number
@@ -476,6 +489,21 @@ export function localizationDuplicateSources() {
 						a.identity.key.localeCompare(b.identity.key) ||
 						a.position - b.position
 				);
+				const counterparts = new DuplicateSources<string, string, string>();
+				const located = identities.map((entry) => {
+					const identity = JSON.stringify([entry.identity.namespace, entry.identity.key]);
+					const known = places.get(entry.position)?.() ?? [];
+					// Without a precise place, retain the existing distinct-key behavior.
+					const sites = known.length ? known : [`unknown:${identity}`];
+					for (const place of sites) counterparts.add(source, identity, place);
+					return { entry, identity, sites };
+				});
+				identities = located
+					.filter(({ identity, sites }) =>
+						sites.some((place) => counterparts.hasOther(source, identity, place))
+					)
+					.map(({ entry }) => entry);
+				if (identities.length < 2) continue;
 				shared.set(source, {
 					source,
 					identityCount: identities.length,
@@ -492,6 +520,18 @@ export function localizationDuplicateSources() {
 			};
 		}
 	};
+}
+
+/** Saved places take precedence over the manifest's historical coordinates. */
+export function localizationDuplicatePlaces(
+	line: Pick<LocalizationLine, "manifest">,
+	occurrences: readonly TextOccurrence[]
+): readonly string[] {
+	if (occurrences.length) return occurrences.map(duplicateOccurrencePlace);
+	return line.manifest.flatMap((entry) => {
+		const place = duplicateManifestPlace(entry.path);
+		return place === undefined ? [] : [place];
+	});
 }
 
 /** One shared source's shipped translations in one culture, with one most used translation. */
@@ -1309,8 +1349,14 @@ export function checkLocalizationTarget(
 	const changes: LocalizationChange[] = [];
 	const byUnit = new Map(corpus.units.map((unit) => [unit.id, unit]));
 	const duplicates = localizationDuplicateSources();
-	for (const line of join.lines)
-		if (localizationDuplicateCandidate(line)) duplicates.add(line.source, line.identity!);
+	for (const [position, line] of join.lines.entries())
+		if (localizationDuplicateCandidate(line))
+			duplicates.add(line.source, line.identity!, position, -1, () =>
+				localizationDuplicatePlaces(
+					line,
+					localizationLineUnits(line, byUnit).flatMap((unit) => unit.occurrences)
+				)
+			);
 	const { shared } = duplicates.finish();
 	const translations = localizationTranslationVariants(shared, join.nativeCulture);
 	if (enabled.includes("inconsistent_translation"))

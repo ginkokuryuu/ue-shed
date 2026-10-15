@@ -5,6 +5,86 @@ import { GameTextIndexRefresh } from "./index-refresh.js";
 import { makeIndexRegressionFixture } from "./index-refresh-regressions.test-support.js";
 import { joinLocalizationTarget } from "./localization.js";
 import { textCorpusQuery } from "./query.js";
+import { checkLocalizationTarget } from "./localization-checks.js";
+
+it.live("does not pair a re-keyed place with its gathered or saved previous identity", () =>
+	Effect.gen(function* () {
+		const fixture = yield* makeIndexRegressionFixture();
+		yield* Effect.gen(function* () {
+			const index = yield* GameTextIndexRefresh;
+			for (const stale of [false, true]) {
+				fixture.update([
+					occurrence("New", "Source", "Label"),
+					...(stale ? [occurrence("K", "Source", "Label")] : [])
+				]);
+				const indexed = yield* index.refresh(fixture.request);
+				const corpus = fixture.raw();
+				const join = joinLocalizationTarget(corpus, indexed.evidence);
+				const report = checkLocalizationTarget(corpus, join, indexed.evidence, {
+					checks: ["duplicate_source"]
+				});
+				expect(report.findings).toEqual([]);
+				const quality = yield* indexed.localizationQuality!({
+					checks: ["duplicate_source"]
+				});
+				expect(quality.findings.length).toBe(0);
+				for (const query of [textCorpusQuery(corpus, undefined, join), indexed.query]) {
+					const request = { query: "", capability: "all" as const, pageSize: 50 };
+					expect(query.search(request).counts.duplicate_source).toBe(0);
+					expect(
+						query.search({ ...request, localization: { target: fixture.target.name } })
+							.counts.duplicate_source
+					).toBe(0);
+				}
+			}
+		}).pipe(Effect.provide(fixture.layer()));
+	}).pipe(Effect.scoped)
+);
+
+it.live("keeps distinct-place duplicates and excludes old keys through source overlays", () =>
+	Effect.gen(function* () {
+		const fixture = yield* makeIndexRegressionFixture();
+		yield* Effect.gen(function* () {
+			const index = yield* GameTextIndexRefresh;
+			for (const [source, otherProperty, expected] of [
+				["Source", "OtherLabel", 2],
+				["A".repeat(40), "Label", 0],
+				["B".repeat(40), "Label", 0]
+			] as const) {
+				fixture.update([
+					occurrence("New", source, "Label"),
+					occurrence("K", source, otherProperty)
+				]);
+				const indexed = yield* index.refresh(fixture.request);
+				const corpus = fixture.raw();
+				const join = joinLocalizationTarget(corpus, indexed.evidence);
+				const oracle = textCorpusQuery(corpus, undefined, join);
+				for (const localization of [undefined, { target: fixture.target.name }]) {
+					const request = {
+						query: "",
+						capability: "all" as const,
+						pageSize: 50,
+						...(localization ? { localization } : undefined)
+					};
+					expect(
+						indexed.query
+							.search(request)
+							.units.map(({ reviewSignals }) => reviewSignals)
+					).toEqual(
+						oracle.search(request).units.map(({ reviewSignals }) => reviewSignals)
+					);
+					expect(indexed.query.search(request).counts.duplicate_source).toBe(expected);
+				}
+				const options = { checks: ["duplicate_source" as const] };
+				const report = checkLocalizationTarget(corpus, join, indexed.evidence, options);
+				const quality = yield* indexed.localizationQuality!(options);
+				expect(quality.findings.length).toBe(expected ? 1 : 0);
+				expect(report.findings).toHaveLength(quality.findings.length);
+				if (source.startsWith("B")) expect(indexed.joined.meta.version).toBe(4);
+			}
+		}).pipe(Effect.provide(fixture.layer()));
+	}).pipe(Effect.scoped)
+);
 
 const occurrence = (key: string, source: string, property = key) => ({
 	source,
@@ -18,6 +98,63 @@ const occurrence = (key: string, source: string, property = key) => ({
 	},
 	edit_capability: "read_only" as const
 });
+
+it.live("does not transfer duplicate signals between identities sharing an occurrence ID", () =>
+	Effect.gen(function* () {
+		const fixture = yield* makeIndexRegressionFixture();
+		fixture.update([
+			occurrence("K", "Other", "Label"),
+			occurrence("New", "Source", "Label"),
+			occurrence("Third", "Source", "OtherLabel")
+		]);
+		yield* Effect.gen(function* () {
+			const indexed = yield* (yield* GameTextIndexRefresh).refresh(fixture.request);
+			const request = { query: "", capability: "all" as const, pageSize: 50 };
+			const oracle = textCorpusQuery(fixture.raw()).search(request);
+			expect(oracle.counts.duplicate_source).toBe(2);
+			expect(indexed.query.search(request).units).toEqual(oracle.units);
+		}).pipe(Effect.provide(fixture.layer()));
+	}).pipe(Effect.scoped)
+);
+
+it.live("compares canonical place coordinates consistently in memory and the index", () =>
+	Effect.gen(function* () {
+		const fixture = yield* makeIndexRegressionFixture();
+		fixture.update([
+			occurrence("K", "Source", "Label[0]"),
+			occurrence("New", "Source", "label(0)")
+		]);
+		yield* Effect.gen(function* () {
+			const indexed = yield* (yield* GameTextIndexRefresh).refresh(fixture.request);
+			const request = { query: "", capability: "all" as const, pageSize: 50 };
+			const oracle = textCorpusQuery(fixture.raw()).search(request);
+			expect(oracle.counts.duplicate_source).toBe(0);
+			expect(indexed.query.search(request).counts).toEqual(oracle.counts);
+		}).pipe(Effect.provide(fixture.layer()));
+	}).pipe(Effect.scoped)
+);
+
+it.live("keeps case-distinct String Table entries as different places", () =>
+	Effect.gen(function* () {
+		const fixture = yield* makeIndexRegressionFixture();
+		fixture.update(
+			["Entry", "entry"].map((key) => ({
+				...occurrence(key, "Source"),
+				location: {
+					kind: "string_table_entry" as const,
+					object_path: "/Game/Text/Table.Table",
+					entry_key: key
+				}
+			}))
+		);
+		yield* Effect.gen(function* () {
+			const indexed = yield* (yield* GameTextIndexRefresh).refresh(fixture.request);
+			const request = { query: "", capability: "all" as const, pageSize: 50 };
+			for (const query of [textCorpusQuery(fixture.raw()), indexed.query])
+				expect(query.search(request).counts.duplicate_source).toBe(2);
+		}).pipe(Effect.provide(fixture.layer()));
+	}).pipe(Effect.scoped)
+);
 
 it.live("excludes unresolved text from both sides of duplicate-source matching", () =>
 	Effect.gen(function* () {
