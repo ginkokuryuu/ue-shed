@@ -566,8 +566,13 @@ describe("translated inconsistently", () => {
 		expect(
 			kind(
 				shared(
-					["LastDialogueOnly", "LastDialogueOnly", "LastDialogueOnly", "Ab Jahr 2"],
-					"LastDialogueOnly"
+					[
+						"FinalDialogueOnly",
+						"FinalDialogueOnly",
+						"FinalDialogueOnly",
+						"Ab dem zweiten Jahr"
+					],
+					"FinalDialogueOnly"
 				),
 				"inconsistent_translation"
 			)

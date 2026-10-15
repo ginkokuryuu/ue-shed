@@ -1945,7 +1945,7 @@ was not run.
 ### Follow-up: check noise on a shipped project
 
 The checks above were measured on a shipped UE 4.27 project (237,931 lines, `en` plus 9 cultures),
-with Electroswag's defaults (`missing_translator_notes` and `duplicate_source` off, no rule file).
+with a host's defaults (`missing_translator_notes` and `duplicate_source` off, no rule file).
 Two blocking checks were almost all noise: `culture_invariant_text` (42,210 findings, none of a
 20-line sample actionable) and `outdated_translation` (2,437, of which 1,513 differed from the
 current source only in `\r\n` against `\n`). Several others were noisy. Changes:
@@ -1968,7 +1968,7 @@ current source only in `\r\n` against `\n`). Several others were noisy. Changes:
 - **`inconsistent_translation`** skips the native culture, sources over four words and ties, and
   groups translations without case, whitespace, punctuation and symbols. When most lines ship the
   source untranslated, it reports those lines (`untranslated: true`), unless under half as many
-  lines translate it: a culture leaves internal labels such as `LastDialogueOnly` (452 lines)
+  lines translate it: a culture leaves internal labels (one repeated on 452 lines)
   untranslated on purpose, and reporting them was 8k of the 16k findings left after the other
   changes.
 - **`rich_text_tags`** reports dropped tags (normal); a translation that only adds tags is
@@ -2003,7 +2003,7 @@ current source only in `\r\n` against `\n`). Several others were noisy. Changes:
   1–1.8 s to hydrate. A 200 ms budget with 16-line pages kept every stall under 1 s but made the
   scan 60% longer, as small pages decompress the same string blocks again.
 
-Findings with Electroswag's defaults, before (`f7d924df`) and after (on main with #82, #87 and
+Findings with those defaults, before (`f7d924df`) and after (on main with #82, #87 and
 #88). The rule-file run adds `segmentSeparator: "//"`, `optionalArguments: ["ParentLabel"]` and
 `optionalTags: ["NPCName", "PlayerName", "Italic"]`:
 
@@ -2038,7 +2038,7 @@ Findings with Electroswag's defaults, before (`f7d924df`) and after (on main wit
 With every check on, 356,983 findings became 228,377 (blocking 13). `missing_translator_notes`
 fell from 192,165 to 134,768 and `duplicate_source` from 18,327 to 17,376 with #82, which leaves
 editor text a target does not gather out of the target. The 13 blocking findings are the
-translations made for older text, the 13 the project's review expected. Scan with Electroswag's defaults:
+translations made for older text, the 13 the project's review expected. Scan with those defaults:
 before 302–316 s, after 319–339 s over three runs (one earlier run of this branch took 262 s);
 the machine was shared, so these are not separable. Longest stall 3.7 s before, 0.92–0.94 s after, with 8–14
 stalls over 400 ms (445 before the scan changes above); peak V8 heap 268 MiB before,
