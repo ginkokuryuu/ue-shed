@@ -701,7 +701,8 @@ Localization checks are quality findings over the same corpus and report model:
 
 - built-ins now check case-sensitive format argument names, plural/ordinal/gender/Hangul modifiers,
   rich text tags, unsafe PO escapes, boundary whitespace and line-break counts, existing empty
-  translation entries, missing translator notes, and the same source under different keys;
+  translation entries and the same source under different keys, and on request missing translator
+  notes;
 - missing translation evidence is a check diagnostic rather than a claim that a translation is empty;
 - version-2 project rules add role budgets and glossary terms per culture, evaluated on that
   culture's shipped translation with the same substring and UTF-16 offset evidence as source rules.
@@ -725,7 +726,15 @@ UE Shed adds checks the compile validator does not perform: source/translation a
 comparison, malformed modifier parameters that Unreal treats as literals, whitespace and line-break
 drift relative to source, PO escape safety, empty entries, notes, and duplicate source identities.
 These are evidence-based built-ins; no rule file is required. Existing version-1 project rule files
-may add `disabledLocalizationChecks`, an array of built-in IDs, without changing their source rules.
+may add `disabledLocalizationChecks`, an array of built-in IDs, without changing their source rules,
+and `enabledLocalizationChecks` to opt in to `missing_translator_notes`. That check is off by
+default: packages saved by UE 4.27 and by UE5 before 5.8 cannot store translator notes (String
+Tables and UE 5.8+ can), so on those projects it would flag every line.
+
+Notes and shared source text are facts about the source line, not a translation. They report once
+per line, under the target's native culture, or the line's first culture in the target by code when
+it has no native one. The all-cultures list counts each such line once; selecting the native culture
+shows them; selecting another culture does not.
 
 ```sh
 ue-shed loc check <project-root> --target <name> [--culture <c>] [--check <id>]...

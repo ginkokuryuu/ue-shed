@@ -197,10 +197,16 @@ with culture and identity findings, structured evidence, saved occurrences, mani
 file provenance/diagnostics and unchanged corpus coverage. Source-quality reports share the bounded corpus diagnostics and their totals. Gathered-only findings have empty saved-occurrence lists and evidence line IDs.
 
 The checks are `format_arguments`, `argument_modifiers`, `rich_text`, `po_escape_safety`,
-`whitespace`, `empty_translation`, `missing_translator_notes`, and `duplicate_source`. Pass
-`{ culture?, checks?, disabledChecks? }` to select them. They need no rule document; existing v1
-`Config/UEShed/GameTextRules.json` documents can optionally contain `disabledLocalizationChecks`.
-Version 2 adds per-culture project policy and progress reports, described below.
+`whitespace`, `empty_translation`, `duplicate_source`, and the opt-in `missing_translator_notes`.
+Pass `{ culture?, checks?, disabledChecks? }` to select them. They need no rule document; existing v1
+`Config/UEShed/GameTextRules.json` documents can optionally contain `disabledLocalizationChecks`, and
+`enabledLocalizationChecks` to opt in. Version 2 adds per-culture project policy and progress
+reports, described below.
+
+`duplicate_source` and `missing_translator_notes` are facts about the source line. Each reports once
+per line, under the target's native culture (or the line's first culture in the target by code), so
+a selected non-native culture does not show them. Missing notes are opt-in because packages saved by
+UE 4.27 and by UE5 before 5.8 cannot store translator notes; only String Tables and UE 5.8+ can.
 
 Checks use the pending non-empty PO text when the culture has a `not_synced` fact, otherwise archive
 text. They compare with manifest source, falling back to corpus source with a diagnostic. Crowdin
