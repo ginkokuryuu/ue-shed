@@ -1,5 +1,12 @@
 # @ue-shed/world
 
+## 0.15.0
+
+### Patch Changes
+
+- @ue-shed/protocol@0.15.0
+    - @ue-shed/unreal-connection@0.15.0
+
 ## 0.14.0
 
 ### Patch Changes
