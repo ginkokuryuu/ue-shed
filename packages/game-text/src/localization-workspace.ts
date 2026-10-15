@@ -5,7 +5,7 @@ import {
 	LocalizationChange,
 	LocalizationChangeSet
 } from "@ue-shed/localization/browser";
-import { TextCorpus, TextUnitId } from "./schema.js";
+import { TextCorpus, TextLocation, TextUnitId } from "./schema.js";
 import {
 	TextQualityFindingId,
 	TextQualityFocus,
@@ -139,7 +139,11 @@ export const WorkspaceFinding = Schema.Struct({
 	sourceVariants: Schema.optionalKey(SourceVariants),
 	problem: Schema.String.check(Schema.isMaxLength(1024)),
 	context: Schema.String.check(Schema.isMaxLength(1024)),
-	culture: Schema.optionalKey(CultureCode)
+	culture: Schema.optionalKey(CultureCode),
+	/** The first place the finding affects, so hosts can name it the way they name a line's places. */
+	location: Schema.optionalKey(TextLocation),
+	/** How many places the finding affects. */
+	locations: Schema.optionalKey(Count)
 });
 export type WorkspaceFinding = typeof WorkspaceFinding.Type;
 export const WorkspaceQualityPage = Schema.Struct({
@@ -524,7 +528,9 @@ export function workspaceQualityItem(
 			: undefined),
 		problem: ((localized ? finding.culture + " · " : "") + problem(finding)).slice(0, 1024),
 		context: context.slice(0, 1024),
-		...(localized ? { culture: finding.culture } : undefined)
+		...(localized ? { culture: finding.culture } : undefined),
+		...(location ? { location } : undefined),
+		locations: finding.affectedOccurrences.length
 	};
 	return { finding, line, summary };
 }
