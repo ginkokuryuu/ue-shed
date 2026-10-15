@@ -1,7 +1,7 @@
 import { Schema } from "effect";
 import { describe, expect, it } from "vitest";
 import { LocalizationTarget, discoverLocalizationTargets } from "@ue-shed/localization/browser";
-import { localizationGathersEditorOnlyData } from "./localization.js";
+import { localizationGathersEditorOnlyData, textGatherScope } from "./localization.js";
 import { success } from "./localization.test-support.js";
 import { TextOccurrence } from "./schema.js";
 import type { SavedAssetTextOccurrence } from "@ue-shed/unreal-assets";
@@ -18,8 +18,7 @@ import {
 	occurrenceTextAudience,
 	textAudienceBit,
 	textAudienceOfMask,
-	textAudienceSubject,
-	textGatherScope
+	textAudienceSubject
 } from "./text-audience.js";
 
 function property(

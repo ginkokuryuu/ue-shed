@@ -1,6 +1,4 @@
 import { Schema } from "effect";
-import type { LocalizationTarget } from "@ue-shed/localization/browser";
-import { localizationGatherCoverage, localizationGathersEditorOnlyData } from "./localization.js";
 import type { TextOccurrence } from "./schema.js";
 import {
 	TextAudience as TextAudienceSchema,
@@ -598,25 +596,6 @@ export function textAudienceFields(classification: TextAudienceClassification) {
  */
 export function isEditorOnlyText(classification: TextAudienceClassification): boolean {
 	return classification.audience === "editor" && classification.reason !== "developer_folder";
-}
-
-/**
- * Whether the selected target's gather would collect the occurrence: its include and exclude
- * paths, then `ShouldGatherFromEditorOnlyData` for editor text. Lines that are out of scope are
- * reported as such rather than "Not gathered yet".
- */
-export function textGatherScope(
-	target: LocalizationTarget | undefined,
-	occurrence: TextOccurrence,
-	classification: TextAudienceClassification
-): TextGatherScope {
-	if (!target) return { status: "no_target" };
-	const coverage = localizationGatherCoverage(target, occurrence);
-	if (coverage.status === "outside")
-		return { status: "out_of_scope", reason: "outside_gather_paths" };
-	if (isEditorOnlyText(classification) && localizationGathersEditorOnlyData(target) === false)
-		return { status: "out_of_scope", reason: "editor_only_data_not_gathered" };
-	return coverage.status === "inside" ? { status: "in_scope" } : { status: "unknown" };
 }
 
 const AUDIENCE_RANK = { editor: 0, unknown: 1, player: 2 } as const satisfies Record<

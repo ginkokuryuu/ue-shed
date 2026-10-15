@@ -25,7 +25,13 @@ import {
 	gatheredTextOccurrenceIdentity
 } from "./gathered-text.js";
 import { hasSearchableSource } from "./search.js";
-import { isEditorOnlyText, lineTextAudience, occurrenceTextAudience } from "./text-audience.js";
+import {
+	isEditorOnlyText,
+	lineTextAudience,
+	occurrenceTextAudience,
+	type TextAudienceClassification,
+	type TextGatherScope
+} from "./text-audience.js";
 import type { TextOutOfScopeReason } from "./text-audience-schema.js";
 
 /** FString matching is case insensitive; ? consumes zero or one character, * any number. */
@@ -228,6 +234,25 @@ export function localizationGatherCoverage(
 		return { status: "inside" };
 	}
 	return uncertain ? { status: "unknown", reason: uncertain } : { status: "outside" };
+}
+
+/**
+ * Whether the selected target's gather would collect the occurrence: its include and exclude
+ * paths, then `ShouldGatherFromEditorOnlyData` for editor text. Lines that are out of scope are
+ * reported as such rather than "Not gathered yet".
+ */
+export function textGatherScope(
+	target: LocalizationTarget | undefined,
+	occurrence: TextOccurrence,
+	classification: TextAudienceClassification
+): TextGatherScope {
+	if (!target) return { status: "no_target" };
+	const coverage = localizationGatherCoverage(target, occurrence);
+	if (coverage.status === "outside")
+		return { status: "out_of_scope", reason: "outside_gather_paths" };
+	if (isEditorOnlyText(classification) && localizationGathersEditorOnlyData(target) === false)
+		return { status: "out_of_scope", reason: "editor_only_data_not_gathered" };
+	return coverage.status === "inside" ? { status: "in_scope" } : { status: "unknown" };
 }
 
 /** A unit has one gathered identity only when all its occurrences agree. */
