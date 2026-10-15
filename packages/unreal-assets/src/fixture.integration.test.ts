@@ -58,13 +58,13 @@ describe.skipIf(!executable)("batched project scan", () => {
 		// 81 `.uasset` packages (including six World Partition external actors, two Blueprints, two
 		// animation fixtures, two Level Sequences, the 25-asset Enhanced Input surface, nine native
 		// coverage assets and three Game Text assets, one a user-defined enum) plus three maps,
-		// including Movement Gym. Levels use the same classic package
-		// container, so enumeration selects them too.
-		expect(scan.summary.scannedAssets).toBe(84);
-		expect(scan.summary.emittedAssets).toBe(84);
+		// including Movement Gym, and the ten Game Text problem packages. Levels use the same classic
+		// package container, so enumeration selects them too.
+		expect(scan.summary.scannedAssets).toBe(94);
+		expect(scan.summary.emittedAssets).toBe(94);
 		expect(scan.summary.skippedAssets).toBe(0);
 		expect(scan.failures).toEqual([]);
-		expect(scan.assets).toHaveLength(84);
+		expect(scan.assets).toHaveLength(94);
 		expect(scan.assets.every((entry) => entry.fileBytes > 0)).toBe(true);
 	}, 15_000);
 
@@ -123,11 +123,11 @@ describe.skipIf(!executable)("batched project scan", () => {
 		const scan = await runReader(
 			scanSavedProject({ classes: ["Texture2D"], projectRoot: fixture.root })
 		);
-		expect(scan.summary.scannedAssets).toBe(84);
+		expect(scan.summary.scannedAssets).toBe(94);
 		expect(scan.summary.emittedAssets).toBe(17);
 		// The levels, Level Sequences, saved World Partition actor packages, and every Enhanced Input
 		// asset carry no Texture2D export, so they are ruled out before any decode.
-		expect(scan.summary.skippedAssets).toBe(67);
+		expect(scan.summary.skippedAssets).toBe(77);
 		expect(
 			scan.assets
 				.filter(isFullScanEntry)
@@ -151,8 +151,8 @@ describe.skipIf(!executable)("batched project scan", () => {
 		);
 		// Every InputAction and InputMappingContext names TextProperty for its description; the
 		// LevelSequence and Blueprint fixtures name it for localized native graph/channel values, and
-		// the user-defined enum for its display names.
-		expect(scan.summary.emittedAssets).toBe(35);
+		// the user-defined enum for its display names. All ten Game Text problem packages hold text.
+		expect(scan.summary.emittedAssets).toBe(45);
 		expect(
 			scan.assets
 				.filter(isFullScanEntry)
@@ -253,14 +253,15 @@ describe.skipIf(!executable)("batched project scan", () => {
 			})
 		);
 		expect(scan.summary.depth).toBe("header");
-		expect(scan.summary.scannedAssets).toBe(84);
-		// The twelve authoring tables and the localization table, each exporting exactly one table.
-		expect(scan.summary.emittedAssets).toBe(13);
+		expect(scan.summary.scannedAssets).toBe(94);
+		// The twelve authoring tables, the localization table and the two Game Text problem tables,
+		// each exporting exactly one table.
+		expect(scan.summary.emittedAssets).toBe(15);
 		const headers = scan.assets.filter(isHeaderScanEntry);
-		expect(headers).toHaveLength(13);
+		expect(headers).toHaveLength(15);
 		// Only the exports the filter selected are emitted, so the AssetImportData export that
 		// accompanies every imported table is absent.
-		expect(headers.flatMap((entry) => entry.header.exports)).toHaveLength(13);
+		expect(headers.flatMap((entry) => entry.header.exports)).toHaveLength(15);
 		expect(
 			headers.every((entry) =>
 				entry.header.exports.every(
@@ -357,7 +358,7 @@ describe.skipIf(!executable)("batched project scan", () => {
 				})
 			);
 			expect(wider.summary.cacheHits).toBe(0);
-			expect(wider.summary.emittedAssets).toBe(13);
+			expect(wider.summary.emittedAssets).toBe(15);
 		} finally {
 			await rm(cacheDirectory, { force: true, recursive: true });
 		}
@@ -394,7 +395,7 @@ describe.skipIf(!executable)("batched project scan", () => {
 describe.skipIf(!executable)("saved authoring fixture", () => {
 	it("discovers DataTables without requiring their paths in advance", async () => {
 		const catalog = await runReader(discoverSavedTables({ projectRoot: fixture.root }));
-		expect(catalog.tables).toHaveLength(13);
+		expect(catalog.tables).toHaveLength(15);
 		expect(catalog.tables[0]?.objectPath).toBe(
 			"/Game/Fixture/Authoring/CDT_Scalars.CDT_Scalars"
 		);

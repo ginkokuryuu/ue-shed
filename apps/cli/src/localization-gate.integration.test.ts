@@ -1,5 +1,5 @@
 import { it } from "@effect/vitest";
-import { mkdtemp, readFile, readdir, writeFile } from "node:fs/promises";
+import { mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, relative } from "node:path";
 import { Effect, Layer, Ref, Schema } from "effect";
@@ -86,9 +86,13 @@ describe.skipIf(!executable)("loc gate with the real reader", () => {
 				const before = yield* gate("--files", table);
 				expect(before.text).not.toContain("not_checked");
 				const unchanged = yield* verdict(before.text);
-				// The fixture's Game target was never gathered, so checking every target skips it.
-				expect(unchanged.targets.map((target) => target.target)).toEqual(["FixtureGame"]);
-				expect(unchanged.skipped.map((target) => target.target)).toEqual(["Game"]);
+				// Checking every target checks both gathered targets: FixtureGame and the Game
+				// target's problem cases.
+				expect(unchanged.targets.map((target) => target.target)).toEqual([
+					"FixtureGame",
+					"Game"
+				]);
+				expect(unchanged.skipped).toEqual([]);
 				expect(unchanged.targets[0]?.checks.key_changed).toBe(0);
 				expect(unchanged.targets[0]?.lines).toBeGreaterThan(0);
 
@@ -149,7 +153,25 @@ describe.skipIf(!executable)("loc gate with the real reader", () => {
 				);
 				expect(contradictory.exit).toBe(2);
 				expect(contradictory.text).toContain("cannot both fail and warn");
-				const ungathered = yield* gate("--files", table, "--target", "Game");
+				// Without its files the Game target is not gathered; every later run skips it.
+				yield* Effect.promise(() =>
+					rm(join(fixture.root, "Content", "Localization", "Game"), {
+						recursive: true
+					})
+				);
+				const ungathered = yield* gate(
+					"--files",
+					yield* list(
+						"ungathered.txt",
+						TABLE,
+						"Content/Localization/Game/Game.manifest",
+						...["en", "de", "fr", "ja"].map(
+							(culture) => `Content/Localization/Game/${culture}/Game.archive`
+						)
+					),
+					"--target",
+					"Game"
+				);
 				expect(ungathered.exit).toBe(2);
 				expect(ungathered.text).toContain("missing_manifest");
 				const unknown = yield* gate("--files", table, "--target", "NoSuchTarget");

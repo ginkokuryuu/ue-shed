@@ -132,11 +132,11 @@ function keyed(join: LocalizationJoin, identity: typeof Identity.Type) {
 	return line;
 }
 
-const search = (target: string): TextCorpusSearchRequest => ({
+const search = (target: LocalizationJoin["target"]): TextCorpusSearchRequest => ({
 	query: "",
 	capability: "all",
 	pageSize: 50,
-	localization: { target: target as never }
+	localization: { target }
 });
 
 describe.skipIf(!executable)("Game Text problem cases in the saved fixture", () => {
@@ -208,7 +208,9 @@ describe.skipIf(!executable)("Game Text problem cases in the saved fixture", () 
 						expect(
 							cases.sourceRules.filter((expected) => {
 								const unit = corpus.units.find((item) =>
-									item.occurrences.some((occurrence) => occurrence.source === expected.source)
+									item.occurrences.some(
+										(occurrence) => occurrence.source === expected.source
+									)
 								);
 								return !source.findings.some(
 									(finding) =>
@@ -234,16 +236,19 @@ describe.skipIf(!executable)("Game Text problem cases in the saved fixture", () 
 								)
 								.map((line) => line.identity!)
 								.sort((a, b) =>
-									`${a.namespace},${a.key}`.localeCompare(`${b.namespace},${b.key}`)
+									`${a.namespace},${a.key}`.localeCompare(
+										`${b.namespace},${b.key}`
+									)
 								)
 						).toEqual(cases.signals.conflictingSource);
 						for (const expected of cases.signals.compiledCopyDiffers) {
 							const place = corpus.units
 								.flatMap((unit) => unit.occurrences)
 								.find((item) => item.location.objectPath === expected.objectPath);
-							expect([place?.source, place && staleRuntimeCopy(place)?.source]).toEqual(
-								[expected.source, expected.compiledSource]
-							);
+							expect([
+								place?.source,
+								place && staleRuntimeCopy(place)?.source
+							]).toEqual([expected.source, expected.compiledSource]);
 						}
 						for (const expected of cases.signals.outOfScope) {
 							const line = keyed(memoryJoin, expected);
@@ -289,9 +294,9 @@ describe.skipIf(!executable)("Game Text problem cases in the saved fixture", () 
 						);
 						expect(lineFacts(result.localizationJoin)).toEqual(lineFacts(memoryJoin));
 						const memoryQuery = textCorpusQuery(corpus, undefined, memoryJoin);
-						const page = yield* result.search(search(cases.target));
+						const page = yield* result.search(search(memoryJoin.target));
 						expect(page.problems).toEqual(
-							memoryQuery.search(search(cases.target)).problems
+							memoryQuery.search(search(memoryJoin.target)).problems
 						);
 						for (const expected of cases.signals.compiledCopyDiffers) {
 							const unit = corpus.units.find((item) =>

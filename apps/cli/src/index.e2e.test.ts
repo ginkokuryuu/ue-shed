@@ -154,7 +154,9 @@ describe("ue-shed CLI process", () => {
 
 			expect(report.schemaVersion).toBe(1);
 			expect(report.ruleDocumentVersion).toBe(1);
-			expect(report.status).toBe("complete");
+			// One Game Text problem case is a package the reader only partly decodes.
+			expect(report.status).toBe("partial");
+			expect(report.coverage.partialPackages).toBe(1);
 			expect(report.coverage.unsupportedTextProperties).toBe(0);
 			expect(report.findings.length).toBeGreaterThan(0);
 			expect(report.findings.every((finding) => finding.role === "ui.prompt")).toBe(true);
@@ -172,7 +174,7 @@ describe("ue-shed CLI process", () => {
 			issueCount: 0,
 			referenceCount: 2,
 			resolvedCount: 2,
-			snapshotCount: 13
+			snapshotCount: 15
 		});
 		expect(report.edges).toEqual(
 			expect.arrayContaining([

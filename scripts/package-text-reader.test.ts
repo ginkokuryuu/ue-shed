@@ -50,10 +50,14 @@ it.each(packageTextFixtureProjects)(
 		expect(clauses.textPropertyBeyondFlag).toBe(0);
 		if (project === "fixtures/unreal-project") {
 			// A_Native and DA_Native have undecodable native values but no gatherable text, so the
-			// full scan reads them completely and excluding them hides no coverage problem.
+			// full scan reads them completely and excluding them hides no coverage problem. The one
+			// partial package is the Game Text problem case whose gathered text the reader cannot
+			// decode; the candidate scan keeps it.
 			expect(expected.coverage.unsupportedTextProperties).toBe(0);
 			expect(actual.coverage.unsupportedTextProperties).toBe(0);
-			expect(expected.coverage.partialPackages).toBe(0);
+			expect([expected.coverage.partialPackages, actual.coverage.partialPackages]).toEqual([
+				1, 1
+			]);
 			expect(gapsMovedToExcluded).toEqual([]);
 			expect(actual.packageCoverage).toContainEqual(
 				expect.objectContaining({
