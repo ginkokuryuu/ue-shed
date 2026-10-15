@@ -7,7 +7,7 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::mpsc;
 
 use serde::{Deserialize, Serialize};
-use uasset_inspection::gather_coverage::{DecodedTextKeys, GatherCoverage, gather_coverage};
+use uasset_inspection::gather_coverage::{DecodedTextKeys, GatherCoverage, gather_table};
 use uasset_inspection::projection::{
     TextAssetProjection, TextureRecord, project_text_asset, project_texture_asset,
     text_feature_version_gap,
@@ -992,13 +992,20 @@ fn project_one_path(
     checkpoint(cancellation, "inspection")?;
     // Undecoded properties rarely hold text. When the package's own gather table can be read,
     // text coverage is partial only if a runtime entry from that table was not decoded.
-    let gather = matches!(kind, ProjectionKind::Text | ProjectionKind::TextPackages)
+    let table = matches!(kind, ProjectionKind::Text | ProjectionKind::TextPackages)
         .then(|| {
-            gather_coverage(&bytes, &package, &path_string, &decoded_keys)
+            gather_table(&bytes, &package, &path_string, &decoded_keys)
                 .ok()
                 .flatten()
         })
         .flatten();
+    // Package records carry each text's editor-only bit from the same table (v1.11).
+    if let Some(table) = &table {
+        for occurrence in &mut record.occurrences {
+            occurrence.record_gather_audience(&table.audience);
+        }
+    }
+    let gather = table.map(|table| table.coverage);
     let partial =
         text_coverage_partial(gather.as_ref(), !diagnostics.is_empty(), coverage_gap_count);
     record.gather_coverage = gather.map(gather_coverage_record);
@@ -2364,6 +2371,14 @@ mod tests {
                         );
                         let gather = record.gather_coverage.as_ref().expect("gather coverage");
                         assert_eq!((gather.runtime_sites, gather.missing), (8, 0));
+                        // Every gathered line carries the table's runtime bit.
+                        let bits: Vec<_> = record
+                            .occurrences
+                            .iter()
+                            .filter_map(|occurrence| occurrence.gather_editor_only)
+                            .collect();
+                        assert!(bits.len() >= 8, "{engine}: {bits:?}");
+                        assert!(bits.iter().all(|editor_only| !editor_only));
                         Some(record.status.clone())
                     }
                     ResultFrame::ExtractText {

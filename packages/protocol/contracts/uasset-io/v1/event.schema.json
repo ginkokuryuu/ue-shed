@@ -7933,6 +7933,9 @@
 				"edit_capability": {
 					"type": "string",
 					"enum": ["source_editable", "read_only"]
+				},
+				"gather_editor_only": {
+					"type": "boolean"
 				}
 			},
 			"required": ["source", "identity", "location", "edit_capability"],

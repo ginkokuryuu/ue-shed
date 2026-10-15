@@ -93,6 +93,16 @@ gaps, and a missing field does not say which rule applied. The status rule also 
 `text_package` events and terminal partial outcomes; the gather table cannot see Blueprint script
 bytecode text, so `complete` still does not certify parity with a fresh gather.
 
+Minor version 1.11 adds optional `gather_editor_only` to each occurrence of a `text_package_record`.
+When the worker reads the package's gather table (under the 1.10 rule), every keyed occurrence whose
+namespace, key and source the table lists carries Unreal's editor-only bit for that text:
+`IsEditorOnly` from its site contexts, `true` only when every site with that namespace, key and
+source is editor-only, since a gather that skips editor-only data still collects text with one
+runtime site. Namespaces are matched as coverage matches them: a serialized `FText` loses its
+package marker once, a String Table entry keeps its authored namespace. A missing field means the
+table was not read or does not list the text; it is not evidence of runtime text. The worker strips
+the field below minor 11. `text_occurrence` events are unchanged.
+
 Result frames use an explicit result kind. Generic inspection, authoring, scan, compact text,
 compact texture, Blueprint graph, and saved-world values each have a named schema; there is no
 untyped result field.
