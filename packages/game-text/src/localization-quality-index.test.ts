@@ -199,6 +199,29 @@ it.live(
 						expect([filter, all.counts[filter]]).not.toEqual([filter, 0]);
 					expect(all.suggestedFixCount).toBeGreaterThan(0);
 					whitespace.push(all.counts.whitespace);
+					// Source-level checks: one finding per line, under the native culture only.
+					const other = join.cultures.find((culture) => culture !== join.nativeCulture)!;
+					const translated = legacy.search({
+						target: join.target,
+						filter: "all",
+						culture: other
+					});
+					expect([
+						translated.counts.duplicate_source,
+						translated.counts.missing_translator_notes
+					]).toEqual([0, 0]);
+					for (const filter of [
+						"duplicate_source",
+						"missing_translator_notes"
+					] as const) {
+						const found = legacy.export({ target: join.target, filter }).findings;
+						expect(new Set(found.map(({ culture }) => culture))).toEqual(
+							new Set([join.nativeCulture])
+						);
+						expect(new Set(found.map(({ context }) => context)).size).toBe(
+							found.length
+						);
+					}
 					for (const culture of [undefined, ...join.cultures])
 						for (const filter of WorkspaceQualityFilter.literals) {
 							const request: WorkspaceQualityRequest = {
@@ -325,16 +348,16 @@ it.live("lines whose IDs compare equal keep the in-memory report's order", () =>
 			expect(join.lines[0]!.id).not.toBe(join.lines[1]!.id);
 			expect(join.lines[0]!.id.localeCompare(join.lines[1]!.id)).toBe(0);
 			// One accepted finding on each line; the other line's text has another fingerprint.
-			const accept = (key: string, check: string) => {
+			const accept = (key: string, check: string, culture: string = "de") => {
 				const line = join.lines.find((item) => item.identity?.key === key)!;
 				return {
 					check,
-					culture: "de",
+					culture,
 					namespace: "UI",
 					key,
 					fingerprint: localizationLineFingerprint(
 						line,
-						line.cultures.find((culture) => culture.culture === "de")!
+						line.cultures.find((item) => item.culture === culture)!
 					),
 					by: "Reviewer",
 					at: "2026-10-14T00:00:00Z"
@@ -346,7 +369,8 @@ it.live("lines whose IDs compare equal keep the in-memory report's order", () =>
 				records: [],
 				acceptedFindings: [
 					accept("\u00e9", "translation.limit"),
-					accept("e\u0301", "localization.duplicate_source")
+					// Source-level findings are reported under the native culture.
+					accept("e\u0301", "localization.duplicate_source", join.nativeCulture!)
 				]
 			});
 			const total = (options: LocalizationCheckOptions) =>

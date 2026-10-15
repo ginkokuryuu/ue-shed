@@ -202,6 +202,10 @@ The checks are `format_arguments`, `argument_modifiers`, `rich_text`, `po_escape
 `Config/UEShed/GameTextRules.json` documents can optionally contain `disabledLocalizationChecks`.
 Version 2 adds per-culture project policy and progress reports, described below.
 
+`missing_translator_notes` and `duplicate_source` are facts about the source line. Each reports once
+per line, under the target's native culture (or the line's first culture in the target by code), so
+a selected non-native culture does not show them.
+
 Checks use the pending non-empty PO text when the culture has a `not_synced` fact, otherwise archive
 text. They compare with manifest source, falling back to corpus source with a diagnostic. Crowdin
 uses manifest source too. Empty PO/archive entries are reported independently of missing files.

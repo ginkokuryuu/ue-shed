@@ -728,6 +728,13 @@ comparison, malformed modifier parameters that Unreal treats as literals, whites
 drift relative to source, PO escape safety, empty entries, notes, and duplicate source identities.
 These are evidence-based built-ins; no rule file is required. Existing version-1 project rule files
 may add `disabledLocalizationChecks`, an array of built-in IDs, without changing their source rules.
+Hosts whose projects cannot store translator notes (packages saved by UE 4.27 and by UE5 before 5.8;
+String Tables and UE 5.8+ can) can pass `disabledChecks: ["missing_translator_notes"]`.
+
+Notes and shared source text are facts about the source line, not a translation. They report once
+per line, under the target's native culture, or the line's first culture in the target by code when
+it has no native one. The all-cultures list counts each such line once; selecting the native culture
+shows them; selecting another culture does not.
 
 ```sh
 ue-shed loc check <project-root> --target <name> [--culture <c>] [--check <id>]...
