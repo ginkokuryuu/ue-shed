@@ -240,7 +240,8 @@ export function lengthOutlier(
 
 /**
  * Words translators leave in place of a translation, compared trimmed, lower-cased and without
- * trailing punctuation. "script lama" is Indonesian for "old script".
+ * trailing punctuation. "script lama" is Indonesian for "old script". "todo" is Spanish and
+ * Portuguese for "all", so only an upper-case `TODO` counts.
  */
 const PLACEHOLDER_TRANSLATIONS = new Set([
 	"skip",
@@ -248,7 +249,6 @@ const PLACEHOLDER_TRANSLATIONS = new Set([
 	"script lama",
 	"tbd",
 	"tba",
-	"todo",
 	"fixme",
 	"placeholder",
 	"to be translated",
@@ -260,14 +260,19 @@ const PLACEHOLDER_TRANSLATIONS = new Set([
 const LETTER_OR_NUMBER = /[\p{L}\p{N}]/u;
 
 /**
- * A translation that is only a placeholder word or only punctuation ("...", ".", "-") while its
- * source has letters, as written; undefined otherwise.
+ * A translation that is only a placeholder word, or only punctuation ("...", ".", "-") for a
+ * source of three words or more, as written; undefined otherwise. A source with no letters, one
+ * that is itself a placeholder (`placeholder_text`'s) and a translation equal to its source are
+ * left out. Shorter sources may be answered with "..." on purpose, as a silent reply.
  */
 export function placeholderTranslation(source: string, translation: string): string | undefined {
 	const trimmed = translation.trim();
 	if (trimmed.length === 0 || trimmed.length > 24 || !LETTER.test(source)) return undefined;
-	if (!LETTER_OR_NUMBER.test(trimmed)) return trimmed;
+	if (translationGroupKey(trimmed) === translationGroupKey(source)) return undefined;
+	if (placeholderMatches(source).length) return undefined;
+	if (!LETTER_OR_NUMBER.test(trimmed)) return visibleWordCount(source) >= 3 ? trimmed : undefined;
 	const word = trimmed.toLowerCase().replace(/[\p{P}\s]+$/u, "");
+	if (word === "todo") return trimmed.startsWith("TODO") ? trimmed : undefined;
 	return PLACEHOLDER_TRANSLATIONS.has(word) ? trimmed : undefined;
 }
 

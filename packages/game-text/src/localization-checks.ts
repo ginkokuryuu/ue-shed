@@ -156,15 +156,33 @@ export interface LocalizationLineCheckContext {
 	/** The rule file's `optionalArguments`. */
 	readonly optionalArguments: ReadonlySet<string>;
 	/**
-	 * `localizationPropertyKey` of every property that holds localizable text somewhere in the
-	 * project; culture-invariant text is reported only in those properties.
+	 * `localizationPropertiesWhereLocalizable` over the project: culture-invariant text is
+	 * reported only in these properties.
 	 */
 	readonly localizableProperties: ReadonlySet<string>;
 	/**
-	 * Whether a line without an identity holds only culture-invariant text, answered without its
-	 * units; a scan whose units are costly to build passes it. Absent, the line's units answer.
+	 * Whether a saved occurrence of the line has translator notes, and the String Tables that
+	 * declare its key, answered without its units; a scan whose units are costly to build passes
+	 * them. Absent, the line's units answer. Units are built only for lines with findings.
+	 */
+	readonly occurrenceNotes?: ((line: LocalizationLine) => boolean) | undefined;
+	readonly stringTables?: ((line: LocalizationLine) => readonly string[]) | undefined;
+	/**
+	 * Whether a line without an identity holds only culture-invariant text and some of it is
+	 * `reportableInvariantText`, answered without its units; a scan whose units are costly to build
+	 * passes it. Absent, the line's units answer.
 	 */
 	readonly cultureInvariant?: ((line: LocalizationLine) => boolean) | undefined;
+}
+
+/** The String Tables of a line's saved String Table entries, sorted. */
+export function localizationStringTables(lineUnits: readonly TextUnit[]): string[] {
+	const tables = new Set<string>();
+	for (const unit of lineUnits)
+		for (const occurrence of unit.occurrences)
+			if (occurrence.location.kind === "string_table_entry")
+				tables.add(occurrence.location.objectPath);
+	return [...tables].sort(byCodeUnit);
 }
 
 /** Every saved occurrence of the line is culture invariant, and it has one. */
@@ -201,23 +219,40 @@ export function localizationPropertyKey(location: TextOccurrence["location"]): s
 	}
 }
 
-/** Text Unreal gathers: a key, or a String Table reference. */
-export function localizableOccurrence(identity: TextOccurrence["identity"]): boolean {
-	return identity.status !== "unresolved";
+/**
+ * Properties holding culture-invariant text (counted where `invariantTextPlace` holds) with at
+ * least as much keyed and String Table text: the invariant text there is likely a slip. A property
+ * mostly invariant, such as a credits column of names with a few localized headings, is invariant
+ * on purpose.
+ */
+export function localizationPropertiesWhereLocalizable(
+	invariant: ReadonlyMap<string, number>,
+	localizable: ReadonlyMap<string, number>
+): Set<string> {
+	const keys = new Set<string>();
+	for (const [key, count] of invariant) if ((localizable.get(key) ?? 0) >= count) keys.add(key);
+	return keys;
 }
 
 /** The localizable properties of a corpus, for `localizableProperties`. */
 export function localizationLocalizableProperties(
 	units: Iterable<Pick<TextUnit, "occurrences">>
 ): Set<string> {
-	const keys = new Set<string>();
+	const invariant = new Map<string, number>(),
+		localizable = new Map<string, number>();
 	for (const unit of units)
 		for (const occurrence of unit.occurrences) {
-			if (!localizableOccurrence(occurrence.identity)) continue;
-			const key = localizationPropertyKey(occurrence.location);
-			if (key !== undefined) keys.add(key);
+			const identity = occurrence.identity;
+			const counts =
+				identity.status !== "unresolved"
+					? localizable
+					: identity.reason === "culture_invariant" && invariantTextPlace(occurrence)
+						? invariant
+						: undefined;
+			const key = counts && localizationPropertyKey(occurrence.location);
+			if (key !== undefined) counts!.set(key, (counts!.get(key) ?? 0) + 1);
 		}
-	return keys;
+	return localizationPropertiesWhereLocalizable(invariant, localizable);
 }
 
 /** A package path with "debug" in a folder or asset name: debug menus, saves and test maps. */
@@ -227,27 +262,35 @@ const TEXT_RENDER_CLASS = /\.TextRenderComponent$/u;
 const PLACED_OBJECT = /\.(?:PersistentLevel|MovieScene\w*)\./u;
 
 /**
- * Whether culture-invariant text in this saved place is worth a finding: player-facing, outside
- * debug content and level or sequence text renders, in a property that is localizable elsewhere
- * in the project. A property that never holds localizable text, such as a credits column of
- * names or a debug label, is invariant on purpose.
+ * A saved place where culture-invariant text could reach players by mistake: not editor text, not
+ * in debug content, not a text render placed in a level or a sequence, not a String Table entry.
  */
-function reportableInvariantText(
-	occurrence: TextOccurrence,
-	localizableProperties: ReadonlySet<string>
+export function invariantTextPlace(
+	occurrence: Pick<TextOccurrence, "audience" | "location">
 ): boolean {
 	if (occurrence.audience === "editor") return false;
 	const location = occurrence.location;
+	if (location.kind === "string_table_entry") return false;
 	const path = location.objectPath,
 		dot = path.indexOf(".", path.lastIndexOf("/") + 1);
 	if (DEBUG_PACKAGE.test(dot < 0 ? path : path.slice(0, dot))) return false;
-	if (
+	return !(
 		location.kind === "asset_property" &&
 		TEXT_RENDER_CLASS.test(location.classPath) &&
 		PLACED_OBJECT.test(location.objectPath)
-	)
-		return false;
-	const key = localizationPropertyKey(location);
+	);
+}
+
+/**
+ * Whether culture-invariant text in this saved place is worth a finding: an `invariantTextPlace`
+ * in a property that mostly holds localizable text elsewhere in the project.
+ */
+export function reportableInvariantText(
+	occurrence: Pick<TextOccurrence, "audience" | "location">,
+	localizableProperties: ReadonlySet<string>
+): boolean {
+	if (!invariantTextPlace(occurrence)) return false;
+	const key = localizationPropertyKey(occurrence.location);
 	return key !== undefined && localizableProperties.has(key);
 }
 
@@ -460,6 +503,15 @@ export function localizationTranslationVariants(
 					);
 					// A tie names no usual translation to compare with.
 					if (variants[0]!.lines === variants[1]!.lines) continue;
+					const majorityUntranslated = variants[0]!.key === sourceKey;
+					// Most lines ship the source and under half as many translate it: the culture keeps
+					// this text untranslated on purpose, as internal labels and names often are.
+					if (majorityUntranslated) {
+						let translated = 0;
+						for (let index = 1; index < variants.length; index++)
+							translated += variants[index]!.lines;
+						if (translated * 2 < variants[0]!.lines) continue;
+					}
 					let byCulture = result.get(source);
 					if (!byCulture) result.set(source, (byCulture = new Map()));
 					byCulture.set(culture, {
@@ -468,7 +520,7 @@ export function localizationTranslationVariants(
 							lines
 						})),
 						majority: variants[0]!.key,
-						majorityUntranslated: variants[0]!.key === sourceKey
+						majorityUntranslated
 					});
 				}
 			}
@@ -641,12 +693,18 @@ export function checkLocalizationLine(
 				code: "reduced_source_checking"
 			});
 	}
+	// A line's units are built when a finding needs them: a key saved in thousands of places,
+	// such as an editor label, takes seconds to build and usually has no finding.
+	let lineUnits: readonly TextUnit[] | undefined,
+		affected: TextQualityAffectedOccurrence[] | undefined;
+	const unitsOnce = () => (lineUnits ??= units());
 	const add = (finding: UnratedFinding) => {
 		if (enabled.includes(finding.kind))
 			// SAFETY: `finding` is one member of the union without its severity, and the severity
 			// added is the one `checkSeverity` gives that member's kind.
 			findings.push({
 				...finding,
+				affectedOccurrences: (affected ??= affectedOf(unitsOnce())),
 				severity: checkSeverity[finding.kind]
 			} as LocalizationQualityFinding);
 	};
@@ -661,10 +719,10 @@ export function checkLocalizationLine(
 			return;
 		// Most lines without a key are not culture invariant; a scan can say so without units.
 		if (context.cultureInvariant && !context.cultureInvariant(line)) return;
-		const lineUnits = units();
+		const invariantUnits = unitsOnce();
 		if (
-			localizationCultureInvariantUnits(lineUnits) &&
-			lineUnits.some((unit) =>
+			localizationCultureInvariantUnits(invariantUnits) &&
+			invariantUnits.some((unit) =>
 				unit.occurrences.some((occurrence) =>
 					reportableInvariantText(occurrence, context.localizableProperties)
 				)
@@ -675,7 +733,7 @@ export function checkLocalizationLine(
 				target,
 				culture: sourceCulture,
 				identity: null,
-				affectedOccurrences: affectedOf(lineUnits),
+				affectedOccurrences: [],
 				manifestLocations: [],
 				translationOrigin: "absent",
 				ruleId: ruleIdOf("culture_invariant_text"),
@@ -691,12 +749,9 @@ export function checkLocalizationLine(
 	const source = manifestSource ?? line.source;
 	// A partly read package can leave the saved text blank; the manifest's source still counts.
 	if (source.trim().length === 0 && line.source.trim().length === 0) return;
-	const lineUnits = units();
-	const affectedOccurrences = affectedOf(lineUnits);
-	const notes = lineUnits
-		.flatMap((unit) => unit.occurrences.map((occurrence) => occurrence.devNotes))
-		.filter((note) => note.trim().length > 0);
-	const sourceVariants = conflictingSourceVariants(line, lineUnits);
+	const sourceVariants = localizationConflictingSource(line)
+		? conflictingSourceVariants(line, unitsOnce())
+		: undefined;
 	// Conflicting texts without a manifest leave no one source to compare a translation with.
 	const comparable = sourceVariants === undefined || manifestSource !== undefined;
 	const manifestLocations = [...new Set(line.manifest.map((entry) => entry.path))].sort();
@@ -721,7 +776,8 @@ export function checkLocalizationLine(
 			target,
 			culture: culture.culture,
 			identity: line.identity,
-			affectedOccurrences,
+			// `add` fills in the saved places.
+			affectedOccurrences: [],
 			manifestLocations,
 			translationOrigin: shipped.origin,
 			...(sourceVariants ? { sourceVariants } : undefined)
@@ -742,8 +798,15 @@ export function checkLocalizationLine(
 		// Source-level checks report once per line, under the line's source culture.
 		if (culture.culture === sourceCulture) {
 			if (
-				notes.length === 0 &&
-				line.manifest.every((entry) => localizationManifestNotes(entry).length === 0)
+				enabled.includes("missing_translator_notes") &&
+				line.manifest.every((entry) => localizationManifestNotes(entry).length === 0) &&
+				!(context.occurrenceNotes
+					? context.occurrenceNotes(line)
+					: unitsOnce().some((unit) =>
+							unit.occurrences.some(
+								(occurrence) => occurrence.devNotes.trim().length > 0
+							)
+						))
 			)
 				add({
 					...base,
@@ -772,19 +835,19 @@ export function checkLocalizationLine(
 				});
 			for (const text of sourceVariants ?? [line.source.trim() ? line.source : source])
 				sourceTextFindings(text, base, sourceChecks, add);
-			const tables = new Set<string>();
-			for (const unit of lineUnits)
-				for (const occurrence of unit.occurrences)
-					if (occurrence.location.kind === "string_table_entry")
-						tables.add(occurrence.location.objectPath);
-			if (tables.size > 1)
+			const tables = !enabled.includes("string_table_key_collision")
+				? []
+				: context.stringTables
+					? context.stringTables(line)
+					: localizationStringTables(unitsOnce());
+			if (tables.length > 1)
 				add({
 					...base,
 					ruleId: ruleIdOf("string_table_key_collision"),
 					kind: "string_table_key_collision",
 					actual: {
-						tables: [...tables].sort(byCodeUnit).slice(0, 16),
-						tableCount: tables.size
+						tables: tables.slice(0, 16),
+						tableCount: tables.length
 					},
 					expectation: { oneTablePerKey: true },
 					recovery:
@@ -1082,7 +1145,10 @@ export function checkLocalizationLine(
 					recovery: `Keep each "${separator}" segment of the source in the translation, in the same order.`
 				});
 		}
-		const placeholder = translated ? placeholderTranslation(source, translation) : undefined;
+		const placeholder =
+			translated && culture.culture !== context.nativeCulture
+				? placeholderTranslation(source, translation)
+				: undefined;
 		if (placeholder !== undefined)
 			add({
 				...base,

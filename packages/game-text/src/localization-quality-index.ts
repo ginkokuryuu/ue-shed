@@ -12,9 +12,12 @@ import {
 	compareReportedLocalizationFindings,
 	enabledLocalizationChecks,
 	localizationDuplicateSources,
+	localizationPropertiesWhereLocalizable,
 	localizationPropertyKey,
 	localizationRuleContext,
+	invariantTextPlace,
 	localizationTranslationVariants,
+	reportableInvariantText,
 	type LocalizationLineCheckContext
 } from "./localization-checks.js";
 import type {
@@ -43,7 +46,7 @@ import {
 	type LocalizationFindingList,
 	type LocalizationQuality
 } from "./localization-workspace.js";
-import { localizationLineUnits } from "./gathered-text.js";
+import { gatheredIdentity, gatheredIdentityKey, localizationLineUnits } from "./gathered-text.js";
 import { JoinedQueryData } from "./joined-query-data.js";
 import { u32 } from "./joined-target-input.js";
 import { runJoinedQuery } from "./joined-query-node.js";
@@ -52,6 +55,7 @@ import type { GameTextRuleDocument } from "./quality-rules-v2.js";
 import { TextQualityRuleId } from "./quality-schema.js";
 import type { TextCorpus, TextUnit, TextUnitId } from "./schema.js";
 import { snapshotCheck } from "./snapshot-format.js";
+import { decodeTextAudience } from "./text-audience.js";
 import { encodeWtf8 } from "./wtf8.js";
 
 /**
@@ -61,6 +65,21 @@ import { encodeWtf8 } from "./wtf8.js";
  * 2048-line pages still stalled 2.0 s: hydrating the page is one synchronous block.
  */
 const SCAN_PAGE_LINES = 256;
+/**
+ * Pages shrink while checking one takes longer than this, down to `MINIMUM_PAGE_LINES`, and grow
+ * back to `SCAN_PAGE_LINES` when it is quick. On a shipped project 256-line pages took about
+ * 0.5 s and some stretches of lines 1–1.8 s. A 200 ms budget with 16-line pages kept every stall
+ * under 1 s but made the scan 60% longer: small pages decompress the same string blocks again.
+ */
+const PAGE_BUDGET_MS = 500;
+const MINIMUM_PAGE_LINES = 64;
+
+/** The next page's size after a page of `lines` took `elapsed` milliseconds. */
+function nextPageLines(lines: number, elapsed: number): number {
+	if (elapsed > PAGE_BUDGET_MS) return Math.max(MINIMUM_PAGE_LINES, lines >>> 1);
+	if (elapsed < PAGE_BUDGET_MS / 4) return Math.min(SCAN_PAGE_LINES, lines * 2);
+	return lines;
+}
 /** Positions hydrated per batch when a workspace reads many findings, as an export does. */
 const ITEM_BATCH = 2048;
 
@@ -114,6 +133,61 @@ function fnv32(bytes: Uint8Array, start: number, end: number) {
 
 /** Unit rows by ID through a hash of the ID column; never builds the unit list. */
 function unitIndex(data: JoinedQueryData) {
+	/** Strings of the occurrences the column predicates read, by ID. */
+	const decoded = new Map<number, string>();
+	/** Gathered identity keys by namespace, key and String Table entry. */
+	const gatheredKeys = new Map<string, string>();
+	/** The shard of a global occurrence index. */
+	const shardOf = (member: number) => {
+		const starts = data.joined.meta.packageStarts;
+		let low = 0,
+			high = starts.length - 2;
+		while (low < high) {
+			const middle = (low + high + 1) >>> 1;
+			if (starts[middle]! <= member) low = middle;
+			else high = middle - 1;
+		}
+		return low;
+	};
+	/**
+	 * Visits each occurrence `localizationLineUnits` keeps for the line, without building units:
+	 * a resolved occurrence is kept when its gathered identity is the line's. Stops when `visit`
+	 * returns true.
+	 */
+	const eachKept = (
+		line: LocalizationLine,
+		visit: (column: (field: string) => number) => boolean
+	) => {
+		if (line.origin.kind !== "corpus") return;
+		const lineKey = line.identity && gatheredIdentityKey(line.identity);
+		for (const id of line.origin.unitIds) {
+			const row = find(id);
+			if (row === undefined) continue;
+			for (const member of data.members("raw", row)) {
+				const shard = shardOf(member),
+					index = member - data.joined.meta.packageStarts[shard]!;
+				const column = (field: string) =>
+					data.packageColumn(shard, `occurrence.${field}`)[index]!;
+				if (column("identity") === 0) {
+					const table = column("location") === 2;
+					const memo = `${column("namespace")}\0${column("key")}\0${table}`;
+					let gathered = gatheredKeys.get(memo);
+					if (gathered === undefined) {
+						// A resolved identity without a key is unresolved: kept, as "".
+						const [namespace, key] = data.strings([column("namespace"), column("key")]);
+						gathered =
+							key === ""
+								? ""
+								: gatheredIdentityKey(gatheredIdentity(namespace!, key!, table));
+						if (gatheredKeys.size >= MEMO_LIMIT) gatheredKeys.clear();
+						gatheredKeys.set(memo, gathered);
+					}
+					if (gathered !== "" && gathered !== lineKey) continue;
+				}
+				if (visit(column)) return;
+			}
+		}
+	};
 	const idRows = data.column("query.raw.raw"),
 		starts = data.column("query.raw.id_starts"),
 		words = data.column("query.raw.id_utf8");
@@ -155,32 +229,102 @@ function unitIndex(data: JoinedQueryData) {
 			return units;
 		},
 		idRow: (row: number) => idRows[row]!,
+		/** Whether a kept occurrence has translator notes; as over `forLine`'s units. */
+		occurrenceNotes(line: LocalizationLine): boolean {
+			let found = false;
+			eachKept(line, (column) => (found = text(column("notes")).trim().length > 0));
+			return found;
+		},
+		/** The String Tables of the kept String Table entries, sorted; as over `forLine`'s units. */
+		stringTables(line: LocalizationLine): string[] {
+			const tables = new Set<string>();
+			eachKept(line, (column) => {
+				if (column("location") === 2) tables.add(text(column("object")));
+				return false;
+			});
+			return [...tables].sort((a, b) => (a < b ? -1 : a > b ? 1 : 0));
+		},
 		/**
-		 * The units a line names hold only culture-invariant occurrences, read from the
-		 * occurrence identity column without building the units; as
-		 * `localizationCultureInvariantUnits` over `forLine`.
+		 * The units a line names hold only culture-invariant occurrences and one of them is
+		 * `reportableInvariantText`, read from the occurrence columns without building the units;
+		 * as `localizationCultureInvariantUnits` and `reportableInvariantText` over `forLine`.
+		 * Lines of thousands of invariant occurrences, such as a label every level repeats, are
+		 * answered without building thousands of occurrences.
 		 */
-		cultureInvariant(line: LocalizationLine): boolean {
+		cultureInvariant(
+			line: LocalizationLine,
+			localizableProperties: ReadonlySet<string>
+		): boolean {
 			if (line.origin.kind !== "corpus") return false;
 			const starts = data.joined.meta.packageStarts;
-			let found = false;
+			let found = false,
+				reportable = false;
 			for (const id of line.origin.unitIds) {
 				const row = find(id);
 				if (row === undefined) continue;
 				for (const member of data.members("raw", row)) {
-					let shard = 0;
-					while (starts[shard + 1]! <= member) shard++;
-					const identity = data.packageColumn(shard, "occurrence.identity")[
-						member - starts[shard]!
-					];
-					if (identity !== CULTURE_INVARIANT) return false;
+					let low = 0,
+						high = starts.length - 2;
+					while (low < high) {
+						const middle = (low + high + 1) >>> 1;
+						if (starts[middle]! <= member) low = middle;
+						else high = middle - 1;
+					}
+					const shard = low,
+						index = member - starts[shard]!;
+					if (
+						data.packageColumn(shard, "occurrence.identity")[index] !==
+						CULTURE_INVARIANT
+					)
+						return false;
 					found = true;
+					reportable ||= placeReportable(shard, index, localizableProperties);
 				}
 			}
-			return found;
+			return found && reportable;
 		}
 	};
+	/** `reportableInvariantText` of one stored occurrence, its strings decoded once each. */
+	function placeReportable(
+		shard: number,
+		index: number,
+		localizableProperties: ReadonlySet<string>
+	): boolean {
+		const column = (field: string) => data.packageColumn(shard, `occurrence.${field}`)[index]!;
+		const kind = column("location");
+		if (kind === 2) return false;
+		const audience = decodeTextAudience(column("audience")).audience;
+		if (audience === "editor") return false;
+		const objectPath = text(column("object")),
+			propertyPath = text(column("property"));
+		return reportableInvariantText(
+			{
+				audience,
+				location:
+					kind === 0
+						? {
+								kind: "asset_property",
+								objectPath,
+								classPath: text(column("class")),
+								propertyPath
+							}
+						: { kind: "data_table_cell", objectPath, row: "", propertyPath }
+			},
+			localizableProperties
+		);
+	}
+	function text(id: number): string {
+		let value = decoded.get(id);
+		if (value === undefined) {
+			if (decoded.size >= MEMO_LIMIT) decoded.clear();
+			decoded.set(id, (value = data.strings([id])[0]!));
+		}
+		return value;
+	}
 }
+
+/** Entries a scan's string memos keep before starting over. */
+const MEMO_LIMIT = 65_536;
 
 /** The occurrence identity column's code for culture-invariant text. */
 const CULTURE_INVARIANT = 2;
@@ -313,76 +457,128 @@ const translationVariants = Effect.fn("GameText.localizationQuality.translations
 const PROPERTY_PAGE_ROWS = 16_384;
 
 /**
- * `localizationLocalizableProperties` from the package occurrence columns. A keyed or String
- * Table occurrence makes its owner (class or DataTable) and property localizable; each pair's key
- * is decoded until one is non-empty, as `textOccurrenceFromExtraction` leaves a keyless resolved
- * identity unresolved, and each distinct owner and property string is decoded once.
+ * `localizationLocalizableProperties` from the package occurrence columns, in two passes over
+ * the identity, location and owner columns. The first counts culture-invariant occurrences by
+ * owner (class or DataTable) and property. The second counts keyed and String Table occurrences,
+ * only in owners the first found; their keys are decoded, as `textOccurrenceFromExtraction`
+ * leaves a resolved identity without a key unresolved. Owner and property strings are decoded once
+ * each.
  */
 const localizableProperties = Effect.fn("GameText.localizationQuality.properties")(function* (
 	data: JoinedQueryData
 ) {
 	const starts = data.joined.meta.packageStarts;
-	/** Property string IDs by owner: a class ID times two, or a DataTable object ID times two plus one. */
-	const pairs = new Map<number, Set<number>>();
-	const known = (owner: number, property: number) => pairs.get(owner)?.has(property) === true;
-	for (let shard = 0; shard + 1 < starts.length; shard++) {
-		if (starts[shard + 1] === starts[shard]) continue;
-		const identity = data.packageColumn(shard, "occurrence.identity"),
-			location = data.packageColumn(shard, "occurrence.location"),
-			classes = data.packageColumn(shard, "occurrence.class"),
-			objects = data.packageColumn(shard, "occurrence.object"),
-			properties = data.packageColumn(shard, "occurrence.property"),
-			keys = data.packageColumn(shard, "occurrence.key");
-		for (let start = 0; start < identity.length; start += PROPERTY_PAGE_ROWS) {
-			const owners: number[] = [],
-				names: number[] = [],
-				keyIds: number[] = [];
-			for (
-				let row = start;
-				row < Math.min(identity.length, start + PROPERTY_PAGE_ROWS);
-				row++
-			) {
-				// Resolved (0) or String Table (1) identities; String Table entries (2) have no property.
-				if (identity[row]! > 1 || location[row]! > 1) continue;
-				const owner = location[row] === 0 ? classes[row]! * 2 : objects[row]! * 2 + 1;
-				if (known(owner, properties[row]!)) continue;
-				owners.push(owner);
-				names.push(properties[row]!);
-				keyIds.push(keys[row]!);
+	const shardColumns = (shard: number) => ({
+		audience: data.packageColumn(shard, "occurrence.audience"),
+		identity: data.packageColumn(shard, "occurrence.identity"),
+		location: data.packageColumn(shard, "occurrence.location"),
+		classes: data.packageColumn(shard, "occurrence.class"),
+		objects: data.packageColumn(shard, "occurrence.object"),
+		properties: data.packageColumn(shard, "occurrence.property"),
+		keys: data.packageColumn(shard, "occurrence.key")
+	});
+	/** A class ID times two, or a DataTable object ID times two plus one. */
+	const ownerOf = (columns: ReturnType<typeof shardColumns>, row: number) =>
+		columns.location[row] === 0 ? columns.classes[row]! * 2 : columns.objects[row]! * 2 + 1;
+	const ownerStrings = new Map<number, string>(),
+		propertyStrings = new Map<number, string>(),
+		objectStrings = new Map<number, string>();
+	const decode = (ids: Iterable<number>, into: Map<number, string>, owners: boolean) => {
+		const missing = [...new Set(ids)].filter((id) => !into.has(id));
+		const values = data.strings(
+			owners ? missing.map((owner) => Math.floor(owner / 2)) : missing
+		);
+		missing.forEach((id, index) => into.set(id, values[index]!));
+	};
+	const keyOf = (owner: number, property: number) =>
+		localizationPropertyKey(
+			owner % 2 === 0
+				? {
+						kind: "asset_property",
+						objectPath: "",
+						classPath: ownerStrings.get(owner)!,
+						propertyPath: propertyStrings.get(property)!
+					}
+				: {
+						kind: "data_table_cell",
+						objectPath: ownerStrings.get(owner)!,
+						row: "",
+						propertyPath: propertyStrings.get(property)!
+					}
+		)!;
+	const invariant = new Map<string, number>(),
+		localizable = new Map<string, number>(),
+		invariantOwners = new Set<number>();
+	for (const counting of ["invariant", "localizable"] as const)
+		for (let shard = 0; shard + 1 < starts.length; shard++) {
+			if (starts[shard + 1] === starts[shard]) continue;
+			const columns = shardColumns(shard);
+			for (let start = 0; start < columns.identity.length; start += PROPERTY_PAGE_ROWS) {
+				const owners: number[] = [],
+					names: number[] = [],
+					keyIds: number[] = [],
+					/** Invariant occurrences: object string ID, or -1 for editor text. */
+					places: number[] = [];
+				const end = Math.min(columns.identity.length, start + PROPERTY_PAGE_ROWS);
+				for (let row = start; row < end; row++) {
+					// String Table entries (location 2) have no property.
+					const identity = columns.identity[row]!;
+					if (columns.location[row]! > 1) continue;
+					if (counting === "invariant" ? identity !== CULTURE_INVARIANT : identity > 1)
+						continue;
+					const owner = ownerOf(columns, row);
+					if (counting === "localizable" && !invariantOwners.has(owner)) continue;
+					if (counting === "invariant") {
+						const editor =
+							decodeTextAudience(columns.audience[row]!).audience === "editor";
+						if (editor) continue;
+						places.push(columns.objects[row]!);
+					}
+					owners.push(owner);
+					names.push(columns.properties[row]!);
+					keyIds.push(columns.keys[row]!);
+				}
+				decode(owners, ownerStrings, true);
+				decode(names, propertyStrings, false);
+				if (counting === "invariant") {
+					decode(places, objectStrings, false);
+					for (let index = 0; index < owners.length; index++) {
+						const owner = owners[index]!,
+							propertyPath = propertyStrings.get(names[index]!)!,
+							objectPath = objectStrings.get(places[index]!)!;
+						// Editor text was left out above; the audience no longer matters.
+						const place = invariantTextPlace({
+							audience: "unknown",
+							location:
+								owner % 2 === 0
+									? {
+											kind: "asset_property",
+											objectPath,
+											classPath: ownerStrings.get(owner)!,
+											propertyPath
+										}
+									: { kind: "data_table_cell", objectPath, row: "", propertyPath }
+						});
+						if (!place) continue;
+						invariantOwners.add(owner);
+						const key = keyOf(owner, names[index]!);
+						invariant.set(key, (invariant.get(key) ?? 0) + 1);
+					}
+				} else {
+					const wanted = owners.flatMap((owner, index) =>
+						invariant.has(keyOf(owner, names[index]!)) ? [index] : []
+					);
+					const keys = data.strings(wanted.map((index) => keyIds[index]!));
+					wanted.forEach((index, position) => {
+						if (keys[position] === "") return;
+						const key = keyOf(owners[index]!, names[index]!);
+						localizable.set(key, (localizable.get(key) ?? 0) + 1);
+					});
+				}
+				yield* Effect.yieldNow;
 			}
-			const decoded = data.strings(keyIds);
-			for (let index = 0; index < owners.length; index++) {
-				if (decoded[index] === "") continue;
-				let ownerNames = pairs.get(owners[index]!);
-				if (!ownerNames) pairs.set(owners[index]!, (ownerNames = new Set()));
-				ownerNames.add(names[index]!);
-			}
-			yield* Effect.yieldNow;
 		}
-	}
-	const ownerIds = [...pairs.keys()];
-	const ownerStrings = data.strings(ownerIds.map((owner) => Math.floor(owner / 2)));
-	const propertyIds = [...new Set([...pairs.values()].flatMap((names) => [...names]))];
-	const decodedProperties = data.strings(propertyIds);
-	const propertyStrings = new Map(
-		propertyIds.map((id, index) => [id, decodedProperties[index]!] as const)
-	);
-	yield* Effect.yieldNow;
-	const result = new Set<string>();
-	for (let index = 0; index < ownerIds.length; index++) {
-		const owner = ownerIds[index]!,
-			path = ownerStrings[index]!;
-		for (const name of pairs.get(owner)!) {
-			const propertyPath = propertyStrings.get(name)!;
-			const key = localizationPropertyKey(
-				owner % 2 === 0
-					? { kind: "asset_property", objectPath: "", classPath: path, propertyPath }
-					: { kind: "data_table_cell", objectPath: path, row: "", propertyPath }
-			);
-			if (key !== undefined) result.add(key);
-		}
-	}
-	return result;
+	return localizationPropertiesWhereLocalizable(invariant, localizable);
 });
 
 /**
@@ -440,7 +636,9 @@ export const indexedLocalizationQuality = Effect.fn("GameText.localizationQualit
 		localizableProperties: enabled.includes("culture_invariant_text")
 			? yield* localizableProperties(data)
 			: new Set(),
-		cultureInvariant: (line) => units.cultureInvariant(line)
+		cultureInvariant: (line) => units.cultureInvariant(line, context.localizableProperties),
+		occurrenceNotes: (line) => units.occurrenceNotes(line),
+		stringTables: (line) => units.stringTables(line)
 	};
 	const units = unitIndex(data);
 	yield* Effect.yieldNow;
@@ -627,25 +825,31 @@ export const indexedLocalizationQuality = Effect.fn("GameText.localizationQualit
 			findings: storedFacts.length
 		});
 	};
-	// One-line blocks in storage order, so each page hydrates adjacent rows.
-	let page: number[] = [];
+	// One-line blocks in storage order, so each page hydrates adjacent rows. Which page a line
+	// is checked in does not change its findings or their order.
+	let page: number[] = [],
+		pageLines = SCAN_PAGE_LINES;
+	const checkPage = () => {
+		const started = performance.now();
+		checkBlocks(page);
+		pageLines = nextPageLines(pageLines, performance.now() - started);
+		page = [];
+	};
 	for (let row = 0; row < count; row++) {
 		if (joinPosition[row] === NOT_JOINED) continue;
 		const rank = rankOf[row]!;
 		if (tied[rank] || (rank + 1 < lineCount && tied[rank + 1])) continue;
 		page.push(rank);
-		if (page.length < SCAN_PAGE_LINES) continue;
-		checkBlocks(page);
-		page = [];
+		if (page.length < pageLines) continue;
+		checkPage();
 		yield* Effect.yieldNow;
 	}
 	// Then the rare blocks of several lines.
 	for (let rank = 0; rank + 1 < lineCount; rank++) {
 		if (tied[rank] || !tied[rank + 1]) continue;
 		page.push(rank);
-		if (page.length < SCAN_PAGE_LINES) continue;
-		checkBlocks(page);
-		page = [];
+		if (page.length < pageLines) continue;
+		checkPage();
 		yield* Effect.yieldNow;
 	}
 	if (page.length) checkBlocks(page);

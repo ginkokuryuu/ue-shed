@@ -198,7 +198,17 @@ it.live(
 				// and debug content.
 				...[
 					{ source: "Backer Name", object: "/Game/Text/Table.Table", property: "Backer" },
-					{ source: "Debug label", object: "/Game/Debug/Panel.Panel", property: "Label3" }
+					{
+						source: "Debug label",
+						object: "/Game/Debug/Panel.Panel",
+						property: "Label3"
+					},
+					// Editor text by its audience: a developer folder.
+					{
+						source: "My test label",
+						object: "/Game/Developers/Me/Panel.Panel",
+						property: "Label3"
+					}
 				].map(({ source, object, property }) => ({
 					...occurrence("", source, 3),
 					identity: {

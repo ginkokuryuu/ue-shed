@@ -168,6 +168,13 @@ describe("text shape helpers", () => {
 		).toBeUndefined();
 		expect(placeholderTranslation("...", "...")).toBeUndefined();
 		expect(placeholderTranslation("Okay", "OK")).toBeUndefined();
+		// "Todo" is Spanish for "all"; the source's own placeholders are placeholder_text's.
+		expect(placeholderTranslation("All", "Todo")).toBeUndefined();
+		expect(placeholderTranslation("TBD", "skip")).toBeUndefined();
+		expect(placeholderTranslation("xxx", "xxx")).toBeUndefined();
+		// A short line may be answered with silence.
+		expect(placeholderTranslation("*exhales*", "...")).toBeUndefined();
+		expect(placeholderTranslation("Maybe the baby will settle down soon.", "...")).toBe("...");
 		// Slate attributes are name="value" pairs; "<invalid requirement type>" is text.
 		expect(richTextTagBalance("<invalid requirement type>")).toEqual({
 			opening: 0,
@@ -377,7 +384,7 @@ describe("translation shape checks", () => {
 		expect(kind(value, "placeholder_translation", "de")[0]?.actual).toEqual({
 			translation: "script lama"
 		});
-		expect(kind(value, "length_outlier")).toEqual([]);
+		expect(kind(value, "length_outlier", "de")).toEqual([]);
 		expect(kinds(line("Your spouse checks the supplies.", "..."))).toContain(
 			"placeholder_translation"
 		);
@@ -552,6 +559,17 @@ describe("translated inconsistently", () => {
 			["K0", true],
 			["K1", true]
 		]);
+		// Lines that leave an internal label untranslated far outnumber those that translate it:
+		// the culture keeps it untranslated on purpose.
+		expect(
+			kind(
+				shared(
+					["LastDialogueOnly", "LastDialogueOnly", "LastDialogueOnly", "Ab Jahr 2"],
+					"LastDialogueOnly"
+				),
+				"inconsistent_translation"
+			)
+		).toEqual([]);
 		// An untranslated line among translated ones is marked too.
 		expect(
 			kind(
@@ -679,15 +697,32 @@ describe("built-in source checks", () => {
 				}
 			}))
 		});
+		const backers = (row: string) => ({
+			kind: "data_table_cell" as const,
+			objectPath: "/Game/UI/Credit/DT_CreditBackers.DT_CreditBackers",
+			row,
+			propertyPath: "title"
+		});
 		const units = [
 			localized,
 			invariantUnit("a", "Blessing Description", textBlock),
-			// A property no keyed text uses: a credits column of backer names.
-			invariantUnit("b", "Lizzie Jenkins", {
-				kind: "data_table_cell",
-				objectPath: "/Game/UI/Credit/DT_CreditBackers.DT_CreditBackers",
-				row: "11860",
-				propertyPath: "title"
+			// A property mostly invariant: a credits column of backer names with one localized
+			// heading.
+			...["Lizzie Jenkins", "Michelle Sims"].map((name, index) =>
+				invariantUnit(`b${index}`, name, backers(`${11860 + index}`))
+			),
+			TextUnit.make({
+				...ftextUnit("Heading", "Backers", undefined, undefined, "data_table_cell"),
+				occurrences: ftextUnit(
+					"Heading",
+					"Backers",
+					undefined,
+					undefined,
+					"data_table_cell"
+				).occurrences.map((occurrence) => ({
+					...occurrence,
+					location: backers("1")
+				}))
 			}),
 			// Debug widgets and saves.
 			invariantUnit("c", "Skip Teleport", {

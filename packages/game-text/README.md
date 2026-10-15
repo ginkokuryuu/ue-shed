@@ -295,10 +295,13 @@ culture in the target by code), so a selected non-native culture does not show t
 out text without letters. `culture_invariant_text` findings have no identity (`identity: null`), so
 they cannot be accepted in a review file. Most culture-invariant text is invariant on purpose, so it
 is reported only for a saved place that is not editor text (by its audience), not in a package
-whose path has "debug" in it, not a text render placed in a level or a sequence, and in a property
-(a class's property path, or a DataTable's column, without container indexes) that holds keyed or
-String Table text somewhere in the project. A column of backer names or a debug label that is never
-localizable is left alone. The source checks skip Blueprint bytecode fragments (manifest entries
+whose path has "debug" in it and not a text render placed in a level or a sequence, and only in a
+property (a class's property path, or a DataTable's column, without container indexes) that holds
+at least as much keyed or String Table text in the project as invariant text in such places. A
+column of backer names with a few localized headings, or a label no one localizes, is left alone.
+`placeholder_translation` leaves out the native culture, a translation equal to its source, a
+source that is itself a placeholder, and punctuation-only answers ("...") to a source under three
+words, which can be a silent reply. The source checks skip Blueprint bytecode fragments (manifest entries
 `… [Script Bytecode]`, the pieces of joined text the gather records); `source_whitespace` also skips
 lines the gather does not collect. `source_markup` reads tags as Slate does: attributes are
 `name="value"` pairs, `<{Argument}>` opens a tag, and a tag right after an ASCII letter, digit or
@@ -317,8 +320,10 @@ removed, whitespace runs counted once; East Asian wide characters count two. A s
 four words. Per culture other than the native one it counts each line's shipped translation,
 grouping translations that differ only in case, whitespace, punctuation or symbols, and reports,
 once per line, every line whose translation is not the single most used one. When most lines ship
-the source untranslated, it reports those lines instead (`untranslated: true`). When the most used
-translations tie, it reports nothing. The finding lists the five most used translations with their
+the source untranslated, it reports those lines instead (`untranslated: true`), unless fewer than
+half as many lines translate it: then the culture keeps the text untranslated on purpose, as
+internal labels often are, and nothing is reported. When the most used translations tie, it reports
+nothing. The finding lists the five most used translations with their
 line counts. An indexed scan counts them in a second pass over the shared lines only, before the
 main pass. A translated source whose recorded text differs from the current one only in line
 endings is `source_line_endings_changed`, not `outdated_translation`.
