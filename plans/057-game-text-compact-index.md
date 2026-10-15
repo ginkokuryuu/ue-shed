@@ -1861,7 +1861,8 @@ also adds "Translated inconsistently", left open above.
   translation recorded for older source; Unreal's resource compile drops it and ships the source).
   Low: `duplicate_source`, `missing_translator_notes`, `number_only_text` and `rich_text_tag_case`
   (Slate matches style and decorator names without case). Everything else, budgets and terminology
-  included, is normal. Severity is a function of the check, so the index stores nothing new: the
+  included, is normal (see the follow-up below for the ratings after a shipped project's review).
+  Severity is a function of the check, so the index stores nothing new: the
   workspace derives it from each finding's packed filter. Pages and exports list blocking findings
   first, then normal, then low, each in report order, on both paths; pages count findings by
   severity in `severityCounts`, and summaries, focus and CSV rows carry it.
@@ -1940,3 +1941,130 @@ Verification: `pnpm exec vitest run packages/game-text` passes 421 tests (6 skip
 Workbench Game Text host tests (44 in five files), the Game Text extension tests (146) and the CLI
 tests pass, as do `pnpm run typecheck`, `lint`, `format:check` and `effect:architecture`. Unreal
 was not run.
+
+### Follow-up: check noise on a shipped project
+
+The checks above were measured on a shipped UE 4.27 project (237,931 lines, `en` plus 9 cultures),
+with Electroswag's defaults (`missing_translator_notes` and `duplicate_source` off, no rule file).
+Two blocking checks were almost all noise: `culture_invariant_text` (42,210 findings, none of a
+20-line sample actionable) and `outdated_translation` (2,437, of which 1,513 differed from the
+current source only in `\r\n` against `\n`). Several others were noisy. Changes:
+
+- **Empty translations.** The shape checks (`format_arguments`, `format_argument_renamed`,
+  `argument_modifiers`, `rich_text_tags`, `line_breaks`, `segment_separator`, `length_outlier`,
+  `outdated_translation`) skip a translation that is empty or whitespace; `empty_translation`
+  reports it.
+- **`outdated_translation`** compares sources with line endings normalized. A change of line
+  endings only is `source_line_endings_changed`, low.
+- **`culture_invariant_text`** is low. It reports a saved place only when it is not editor text
+  (the occurrence's audience, which for a folded Blueprint place already rolls up its copies'
+  evidence), not in a package whose path contains "debug", not a `TextRenderComponent` (world-space
+  labels: waypoint distances, spawner names), and in a property that holds at least as much keyed
+  or String Table text in the project as invariant text in such places. A property is a class's
+  property path or a DataTable's column, container indexes removed. The indexed scan counts both
+  in two passes over the occurrence identity, location, owner and audience columns before the main
+  pass, decoding each owner and property string once. The main pass answers keyless lines from the
+  same columns, so units are built only for reported lines.
+- **`inconsistent_translation`** skips the native culture, sources over four words and ties, and
+  groups translations without case, whitespace, punctuation and symbols. When most lines ship the
+  source untranslated, it reports those lines (`untranslated: true`), unless under half as many
+  lines translate it: a culture leaves internal labels such as `LastDialogueOnly` (452 lines)
+  untranslated on purpose, and reporting them was 8k of the 16k findings left after the other
+  changes.
+- **`rich_text_tags`** reports dropped tags (normal); a translation that only adds tags is
+  `rich_text_tags_added` (low). Rule files can list `optionalTags`, compared without case, and
+  `optionalArguments`: arguments the game always supplies, which a translation may add, with a tag
+  around only them (`<PlayerName>{ParentLabel}</>`). An optional argument never pairs as a rename.
+- **`line_breaks`** counts breaks between the first and last visible characters.
+- **`source_whitespace`** is low and skips Blueprint bytecode fragments (manifest paths ending
+  `[Script Bytecode]`) and lines without a manifest entry. `source_markup` and `number_only_text`
+  skip bytecode fragments too. `source_markup` reads tags as Slate does: attributes are
+  `name="value"` pairs (`<invalid requirement type>` is text), `<{arg}>` opens a tag, a tag right
+  after an ASCII identifier character is code (`GetSubsystem<UMySubsystem>()`), and `</Name>`
+  closings are listed in `xmlClosings` with their own message.
+- **`length_outlier`** allows a quarter for zh, ja, ko and th. `placeholder_translation` reports a
+  translation that is only a placeholder word ("skip", "TBD", "script lama", upper-case "TODO") or,
+  for a source of three words or more, only punctuation, outside the native culture and unless the
+  source is itself a placeholder or the translation equals it; `length_outlier` leaves such lines
+  to it.
+- **Rule files and built-ins.** `placeholder_text` leaves out a placeholder that a rule file's
+  forbidden source term already reports where its role selects the line's place. The starter rules
+  forbid "placeholder" under `/Game/`, so before this every such text was reported twice, once by
+  source quality (now over the index, #88) and once by the built-in.
+- **Stall.** The worst stall (3.7–4.5 s) was not after the last progress call: it was one page
+  that held keys saved in thousands of places (`FEventTrackEditor`/`TrackName` "Events" took
+  2.3 s, `SCS`/`Default` 2.1 s), whose units every keyed line built for its notes and saved
+  places. Lines now build units only for a finding; translator notes and String Table entries are
+  read from the occurrence columns (each kept occurrence filtered by its gathered identity, as
+  `localizationLineUnits` filters, with namespace, key and notes strings memoized), and policy rules
+  build units only for a line with a translation to check. On the project, the counts with these
+  column reads and with units were identical per check and culture. Pages also halve, to 64 lines,
+  while one takes over 500 ms and grow back below 125 ms: 256-line pages of some stretches took
+  1–1.8 s to hydrate. A 200 ms budget with 16-line pages kept every stall under 1 s but made the
+  scan 60% longer, as small pages decompress the same string blocks again.
+
+Findings with Electroswag's defaults, before (`f7d924df`) and after (on main with #82, #87 and
+#88). The rule-file run adds `segmentSeparator: "//"`, `optionalArguments: ["ParentLabel"]` and
+`optionalTags: ["NPCName", "PlayerName", "Italic"]`:
+
+| Check                         |  Before |  After | Before, rule file | After, rule file |
+| ----------------------------- | ------: | -----: | ----------------: | ---------------: |
+| `culture_invariant_text`      |  42,210 |    324 |            42,210 |              324 |
+| `inconsistent_translation`    |  32,643 |  8,444 |            32,643 |            8,444 |
+| `rich_text_tags`              |  20,269 | 11,772 |            20,269 |              248 |
+| `rich_text_tags_added`        |       — |  7,587 |                 — |            1,195 |
+| `whitespace`                  |  19,803 | 19,803 |            19,803 |           19,803 |
+| `empty_translation`           |   7,482 |  7,482 |             7,482 |            7,482 |
+| `rich_text`                   |   4,897 |  4,897 |             4,897 |            4,897 |
+| `format_arguments`            |   4,285 |  3,289 |             4,285 |            2,476 |
+| `rich_text_tag_case`          |   3,364 |  3,364 |             3,364 |            3,364 |
+| `length_outlier`              |   2,590 |  1,604 |             2,590 |            1,604 |
+| `outdated_translation`        |   2,437 |     13 |             2,437 |               13 |
+| `source_line_endings_changed` |       — |  1,513 |                 — |            1,513 |
+| `format_argument_renamed`     |   1,859 |  1,859 |             1,859 |            1,854 |
+| `line_breaks`                 |   1,548 |    956 |             1,548 |              956 |
+| `number_only_text`            |   1,399 |  1,351 |             1,399 |            1,351 |
+| `source_whitespace`           |   1,202 |    991 |             1,202 |              991 |
+| `placeholder_translation`     |       — |    527 |                 — |              527 |
+| `argument_modifiers`          |     329 |    305 |               329 |              305 |
+| `placeholder_text`            |     131 |    127 |               131 |              127 |
+| `source_markup`               |      43 |     25 |                43 |               25 |
+| `segment_separator`           |       — |      — |            13,532 |           11,635 |
+| Total                         | 146,491 | 76,233 |           160,023 |           69,134 |
+| Blocking                      |  44,647 |     13 |            44,647 |               13 |
+| Normal                        |  97,081 | 61,090 |           110,613 |           60,383 |
+| Low                           |   4,763 | 15,130 |             4,763 |            8,738 |
+
+With every check on, 356,983 findings became 228,377 (blocking 13). `missing_translator_notes`
+fell from 192,165 to 134,768 and `duplicate_source` from 18,327 to 17,376 with #82, which leaves
+editor text a target does not gather out of the target. The 13 blocking findings are the
+translations made for older text, the 13 the project's review expected. Scan with Electroswag's defaults:
+before 302–316 s, after 319–339 s over three runs (one earlier run of this branch took 262 s);
+the machine was shared, so these are not separable. Longest stall 3.7 s before, 0.92–0.94 s after, with 8–14
+stalls over 400 ms (445 before the scan changes above); peak V8 heap 268 MiB before,
+270–340 MiB after.
+
+1× scale harness, `--select quality`, Node 26.12.0, default heap, on a fresh copy of the generated
+1× project (583,507 lines, 10 cultures) and its records, the index cache warmed once. `main` is
+`52db2495` (with #82, #87 and #88); main and this branch were built and run alternately, then the
+branch twice more after its string memos were released at the end of the scan:
+
+| Run           |   Scan | Peak V8 heap | Kept after GC | Stall p50 / p95 / max | Findings |
+| ------------- | -----: | -----------: | ------------: | --------------------: | -------: |
+| main          | 88.1 s |      201 MiB |        50 MiB |     15 / 132 / 482 ms |  227,047 |
+| branch        | 96.3 s |      212 MiB |        59 MiB |     14 / 143 / 473 ms |  222,872 |
+| main          | 87.3 s |      217 MiB |        50 MiB |     15 / 130 / 488 ms |  227,047 |
+| branch        | 95.1 s |      188 MiB |        59 MiB |     14 / 139 / 483 ms |  222,872 |
+| branch, memos | 94.5 s |      196 MiB |        51 MiB |     15 / 139 / 509 ms |  222,872 |
+| branch, memos | 95.6 s |      188 MiB |        51 MiB |     14 / 142 / 476 ms |  222,872 |
+
+The scan is about 8% slower than main, stalls are unchanged, and the heap kept after the scan is
+within 1 MiB once the memos are dropped. Findings per check, main → branch:
+`missing_translator_notes` 188,906 → 188,906; `empty_translation` 13,680 → 13,680; `whitespace`
+13,290 → 13,290; `duplicate_source` 11,171 → 5,532; `source_whitespace` 1,314; `length_outlier` 150. `inconsistent_translation` now reports nothing here: the generator's shared sources that
+translate differently are sentences or ties.
+
+Verification: `pnpm exec vitest run packages/game-text` passes 501 tests (8 skipped); the
+Workbench Game Text host tests (46 in five files), the Game Text extension tests (150 node, 126
+component) and the CLI tests (68, 9 skipped) pass, as do `pnpm run typecheck`, `lint`,
+`format:check` and `effect:architecture`. Unreal was not run.
