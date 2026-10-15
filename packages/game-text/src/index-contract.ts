@@ -13,7 +13,7 @@ import type { JoinedTargetReader } from "./joined-target-reader.js";
 import type { TextCorpusQuery } from "./query.js";
 import type { TextCorpus, TextCorpusSearchRequest, TextCorpusSearchPage } from "./schema.js";
 import type { LocalizationJoin } from "./localization-schema.js";
-import type { LocalizationCheckOptions } from "./localization-quality-schema.js";
+import type { IndexedLocalizationQualityOptions } from "./localization-quality-index.js";
 import type { LocalizationQuality } from "./localization-workspace.js";
 import type { GameTextRuleDocument } from "./quality-rules-v2.js";
 import { LocalizationKeyChangePair } from "./localization-key-changes.js";
@@ -90,7 +90,7 @@ export interface GameTextIndexRefreshResult {
 	 */
 	readonly localizationQuality?:
 		| ((
-				options?: LocalizationCheckOptions,
+				options?: IndexedLocalizationQualityOptions,
 				ruleDocument?: GameTextRuleDocument
 		  ) => Effect.Effect<LocalizationQuality>)
 		| undefined;
