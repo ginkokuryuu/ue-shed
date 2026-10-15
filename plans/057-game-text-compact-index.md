@@ -1631,6 +1631,80 @@ match on both paths; the tie case now accepts `duplicate_source` under the nativ
 translations unchanged). Scan 95.5 s before and 107.1 s after, peak V8 heap 178 and 209 MiB, 48 MiB
 kept after collection in both. Repeats were not run to separate the time difference from variance.
 
+### Follow-up: player and editor text in the index
+
+Occurrences now carry an audience (`player`, `editor`, `unknown`), from the reader's gather-table
+editor-only bit (uasset-io 1.11) or the policy table in `text-audience.ts`; see
+[player and editor text](../docs/products/game-text.md#player-and-editor-text). The index stores it
+so filters, facets and groups never read path strings:
+
+- **Package text, `package-text-v4`.** Two u32 occurrence columns: `occurrence.gather` (0 none,
+  1 runtime, 2 editor-only), which round-trips the reader's bit, and `occurrence.audience`
+  (audience in two bits, reason in four, policy row plus one in eight). v1 to v3 shards are read
+  again. The policy table is hashed into every shard key, so a policy change re-encodes shards
+  from their stored evidence without reading packages.
+- **Join, `joined-v13`.** `line.audience` holds the audience mask of the line's visible places
+  (one bit per audience) and, from bit 4, the out-of-scope reason; `query.raw.audience` and
+  `query.slice.audience` hold unit and slice masks. Rollup: player, else unknown, else editor.
+  Editor text a target without editor-only data would skip turns `not_gathered` into
+  `outside_target`, in both joins. Incremental joins fall back when an audience column changes.
+
+The oracle (`indexed-audience.test.ts`) compares occurrences, lines, scope, 16 filter, facet and
+group requests, exported lines and localization quality findings between the index and the
+in-memory corpus and join.
+
+1× scale harness, Node 26.12.0, default heap, `origin/main` (`de874f16`) against this branch
+(`c3ebc294`, plus earlier commits where marked) on the same machine and inputs: a fresh
+`--seed 57` project and its converted records. The records carry no gather-table bits, and the
+generator's "editor-looking" text is `NodeTitle` on a DataAsset, which no policy row matches, so
+every line is player (178,467) or unknown (405,040) text; units 179,234 and 404,564. States and
+findings are unchanged (`not_gathered` 60,769, `outside_target` 4,132, 227,047 findings from the
+same four checks). The runs measure storing and querying the audience, not reclassification; a
+generator that emits policy-matching editor text would change the retained recipe and is left for
+later.
+
+| Stage                                       |                               main |                               branch |
+| ------------------------------------------- | ---------------------------------: | -----------------------------------: |
+| Package layer cold build (`--mode package`) |                 16.7, 17.8, 24.3 s |         18.6, 20.0 s (17.0–23.2 s ¹) |
+| of which string sort                        |                    5.1, 5.3, 8.8 s |             5.4, 5.7 s (4.9–8.8 s ¹) |
+| of which layer encode / verify (summed)     |              12.0–13.2 / 4.3–4.8 s |                13.2–15.2 / 4.6–5.7 s |
+| Package layer bytes                         |                4,922,180–4,922,236 |          5,055,176–5,055,512 (+2.7%) |
+| Peak RSS, package layer cold build          |                    1,576–1,638 MiB |      1,688–1,803 MiB (1,743–1,838 ¹) |
+| No-change / one-package refresh             |            0.38–0.59 / 1.24–1.82 s |              0.42–0.58 / 1.41–1.48 s |
+| Quality open, cold (package layer, join)    |                      89.1, 109.2 s |             97.6 s (103.6–117.6 s ¹) |
+| Peak RSS, cold open                         |                    2,212–2,230 MiB |            2,239 MiB (2,185–2,322 ¹) |
+| Quality open, warm                          |                         2.4, 2.4 s |                         2.4, 2.6 s ¹ |
+| Heap kept after opening, cold / warm        |               45.7–45.9 / 43.1 MiB |               46.3–46.5 / 43.6 MiB ¹ |
+| Quality scan                                |       105.3, 132.1, 133.5, 136.8 s |             133.4 s (98.8–140.7 s ¹) |
+| Scan peak V8 heap / kept                    |                184–211 / 49–51 MiB |                175–183 / 50–52 MiB ¹ |
+| Scan stalls p95 / longest / over 100 ms     | 185–202 ms / 0.49–0.72 s / 517–546 | 146–209 ms / 0.59–0.68 s / 516–579 ¹ |
+
+¹ Runs on earlier commits of this branch, with the same columns and join and a slower classifier.
+
+Time differences are within the spread one commit shows: the package layer's cold build ranges
+over 7 s on both, almost all of it string sort and append, which this change does not touch. The
+index keeps about 0.5 MiB more heap open. Peak RSS of the package layer's cold build is about
+100 to 200 MiB higher: its eight workers now classify every occurrence. Removing the two new
+columns while still classifying left it at 1,869 MiB, so the columns are not the cause. The
+classifier takes 1.8 s per million occurrences on one thread (3.9 s before lowercasing and splitting
+each subject once), and returns at once when the reader sent the gather-table bit, as real records
+usually do; memoizing path parts did not help on 1× paths, which are nearly all distinct. Peak RSS
+of the whole cold open is unchanged within its spread.
+
+Search over the opened index (a gitignored probe calling `query.search` for a 50-line page,
+first call then repeat):
+
+| Request                        | Units, first / repeat | Target lines, first / repeat |
+| ------------------------------ | --------------------: | ---------------------------: |
+| Page with origin facet, main   |          196 / 5.7 ms |                 60 / 22.9 ms |
+| Page with origin facet, branch |          237 / 7.8 ms |                 64 / 27.4 ms |
+| Page with audience facet       |          170 / 8.8 ms |                 63 / 25.6 ms |
+| Audience is not editor         |          255 / 5.5 ms |                337 / 26.5 ms |
+| Grouped by audience            |          183 / 5.5 ms |                 63 / 29.5 ms |
+
+First calls load columns and the source cache; repeats are in the range of the existing facets.
+No 10× run was made; Unreal was not run.
+
 ### Follow-up: check severity, shape and source checks (P1.5–P1.7)
 
 A review of shipped projects asked for three things: rank findings by how much they matter, check a

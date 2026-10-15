@@ -35,6 +35,12 @@ import {
 import { LocalizationIdentity } from "@ue-shed/localization/browser";
 import { StringArena } from "./shared-string-codec.js";
 import {
+	TEXT_OUT_OF_SCOPE_REASONS,
+	decodeTextAudience,
+	textAudienceFields,
+	textAudienceOfMask
+} from "./text-audience.js";
+import {
 	readJoinedSourceCache,
 	addSourceTrigrams,
 	rejectSourceTrigrams,
@@ -371,8 +377,9 @@ export class JoinedQueryData {
 		const path = this.strings([this.packageColumn(shard, "package.path")[low]!])[0]!;
 		const projectRoot = this.joined.meta.input.projectRoot;
 		const identity = c("identity"),
-			location = c("location");
-		return textOccurrenceFromExtraction({
+			location = c("location"),
+			gather = c("gather");
+		const occurrence = textOccurrenceFromExtraction({
 			packageFile: relative(projectRoot, resolve(projectRoot, path)),
 			occurrence: {
 				source: s("source"),
@@ -406,9 +413,12 @@ export class JoinedQueryData {
 									object_path: s("object"),
 									entry_key: s("row")
 								},
-				edit_capability: c("editable") ? "source_editable" : "read_only"
+				edit_capability: c("editable") ? "source_editable" : "read_only",
+				...(gather === 0 ? undefined : { gather_editor_only: gather === 2 })
 			}
 		});
+		// The audience the index stored and filters by.
+		return { ...occurrence, ...textAudienceFields(decodeTextAudience(c("audience"))) };
 	}
 	members(kind: "raw" | "slice", row: number) {
 		const prefix = `query.${kind}.`;
@@ -513,7 +523,8 @@ export class JoinedQueryData {
 				...(origins & 4 ? ["asset_property" as const] : []),
 				...(origins & 2 ? ["data_table_cell" as const] : []),
 				...(origins & 1 ? ["string_table_entry" as const] : [])
-			]
+			],
+			audience: textAudienceOfMask(this.column(prefix + "audience")[row]!)
 		};
 	}
 	line(row: number): Effect.Success<ReturnType<typeof hydrateJoinedTarget>>["lines"][number] {
@@ -619,10 +630,14 @@ export class JoinedQueryData {
 		}
 		const change = c("line.key_change"),
 			pair = this.joined.meta.pairs[(change >>> 1) - 1];
+		const audience = c("line.audience"),
+			outOfScope = TEXT_OUT_OF_SCOPE_REASONS[(audience >>> 4) - 1];
 		return {
 			id,
 			source,
 			identity,
+			audience: textAudienceOfMask(audience),
+			...(outOfScope === undefined ? undefined : { outOfScope }),
 			manifestLocations,
 			remainingLocationCount: Math.max(0, end - begin - 3),
 			origin: units.size

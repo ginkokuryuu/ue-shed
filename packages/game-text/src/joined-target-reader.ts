@@ -24,6 +24,7 @@ import {
 	type LocalizationJoin
 } from "./localization-schema.js";
 import { TextUnitId } from "./identifiers.js";
+import { TEXT_OUT_OF_SCOPE_REASONS, textAudienceOfMask } from "./text-audience.js";
 import { JoinedSourceCacheMeta } from "./joined-source-cache.js";
 import { u32, type ColumnReader } from "./joined-target-input.js";
 import type { SharedIndexReader } from "./shared-index.js";
@@ -266,7 +267,8 @@ export const hydrateJoinedTarget = Effect.fn("JoinedTarget.page")(function* (
 		"occ_end",
 		"manifest_start",
 		"manifest_end",
-		"key_change"
+		"key_change",
+		"audience"
 	])
 		columns[name] = yield* u32(layer, `line.${name}`);
 	const occurrenceRows = yield* u32(layer, "occurrence.rows"),
@@ -501,6 +503,8 @@ export const hydrateJoinedTarget = Effect.fn("JoinedTarget.page")(function* (
 		}
 		const change = columns.key_change![row]!,
 			pair = meta.pairs[(change >>> 1) - 1];
+		const audience = columns.audience![row]!,
+			outOfScope = TEXT_OUT_OF_SCOPE_REASONS[(audience >>> 4) - 1];
 		lines.push({
 			id,
 			identity,
@@ -524,7 +528,9 @@ export const hydrateJoinedTarget = Effect.fn("JoinedTarget.page")(function* (
 							translations: pair.translations
 						}
 					}
-				: undefined)
+				: undefined),
+			audience: textAudienceOfMask(audience),
+			...(outOfScope === undefined ? undefined : { outOfScope })
 		});
 	}
 	return {

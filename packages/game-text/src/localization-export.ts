@@ -10,6 +10,9 @@ import type {
 import { localizationShippedTranslation } from "./localization-shipped-translation.js";
 import type { TextCorpus } from "./schema.js";
 import { TEXT_ORIGIN_LABELS, manifestOrigins, textLocationOrigin } from "./text-origin.js";
+import { TEXT_AUDIENCE_LABELS } from "./text-audience-schema.js";
+import { lineTextAudience, occurrenceTextAudience } from "./text-audience.js";
+import { hasSearchableSource } from "./search.js";
 
 /** The state names writers see, shared by every host that presents localization states. */
 export const LOCALIZATION_STATE_LABELS = {
@@ -75,6 +78,18 @@ export function localizationLinesCsv(input: {
 					)
 				]
 			: manifestOrigins(line.manifest.map((entry) => entry.path));
+	// Joins record the audience; recompute it for lines from older joins when the corpus is here.
+	const audienceOf = (line: LocalizationLine) =>
+		line.audience ??
+		lineTextAudience(
+			localizationLineUnits(line, units)
+				.filter(hasSearchableSource)
+				.flatMap((unit) =>
+					unit.occurrences.map(
+						(occurrence) => occurrenceTextAudience(occurrence).audience
+					)
+				)
+		);
 	const sorted = [...lines].sort(
 		(left, right) =>
 			byCodeUnit(left.identity?.namespace ?? "￿", right.identity?.namespace ?? "￿") ||
@@ -87,6 +102,7 @@ export function localizationLinesCsv(input: {
 		"Source",
 		"Where",
 		"Kind",
+		"Audience",
 		...cultures.flatMap((culture) => [culture, `${culture} state`])
 	];
 	const rows = sorted.map((line) => {
@@ -101,6 +117,7 @@ export function localizationLinesCsv(input: {
 			kindsOf(line)
 				.map((kind) => TEXT_ORIGIN_LABELS[kind])
 				.join(", "),
+			TEXT_AUDIENCE_LABELS[audienceOf(line)],
 			...cultures.flatMap((culture) => {
 				const mark = line.cultures.find((item) => item.culture === culture);
 				return mark === undefined

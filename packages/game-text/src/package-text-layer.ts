@@ -25,6 +25,7 @@ import { LocalizationImportSession } from "./localization-import-session.js";
 import { GameTextIndexProgressReporter } from "./index-progress.js";
 import { writeSnapshotFile, openSnapshotFile, type SnapshotFileReader } from "./snapshot-file.js";
 import { importColdPackageTextLayer } from "./package-text-cold.js";
+import { TEXT_AUDIENCE_MATCHER_VERSION, TEXT_AUDIENCE_POLICY } from "./text-audience.js";
 
 /** The caller supplies the Project Index's opaque package-and-sidecar signature, never a layer hash.
  * Header evidence and signatures must come from the same complete inventory generation.
@@ -37,8 +38,12 @@ export const PackageTextInventoryEntry = Schema.Struct({
 export type PackageTextInventoryEntry = typeof PackageTextInventoryEntry.Type;
 /** Bump when package text columns change; older shards are read again instead of decoded.
  * v3: object paths are completed with the package name; v2 shards from UE 4.27 projects held
- * package-relative names. */
-export const PACKAGE_TEXT_FORMAT = "package-text-v3";
+ * package-relative names.
+ * v4: occurrences keep the reader's gather-table editor-only bit and their audience
+ * (`text-audience.ts`). The audience policy table and matcher version are part of every shard key,
+ * so a policy or matcher change re-encodes each shard from its stored evidence without reading
+ * packages again. */
+export const PACKAGE_TEXT_FORMAT = "package-text-v4";
 export const PACKAGE_TEXT_SHARDS = 256;
 export function packageTextShard(path: string) {
 	let hash = 2166136261;
@@ -69,7 +74,9 @@ export function packageTextSelection(
 		() => []
 	);
 	const hashes = Array.from({ length: PACKAGE_TEXT_SHARDS }, () =>
-		createHash("sha256").update(PACKAGE_TEXT_FORMAT)
+		createHash("sha256")
+			.update(PACKAGE_TEXT_FORMAT)
+			.update(JSON.stringify([TEXT_AUDIENCE_MATCHER_VERSION, TEXT_AUDIENCE_POLICY]))
 	);
 	let previous: string | undefined;
 	for (const entry of inventory) {

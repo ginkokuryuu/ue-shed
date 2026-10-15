@@ -6,6 +6,7 @@ import {
 	sortPackedStringsByLocale
 } from "./shared-string-codec.js";
 import { snapshotCheck } from "./snapshot-format.js";
+import { textAudienceBit } from "./text-audience.js";
 
 /** Numeric query entries retain raw-unit predicates and each gathered occurrence slice. */
 export function joinedQueryColumns(input: {
@@ -76,6 +77,8 @@ export function joinedQueryColumns(input: {
 		"origins",
 		"editing",
 		"notes",
+		// Mask of the members' audiences (textAudienceBit); textAudienceOfMask rolls it up.
+		"audience",
 		"characters",
 		"words",
 		"visible"
@@ -139,6 +142,7 @@ export function joinedQueryColumns(input: {
 			paths = new Set<number>();
 		let flags = 0,
 			origins = 0,
+			audience = 0,
 			editing = 0,
 			notes = 0,
 			characters = 0,
@@ -160,6 +164,7 @@ export function joinedQueryColumns(input: {
 			if (c.identity[member] !== 1 && duplicate[c.source[member]!]) flags |= 2;
 			origins |= 1 << (c.location[member] === 2 ? 0 : c.location[member] === 1 ? 1 : 2);
 			editing |= c.editable[member] ? 1 : 2;
+			audience |= textAudienceBit(c.audience[member]!);
 			if (strings.string(c.notes[member]!).trim() !== "") notes = 1;
 		}
 		const decoded = [...values].map((source) => ({ source, value: strings.string(source) }));
@@ -183,6 +188,7 @@ export function joinedQueryColumns(input: {
 		columns.signals![row] = flags;
 		columns.origins![row] = origins;
 		columns.editing![row] = editing;
+		columns.audience![row] = audience;
 		columns.notes![row] = notes;
 		columns.characters![row] = characters;
 		columns.words![row] = words;

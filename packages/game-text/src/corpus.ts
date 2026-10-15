@@ -28,6 +28,11 @@ import {
 	type TextUnit
 } from "./schema.js";
 import { mountPackageTextEvent } from "./package-object-path.js";
+import {
+	classifySavedTextAudience,
+	classifyTextAudience,
+	textAudienceFields
+} from "./text-audience.js";
 
 const makeOccurrenceId = TextOccurrenceId.make;
 const makeUnitId = TextUnitId.make;
@@ -131,7 +136,7 @@ function addTextOccurrence(options: {
 	readonly location: TextLocation;
 	readonly editCapability: TextOccurrence["editCapability"];
 }): void {
-	options.output.push({
+	const occurrence: TextOccurrence = {
 		id: makeOccurrenceId(occurrenceId(options.packageFile, options.location)),
 		packageFile: options.packageFile,
 		source: options.value.value,
@@ -139,7 +144,9 @@ function addTextOccurrence(options: {
 		identity: identityForText(options.value),
 		location: options.location,
 		editCapability: options.editCapability
-	});
+	};
+	// A full inspection has no gather table evidence; the policy table decides.
+	options.output.push({ ...occurrence, ...textAudienceFields(classifyTextAudience(occurrence)) });
 }
 
 export function textOccurrenceFromExtraction(options: {
@@ -194,7 +201,8 @@ export function textOccurrenceFromExtraction(options: {
 		devNotes: options.occurrence.dev_notes,
 		identity,
 		location,
-		editCapability: options.occurrence.edit_capability
+		editCapability: options.occurrence.edit_capability,
+		...textAudienceFields(classifySavedTextAudience(options.occurrence))
 	};
 }
 

@@ -24,6 +24,15 @@ import {
 	gatheredTextGroups,
 	gatheredTextOccurrenceIdentity
 } from "./gathered-text.js";
+import { hasSearchableSource } from "./search.js";
+import {
+	isEditorOnlyText,
+	lineTextAudience,
+	occurrenceTextAudience,
+	type TextAudienceClassification,
+	type TextGatherScope
+} from "./text-audience.js";
+import type { TextOutOfScopeReason } from "./text-audience-schema.js";
 
 /** FString matching is case insensitive; ? consumes zero or one character, * any number. */
 export function matchesUnrealWildcard(value: string, pattern: string): boolean {
@@ -101,6 +110,28 @@ function gatherRules(target: LocalizationTarget): readonly GatherRule[] | undefi
 			excludeDerived: settings.ShouldExcludeDerivedClasses ?? false
 		}
 	];
+}
+
+/**
+ * Whether the target's asset gather reads editor-only data (`ShouldGatherFromEditorOnlyData`).
+ * Unreal's GatherTextFromAssets commandlet defaults it to false. A recipe with several asset-gather
+ * steps that disagree, or no asset gather at all, is undefined: the caller cannot rely on it.
+ */
+export function localizationGathersEditorOnlyData(target: LocalizationTarget): boolean | undefined {
+	const steps = target.configs.flatMap((config) =>
+		config.steps
+			.filter((step) => step.commandletClass === "GatherTextFromAssets")
+			.map(
+				(step) =>
+					step.fields.ShouldGatherFromEditorOnlyData ??
+					config.common.ShouldGatherFromEditorOnlyData ??
+					false
+			)
+	);
+	if (steps.length) return steps.every((value) => value === steps[0]) ? steps[0] : undefined;
+	const settings = target.dashboard?.settings.GatherFromPackages;
+	if (!settings?.IsEnabled) return undefined;
+	return settings.ShouldGatherFromEditorOnlyData ?? false;
 }
 
 function pathRating(pattern: string): number {
@@ -203,6 +234,25 @@ export function localizationGatherCoverage(
 		return { status: "inside" };
 	}
 	return uncertain ? { status: "unknown", reason: uncertain } : { status: "outside" };
+}
+
+/**
+ * Whether the selected target's gather would collect the occurrence: its include and exclude
+ * paths, then `ShouldGatherFromEditorOnlyData` for editor text. Lines that are out of scope are
+ * reported as such rather than "Not gathered yet".
+ */
+export function textGatherScope(
+	target: LocalizationTarget | undefined,
+	occurrence: TextOccurrence,
+	classification: TextAudienceClassification
+): TextGatherScope {
+	if (!target) return { status: "no_target" };
+	const coverage = localizationGatherCoverage(target, occurrence);
+	if (coverage.status === "outside")
+		return { status: "out_of_scope", reason: "outside_gather_paths" };
+	if (isEditorOnlyText(classification) && localizationGathersEditorOnlyData(target) === false)
+		return { status: "out_of_scope", reason: "editor_only_data_not_gathered" };
+	return coverage.status === "inside" ? { status: "in_scope" } : { status: "unknown" };
 }
 
 /** A unit has one gathered identity only when all its occurrences agree. */
@@ -343,8 +393,11 @@ export function joinLocalizationTarget(
 				: []
 		)
 	}));
+	// Unreal skips editor-only text when the target does not gather editor-only data.
+	const skipsEditorOnlyData = localizationGathersEditorOnlyData(target) === false;
 	const lines: LocalizationLine[] = [];
 	for (const [key, row] of rows) {
+		let outOfScope: TextOutOfScopeReason | undefined;
 		const entries = manifest.get(key) ?? [];
 		const first = entries[0];
 		const reasons: LocalizationUnknownReason[] = [];
@@ -370,13 +423,26 @@ export function joinLocalizationTarget(
 			const coverage = occurrences.map((occurrence) =>
 				localizationGatherCoverage(target, occurrence)
 			);
-			if (coverage.every((item) => item.status === "outside"))
+			if (coverage.every((item) => item.status === "outside")) {
 				structural.push("outside_target");
-			else if (!coverage.some((item) => item.status === "inside")) {
+				outOfScope = "outside_gather_paths";
+			} else if (!coverage.some((item) => item.status === "inside")) {
 				for (const item of coverage)
 					if (item.status === "unknown") reasons.push(item.reason);
-			} else if (!first && evidence.manifest.status === "read" && row.identity)
-				structural.push("not_gathered");
+			} else if (!first && evidence.manifest.status === "read" && row.identity) {
+				// Not gathered because the gather skips editor-only data, not because it is stale.
+				if (
+					skipsEditorOnlyData &&
+					occurrences.every(
+						(occurrence, index) =>
+							coverage[index]!.status === "outside" ||
+							isEditorOnlyText(occurrenceTextAudience(occurrence))
+					)
+				) {
+					structural.push("outside_target");
+					outOfScope = "editor_only_data_not_gathered";
+				} else structural.push("not_gathered");
+			}
 			if (first && sources.length === 1 && sources[0] !== first.source.Text)
 				structural.push("changed_since_gather");
 			// A global identity match does not prove that the manifest's original package still has it.
@@ -508,7 +574,17 @@ export function joinLocalizationTarget(
 			identity: row.identity,
 			source,
 			manifest: entries,
-			cultures
+			cultures,
+			audience: lineTextAudience(
+				row.units
+					.filter(hasSearchableSource)
+					.flatMap((unit) =>
+						unit.occurrences.map(
+							(occurrence) => occurrenceTextAudience(occurrence).audience
+						)
+					)
+			),
+			...(outOfScope === undefined ? undefined : { outOfScope })
 		});
 	}
 	return {

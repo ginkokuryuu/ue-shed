@@ -4,7 +4,7 @@
 //! hold no text. The package's gatherable text table lists the localizable text it contributes, so
 //! text coverage is complete when every runtime entry in that table was decoded.
 
-use std::collections::BTreeSet;
+use std::collections::{BTreeMap, BTreeSet};
 
 use uasset_parser::Package;
 use uasset_parser::gatherable_text::{
@@ -42,6 +42,64 @@ impl DecodedTextKeys {
         self.0
             .contains(&(namespace.to_owned(), key.to_owned(), source.to_owned()))
     }
+}
+
+/// Whether Unreal saved each gathered text as editor-only, keyed like [`DecodedTextKeys`].
+///
+/// The gather table has one site per key that uses a namespace/source pair, each with Unreal's own
+/// editor-only bit (`FGatherableTextData::SourceSiteContexts[].IsEditorOnly`). A gather that skips
+/// editor-only data still collects text with at least one runtime site, so text is editor-only only
+/// when every site with its namespace, key and source is.
+#[derive(Clone, Debug, Default, Eq, PartialEq)]
+pub struct GatherSiteAudience(BTreeMap<(String, String, String), bool>);
+
+impl GatherSiteAudience {
+    #[must_use]
+    pub fn from_entries(entries: &[GatherableText]) -> Self {
+        let mut sites = BTreeMap::new();
+        for entry in entries {
+            for site in &entry.sites {
+                sites
+                    .entry((
+                        entry.namespace.clone(),
+                        site.key.clone(),
+                        entry.source.clone(),
+                    ))
+                    .and_modify(|editor_only: &mut bool| *editor_only &= site.is_editor_only)
+                    .or_insert(site.is_editor_only);
+            }
+        }
+        Self(sites)
+    }
+
+    /// The editor-only bit for decoded keyed text, or `None` when the table has no site for it.
+    ///
+    /// `string_table_entry` keeps a String Table's authored namespace verbatim; a serialized
+    /// `FText` namespace loses its package marker once, as in [`DecodedTextKeys::record`].
+    #[must_use]
+    pub fn editor_only(
+        &self,
+        namespace: &str,
+        key: &str,
+        source: &str,
+        string_table_entry: bool,
+    ) -> Option<bool> {
+        let namespace = if string_table_entry {
+            namespace
+        } else {
+            strip_package_namespace(namespace)
+        };
+        self.0
+            .get(&(namespace.to_owned(), key.to_owned(), source.to_owned()))
+            .copied()
+    }
+}
+
+/// A package's gather table: coverage of its runtime sites and each text's editor-only bit.
+#[derive(Clone, Debug, Default, Eq, PartialEq)]
+pub struct GatherTable {
+    pub coverage: GatherCoverage,
+    pub audience: GatherSiteAudience,
 }
 
 /// Missing sites kept per package, matching the coverage gap sample bound.
@@ -83,10 +141,32 @@ pub fn gather_coverage(
     path: &str,
     decoded: &DecodedTextKeys,
 ) -> Result<Option<GatherCoverage>, PackageError> {
+    Ok(gather_table(source, package, path, decoded)?.map(|table| table.coverage))
+}
+
+/// [`gather_coverage`], plus each gathered text's editor-only bit.
+///
+/// The bits are trusted under the same rule as coverage: only where Unreal's own gather would read
+/// the table.
+///
+/// # Errors
+///
+/// Returns an error if the package's gatherable text table cannot be read.
+pub fn gather_table(
+    source: &[u8],
+    package: &Package,
+    path: &str,
+    decoded: &DecodedTextKeys,
+) -> Result<Option<GatherTable>, PackageError> {
     if !gather_reads_table(package, path) {
         return Ok(None);
     }
-    Ok(read_gatherable_text(source, &package.summary)?.map(|entries| compare(entries, decoded)))
+    Ok(
+        read_gatherable_text(source, &package.summary)?.map(|entries| GatherTable {
+            audience: GatherSiteAudience::from_entries(&entries),
+            coverage: compare(entries, decoded),
+        }),
+    )
 }
 
 fn compare(entries: Vec<GatherableText>, decoded: &DecodedTextKeys) -> GatherCoverage {
@@ -118,7 +198,7 @@ fn compare(entries: Vec<GatherableText>, decoded: &DecodedTextKeys) -> GatherCov
 mod tests {
     use uasset_parser::gatherable_text::{GatherableText, GatherableTextSite};
 
-    use super::{DecodedTextKeys, compare};
+    use super::{DecodedTextKeys, GatherSiteAudience, compare};
     use crate::projection::{TextEditCapability, TextIdentity, TextLocation, TextOccurrence};
 
     fn entry(namespace: &str, source: &str, key: &str) -> GatherableText {
@@ -232,5 +312,81 @@ mod tests {
             })
             .collect();
         assert_eq!(samples, [("UI", "K", "Delete")]);
+    }
+
+    fn site(key: &str, is_editor_only: bool) -> GatherableTextSite {
+        GatherableTextSite {
+            key: key.to_owned(),
+            site_description: format!("/Game/UI.UI:{key}"),
+            is_editor_only,
+            is_optional: false,
+        }
+    }
+
+    fn text(namespace: &str, source: &str, sites: Vec<GatherableTextSite>) -> GatherableText {
+        GatherableText {
+            namespace: namespace.to_owned(),
+            source: source.to_owned(),
+            sites,
+        }
+    }
+
+    /// Each text takes Unreal's editor-only bit. Text with any runtime site is runtime: a gather
+    /// that skips editor-only data still collects it from that site.
+    #[test]
+    fn gathered_text_takes_its_sites_editor_only_bit() {
+        let audience = GatherSiteAudience::from_entries(&[
+            text(
+                "UI",
+                "Health",
+                vec![site("Tooltip", true), site("Label", false)],
+            ),
+            text("UI", "Shown", vec![site("Copy", true), site("Copy", false)]),
+            text("UI", "Hidden", vec![site("Copy", true), site("Copy", true)]),
+        ]);
+        assert_eq!(
+            audience.editor_only("UI", "Tooltip", "Health", false),
+            Some(true)
+        );
+        assert_eq!(
+            audience.editor_only("UI", "Label", "Health", false),
+            Some(false)
+        );
+        assert_eq!(
+            audience.editor_only("UI", "Copy", "Shown", false),
+            Some(false)
+        );
+        assert_eq!(
+            audience.editor_only("UI", "Copy", "Hidden", false),
+            Some(true)
+        );
+        // Another source under the same key is separate text the table does not list.
+        assert_eq!(audience.editor_only("UI", "Label", "Mana", false), None);
+        assert_eq!(
+            audience.editor_only("Other", "Label", "Health", false),
+            None
+        );
+    }
+
+    /// The FText's package marker is stripped once; a String Table's namespace is compared as is.
+    #[test]
+    fn site_bits_match_namespaces_like_coverage() {
+        let audience = GatherSiteAudience::from_entries(&[text(
+            "Menu [Legacy]",
+            "Quit",
+            vec![site("Quit", true)],
+        )]);
+        assert_eq!(
+            audience.editor_only("Menu [Legacy] [8D4F2A61B0C9E7F3]", "Quit", "Quit", false),
+            Some(true)
+        );
+        assert_eq!(
+            audience.editor_only("Menu [Legacy]", "Quit", "Quit", true),
+            Some(true)
+        );
+        assert_eq!(
+            audience.editor_only("Menu [Legacy]", "Quit", "Quit", false),
+            None
+        );
     }
 }

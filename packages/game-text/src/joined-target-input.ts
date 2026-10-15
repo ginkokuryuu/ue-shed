@@ -149,7 +149,8 @@ export const occurrenceFields = [
 	"row",
 	"identity",
 	"location",
-	"editable"
+	"editable",
+	"audience"
 ] as const;
 export interface JoinPackages {
 	readonly names: readonly string[];
