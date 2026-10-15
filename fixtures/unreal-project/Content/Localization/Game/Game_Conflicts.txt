@@ -1,0 +1,12 @@
+Fixture.GameTextProblems.Widgets - ObjectiveTitle 
+	/Game/Fixture/GameTextProblems/WBP_FixtureObjective_Copy.WBP_FixtureObjective_Copy_C:WidgetTree.Title.Text - "Reach the old lighthouse" 
+	/Game/Fixture/GameTextProblems/WBP_FixtureObjective.WBP_FixtureObjective_C:WidgetTree.Title.Text - "Reach the lighthouse" 
+
+Fixture.GameTextProblems.Quests - QuestIntro 
+	/Game/Fixture/GameTextProblems/DT_FixtureQuestLog.DT_FixtureQuestLog.IntroRetold.DisplayName - "Find the old lighthouse keeper" 
+	/Game/Fixture/GameTextProblems/DT_FixtureQuestLog.DT_FixtureQuestLog.Intro.DisplayName - "Find the lighthouse keeper" 
+
+Fixture.GameTextProblems.Menu - Resume 
+	/Game/Fixture/GameTextProblems/ST_FixtureMenuA.ST_FixtureMenuA - "Resume" 
+	/Game/Fixture/GameTextProblems/ST_FixtureMenuB.ST_FixtureMenuB - "Resume game" 
+

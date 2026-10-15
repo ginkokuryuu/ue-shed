@@ -1,0 +1,324 @@
+﻿# Game German translation.
+# Fill out your copyright notice in the Description page of Project Settings.
+# 
+msgid ""
+msgstr ""
+"Project-Id-Version: Game\n"
+"POT-Creation-Date: 2026-10-15 10:40\n"
+"PO-Revision-Date: 2026-10-15 10:40\n"
+"Language-Team: \n"
+"Language: de\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Plural-Forms: nplurals=2; plural=(n != 1);\n"
+
+#. Key:	RewardLabel
+#. SourceLocation:	/Game/Fixture/GameTextProblems/DA_FixturePartlyRead.DA_FixturePartlyRead.Reward.Label
+#: /Game/Fixture/GameTextProblems/DA_FixturePartlyRead.DA_FixturePartlyRead.Reward.Label
+msgctxt "Fixture.GameTextProblems.Rewards,RewardLabel"
+msgid "A flask of lamp oil"
+msgstr ""
+
+#. Key:	RewardTitle
+#. SourceLocation:	/Game/Fixture/GameTextProblems/DA_FixturePartlyRead.DA_FixturePartlyRead.Title
+#: /Game/Fixture/GameTextProblems/DA_FixturePartlyRead.DA_FixturePartlyRead.Title
+msgctxt "Fixture.GameTextProblems.Rewards,RewardTitle"
+msgid "Reward"
+msgstr ""
+
+#. Key:	Compass
+#. SourceLocation:	/Game/Fixture/GameTextProblems/DT_FixtureItems.DT_FixtureItems.Compass.DisplayName
+#: /Game/Fixture/GameTextProblems/DT_FixtureItems.DT_FixtureItems.Compass.DisplayName
+msgctxt "Fixture.GameTextProblems.Items,Compass"
+msgid "Old compass"
+msgstr "Alter Kompass"
+
+#. Key:	Lantern
+#. SourceLocation:	/Game/Fixture/GameTextProblems/DT_FixtureItems.DT_FixtureItems.Lantern.DisplayName
+#: /Game/Fixture/GameTextProblems/DT_FixtureItems.DT_FixtureItems.Lantern.DisplayName
+msgctxt "Fixture.GameTextProblems.Items,Lantern"
+msgid "Brass lantern"
+msgstr "Messinglaterne"
+
+#. Key:	Moonstone
+#. SourceLocation:	/Game/Fixture/GameTextProblems/DT_FixtureItems.DT_FixtureItems.Moonstone.DisplayName
+#: /Game/Fixture/GameTextProblems/DT_FixtureItems.DT_FixtureItems.Moonstone.DisplayName
+msgctxt "Fixture.GameTextProblems.Items,Moonstone"
+msgid "Moonstone relic"
+msgstr "Mondsteinrelikt"
+
+#. Key:	Price
+#. SourceLocation:	/Game/Fixture/GameTextProblems/DT_FixtureItems.DT_FixtureItems.Price.DisplayName
+#: /Game/Fixture/GameTextProblems/DT_FixtureItems.DT_FixtureItems.Price.DisplayName
+msgctxt "Fixture.GameTextProblems.Items,Price"
+msgid "1,000"
+msgstr ""
+
+#. Key:	Rope
+#. SourceLocation:	/Game/Fixture/GameTextProblems/DT_FixtureItems.DT_FixtureItems.Rope.DisplayName
+#: /Game/Fixture/GameTextProblems/DT_FixtureItems.DT_FixtureItems.Rope.DisplayName
+msgctxt "Fixture.GameTextProblems.Items,Rope"
+msgid "Coil of rope"
+msgstr "Seilrolle"
+
+#. Key:	Timer
+#. SourceLocation:	/Game/Fixture/GameTextProblems/DT_FixtureItems.DT_FixtureItems.Timer.DisplayName
+#: /Game/Fixture/GameTextProblems/DT_FixtureItems.DT_FixtureItems.Timer.DisplayName
+msgctxt "Fixture.GameTextProblems.Items,Timer"
+msgid "00:30"
+msgstr ""
+
+#. Key:	QuestIntro
+#. SourceLocation:	/Game/Fixture/GameTextProblems/DT_FixtureQuestLog.DT_FixtureQuestLog.Intro.DisplayName
+#: /Game/Fixture/GameTextProblems/DT_FixtureQuestLog.DT_FixtureQuestLog.Intro.DisplayName
+msgctxt "Fixture.GameTextProblems.Quests,QuestIntro"
+msgid "Find the lighthouse keeper"
+msgstr ""
+
+#. Key:	QuestOutro
+#. SourceLocation:	/Game/Fixture/GameTextProblems/DT_FixtureQuestLog.DT_FixtureQuestLog.Outro.DisplayName
+#: /Game/Fixture/GameTextProblems/DT_FixtureQuestLog.DT_FixtureQuestLog.Outro.DisplayName
+msgctxt "Fixture.GameTextProblems.Quests,QuestOutro"
+msgid "The lamp burns again"
+msgstr "Die Lampe brennt wieder"
+
+#. Key:	Options
+#. SourceLocation:	/Game/Fixture/GameTextProblems/ST_FixtureMenuA.ST_FixtureMenuA
+#: /Game/Fixture/GameTextProblems/ST_FixtureMenuA.ST_FixtureMenuA
+msgctxt "Fixture.GameTextProblems.Menu,Options"
+msgid "Options"
+msgstr "Optionen"
+
+#. Key:	Quit
+#. SourceLocation:	/Game/Fixture/GameTextProblems/ST_FixtureMenuB.ST_FixtureMenuB
+#: /Game/Fixture/GameTextProblems/ST_FixtureMenuB.ST_FixtureMenuB
+msgctxt "Fixture.GameTextProblems.Menu,Quit"
+msgid "Quit to title"
+msgstr "Zum Titelbildschirm"
+
+#. Key:	Resume
+#. SourceLocation:	/Game/Fixture/GameTextProblems/ST_FixtureMenuB.ST_FixtureMenuB
+#: /Game/Fixture/GameTextProblems/ST_FixtureMenuB.ST_FixtureMenuB
+msgctxt "Fixture.GameTextProblems.Menu,Resume"
+msgid "Resume game"
+msgstr "Fortsetzen"
+
+#. Key:	AddedArgument
+#. SourceLocation:	/Game/Fixture/GameTextProblems/ST_FixtureProblemLines.ST_FixtureProblemLines
+#: /Game/Fixture/GameTextProblems/ST_FixtureProblemLines.ST_FixtureProblemLines
+msgctxt "Fixture.GameTextProblems.Lines,AddedArgument"
+msgid "Welcome back"
+msgstr "Willkommen zurück"
+
+#. Key:	AddedTag
+#. SourceLocation:	/Game/Fixture/GameTextProblems/ST_FixtureProblemLines.ST_FixtureProblemLines
+#: /Game/Fixture/GameTextProblems/ST_FixtureProblemLines.ST_FixtureProblemLines
+msgctxt "Fixture.GameTextProblems.Lines,AddedTag"
+msgid "Plain words here"
+msgstr "<b>Schlichte</> Worte"
+
+#. Key:	BackFromInventory
+#. SourceLocation:	/Game/Fixture/GameTextProblems/ST_FixtureProblemLines.ST_FixtureProblemLines
+#: /Game/Fixture/GameTextProblems/ST_FixtureProblemLines.ST_FixtureProblemLines
+msgctxt "Fixture.GameTextProblems.Lines,BackFromInventory"
+msgid "Back"
+msgstr "Abbrechen"
+
+#. Key:	BackFromMap
+#. SourceLocation:	/Game/Fixture/GameTextProblems/ST_FixtureProblemLines.ST_FixtureProblemLines
+#: /Game/Fixture/GameTextProblems/ST_FixtureProblemLines.ST_FixtureProblemLines
+msgctxt "Fixture.GameTextProblems.Lines,BackFromMap"
+msgid "Back"
+msgstr "Zurück"
+
+#. Key:	BackFromShop
+#. SourceLocation:	/Game/Fixture/GameTextProblems/ST_FixtureProblemLines.ST_FixtureProblemLines
+#: /Game/Fixture/GameTextProblems/ST_FixtureProblemLines.ST_FixtureProblemLines
+msgctxt "Fixture.GameTextProblems.Lines,BackFromShop"
+msgid "Back"
+msgstr "Zurück"
+
+#. Key:	Beacon
+#. SourceLocation:	/Game/Fixture/GameTextProblems/ST_FixtureProblemLines.ST_FixtureProblemLines
+#: /Game/Fixture/GameTextProblems/ST_FixtureProblemLines.ST_FixtureProblemLines
+msgctxt "Fixture.GameTextProblems.Lines,Beacon"
+msgid "Light both beacons"
+msgstr ""
+
+#. Key:	Clean
+#. SourceLocation:	/Game/Fixture/GameTextProblems/ST_FixtureProblemLines.ST_FixtureProblemLines
+#. InfoMetaData:	"Comment" : "Button on the title screen."
+#: /Game/Fixture/GameTextProblems/ST_FixtureProblemLines.ST_FixtureProblemLines
+msgctxt "Fixture.GameTextProblems.Lines,Clean"
+msgid "Start the voyage"
+msgstr "Brich zur Reise auf"
+
+#. Key:	DroppedArgument
+#. SourceLocation:	/Game/Fixture/GameTextProblems/ST_FixtureProblemLines.ST_FixtureProblemLines
+#: /Game/Fixture/GameTextProblems/ST_FixtureProblemLines.ST_FixtureProblemLines
+msgctxt "Fixture.GameTextProblems.Lines,DroppedArgument"
+msgid "{Name} found {Count} coins"
+msgstr "{Name} hat Münzen gefunden"
+
+#. Key:	EdgeWhitespace
+#. SourceLocation:	/Game/Fixture/GameTextProblems/ST_FixtureProblemLines.ST_FixtureProblemLines
+#: /Game/Fixture/GameTextProblems/ST_FixtureProblemLines.ST_FixtureProblemLines
+msgctxt "Fixture.GameTextProblems.Lines,EdgeWhitespace"
+msgid "Ready"
+msgstr " Bereit"
+
+#. Key:	EmptyTranslation
+#. SourceLocation:	/Game/Fixture/GameTextProblems/ST_FixtureProblemLines.ST_FixtureProblemLines
+#: /Game/Fixture/GameTextProblems/ST_FixtureProblemLines.ST_FixtureProblemLines
+msgctxt "Fixture.GameTextProblems.Lines,EmptyTranslation"
+msgid "Open the map"
+msgstr ""
+
+#. Key:	LengthOutlier
+#. SourceLocation:	/Game/Fixture/GameTextProblems/ST_FixtureProblemLines.ST_FixtureProblemLines
+#: /Game/Fixture/GameTextProblems/ST_FixtureProblemLines.ST_FixtureProblemLines
+msgctxt "Fixture.GameTextProblems.Lines,LengthOutlier"
+msgid "Collect the lantern before nightfall"
+msgstr "Laterne"
+
+#. Key:	LineBreak
+#. SourceLocation:	/Game/Fixture/GameTextProblems/ST_FixtureProblemLines.ST_FixtureProblemLines
+#: /Game/Fixture/GameTextProblems/ST_FixtureProblemLines.ST_FixtureProblemLines
+msgctxt "Fixture.GameTextProblems.Lines,LineBreak"
+msgid "First line\nSecond line"
+msgstr "Erste Zeile\nZweite Zeile"
+
+#. Key:	MarkupUnclosedTag
+#. SourceLocation:	/Game/Fixture/GameTextProblems/ST_FixtureProblemLines.ST_FixtureProblemLines
+#: /Game/Fixture/GameTextProblems/ST_FixtureProblemLines.ST_FixtureProblemLines
+msgctxt "Fixture.GameTextProblems.Lines,MarkupUnclosedTag"
+msgid "Unclosed <Em>tag"
+msgstr ""
+
+#. Key:	MarkupXmlClosing
+#. SourceLocation:	/Game/Fixture/GameTextProblems/ST_FixtureProblemLines.ST_FixtureProblemLines
+#: /Game/Fixture/GameTextProblems/ST_FixtureProblemLines.ST_FixtureProblemLines
+msgctxt "Fixture.GameTextProblems.Lines,MarkupXmlClosing"
+msgid "<b>Bold</b> move"
+msgstr ""
+
+#. Key:	MissingTag
+#. SourceLocation:	/Game/Fixture/GameTextProblems/ST_FixtureProblemLines.ST_FixtureProblemLines
+#: /Game/Fixture/GameTextProblems/ST_FixtureProblemLines.ST_FixtureProblemLines
+msgctxt "Fixture.GameTextProblems.Lines,MissingTag"
+msgid "Press <Key>E</> to open"
+msgstr "Drücke E zum Öffnen"
+
+#. Key:	OptionalArgument
+#. SourceLocation:	/Game/Fixture/GameTextProblems/ST_FixtureProblemLines.ST_FixtureProblemLines
+#: /Game/Fixture/GameTextProblems/ST_FixtureProblemLines.ST_FixtureProblemLines
+msgctxt "Fixture.GameTextProblems.Lines,OptionalArgument"
+msgid "Thanks for the help!"
+msgstr "Danke für die Hilfe, {ParentLabel}!"
+
+#. Key:	OptionalTag
+#. SourceLocation:	/Game/Fixture/GameTextProblems/ST_FixtureProblemLines.ST_FixtureProblemLines
+#: /Game/Fixture/GameTextProblems/ST_FixtureProblemLines.ST_FixtureProblemLines
+msgctxt "Fixture.GameTextProblems.Lines,OptionalTag"
+msgid "Hello, traveller"
+msgstr "Hallo, Reisender"
+
+#. Key:	PlaceholderLorem
+#. SourceLocation:	/Game/Fixture/GameTextProblems/ST_FixtureProblemLines.ST_FixtureProblemLines
+#: /Game/Fixture/GameTextProblems/ST_FixtureProblemLines.ST_FixtureProblemLines
+msgctxt "Fixture.GameTextProblems.Lines,PlaceholderLorem"
+msgid "Lorem ipsum dolor sit amet"
+msgstr ""
+
+#. Key:	PlaceholderPending
+#. SourceLocation:	/Game/Fixture/GameTextProblems/ST_FixtureProblemLines.ST_FixtureProblemLines
+#: /Game/Fixture/GameTextProblems/ST_FixtureProblemLines.ST_FixtureProblemLines
+msgctxt "Fixture.GameTextProblems.Lines,PlaceholderPending"
+msgid "(To be translated)"
+msgstr ""
+
+#. Key:	PlaceholderTodo
+#. SourceLocation:	/Game/Fixture/GameTextProblems/ST_FixtureProblemLines.ST_FixtureProblemLines
+#: /Game/Fixture/GameTextProblems/ST_FixtureProblemLines.ST_FixtureProblemLines
+msgctxt "Fixture.GameTextProblems.Lines,PlaceholderTodo"
+msgid "TODO: final quest name"
+msgstr ""
+
+#. Key:	PlaceholderTranslation
+#. SourceLocation:	/Game/Fixture/GameTextProblems/ST_FixtureProblemLines.ST_FixtureProblemLines
+#: /Game/Fixture/GameTextProblems/ST_FixtureProblemLines.ST_FixtureProblemLines
+msgctxt "Fixture.GameTextProblems.Lines,PlaceholderTranslation"
+msgid "Return to the harbour"
+msgstr "Kehre zum Hafen zurück"
+
+#. Key:	PoEscape
+#. SourceLocation:	/Game/Fixture/GameTextProblems/ST_FixtureProblemLines.ST_FixtureProblemLines
+#: /Game/Fixture/GameTextProblems/ST_FixtureProblemLines.ST_FixtureProblemLines
+msgctxt "Fixture.GameTextProblems.Lines,PoEscape"
+msgid "Two lines of help"
+msgstr ""
+
+#. Key:	RenamedArgument
+#. SourceLocation:	/Game/Fixture/GameTextProblems/ST_FixtureProblemLines.ST_FixtureProblemLines
+#: /Game/Fixture/GameTextProblems/ST_FixtureProblemLines.ST_FixtureProblemLines
+msgctxt "Fixture.GameTextProblems.Lines,RenamedArgument"
+msgid "Buy {Quantity} apples"
+msgstr "Kaufe {Quantity} Äpfel"
+
+#. Key:	Separator
+#. SourceLocation:	/Game/Fixture/GameTextProblems/ST_FixtureProblemLines.ST_FixtureProblemLines
+#: /Game/Fixture/GameTextProblems/ST_FixtureProblemLines.ST_FixtureProblemLines
+msgctxt "Fixture.GameTextProblems.Lines,Separator"
+msgid "Yes // No"
+msgstr "Ja Nein"
+
+#. Key:	SourceDoubleSpace
+#. SourceLocation:	/Game/Fixture/GameTextProblems/ST_FixtureProblemLines.ST_FixtureProblemLines
+#: /Game/Fixture/GameTextProblems/ST_FixtureProblemLines.ST_FixtureProblemLines
+msgctxt "Fixture.GameTextProblems.Lines,SourceDoubleSpace"
+msgid "Double  space"
+msgstr ""
+
+#. Key:	SourceEdgeSpace
+#. SourceLocation:	/Game/Fixture/GameTextProblems/ST_FixtureProblemLines.ST_FixtureProblemLines
+#: /Game/Fixture/GameTextProblems/ST_FixtureProblemLines.ST_FixtureProblemLines
+msgctxt "Fixture.GameTextProblems.Lines,SourceEdgeSpace"
+msgid " Leading space"
+msgstr ""
+
+#. Key:	TagCase
+#. SourceLocation:	/Game/Fixture/GameTextProblems/ST_FixtureProblemLines.ST_FixtureProblemLines
+#: /Game/Fixture/GameTextProblems/ST_FixtureProblemLines.ST_FixtureProblemLines
+msgctxt "Fixture.GameTextProblems.Lines,TagCase"
+msgid "<Italic>Note</>"
+msgstr "<Italic>Hinweis</>"
+
+#. Key:	TornPage
+#. SourceLocation:	/Game/Fixture/GameTextProblems/ST_FixtureProblemLines.ST_FixtureProblemLines
+#: /Game/Fixture/GameTextProblems/ST_FixtureProblemLines.ST_FixtureProblemLines
+msgctxt "Fixture.GameTextProblems.Lines,TornPage"
+msgid "Torn page\nA scrap of the map"
+msgstr ""
+
+#. Key:	UnbalancedTag
+#. SourceLocation:	/Game/Fixture/GameTextProblems/ST_FixtureProblemLines.ST_FixtureProblemLines
+#: /Game/Fixture/GameTextProblems/ST_FixtureProblemLines.ST_FixtureProblemLines
+msgctxt "Fixture.GameTextProblems.Lines,UnbalancedTag"
+msgid "<Em>Continue</>"
+msgstr "<Em>Weiter"
+
+#. Key:	ObjectiveTitle
+#. SourceLocation:	/Game/Fixture/GameTextProblems/WBP_FixtureObjective.WBP_FixtureObjective_C:WidgetTree.Title.Text
+#: /Game/Fixture/GameTextProblems/WBP_FixtureObjective.WBP_FixtureObjective_C:WidgetTree.Title.Text
+msgctxt "Fixture.GameTextProblems.Widgets,ObjectiveTitle"
+msgid "Reach the lighthouse"
+msgstr ""
+
+#. Key:	StaleHint
+#. SourceLocation:	/Game/Fixture/GameTextProblems/WBP_FixtureStaleCompile.WBP_FixtureStaleCompile_C:WidgetTree.Hint.Text
+#: /Game/Fixture/GameTextProblems/WBP_FixtureStaleCompile.WBP_FixtureStaleCompile_C:WidgetTree.Hint.Text
+msgctxt "Fixture.GameTextProblems.Widgets,StaleHint"
+msgid "Press any button"
+msgstr ""
+

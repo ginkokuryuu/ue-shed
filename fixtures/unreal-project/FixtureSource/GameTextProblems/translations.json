@@ -1,0 +1,131 @@
+{
+	"translations": {
+		"de": {
+			"Fixture.GameTextProblems.Lines": {
+				"Clean": "Brich zur Reise auf",
+				"RenamedArgument": "Kaufe {Quantity} Äpfel",
+				"DroppedArgument": "{Name} hat Münzen gefunden",
+				"AddedArgument": "Willkommen zurück",
+				"OptionalArgument": "Danke für die Hilfe, {ParentLabel}!",
+				"MissingTag": "Drücke E zum Öffnen",
+				"AddedTag": "<b>Schlichte</> Worte",
+				"TagCase": "<Italic>Hinweis</>",
+				"OptionalTag": "Hallo, Reisender",
+				"UnbalancedTag": "<Em>Weiter",
+				"Separator": "Ja Nein",
+				"EdgeWhitespace": " Bereit",
+				"LineBreak": "Erste Zeile\nZweite Zeile",
+				"LengthOutlier": "Laterne",
+				"PlaceholderTranslation": "Kehre zum Hafen zurück",
+				"EmptyTranslation": "",
+				"PoEscape": "Zwei Zeilen\\nHilfe",
+				"Beacon": "Entzünde das Leuchtfeuer",
+				"TornPage": "Zerrissene Seite\r\nEin Stück der Karte",
+				"BackFromMap": "Zurück",
+				"BackFromShop": "Zurück",
+				"BackFromInventory": "Abbrechen"
+			},
+			"Fixture.GameTextProblems.Menu": {
+				"Resume": "Fortsetzen",
+				"Options": "Optionen",
+				"Quit": "Zum Titelbildschirm"
+			},
+			"Fixture.GameTextProblems.Items": {
+				"Lantern": "Messinglaterne",
+				"Rope": "Seilrolle",
+				"Compass": "Alter Kompass",
+				"Moonstone": "Mondsteinrelikt"
+			},
+			"Fixture.GameTextProblems.Quests": {
+				"QuestOutro": "Die Lampe brennt wieder"
+			}
+		},
+		"fr": {
+			"Fixture.GameTextProblems.Lines": {
+				"Clean": "Commencer le voyage",
+				"RenamedArgument": "Acheter {Quantité} pommes",
+				"DroppedArgument": "{Name} a trouvé {Count} pièces",
+				"AddedArgument": "Bon retour",
+				"OptionalArgument": "Merci pour l'aide !",
+				"MissingTag": "Appuie sur <Key>E</> pour ouvrir",
+				"AddedTag": "Des mots simples",
+				"TagCase": "<italic>Remarque</>",
+				"OptionalTag": "Bonjour, <npcname>voyageur</>",
+				"UnbalancedTag": "<Em>Continuer</>",
+				"Separator": "Oui // Non",
+				"EdgeWhitespace": "Prêt",
+				"LineBreak": "Première ligne Seconde ligne",
+				"LengthOutlier": "Récupère la lanterne avant la nuit",
+				"PlaceholderTranslation": "skip",
+				"EmptyTranslation": "Ouvrir la carte",
+				"PoEscape": "Deux lignes d'aide",
+				"Beacon": "Allume le phare",
+				"TornPage": "Page déchirée\r\nUn morceau de la carte",
+				"BackFromMap": "Retour",
+				"BackFromShop": "Retour",
+				"BackFromInventory": "Retour"
+			},
+			"Fixture.GameTextProblems.Menu": {
+				"Resume": "Reprendre",
+				"Options": "Options",
+				"Quit": "Retour au titre"
+			},
+			"Fixture.GameTextProblems.Items": {
+				"Lantern": "Lanterne en laiton",
+				"Rope": "Rouleau de corde",
+				"Compass": "Vieille boussole",
+				"Moonstone": "Relique de pierre de lune"
+			},
+			"Fixture.GameTextProblems.Quests": {
+				"QuestOutro": "La lampe brûle à nouveau"
+			}
+		},
+		"ja": {
+			"Fixture.GameTextProblems.Lines": {
+				"Clean": "航海を始める",
+				"RenamedArgument": "リンゴを{Quantity}個買う",
+				"DroppedArgument": "{Name}はコインを{Count}枚見つけた",
+				"AddedArgument": "おかえりなさい、{PlayerName}",
+				"OptionalArgument": "手伝ってくれてありがとう！",
+				"MissingTag": "<Key>E</>で開く",
+				"AddedTag": "シンプルな言葉",
+				"TagCase": "<Italic>メモ</>",
+				"OptionalTag": "こんにちは、旅人さん",
+				"UnbalancedTag": "<Em>続ける</>",
+				"Separator": "はい // いいえ",
+				"EdgeWhitespace": "準備完了",
+				"LineBreak": "一行目\n二行目",
+				"LengthOutlier": "日暮れ前にランタンを集めよう",
+				"PlaceholderTranslation": "港に戻る",
+				"EmptyTranslation": "地図を開く",
+				"PoEscape": "二行のヘルプ",
+				"Beacon": "のろしを灯せ",
+				"TornPage": "破れたページ\r\n地図の切れ端",
+				"BackFromMap": "戻る",
+				"BackFromShop": "戻る",
+				"BackFromInventory": "戻る"
+			},
+			"Fixture.GameTextProblems.Menu": {
+				"Resume": "再開",
+				"Options": "オプション",
+				"Quit": "タイトルへ"
+			},
+			"Fixture.GameTextProblems.Items": {
+				"Lantern": "真鍮のランタン",
+				"Rope": "ロープの束",
+				"Compass": "古いコンパス",
+				"Moonstone": "月長石の遺物"
+			},
+			"Fixture.GameTextProblems.Quests": {
+				"QuestOutro": "灯火が再び灯る"
+			}
+		}
+	},
+	"poOverrides": {
+		"de": {
+			"Fixture.GameTextProblems.Lines": {
+				"PoEscape": ""
+			}
+		}
+	}
+}

@@ -1,0 +1,417 @@
+{
+	"schemaVersion": 1,
+	"target": "Game",
+	"rules": "FixtureSource/GameTextProblems/rules.json",
+	"findings": [
+		{
+			"case": "renamed-argument",
+			"check": "format_argument_renamed",
+			"culture": "fr",
+			"namespace": "Fixture.GameTextProblems.Lines",
+			"key": "RenamedArgument",
+			"rules": "both"
+		},
+		{
+			"case": "dropped-argument",
+			"check": "format_arguments",
+			"culture": "de",
+			"namespace": "Fixture.GameTextProblems.Lines",
+			"key": "DroppedArgument",
+			"rules": "both"
+		},
+		{
+			"case": "added-argument",
+			"check": "format_arguments",
+			"culture": "ja",
+			"namespace": "Fixture.GameTextProblems.Lines",
+			"key": "AddedArgument",
+			"rules": "both"
+		},
+		{
+			"case": "optional-argument",
+			"check": "format_arguments",
+			"culture": "de",
+			"namespace": "Fixture.GameTextProblems.Lines",
+			"key": "OptionalArgument",
+			"rules": "without"
+		},
+		{
+			"case": "missing-tag",
+			"check": "rich_text_tags",
+			"culture": "de",
+			"namespace": "Fixture.GameTextProblems.Lines",
+			"key": "MissingTag",
+			"rules": "both"
+		},
+		{
+			"case": "added-tag",
+			"check": "rich_text_tags_added",
+			"culture": "de",
+			"namespace": "Fixture.GameTextProblems.Lines",
+			"key": "AddedTag",
+			"rules": "both"
+		},
+		{
+			"case": "tag-case",
+			"check": "rich_text_tag_case",
+			"culture": "fr",
+			"namespace": "Fixture.GameTextProblems.Lines",
+			"key": "TagCase",
+			"rules": "both"
+		},
+		{
+			"case": "optional-tag",
+			"check": "rich_text_tags_added",
+			"culture": "fr",
+			"namespace": "Fixture.GameTextProblems.Lines",
+			"key": "OptionalTag",
+			"rules": "without"
+		},
+		{
+			"case": "unbalanced-tag",
+			"check": "rich_text",
+			"culture": "de",
+			"namespace": "Fixture.GameTextProblems.Lines",
+			"key": "UnbalancedTag",
+			"rules": "both"
+		},
+		{
+			"case": "segment-separator",
+			"check": "segment_separator",
+			"culture": "de",
+			"namespace": "Fixture.GameTextProblems.Lines",
+			"key": "Separator",
+			"rules": "with"
+		},
+		{
+			"case": "edge-whitespace",
+			"check": "whitespace",
+			"culture": "de",
+			"namespace": "Fixture.GameTextProblems.Lines",
+			"key": "EdgeWhitespace",
+			"rules": "both"
+		},
+		{
+			"case": "line-break",
+			"check": "line_breaks",
+			"culture": "fr",
+			"namespace": "Fixture.GameTextProblems.Lines",
+			"key": "LineBreak",
+			"rules": "both"
+		},
+		{
+			"case": "length-outlier",
+			"check": "length_outlier",
+			"culture": "de",
+			"namespace": "Fixture.GameTextProblems.Lines",
+			"key": "LengthOutlier",
+			"rules": "both"
+		},
+		{
+			"case": "placeholder-translation",
+			"check": "placeholder_translation",
+			"culture": "fr",
+			"namespace": "Fixture.GameTextProblems.Lines",
+			"key": "PlaceholderTranslation",
+			"rules": "both"
+		},
+		{
+			"case": "empty-translation",
+			"check": "empty_translation",
+			"culture": "de",
+			"namespace": "Fixture.GameTextProblems.Lines",
+			"key": "EmptyTranslation",
+			"rules": "both"
+		},
+		{
+			"case": "po-escape",
+			"check": "po_escape_safety",
+			"culture": "de",
+			"namespace": "Fixture.GameTextProblems.Lines",
+			"key": "PoEscape",
+			"rules": "both"
+		},
+		{
+			"case": "outdated-translation",
+			"check": "outdated_translation",
+			"culture": "de",
+			"namespace": "Fixture.GameTextProblems.Lines",
+			"key": "Beacon",
+			"rules": "both"
+		},
+		{
+			"case": "outdated-translation",
+			"check": "outdated_translation",
+			"culture": "fr",
+			"namespace": "Fixture.GameTextProblems.Lines",
+			"key": "Beacon",
+			"rules": "both"
+		},
+		{
+			"case": "outdated-translation",
+			"check": "outdated_translation",
+			"culture": "ja",
+			"namespace": "Fixture.GameTextProblems.Lines",
+			"key": "Beacon",
+			"rules": "both"
+		},
+		{
+			"case": "line-endings-changed",
+			"check": "source_line_endings_changed",
+			"culture": "de",
+			"namespace": "Fixture.GameTextProblems.Lines",
+			"key": "TornPage",
+			"rules": "both"
+		},
+		{
+			"case": "line-endings-changed",
+			"check": "source_line_endings_changed",
+			"culture": "fr",
+			"namespace": "Fixture.GameTextProblems.Lines",
+			"key": "TornPage",
+			"rules": "both"
+		},
+		{
+			"case": "line-endings-changed",
+			"check": "source_line_endings_changed",
+			"culture": "ja",
+			"namespace": "Fixture.GameTextProblems.Lines",
+			"key": "TornPage",
+			"rules": "both"
+		},
+		{
+			"case": "inconsistent-translation",
+			"check": "inconsistent_translation",
+			"culture": "de",
+			"namespace": "Fixture.GameTextProblems.Lines",
+			"key": "BackFromInventory",
+			"rules": "both"
+		},
+		{
+			"case": "duplicate-source",
+			"check": "duplicate_source",
+			"culture": "en",
+			"namespace": "Fixture.GameTextProblems.Lines",
+			"key": "BackFromInventory",
+			"rules": "both"
+		},
+		{
+			"case": "placeholder-todo",
+			"check": "placeholder_text",
+			"culture": "en",
+			"namespace": "Fixture.GameTextProblems.Lines",
+			"key": "PlaceholderTodo",
+			"rules": "both"
+		},
+		{
+			"case": "placeholder-lorem",
+			"check": "placeholder_text",
+			"culture": "en",
+			"namespace": "Fixture.GameTextProblems.Lines",
+			"key": "PlaceholderLorem",
+			"rules": "both"
+		},
+		{
+			"case": "placeholder-pending",
+			"check": "placeholder_text",
+			"culture": "en",
+			"namespace": "Fixture.GameTextProblems.Lines",
+			"key": "PlaceholderPending",
+			"rules": "both"
+		},
+		{
+			"case": "markup-unclosed-tag",
+			"check": "source_markup",
+			"culture": "en",
+			"namespace": "Fixture.GameTextProblems.Lines",
+			"key": "MarkupUnclosedTag",
+			"rules": "both"
+		},
+		{
+			"case": "markup-xml-closing",
+			"check": "source_markup",
+			"culture": "en",
+			"namespace": "Fixture.GameTextProblems.Lines",
+			"key": "MarkupXmlClosing",
+			"rules": "both"
+		},
+		{
+			"case": "source-edge-space",
+			"check": "source_whitespace",
+			"culture": "en",
+			"namespace": "Fixture.GameTextProblems.Lines",
+			"key": "SourceEdgeSpace",
+			"rules": "both"
+		},
+		{
+			"case": "source-double-space",
+			"check": "source_whitespace",
+			"culture": "en",
+			"namespace": "Fixture.GameTextProblems.Lines",
+			"key": "SourceDoubleSpace",
+			"rules": "both"
+		},
+		{
+			"case": "number-only-price",
+			"check": "number_only_text",
+			"culture": "en",
+			"namespace": "Fixture.GameTextProblems.Items",
+			"key": "Price",
+			"rules": "both"
+		},
+		{
+			"case": "number-only-timer",
+			"check": "number_only_text",
+			"culture": "en",
+			"namespace": "Fixture.GameTextProblems.Items",
+			"key": "Timer",
+			"rules": "both"
+		},
+		{
+			"case": "culture-invariant-row",
+			"check": "culture_invariant_text",
+			"culture": "en",
+			"namespace": null,
+			"key": null,
+			"source": "Rusty cellar key",
+			"rules": "both"
+		},
+		{
+			"case": "string-table-key-collision",
+			"check": "string_table_key_collision",
+			"culture": "en",
+			"namespace": "Fixture.GameTextProblems.Menu",
+			"key": "Resume",
+			"rules": "both"
+		},
+		{
+			"case": "translation-budget",
+			"check": "localization_character_budget",
+			"culture": "de",
+			"namespace": "Fixture.GameTextProblems.Menu",
+			"key": "Quit",
+			"rules": "with"
+		}
+	],
+	"sourceRules": [
+		{
+			"case": "menu-budget",
+			"ruleId": "menu.limit",
+			"source": "Resume game"
+		},
+		{
+			"case": "menu-budget",
+			"ruleId": "menu.limit",
+			"source": "Quit to title"
+		},
+		{
+			"case": "forbidden-term",
+			"ruleId": "lines.terms",
+			"source": "TODO: final quest name"
+		}
+	],
+	"signals": {
+		"conflictingSource": [
+			{
+				"namespace": "Fixture.GameTextProblems.Menu",
+				"key": "Resume"
+			},
+			{
+				"namespace": "Fixture.GameTextProblems.Quests",
+				"key": "QuestIntro"
+			},
+			{
+				"namespace": "Fixture.GameTextProblems.Widgets",
+				"key": "ObjectiveTitle"
+			}
+		],
+		"compiledCopyDiffers": [
+			{
+				"objectPath": "/Game/Fixture/GameTextProblems/WBP_FixtureStaleCompile.WBP_FixtureStaleCompile.WidgetTree.Hint",
+				"source": "Press any button",
+				"compiledSource": "Press any key"
+			}
+		],
+		"outOfScope": [
+			{
+				"namespace": "Fixture.GameTextProblems.Widgets",
+				"key": "ObjectiveCategory",
+				"reason": "editor_only_data_not_gathered",
+				"audience": "editor"
+			},
+			{
+				"namespace": "Fixture.GameTextProblems.Excluded",
+				"key": "OverlayLabel",
+				"reason": "outside_gather_paths",
+				"audience": "player"
+			}
+		],
+		"keyChanged": [
+			{
+				"from": {
+					"namespace": "Fixture.GameTextProblems.Items",
+					"key": "Moonstone"
+				},
+				"to": {
+					"namespace": "Fixture.GameTextProblems.Items",
+					"key": "MoonstoneRelic"
+				}
+			}
+		],
+		"partlyRead": ["Content/Fixture/GameTextProblems/DA_FixturePartlyRead.uasset"]
+	},
+	"counts": {
+		"without": {
+			"culture_invariant_text": 1,
+			"duplicate_source": 2,
+			"empty_translation": 50,
+			"format_argument_renamed": 1,
+			"format_arguments": 3,
+			"inconsistent_translation": 1,
+			"length_outlier": 1,
+			"line_breaks": 1,
+			"missing_translator_notes": 44,
+			"number_only_text": 2,
+			"outdated_translation": 3,
+			"placeholder_text": 3,
+			"placeholder_translation": 1,
+			"po_escape_safety": 1,
+			"rich_text": 1,
+			"rich_text_tag_case": 1,
+			"rich_text_tags": 1,
+			"rich_text_tags_added": 2,
+			"source_line_endings_changed": 3,
+			"source_markup": 2,
+			"source_whitespace": 2,
+			"string_table_key_collision": 1,
+			"whitespace": 5
+		},
+		"with": {
+			"culture_invariant_text": 1,
+			"duplicate_source": 2,
+			"empty_translation": 50,
+			"format_argument_renamed": 1,
+			"format_arguments": 2,
+			"inconsistent_translation": 1,
+			"length_outlier": 1,
+			"line_breaks": 1,
+			"localization_character_budget": 1,
+			"missing_translator_notes": 44,
+			"number_only_text": 2,
+			"outdated_translation": 3,
+			"placeholder_text": 3,
+			"placeholder_translation": 1,
+			"po_escape_safety": 1,
+			"rich_text": 1,
+			"rich_text_tag_case": 1,
+			"rich_text_tags": 1,
+			"rich_text_tags_added": 1,
+			"segment_separator": 1,
+			"source_line_endings_changed": 3,
+			"source_markup": 2,
+			"source_whitespace": 2,
+			"string_table_key_collision": 1,
+			"whitespace": 5
+		}
+	}
+}

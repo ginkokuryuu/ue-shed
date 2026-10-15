@@ -31,7 +31,14 @@ describe("Unreal target settings and recipes", () => {
 		const parsed = success(parseDashboardTargets(editor));
 		expect(parsed.diagnostics).toEqual([]);
 		expect(parsed.targets.map((target) => target.name)).toEqual(["Game", "FixtureGame"]);
-		expect(parsed.targets[0]?.nativeCulture).toBeNull();
+		// The stock Game target holds the Game Text problem cases.
+		const game = parsed.targets[0];
+		expect([game?.nativeCulture, game?.cultures]).toEqual(["en", ["en", "de", "fr", "ja"]]);
+		expect(game?.settings.GatherFromPackages.ExcludePathWildcards).toEqual([
+			{ Pattern: "Content/L10N/*" },
+			{ Pattern: "Content/Fixture/GameTextProblems/Excluded/*" }
+		]);
+		expect(game?.settings.GatherFromPackages.ShouldGatherFromEditorOnlyData).toBe(false);
 		const target = parsed.targets[1];
 		expect(target?.nativeCulture).toBe("en");
 		expect(target?.cultures).toEqual(["en", "de", "fr"]);

@@ -22,6 +22,7 @@
 		"fixture:apply": "node scripts/unreal-fixture.ts apply",
 		"fixture:generate": "node scripts/unreal-fixture.ts generate",
 		"fixture:generate-localization": "node scripts/unreal-fixture.ts localization",
+		"fixture:generate-game-text-problems": "node scripts/unreal-fixture.ts game-text-problems",
 		"fixture:generate-localization-427": "node scripts/unreal-fixture.ts localization-427",
 		"fixture:verify-localization": "node scripts/unreal-fixture.ts localization-verify",
 		"fixture:generate-legacy": "node scripts/generate-legacy-unreal-fixtures.ts",

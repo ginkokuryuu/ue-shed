@@ -93,6 +93,79 @@ header dates.
 The smaller [4.27 fixture](../unreal-427-localization/README.md) proves source-only gather output
 formats without a compiled module.
 
+## Game Text problem cases
+
+The project's stock `Game` target holds one deliberate instance of each problem Game Text reports,
+including the ones studio projects rarely contain. Native culture `en`, foreign `de`, `fr` and
+`ja`. It gathers `Content/Fixture/GameTextProblems/*`, excludes its `Excluded/` folder and does not
+gather editor-only data. Assets are under `/Game/Fixture/GameTextProblems/`; String Table
+namespaces start with `Fixture.GameTextProblems.`.
+
+`pnpm fixture:generate-game-text-problems` builds the editor and runs every stage in a fresh
+process, in this order: create the assets and target settings, gather, import translations
+(`FixtureSource/GameTextProblems/translations.json`), export, compile, change two sources, gather,
+export, compile, reports, blank one German PO entry, then re-key one DataTable row. It resets only
+`Content/Localization/Game` and `Content/Fixture/GameTextProblems`. Commit the generated packages,
+`Config/Localization/Game_*.ini`, `Config/DefaultEditor.ini` and the target's files with the inputs.
+The committed baseline is generated with UE 5.7.
+
+[`expected-cases.json`](FixtureSource/GameTextProblems/expected-cases.json) is the authored intent:
+each case's finding or signal, and the finding count per check with and without
+[`rules.json`](FixtureSource/GameTextProblems/rules.json). The Game Text integration test
+`game-text-problems-fixture.integration.test.ts` checks it in memory and through the index, and
+compares Unreal's own `Game_Conflicts.txt`.
+
+| Case                         | Expected                                                    | Asset · key                                         |
+| ---------------------------- | ----------------------------------------------------------- | --------------------------------------------------- |
+| Clean line                   | no finding (control)                                        | `ST_FixtureProblemLines` · `Clean`                  |
+| Renamed argument             | `format_argument_renamed` (fr `{Quantité}`)                 | `ST_FixtureProblemLines` · `RenamedArgument`        |
+| Dropped argument             | `format_arguments` (de)                                     | `ST_FixtureProblemLines` · `DroppedArgument`        |
+| Added argument               | `format_arguments` (ja `{PlayerName}`)                      | `ST_FixtureProblemLines` · `AddedArgument`          |
+| Optional argument            | `format_arguments` (de) only without `optionalArguments`    | `ST_FixtureProblemLines` · `OptionalArgument`       |
+| Dropped tag                  | `rich_text_tags` (de)                                       | `ST_FixtureProblemLines` · `MissingTag`             |
+| Added tag                    | `rich_text_tags_added` (de)                                 | `ST_FixtureProblemLines` · `AddedTag`               |
+| Tag case changed             | `rich_text_tag_case` (fr)                                   | `ST_FixtureProblemLines` · `TagCase`                |
+| Optional tag                 | `rich_text_tags_added` (fr) only without `optionalTags`     | `ST_FixtureProblemLines` · `OptionalTag`            |
+| Unbalanced tag               | `rich_text` (de)                                            | `ST_FixtureProblemLines` · `UnbalancedTag`          |
+| `//` separator dropped       | `segment_separator` (de) with `segmentSeparator`            | `ST_FixtureProblemLines` · `Separator`              |
+| Edge whitespace              | `whitespace` (de)                                           | `ST_FixtureProblemLines` · `EdgeWhitespace`         |
+| Interior line break dropped  | `line_breaks` (fr)                                          | `ST_FixtureProblemLines` · `LineBreak`              |
+| Much shorter translation     | `length_outlier` (de)                                       | `ST_FixtureProblemLines` · `LengthOutlier`          |
+| "skip" as translation        | `placeholder_translation` (fr)                              | `ST_FixtureProblemLines` · `PlaceholderTranslation` |
+| Empty translation            | `empty_translation` (de)                                    | `ST_FixtureProblemLines` · `EmptyTranslation`       |
+| Literal `\n` in translation  | `po_escape_safety` (de; its PO entry is blank)              | `ST_FixtureProblemLines` · `PoEscape`               |
+| Source changed after import  | `outdated_translation` (de, fr, ja)                         | `ST_FixtureProblemLines` · `Beacon`                 |
+| Only CRLF changed to LF      | `source_line_endings_changed` (de, fr, ja)                  | `ST_FixtureProblemLines` · `TornPage`               |
+| "Back" under three keys      | `duplicate_source`; `inconsistent_translation` (de, 2 to 1) | `ST_FixtureProblemLines` · `BackFrom*`              |
+| TODO, Lorem ipsum, TBT       | `placeholder_text`; TODO is also the rule file's term       | `ST_FixtureProblemLines` · `Placeholder*`           |
+| Unclosed tag, `</b>` closing | `source_markup`                                             | `ST_FixtureProblemLines` · `Markup*`                |
+| Leading and doubled spaces   | `source_whitespace`                                         | `ST_FixtureProblemLines` · `Source*Space`           |
+| "1,000", "00:30"             | `number_only_text`                                          | `DT_FixtureItems` · `Price`, `Timer`                |
+| Invariant cell, keyed column | `culture_invariant_text`                                    | `DT_FixtureItems` · row `CellarKey`                 |
+| Row re-keyed after gather    | Key changed: `Moonstone` → `MoonstoneRelic`                 | `DT_FixtureItems` · row `Moonstone`                 |
+| Two tables, one namespace    | `string_table_key_collision`; Same key, different text      | `ST_FixtureMenuA`/`ST_FixtureMenuB` · `Resume`      |
+| Menu labels over budget      | `character_budget`; de `localization_character_budget`      | `ST_FixtureMenuB` · `Resume`, `Quit`                |
+| Copied row, edited           | Same key, different text                                    | `DT_FixtureQuestLog` · `QuestIntro`                 |
+| Duplicated widget, edited    | Same key, different text                                    | `WBP_FixtureObjective`(`_Copy`) · `ObjectiveTitle`  |
+| Edited, not compiled         | Blueprint not compiled since edit (`compiled_copy_differs`) | `WBP_FixtureStaleCompile` · `StaleHint`             |
+| Variable category            | Editor text; out of scope, editor-only data not gathered    | `WBP_FixtureObjective` · `ObjectiveCategory`        |
+| Excluded folder              | Out of scope, outside gather paths                          | `Excluded/DA_FixtureExcluded` · `OverlayLabel`      |
+| Self-serializing struct      | Partly read package: gathered text the reader cannot decode | `DA_FixturePartlyRead` · `RewardLabel`              |
+
+The duplicated widget is built twice with the same keys, as Unreal's duplicate leaves them. The
+stale widget is compiled, its designer text block is edited, and it is saved without compiling.
+The pinned counts also hold what the cases imply: every untranslated foreign line and every
+outdated line has an empty PO `msgstr` (`empty_translation`), untranslated lines of a source with
+edge spaces report `whitespace`, and the re-keyed row shares its source with its old key
+(`duplicate_source`) until the next gather. The test reads package records, as the index does, so
+Blueprint compiled copies fold into their places.
+`DA_FixturePartlyRead` keeps text in `FUEShedFixtureNativeText`, a struct with its own serializer
+(`UEShedGameTextProblemTypes.h`, outside the parser source model's headers). Unreal's gather walks
+its properties; the reader cannot decode its bytes, so the gather table has a site it cannot find.
+`PoEscape`'s German PO entry is blanked after export because a PO file cannot carry a literal
+`\n`: Unreal's PO import turns it into a line break. Translations of `Moonstone` stay under the old
+key; the re-keyed row is not gathered.
+
 ## Large World Partition map
 
 Run `pnpm fixture:generate-world-partition` to build, generate, and verify

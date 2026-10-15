@@ -1,0 +1,62 @@
+{
+	"schemaVersion": 2,
+	"segmentSeparator": "//",
+	"optionalArguments": ["ParentLabel"],
+	"optionalTags": ["npcname"],
+	"roles": [
+		{
+			"id": "menu",
+			"scopes": [
+				{
+					"matchers": [
+						{
+							"kind": "object_path",
+							"operator": "prefix",
+							"value": "/Game/Fixture/GameTextProblems/ST_FixtureMenu"
+						}
+					]
+				}
+			]
+		},
+		{
+			"id": "lines",
+			"scopes": [
+				{
+					"matchers": [
+						{
+							"kind": "object_path",
+							"operator": "prefix",
+							"value": "/Game/Fixture/GameTextProblems/ST_FixtureProblemLines"
+						}
+					]
+				}
+			]
+		}
+	],
+	"rules": [
+		{
+			"id": "menu.limit",
+			"kind": "character_budget",
+			"role": "menu",
+			"maximumCharacters": 8,
+			"recovery": "Shorten the menu label."
+		},
+		{
+			"id": "lines.terms",
+			"kind": "terminology",
+			"role": "lines",
+			"caseSensitive": true,
+			"terms": [{ "kind": "forbidden", "term": "TODO" }],
+			"recovery": "Write the final text."
+		}
+	],
+	"localizationRules": [
+		{
+			"id": "menu.translation-limit",
+			"kind": "localization_character_budget",
+			"role": "menu",
+			"cultures": { "de": 12 },
+			"recovery": "Shorten the translation."
+		}
+	]
+}
