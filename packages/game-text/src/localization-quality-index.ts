@@ -229,6 +229,11 @@ function unitIndex(data: JoinedQueryData) {
 			return units;
 		},
 		idRow: (row: number) => idRows[row]!,
+		/** Drops the string memos; pages and focus after the scan read few lines. */
+		releaseMemos() {
+			decoded.clear();
+			gatheredKeys.clear();
+		},
 		/** Whether a kept occurrence has translator notes; as over `forLine`'s units. */
 		occurrenceNotes(line: LocalizationLine): boolean {
 			let found = false;
@@ -853,6 +858,7 @@ export const indexedLocalizationQuality = Effect.fn("GameText.localizationQualit
 		yield* Effect.yieldNow;
 	}
 	if (page.length) checkBlocks(page);
+	units.releaseMemos();
 	page = [];
 
 	const total = storedFacts.length;
