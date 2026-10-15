@@ -103,6 +103,17 @@ package marker once, a String Table entry keeps its authored namespace. A missin
 table was not read or does not list the text; it is not evidence of runtime text. The worker strips
 the field below minor 11. `text_occurrence` events are unchanged.
 
+Minor version 1.12 adds optional `blueprintClasses` to a `text_package_record`: one entry for each
+decoded object in the package whose saved `GeneratedClass` names an export of the same package
+(a Blueprint). `generatedClass` is that export; `classDefault` is the one export flagged
+`RF_ClassDefaultObject` whose class is the generated class. `SkeletonGeneratedClass` is transient,
+so `skeletonClass` is present only when the package saved a top-level export of the generated
+class's own class named `SKEL_` plus the generated class's name, with `skeletonClassDefault` its
+default object. Paths are spelled like occurrence object paths. Text saved under these exports is a
+compiled representation copy of the Blueprint's authored text; consumers can fold it into the
+authored site. The field is omitted when the package has no Blueprint, and the worker strips it
+below minor 12.
+
 Result frames use an explicit result kind. Generic inspection, authoring, scan, compact text,
 compact texture, Blueprint graph, and saved-world values each have a named schema; there is no
 untyped result field.

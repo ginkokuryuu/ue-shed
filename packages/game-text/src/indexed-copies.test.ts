@@ -1,0 +1,397 @@
+import { writeFile } from "node:fs/promises";
+import { join } from "node:path";
+import { it } from "@effect/vitest";
+import { Effect } from "effect";
+import { expect } from "vitest";
+import { LocalizationEvidence } from "@ue-shed/localization";
+import type { SavedAssetPackageTextRecord } from "@ue-shed/unreal-assets";
+import { GameTextIndexRefresh } from "./index-refresh.js";
+import { makeIndexRegressionFixture } from "./index-refresh-regressions.test-support.js";
+import { joinLocalizationTarget } from "./localization.js";
+import type { LocalizationJoin } from "./localization-schema.js";
+import { textCorpusQuery } from "./query.js";
+import { gameTextCsv } from "./csv.js";
+import type { TextCorpus, TextCorpusSearchPage, TextCorpusSearchRequest } from "./schema.js";
+
+type Occurrence = SavedAssetPackageTextRecord["occurrences"][number];
+
+// The fixture's package is Content/Text/Table.uasset, mounted at /Game/Text/Table. Here it is a
+// Widget Blueprint with the copies a compile saves, in the shapes the native reader writes them.
+const pkg = "/Game/Text/Table";
+const classes = [
+	{
+		blueprint: `${pkg}.Table`,
+		generatedClass: `${pkg}.Table_C`,
+		classDefault: `${pkg}.Default__Table_C`,
+		skeletonClass: `${pkg}.SKEL_Table_C`
+	}
+];
+const at = (
+	object: string,
+	key: string | null,
+	source: string,
+	property_path = "Text",
+	class_path = "/Script/UMG.TextBlock"
+): Occurrence => ({
+	source,
+	dev_notes: "",
+	identity:
+		key === null
+			? { status: "unresolved", reason: "culture_invariant" }
+			: { status: "resolved", namespace: "UI", key },
+	location: {
+		kind: "asset_property",
+		object_path: `${pkg}.${object}`,
+		class_path,
+		property_path
+	},
+	edit_capability: "read_only"
+});
+
+const saved: Occurrence[] = [
+	// Edited in the designer, not compiled since: the class still holds the old text.
+	at("Table_C.WidgetTree.Title", "Title", "Play"),
+	at("Table.WidgetTree.Title", "Title", "Play now"),
+	// Compiled and up to date.
+	at("Table.WidgetTree.Options", "Options", "Options"),
+	at("Table_C.WidgetTree.Options", "Options", "Options"),
+	// A UMG animation and its `_INST` copy in the generated class.
+	at(
+		"Table.FadeIn.FadeIn.MovieSceneFloatTrack_0",
+		"Opacity",
+		"Render Opacity",
+		"DisplayName",
+		"/Script/MovieSceneTracks.MovieSceneFloatTrack"
+	),
+	at(
+		"Table_C.FadeIn_INST.FadeIn.MovieSceneFloatTrack_0",
+		"Opacity",
+		"Render Opacity",
+		"DisplayName",
+		"/Script/MovieSceneTracks.MovieSceneFloatTrack"
+	),
+	// Saved only under the generated class: stays its own place.
+	at(
+		"Table_C.SimpleConstructionScript_0.SCS_Node_0",
+		"Category",
+		"Default",
+		"CategoryName",
+		"/Script/Engine.SCS_Node"
+	),
+	// Two class-default properties under one key: two places of one line.
+	at("Default__Table_C", "Tab0", "01", "ButtonText[0]", `${pkg}.Table_C`),
+	at("Default__Table_C", "Tab0", "01", "ButtonTooltipText[0]", `${pkg}.Table_C`),
+	// Culture-invariant text is a unit per place; its copy folds and is no unit of its own.
+	at("Table.WidgetTree.Version", null, "v1.2"),
+	at("Table_C.WidgetTree.Version", null, "v1.1"),
+	// The gather table calls the edited tooltip editor-only and the text the compiled class
+	// still runs runtime: the line stays player text, so the target still expects it.
+	{
+		...at("Table.WidgetTree.Hint", "Hint", "New tooltip", "ToolTipText"),
+		gather_editor_only: true
+	},
+	{
+		...at(
+			"Table_C.WidgetTree.Hint",
+			"Hint",
+			"Old tooltip",
+			"ToolTipText",
+			"/Script/UMG.Border"
+		),
+		gather_editor_only: false
+	},
+	// Compiled; only a saved skeleton class holds older text. The game shows the new text.
+	at("Table.WidgetTree.Quit", "Quit", "Quit now"),
+	at("Table_C.WidgetTree.Quit", "Quit", "Quit now"),
+	at("SKEL_Table_C.WidgetTree.Quit", "Quit", "Quit")
+];
+
+async function writeLocalization(projectRoot: string) {
+	// Gathered from the last compile: the manifest still has the old title.
+	const gathered = [
+		["Title", "Play"],
+		["Options", "Options"],
+		["Tab0", "01"]
+	] as const;
+	await writeFile(
+		join(projectRoot, "Review.manifest"),
+		JSON.stringify({
+			FormatVersion: 1,
+			Namespace: "UI",
+			Children: gathered.map(([key, source]) => ({
+				Source: { Text: source },
+				Keys: [{ Key: key, Path: `${pkg}.Table.${key}` }]
+			}))
+		})
+	);
+	for (const culture of ["en", "de"] as const) {
+		await writeFile(
+			join(projectRoot, `${culture}.archive`),
+			JSON.stringify({
+				FormatVersion: 2,
+				Namespace: "UI",
+				Children: gathered.map(([key, source]) => ({
+					Key: key,
+					Source: { Text: source },
+					Translation: { Text: culture === "en" ? source : `${source} (de)` }
+				}))
+			})
+		);
+		await writeFile(
+			join(projectRoot, `${culture}.po`),
+			gathered
+				.map(
+					([key, source]) =>
+						`msgctxt "UI,${key}"\nmsgid "${source}"\nmsgstr "${culture === "en" ? "" : `${source} (de)`}"\n`
+				)
+				.join("\n")
+		);
+	}
+}
+
+const lineFacts = (join: LocalizationJoin) =>
+	Object.fromEntries(
+		join.lines.map((line) => [
+			line.identity?.key ?? line.id,
+			[
+				line.source,
+				line.audience,
+				line.cultures
+					.map((culture) => [culture.state, ...(culture.unknownReasons ?? [])].join(","))
+					.join("|")
+			]
+		])
+	);
+
+const pageFacts = (page: TextCorpusSearchPage) => ({
+	total: page.total,
+	counts: page.counts,
+	problems: page.problems,
+	units: page.units.map((unit) => [
+		unit.id,
+		unit.source,
+		unit.occurrenceCount,
+		unit.reviewSignals,
+		unit.audience
+	]),
+	lines: page.localization?.lines.map((line) => [line.id, line.source]),
+	assets: page.facets?.assets,
+	groups: page.groups
+});
+
+const places = (corpus: TextCorpus) =>
+	corpus.units.flatMap((unit) =>
+		unit.occurrences.map((occurrence) =>
+			JSON.stringify([
+				occurrence.location.objectPath,
+				occurrence.location.kind === "asset_property"
+					? occurrence.location.propertyPath
+					: "",
+				occurrence.source,
+				occurrence.copies?.map((copy) => [copy.kind, copy.objectPath, copy.source]) ?? []
+			])
+		)
+	);
+
+it.live("folded copies agree between the index and the in-memory corpus and join", () =>
+	Effect.gen(function* () {
+		const fixture = yield* makeIndexRegressionFixture();
+		yield* Effect.promise(() => writeLocalization(fixture.projectRoot));
+		fixture.update(saved, classes);
+		yield* Effect.gen(function* () {
+			const result = yield* (yield* GameTextIndexRefresh).refresh(fixture.request);
+			const memory = fixture.raw();
+
+			// Places: one per authored site, each with the raw copies folded into it.
+			expect(places(memory).sort()).toEqual(
+				[
+					[
+						`${pkg}.Table.FadeIn.FadeIn.MovieSceneFloatTrack_0`,
+						"DisplayName",
+						"Render Opacity",
+						[
+							[
+								"instance",
+								`${pkg}.Table_C.FadeIn_INST.FadeIn.MovieSceneFloatTrack_0`,
+								"Render Opacity"
+							]
+						]
+					],
+					[
+						`${pkg}.Table.WidgetTree.Options`,
+						"Text",
+						"Options",
+						[["generated_class", `${pkg}.Table_C.WidgetTree.Options`, "Options"]]
+					],
+					[
+						`${pkg}.Table.WidgetTree.Title`,
+						"Text",
+						"Play now",
+						[["generated_class", `${pkg}.Table_C.WidgetTree.Title`, "Play"]]
+					],
+					[
+						`${pkg}.Table.WidgetTree.Version`,
+						"Text",
+						"v1.2",
+						[["generated_class", `${pkg}.Table_C.WidgetTree.Version`, "v1.1"]]
+					],
+					[
+						`${pkg}.Table_C.SimpleConstructionScript_0.SCS_Node_0`,
+						"CategoryName",
+						"Default",
+						[]
+					],
+					[`${pkg}.Default__Table_C`, "ButtonText[0]", "01", []],
+					[`${pkg}.Default__Table_C`, "ButtonTooltipText[0]", "01", []],
+					[
+						`${pkg}.Table.WidgetTree.Hint`,
+						"ToolTipText",
+						"New tooltip",
+						[["generated_class", `${pkg}.Table_C.WidgetTree.Hint`, "Old tooltip"]]
+					],
+					[
+						`${pkg}.Table.WidgetTree.Quit`,
+						"Text",
+						"Quit now",
+						[
+							["generated_class", `${pkg}.Table_C.WidgetTree.Quit`, "Quit now"],
+							["skeleton", `${pkg}.SKEL_Table_C.WidgetTree.Quit`, "Quit"]
+						]
+					]
+				]
+					.map((place) => JSON.stringify(place))
+					.sort()
+			);
+			expect(memory.coverage).toMatchObject({ textUnits: 8, textOccurrences: 9 });
+			expect(result.corpus.coverage).toEqual(memory.coverage);
+			expect(result.corpus.units).toEqual(memory.units);
+
+			// Focus through the index decodes the same copies.
+			const title = memory.units.find(
+				(unit) => unit.identity.status === "resolved" && unit.identity.key === "Title"
+			)!;
+			const { localization: _line, ...focused } = result.query.focus({
+				id: title.id,
+				pageSize: 50
+			})!;
+			expect(focused).toEqual(textCorpusQuery(memory).focus({ id: title.id, pageSize: 50 }));
+			expect(focused.unit.source).toEqual({ status: "consistent", value: "Play now" });
+			expect(focused.unit.reviewSignals).toContain("compiled_copy_differs");
+			expect(focused.unit.reviewSignals).not.toContain("conflicting");
+
+			// Lines: the authored text is the line's source; no key has two texts.
+			const evidence = yield* Effect.gen(function* () {
+				return yield* (yield* LocalizationEvidence).read({
+					projectRoot: fixture.projectRoot,
+					target: fixture.target
+				});
+			}).pipe(Effect.provide(fixture.evidence));
+			const memoryJoin = joinLocalizationTarget(memory, evidence);
+			const lines = lineFacts(memoryJoin);
+			expect(JSON.stringify(lines)).not.toContain("conflicting_source");
+			expect(lines.Title?.[0]).toBe("Play now");
+			// A runtime compiled copy keeps an editor-only place's line player text and in scope.
+			expect(lines.Hint?.slice(0, 2)).toEqual(["New tooltip", "player"]);
+			expect(lines.Hint?.[2]).not.toContain("outside_target");
+			const hint = memoryJoin.lines.find((line) => line.identity?.key === "Hint")!;
+			expect(hint.outOfScope).toBeUndefined();
+			// A skeleton-only difference is not stale runtime text.
+			const quit = memory.units.find(
+				(unit) => unit.identity.status === "resolved" && unit.identity.key === "Quit"
+			)!;
+			expect(
+				result.query.focus({ id: quit.id, pageSize: 1 })!.unit.reviewSignals
+			).not.toContain("compiled_copy_differs");
+			expect(lineFacts(result.localizationJoin)).toEqual(lines);
+
+			// Search, lenses, problems, facets and groups agree, without a target and with one.
+			const inMemory = textCorpusQuery(memory, undefined, memoryJoin);
+			const requests: TextCorpusSearchRequest[] = [];
+			for (const scoped of [false, true])
+				for (const query of ["", "play", "render"])
+					for (const lens of [undefined, "conflicting", "shared"] as const)
+						for (const group of [undefined, "problem", "asset"] as const)
+							requests.push({
+								query,
+								capability: "all",
+								pageSize: 50,
+								facets: { assets: true },
+								...(scoped
+									? { localization: { target: fixture.target.name } }
+									: undefined),
+								...(lens === undefined ? undefined : { lens }),
+								...(group === undefined ? undefined : { group })
+							});
+			for (const request of requests) {
+				const indexed = yield* result.search(request);
+				expect(pageFacts(indexed), JSON.stringify(request)).toEqual(
+					pageFacts(inMemory.search(request))
+				);
+			}
+			const all = yield* result.search({ query: "", capability: "all", pageSize: 50 });
+			expect(all.counts.conflicting).toBe(0);
+			expect(
+				all.units
+					.filter((unit) => unit.reviewSignals.includes("compiled_copy_differs"))
+					.map((unit) => unit.source)
+					.sort((a, b) => JSON.stringify(a).localeCompare(JSON.stringify(b)))
+			).toEqual([
+				{ status: "consistent", value: "New tooltip" },
+				{ status: "consistent", value: "Play now" },
+				{ status: "consistent", value: "v1.2" }
+			]);
+			// The compiled copy's old text is provenance, not a searchable place.
+			const old = yield* result.search({ query: "v1.1", capability: "all", pageSize: 50 });
+			expect(old.total).toBe(0);
+
+			// Exported lines and rows list places, not copies.
+			const exported = {
+				query: "",
+				capability: "all",
+				localization: { target: fixture.target.name }
+			} as const;
+			expect(result.query.localizationLines(exported).map((line) => line.id)).toEqual(
+				inMemory.localizationLines(exported).map((line) => line.id)
+			);
+			expect(gameTextCsv(memory).split("\r\n").filter(Boolean)).toHaveLength(1 + 9);
+
+			// Edit the authored title again, still without compiling: only place text changes, so
+			// the join refreshes incrementally and keeps the signal. Then compile: the copy catches
+			// up and the signal clears.
+			const differing = (page: TextCorpusSearchPage) =>
+				page.units
+					.filter((unit) => unit.reviewSignals.includes("compiled_copy_differs"))
+					.map((unit) => (unit.source.status === "consistent" ? unit.source.value : ""))
+					.sort();
+			const edit = (title: string, compiled: string) =>
+				saved.map((item) =>
+					item.location.object_path === `${pkg}.Table.WidgetTree.Title`
+						? { ...item, source: title }
+						: item.location.object_path === `${pkg}.Table_C.WidgetTree.Title`
+							? { ...item, source: compiled }
+							: item
+				);
+			const request = { query: "", capability: "all", pageSize: 50 } as const;
+			// Incremental joins take edits between texts of 40 characters or more.
+			const long = "Press any button to begin a new adventure";
+			const longer = "Press any button to begin your next adventure";
+			for (const [title, compiled, expected, strategy] of [
+				[long, "Play", ["New tooltip", long, "v1.2"], "full"],
+				[longer, "Play", ["New tooltip", longer, "v1.2"], "incremental"],
+				// The copy's text and the place's copy flags change: a full join.
+				[longer, longer, ["New tooltip", "v1.2"], "full"]
+			] as const) {
+				fixture.update(edit(title, compiled), classes);
+				const next = yield* (yield* GameTextIndexRefresh).refresh(fixture.request);
+				expect(next.join).toMatchObject({ strategy });
+				const nextMemory = fixture.raw();
+				expect(next.corpus.units).toEqual(nextMemory.units);
+				const page = yield* next.search(request);
+				expect(differing(page)).toEqual(expected);
+				expect(pageFacts(page)).toEqual(
+					pageFacts(textCorpusQuery(nextMemory).search(request))
+				);
+			}
+		}).pipe(Effect.provide(fixture.layer()));
+	}).pipe(Effect.scoped)
+);

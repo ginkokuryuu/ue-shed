@@ -502,3 +502,20 @@ base, preventing an overlay from overwriting the base it references.
 Count baselines are cached per target/culture selection, so Workbench target selection cannot
 evict another culture's baseline and make otherwise equivalent facet/search requests recount
 the entire target. These caches are bounded Effect caches owned by the query generation.
+
+`package-text-v5` stores each package record with its Blueprint representation copies folded into
+their authored sites ([Compiled Blueprint copies](../products/game-text.md#compiled-blueprint-copies)).
+Occurrence rows are places only, so joins, units, counts and facets read them unchanged. Each
+place has `occurrence.copies`: bit 0 when it has copies, bit 1 when a copy holds other text, and
+the copy count from bit 2. Copies are sparse rows in their places' order (`copy.object`,
+`copy.kind`, `copy.source`, `copy.class`). `copy.kind` holds the kind in bits 0–1, bit 2 when the
+copy has its place's text (its source is then empty), bits 3–4 for the gather table's runtime or
+editor-only bit for the copy's own text, and bit 5 when it has its place's class (its class is then
+empty), so stored records keep each copy's audience evidence through refreshes. `package.blueprints` keeps the reader's `blueprintClasses` as JSON
+(empty without a Blueprint), so a decoded shard round-trips to the folded record. A place's
+`occurrence.audience` is the rollup over the place and its copies, each classified from its own
+evidence. Bit 1 of `occurrence.copies` counts only copies the game runs (generated class, its
+animation instances, class default), never a skeleton. `joined-v14` reads
+`occurrence.copies` and sets query signal bit 6 (`compiled_copy_differs`). A change to a copy's
+text or to a place's copy flags is a package-structure change, so the join rebuilds in full; edits
+to the place's own text keep the incremental path and its signal bits.

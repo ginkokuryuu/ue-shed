@@ -61,6 +61,7 @@ import type {
 import { GameTextLocalizationError } from "./localization-schema.js";
 import { localizationManifestNotes } from "./localization.js";
 import { gatheredTextGroups, localizationLineUnits } from "./gathered-text.js";
+import { hasDifferingCopy } from "./text-copies.js";
 import {
 	localizationQueryPage,
 	matchesLocalizationLine,
@@ -73,6 +74,13 @@ function normalizedTerms(query: string): readonly string[] {
 }
 
 const LONG_SOURCE_THRESHOLD = 40;
+
+/** Signals with a review count; read-only and compiled-copy evidence are shown, not counted. */
+function isCountedSignal(
+	signal: TextReviewSignal
+): signal is Exclude<TextReviewSignal, "evidence_only" | "compiled_copy_differs"> {
+	return signal !== "evidence_only" && signal !== "compiled_copy_differs";
+}
 
 function sourceValue(unit: TextUnit): string {
 	return unit.source.status === "consistent" ? unit.source.value : unit.source.values.join(" ");
@@ -107,6 +115,7 @@ function searchResult(
 	if (groups.some((group) => group.sources.size > 1)) reviewSignals.push("conflicting");
 	if (unit.occurrences.every((occurrence) => occurrence.editCapability === "read_only"))
 		reviewSignals.push("evidence_only");
+	if (unit.occurrences.some(hasDifferingCopy)) reviewSignals.push("compiled_copy_differs");
 	return {
 		characterCount: value.length,
 		contexts,
@@ -321,7 +330,7 @@ export function textCorpusQuery(
 			matched.push(entry);
 			counts.all++;
 			for (const signal of presentation.reviewSignals) {
-				if (signal !== "evidence_only") counts[signal]++;
+				if (isCountedSignal(signal)) counts[signal]++;
 			}
 		}
 		return { matched, counts };
@@ -646,7 +655,7 @@ export function textCorpusQuery(
 					for (const signal of new Set(
 						entries.flatMap((entry) => entry.presentation.reviewSignals)
 					))
-						if (signal !== "evidence_only") counts[signal]++;
+						if (isCountedSignal(signal)) counts[signal]++;
 				}
 				return {
 					counts,

@@ -42,8 +42,11 @@ export type PackageTextInventoryEntry = typeof PackageTextInventoryEntry.Type;
  * v4: occurrences keep the reader's gather-table editor-only bit and their audience
  * (`text-audience.ts`). The audience policy table and matcher version are part of every shard key,
  * so a policy or matcher change re-encodes each shard from its stored evidence without reading
- * packages again. */
-export const PACKAGE_TEXT_FORMAT = "package-text-v4";
+ * packages again.
+ * v5: records keep the reader's Blueprint classes (uasset-io 1.12) and are stored with their
+ * representation copies folded into the authored sites (`representation-copies.ts`); copies keep
+ * their raw paths and text in `copy.*` columns. */
+export const PACKAGE_TEXT_FORMAT = "package-text-v5";
 export const PACKAGE_TEXT_SHARDS = 256;
 export function packageTextShard(path: string) {
 	let hash = 2166136261;

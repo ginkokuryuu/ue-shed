@@ -8210,6 +8210,28 @@
 			"required": ["namespace", "key", "source", "site"],
 			"additionalProperties": false
 		},
+		"SavedAssetBlueprintClasses": {
+			"type": "object",
+			"properties": {
+				"blueprint": {
+					"type": "string"
+				},
+				"generatedClass": {
+					"type": "string"
+				},
+				"classDefault": {
+					"type": "string"
+				},
+				"skeletonClass": {
+					"type": "string"
+				},
+				"skeletonClassDefault": {
+					"type": "string"
+				}
+			},
+			"required": ["blueprint", "generatedClass"],
+			"additionalProperties": false
+		},
 		"SavedAssetGatherCoverage": {
 			"type": "object",
 			"properties": {
@@ -8301,6 +8323,12 @@
 				},
 				"gatherCoverage": {
 					"$ref": "#/$defs/SavedAssetGatherCoverage"
+				},
+				"blueprintClasses": {
+					"type": "array",
+					"items": {
+						"$ref": "#/$defs/SavedAssetBlueprintClasses"
+					}
 				}
 			},
 			"required": [

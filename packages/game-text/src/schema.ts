@@ -57,6 +57,31 @@ export const TextLocation = Schema.Union([
 ]);
 export type TextLocation = Schema.Schema.Type<typeof TextLocation>;
 
+/**
+ * Which compiled representation of a Blueprint a copy was saved in: the generated class (`X_C`),
+ * a UMG animation instance in it (`Name_INST`), the class default object (`Default__X_C`), or a
+ * saved skeleton class (`SKEL_X_C`) or its default object.
+ */
+export const TextCopyKind = Schema.Literals([
+	"generated_class",
+	"class_default",
+	"skeleton",
+	"instance"
+]);
+export type TextCopyKind = Schema.Schema.Type<typeof TextCopyKind>;
+
+/**
+ * A representation copy folded into its place: the raw export path Unreal saved it under, which
+ * kind of copy it is, and the text it holds. The game runs the compiled class, so a copy whose
+ * text differs from the place's is what players see until the Blueprint is compiled again.
+ */
+export const TextRepresentationCopy = Schema.Struct({
+	objectPath: Schema.String,
+	kind: TextCopyKind,
+	source: Schema.String
+});
+export type TextRepresentationCopy = Schema.Schema.Type<typeof TextRepresentationCopy>;
+
 export const TextOccurrence = Schema.Struct({
 	devNotes: Schema.String.pipe(Schema.withDecodingDefaultKey(Effect.succeed(""))),
 	id: TextOccurrenceId,
@@ -71,7 +96,13 @@ export const TextOccurrence = Schema.Struct({
 	 */
 	audience: Schema.optionalKey(TextAudience),
 	audienceReason: Schema.optionalKey(TextAudienceReason),
-	audienceRule: Schema.optionalKey(Schema.String.check(Schema.isMaxLength(64)))
+	audienceRule: Schema.optionalKey(Schema.String.check(Schema.isMaxLength(64))),
+	/**
+	 * Copies of this place that a Blueprint's compile saved under its generated class, default
+	 * object or skeleton class, folded in from the reader's `blueprintClasses`. The place's own
+	 * `source` is the authored text; each copy keeps its raw path and text.
+	 */
+	copies: Schema.optionalKey(Schema.Array(TextRepresentationCopy).check(Schema.isMinLength(1)))
 });
 export type TextOccurrence = Schema.Schema.Type<typeof TextOccurrence>;
 
@@ -239,7 +270,13 @@ export const TextReviewSignal = Schema.Literals([
 	"long",
 	"unresolved",
 	"conflicting",
-	"evidence_only"
+	"evidence_only",
+	/**
+	 * A Blueprint was edited since it last compiled: a copy the game runs (the generated class or
+	 * class default) of one of the line's places holds other text, which is what the game shows.
+	 * A skeleton copy never raises it. Each place lists its copies.
+	 */
+	"compiled_copy_differs"
 ]);
 export type TextReviewSignal = Schema.Schema.Type<typeof TextReviewSignal>;
 

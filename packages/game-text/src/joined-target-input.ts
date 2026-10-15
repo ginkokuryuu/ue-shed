@@ -150,7 +150,9 @@ export const occurrenceFields = [
 	"identity",
 	"location",
 	"editable",
-	"audience"
+	"audience",
+	// OCCURRENCE_HAS_COPIES | OCCURRENCE_COPY_DIFFERS from the package layer.
+	"copies"
 ] as const;
 export interface JoinPackages {
 	readonly names: readonly string[];

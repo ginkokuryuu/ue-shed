@@ -1704,3 +1704,80 @@ first call then repeat):
 
 First calls load columns and the source cache; repeats are in the range of the existing facets.
 No 10× run was made; Unreal was not run.
+
+### Follow-up: compiled Blueprint copies
+
+A Blueprint's compile saves its authored subobjects again in the same package: a widget's
+`WBP_X.WBP_X.WidgetTree.Title` also as `WBP_X.WBP_X_C.WidgetTree.Title`, UMG animations as
+`WBP_X_C.FadeIn_INST`, and sometimes default objects and a skeleton class. Each widget text was two
+places, and a Blueprint edited but not compiled read as "Same key, different text". See
+[compiled Blueprint copies](../docs/products/game-text.md#compiled-blueprint-copies).
+
+- **Reader, uasset-io 1.12.** Package text records carry `blueprintClasses`: each decoded object
+  whose saved `GeneratedClass` names an export of the package, that export's single
+  `RF_ClassDefaultObject` export, and a saved skeleton class (the top-level export of the generated
+  class's own class named `SKEL_` plus its name; `SkeletonGeneratedClass` is transient) and its
+  default object. Stripped below minor 12; package text extraction requests 12.
+- **Fold.** `foldRepresentationCopies` (pure, idempotent, per record) folds a copy into the
+  occurrence at its authored site with the same location kind, property path and key. Same-key
+  properties of one object stay two places; a copy under another key stays a place; sites saved
+  only under the class stay places at their own path. The place keeps the authored text as the
+  line's source and lists its copies (`objectPath`, `kind`, `source`). A differing copy the game
+  runs (generated class, its animation instances, class default) sets the
+  `compiled_copy_differs` review signal instead of a conflicting source; a skeleton-only
+  difference is listed but raises nothing. The in-memory corpus folds
+  each record as it is read; the index folds in `packageTextColumns`, so cold, warm and worker
+  paths agree.
+- **Package text, `package-text-v5`.** Occurrence rows are places. `occurrence.copies` holds bit 0
+  (has copies), bit 1 (a copy differs) and the copy count from bit 2; copies are sparse rows in
+  place order (`copy.object`, `copy.kind`, `copy.source`, the source empty when it is the
+  place's). `package.blueprints` keeps the reader's classes as JSON. A place's audience is the
+  rollup over the place and its copies, each classified from its own gather bit and class, which
+  `copy.kind` and `copy.class` keep.
+- **Join, `joined-v14`.** Query signal bit 6 is `compiled_copy_differs`. Copy text or flag changes
+  rebuild the join in full; place text edits stay incremental and keep the bit. Indexed
+  occurrences decode their copies on first access.
+
+Real reader output, read only (no Unreal run): UE 5.7 and UE 5.8 engine `PerformanceCaptureWorkflow`
+plugin content and UE 4.27 `VirtualCamera` content give 296 of 5,869, 402 of 8,358 and 7 of 262
+occurrences as copies (generated-class widget trees, one or five `_INST` animation tracks); every
+copy had its place's text. Construction-script nodes (33 and 35) and class-default text (38 and 43) had no authored site and stay places, including two default-object properties under one key.
+
+The oracle (`indexed-copies.test.ts`) compares places, units, focus, lines and 54 search requests
+between the index and the in-memory corpus and join, then an incremental place edit and a full
+recompile. `package-text-copies.test.ts` round-trips copies and classes through cold worker and warm
+refreshes; `fixture.integration.test.ts` reads the saved fixture's review Blueprint through the
+native reader.
+
+1× scale harness, Node 26.12.0, default heap, `origin/main` (`a0508222`) against this branch on
+the same machine and freshly generated `--seed 57` inputs (one run each unless listed). The
+generated records have no Blueprint evidence, so they measure the new columns, not folding. The
+"copies" variant adds `blueprintClasses` to the 16,500 text packages and a generated-class copy
+before each of their 831,604 asset-property occurrences, 16,632 with older text (1,859,809 raw
+occurrences that fold back to the same 1,028,205 places).
+
+| Stage                                   |                    main |                  branch |           branch, copies |
+| --------------------------------------- | ----------------------: | ----------------------: | -----------------------: |
+| Package layer cold build                |            20.6, 22.1 s |            19.1, 19.5 s |             25.1, 25.2 s |
+| of which string sort                    |              6.8, 8.5 s |              5.6, 5.7 s |               7.3, 7.3 s |
+| of which layer encode / verify (summed) |     12.6–13.0 / 4.8–4.9 |     13.9–14.4 / 5.5–5.9 |      16.3–16.6 / 6.9–7.0 |
+| Package layer bytes                     |     5,055,324–5,055,496 |     5,193,552–5,193,776 |      6,227,348–6,227,856 |
+| Peak OS RSS, package cold build         |         1,677–1,777 MiB |         1,822–1,851 MiB |          1,787–1,894 MiB |
+| No-change / one-package refresh         | 0.36–0.50 / 1.31–1.49 s | 0.43–0.47 / 1.37–1.47 s |  0.43–0.46 / 1.59–1.64 s |
+| Quality open, cold / warm               |            89.7 / 2.5 s |            90.0 / 2.3 s | 93.6, 116.8 / 2.3, 2.5 s |
+| Peak RSS, cold open                     |               2,252 MiB |               2,217 MiB |          2,176–2,220 MiB |
+| Heap kept after opening, cold / warm    |         46.5 / 43.7 MiB |         47.1 / 44.1 MiB |     46.6–46.9 / 44.2 MiB |
+| Quality scan, cold / warm               |         111.2 / 101.4 s |          112.7 / 91.0 s |        139.0 / 112.4 s ¹ |
+| Scan peak V8 heap / kept                |     210–214 / 50–52 MiB |     179–185 / 50–53 MiB |      179–182 / 50–53 MiB |
+| Scan stalls p95 / over 100 ms           |    153–164 ms / 518–524 |    140–168 ms / 515–521 |     180–206 ms / 567–587 |
+
+¹ With copies decoded eagerly the scan took 147.3 s cold and 143.8 s warm; never decoding them, a
+probe took 104.1 s warm. Quality checks never read copies, whose scattered paths miss the string
+block cache, so indexed occurrences now decode them on first access.
+
+Findings are 227,047 in every run. The package layer grows 2.7% at 1×: five new sections per
+shard, one of them per occurrence. A first layout with a section per Blueprint field and a
+per-occurrence copy offset grew it 5.9%, and to 9.0 MB on the copies variant. Package and quality
+times are within the spread one commit shows (the plan's earlier records range over 7 s and 40 s);
+the copies variant's cold build reads 81% more raw occurrences. No 10× run was made; Unreal was not
+run, and the UE 5.7/5.8 engine matrix was not run (no parser change).

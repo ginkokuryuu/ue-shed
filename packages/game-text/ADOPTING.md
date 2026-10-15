@@ -93,7 +93,7 @@ retainer's `release()` when clearing a view. The host's outer scope releases eve
 Raw `corpus.units` preserves empty and whitespace-only source evidence. Search and query exports
 retain their existing visibility filters. Failed current localization reads never use a previous
 successful layer as current evidence; missing and malformed inputs keep their distinct states.
-Joined cache keys use `joined-v12`, rebuilding older joins while preserving snapshot format v4.
+Joined cache keys use `joined-v14` and package shards `package-text-v5`, rebuilding older layers while preserving snapshot format v4.
 
 The core audit requires saved project packages and a configured reader. It does not require a
 running editor, Perforce, `UEShedCore`, or any other UE Shed Unreal plugin.

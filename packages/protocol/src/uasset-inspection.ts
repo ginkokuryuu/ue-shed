@@ -657,6 +657,21 @@ export const SavedAssetGatherCoverage = Schema.Struct({
 export type SavedAssetGatherCoverage = typeof SavedAssetGatherCoverage.Type;
 
 /**
+ * v1.12: one Blueprint in a package and the exports its compile saved beside it, from the export
+ * table and the Blueprint's saved `GeneratedClass`: the generated class, its default object
+ * (`RF_ClassDefaultObject`), and a saved skeleton class and its default object. Text under these
+ * is a representation copy of the Blueprint's authored text.
+ */
+export const SavedAssetBlueprintClasses = Schema.Struct({
+	blueprint: Schema.String,
+	generatedClass: Schema.String,
+	classDefault: Schema.optionalKey(Schema.String),
+	skeletonClass: Schema.optionalKey(Schema.String),
+	skeletonClassDefault: Schema.optionalKey(Schema.String)
+}).annotate({ identifier: "SavedAssetBlueprintClasses" });
+export type SavedAssetBlueprintClasses = typeof SavedAssetBlueprintClasses.Type;
+
+/**
  * v1.8 opt-in package evidence. Sampling matches the legacy corpus fold exactly. From v1.10,
  * `gatherCoverage` is present when the package's gather table was read; status then reflects
  * missing runtime gatherable text rather than decoder gaps.
@@ -676,7 +691,8 @@ export const SavedAssetPackageTextRecord = Schema.Struct({
 		property_decoder_rejected: NonNegativeInt
 	}),
 	gapSamples: Schema.Array(SavedAssetTextCoverageGap).check(Schema.isMaxLength(3)),
-	gatherCoverage: Schema.optionalKey(SavedAssetGatherCoverage)
+	gatherCoverage: Schema.optionalKey(SavedAssetGatherCoverage),
+	blueprintClasses: Schema.optionalKey(Schema.Array(SavedAssetBlueprintClasses))
 }).annotate({ identifier: "SavedAssetPackageTextRecord" });
 export type SavedAssetPackageTextRecord = typeof SavedAssetPackageTextRecord.Type;
 
