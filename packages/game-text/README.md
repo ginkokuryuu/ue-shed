@@ -214,6 +214,14 @@ unavailable source/translation, unsupported cultures and syntax limits.
 Syntax is capped at one million code units and 16 nested modifier forms. Coverage is not upgraded
 when a syntax check succeeds on a partial corpus.
 
+An opened index model's `localizationQuality(options?, ruleDocument?)` runs the same checks over the
+index in pages of 256 lines, yielding between pages. Its options add
+`onProgress?: (progress: LocalizationQualityProgress) => void` to the check options. The callback
+receives `{ checkedLines, totalLines, findings }`: once before the scan with `checkedLines: 0` and
+`totalLines` already known, then after each page, the last call with every line checked and the
+scan's finding count. It does not change findings, their order or IDs. It runs inside the scan, so
+keep it cheap and do not throw from it.
+
 `parseUnrealFormatPattern`, `unrealPluralForms`, and `unrealRichTextCounts` expose the verified
 Unreal grammar helpers. Required plural categories come from the identical ICU 64 category data
 in the supported engines, rather than host `Intl.PluralRules`. Rich-text validation mirrors compile
