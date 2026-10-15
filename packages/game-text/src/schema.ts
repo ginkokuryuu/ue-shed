@@ -8,7 +8,9 @@ import {
 	LocalizationQueryPage,
 	LocalizationSelection
 } from "./localization-schema.js";
+import { TextAudience, TextAudienceReason } from "./text-audience-schema.js";
 export * from "./identifiers.js";
+export * from "./text-audience-schema.js";
 
 export const UnrealTextIdentity = Schema.Struct({
 	status: Schema.Literal("resolved"),
@@ -62,7 +64,14 @@ export const TextOccurrence = Schema.Struct({
 	source: Schema.String,
 	identity: TextIdentity,
 	location: TextLocation,
-	editCapability: Schema.Literals(["source_editable", "read_only"])
+	editCapability: Schema.Literals(["source_editable", "read_only"]),
+	/**
+	 * Who the text is for, why, and the policy row that decided it (see `text-audience.ts`).
+	 * Readers always set the audience and reason; occurrences built by older versions omit them.
+	 */
+	audience: Schema.optionalKey(TextAudience),
+	audienceReason: Schema.optionalKey(TextAudienceReason),
+	audienceRule: Schema.optionalKey(Schema.String.check(Schema.isMaxLength(64)))
 });
 export type TextOccurrence = Schema.Schema.Type<typeof TextOccurrence>;
 
@@ -289,7 +298,9 @@ export const TextFilterClause = Schema.Union([
 	clause("asset", Schema.String.check(Schema.isMinLength(1), Schema.isMaxLength(1024)), 200),
 	clause("namespace", Schema.String.check(Schema.isMaxLength(1024)), 50),
 	clause("editing", TextEditing, TextEditing.literals.length),
-	clause("notes", TextNotes, TextNotes.literals.length)
+	clause("notes", TextNotes, TextNotes.literals.length),
+	/** The line's audience: player if any of its saved places is player text, and so on. */
+	clause("audience", TextAudience, TextAudience.literals.length)
 ]);
 export type TextFilterClause = Schema.Schema.Type<typeof TextFilterClause>;
 export type TextFilterField = TextFilterClause["field"];
@@ -311,7 +322,14 @@ export type TextProblemCounts = Schema.Schema.Type<typeof TextProblemCounts>;
 
 export const MAX_TEXT_GROUPS = 200;
 
-export const TextGroupBy = Schema.Literals(["problem", "folder", "asset", "origin", "namespace"]);
+export const TextGroupBy = Schema.Literals([
+	"problem",
+	"folder",
+	"asset",
+	"origin",
+	"namespace",
+	"audience"
+]);
 export type TextGroupBy = Schema.Schema.Type<typeof TextGroupBy>;
 
 /**
@@ -341,6 +359,7 @@ export const TextFacetRequest = Schema.Struct({
 	folder: Schema.optionalKey(Schema.String.check(Schema.isMaxLength(512))),
 	assets: Schema.optionalKey(Schema.Boolean),
 	origins: Schema.optionalKey(Schema.Boolean),
+	audiences: Schema.optionalKey(Schema.Boolean),
 	cultures: Schema.optionalKey(Schema.Boolean)
 });
 export type TextFacetRequest = Schema.Schema.Type<typeof TextFacetRequest>;
@@ -360,6 +379,8 @@ export const TextFacets = Schema.Struct({
 	folders: Schema.optionalKey(Schema.Struct({ under: Schema.String, ...TextGroupList.fields })),
 	assets: Schema.optionalKey(TextGroupList),
 	origins: Schema.optionalKey(TextGroupList),
+	/** Lines by audience (player, editor, unknown), over the request without its audience clauses. */
+	audiences: Schema.optionalKey(TextGroupList),
 	cultures: Schema.optionalKey(Schema.Array(TextCultureFacet).check(Schema.isMaxLength(256)))
 });
 export type TextFacets = Schema.Schema.Type<typeof TextFacets>;
@@ -392,7 +413,9 @@ export const TextUnitSearchResult = Schema.Struct({
 	occurrenceCount: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
 	remainingContextCount: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
 	reviewSignals: Schema.Array(TextReviewSignal),
-	wordCount: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0))
+	wordCount: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
+	/** Player if any occurrence is player text, else unknown if any is, else editor. */
+	audience: Schema.optionalKey(TextAudience)
 });
 export type TextUnitSearchResult = Schema.Schema.Type<typeof TextUnitSearchResult>;
 

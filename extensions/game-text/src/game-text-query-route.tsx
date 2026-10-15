@@ -519,7 +519,22 @@ export function GameTextRoute(props: {
 				notes: {
 					missing: counts.withoutNotes,
 					present: Math.max(0, current.total - counts.withoutNotes)
-				}
+				},
+				...(current.facets?.audiences === undefined
+					? undefined
+					: {
+							audience: {
+								player: 0,
+								editor: 0,
+								unknown: 0,
+								...Object.fromEntries(
+									current.facets.audiences.entries.map((entry) => [
+										entry.key,
+										entry.count
+									])
+								)
+							}
+						})
 			},
 			folders: current.facets?.folders,
 			assets: current.facets?.assets
@@ -549,6 +564,7 @@ export function GameTextRoute(props: {
 				folder: facetFolder(),
 				assets: true,
 				origins: true,
+				audiences: true,
 				...(selected ? { cultures: true } : undefined)
 			},
 			...(selected ? { localization: selected } : undefined),

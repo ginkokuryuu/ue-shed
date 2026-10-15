@@ -10,6 +10,7 @@ import {
 } from "@ue-shed/localization/browser";
 import { Schema } from "effect";
 import { TextUnitId } from "./identifiers.js";
+import { TextAudience, TextOutOfScopeReason } from "./text-audience-schema.js";
 
 export const LocalizationState = Schema.Literals([
 	"translated",
@@ -133,7 +134,18 @@ export const LocalizationLine = Schema.Struct({
 	source: Schema.String,
 	manifest: Schema.Array(ManifestEntry),
 	cultures: Schema.Array(LocalizationCultureState),
-	keyChange: Schema.optionalKey(LocalizationKeyChange)
+	keyChange: Schema.optionalKey(LocalizationKeyChange),
+	/**
+	 * Player if any saved place with visible text is player text, else unknown if any is, else
+	 * editor; unknown for lines with no saved place. Absent from joins built by older versions.
+	 */
+	audience: Schema.optionalKey(TextAudience),
+	/**
+	 * Why the target would not gather this line, when its state is `outside_target`: every saved
+	 * place is outside the gather paths, or it is editor text and the target does not gather
+	 * editor-only data.
+	 */
+	outOfScope: Schema.optionalKey(TextOutOfScopeReason)
 });
 export type LocalizationLine = typeof LocalizationLine.Type;
 export const LocalizationJoin = Schema.Struct({
@@ -185,6 +197,8 @@ export const LocalizationLinePreview = Schema.Struct({
 	manifestLocations: Schema.Array(Schema.String).check(Schema.isMaxLength(3)),
 	remainingLocationCount: Count,
 	keyChange: Schema.optionalKey(LocalizationKeyChange),
+	audience: LocalizationLine.fields.audience,
+	outOfScope: LocalizationLine.fields.outOfScope,
 	cultures: Schema.Array(
 		LocalizationCultureMark.pipe(
 			Schema.fieldsAssign({

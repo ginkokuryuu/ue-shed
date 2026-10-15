@@ -18,6 +18,8 @@ import {
 	TextUnitId
 } from "./schema.js";
 import { TEXT_PROBLEM_LABELS } from "./text-problems.js";
+import { TEXT_AUDIENCE_LABELS, TextAudience } from "./text-audience-schema.js";
+import { textAudienceOfMask } from "./text-audience.js";
 import {
 	TEXT_ORIGIN_KINDS,
 	TEXT_ORIGIN_LABELS,
@@ -55,6 +57,11 @@ const emptyCounts = () =>
 const terms = (value: string) => value.toLocaleLowerCase().trim().split(/\s+/u).filter(Boolean);
 const countedSignals = ["shared", "duplicate_source", "long", "unresolved", "conflicting"] as const;
 const origins = (mask: number) => TEXT_ORIGIN_KINDS.filter((_, bit) => mask & (1 << bit));
+/** A row's audience (its index in TextAudience) from its audience mask. */
+const audienceIndex = (mask: number) => TextAudience.literals.indexOf(textAudienceOfMask(mask & 7));
+// Ties sort by label, as the in-memory query's tallies do.
+const audienceLabels = TextAudience.literals.map((audience) => TEXT_AUDIENCE_LABELS[audience]);
+const audienceRank = audienceLabels.map((label) => [...audienceLabels].sort().indexOf(label));
 
 /** The query over an index, with the line rows behind `localizationLines` for index scans. */
 export interface ColumnarTextCorpusQuery extends TextCorpusQuery {
@@ -107,6 +114,7 @@ export function columnarTextCorpusQuery(
 			"origins",
 			"editing",
 			"notes",
+			"audience",
 			"member_start",
 			"member_end",
 			"source_start",
@@ -124,6 +132,7 @@ export function columnarTextCorpusQuery(
 			"origins",
 			"editing",
 			"notes",
+			"audience",
 			"member_start",
 			"member_end",
 			"source_start",
@@ -347,6 +356,15 @@ export function columnarTextCorpusQuery(
 					has = Boolean(
 						clause.mask &
 						((kind === "line" ? c("line.notes")[row] : fields.notes![row]) ? 2 : 1)
+					);
+					break;
+				case "audience":
+					has = Boolean(
+						clause.mask &
+						(1 <<
+							audienceIndex(
+								kind === "line" ? c("line.audience")[row]! : fields.audience![row]!
+							))
 					);
 					break;
 				case "translation":
@@ -754,14 +772,16 @@ export function columnarTextCorpusQuery(
 										? bits(clause.values, ["editable", "read_only"])
 										: clause.field === "notes"
 											? bits(clause.values, ["missing", "present"])
-											: clause.field === "translation"
-												? bits(clause.values, [
-														"",
-														"missing",
-														"to_update",
-														"not_synced"
-													])
-												: 0,
+											: clause.field === "audience"
+												? bits(clause.values, TextAudience.literals)
+												: clause.field === "translation"
+													? bits(clause.values, [
+															"",
+															"missing",
+															"to_update",
+															"not_synced"
+														])
+													: 0,
 					labels:
 						clause.field === "asset"
 							? preparedLabels(clause.values.map(textFileKey))
@@ -876,7 +896,9 @@ export function columnarTextCorpusQuery(
 					? 0
 					: by === "origin"
 						? [0, 5, 3, 1, 2, 4][key]!
-						: places.rank[labels[key]!]!;
+						: by === "audience"
+							? audienceRank[key]!
+							: places.rank[labels[key]!]!;
 			used.sort(
 				(a, b) =>
 					worsts[a]! - worsts[b]! ||
@@ -897,7 +919,12 @@ export function columnarTextCorpusQuery(
 									key: TEXT_ORIGIN_KINDS[id - 1]!,
 									label: TEXT_ORIGIN_LABELS[TEXT_ORIGIN_KINDS[id - 1]!]
 								}
-						: { key: places.label(id), label: places.label(labels[id]!) };
+						: by === "audience"
+							? {
+									key: TextAudience.literals[id]!,
+									label: TEXT_AUDIENCE_LABELS[TextAudience.literals[id]!]
+								}
+							: { key: places.label(id), label: places.label(labels[id]!) };
 			return {
 				entries: used.slice(0, MAX_TEXT_GROUPS).map((id) => ({
 					...display(id),
@@ -922,6 +949,7 @@ export function columnarTextCorpusQuery(
 			? problemsFor(cultureScope(request.localization))
 			: undefined;
 		const originColumns = request.localization ? c("line.origins") : raw.origins!;
+		const audienceColumn = request.localization ? c("line.audience") : raw.audience!;
 		let stamp = 0;
 		const files = request.localization ? lineFiles.files : raw.files!;
 		const fileStarts = request.localization ? lineFiles.starts : raw.file_start!;
@@ -945,6 +973,9 @@ export function columnarTextCorpusQuery(
 				if (!origins && !facet) visit(0, 0, stamp, mask, worst);
 			} else if (by === "namespace") {
 				const id = Math.max(0, namespaceOf(request.localization ? "line" : "raw", row));
+				visit(id, id, stamp, mask, worst);
+			} else if (by === "audience") {
+				const id = audienceIndex(audienceColumn[row]!);
 				visit(id, id, stamp, mask, worst);
 			} else {
 				let found = false;
@@ -1023,7 +1054,9 @@ export function columnarTextCorpusQuery(
 					? request.openGroup === ""
 						? 0
 						: TEXT_ORIGIN_KINDS.findIndex((value) => value === request.openGroup) + 1
-					: places.findLabel(request.openGroup ?? "");
+					: group === "audience"
+						? TextAudience.literals.findIndex((value) => value === request.openGroup)
+						: places.findLabel(request.openGroup ?? "");
 		const groupKey = (row: number) => {
 			const kind = selection ? "line" : "raw";
 			if (group === "namespace") return Math.max(0, namespaceOf(kind, row));
@@ -1038,6 +1071,8 @@ export function columnarTextCorpusQuery(
 				const mask = selection ? c("line.origins")[row]! : raw.origins![row]!;
 				return mask ? 32 - Math.clz32(mask & -mask) : 0;
 			}
+			if (group === "audience")
+				return audienceIndex(selection ? c("line.audience")[row]! : raw.audience![row]!);
 			let key = 0;
 			visitFiles(kind, row, (id) => {
 				key = places.coordinate(id, group === "folder").key;
@@ -1309,6 +1344,16 @@ export function columnarTextCorpusQuery(
 								: undefined),
 							...(facets.origins && !combined
 								? { origins: aggregate(base("origin"), request, "origin", true) }
+								: undefined),
+							...(facets.audiences
+								? {
+										audiences: aggregate(
+											base("audience"),
+											request,
+											"audience",
+											true
+										)
+									}
 								: undefined),
 							...(facets.cultures && selection
 								? {

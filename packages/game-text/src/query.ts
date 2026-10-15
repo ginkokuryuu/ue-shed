@@ -19,6 +19,7 @@ import type {
 } from "./schema.js";
 import {
 	textAssetFacet,
+	textAudienceFacet,
 	textCultureFacet,
 	textFolderFacet,
 	textGroupOf,
@@ -34,6 +35,7 @@ import {
 	type TextFacts
 } from "./text-problems.js";
 import { hasSearchableSource, searchableSourceText } from "./search.js";
+import { lineTextAudience, occurrenceTextAudience } from "./text-audience.js";
 import {
 	emptyTextOriginCounts,
 	manifestFileKeys,
@@ -117,7 +119,10 @@ function searchResult(
 		remainingContextCount: Math.max(0, unit.occurrences.length - contexts.length),
 		reviewSignals,
 		source: unit.source,
-		wordCount: wordCount(value)
+		wordCount: wordCount(value),
+		audience: lineTextAudience(
+			unit.occurrences.map((occurrence) => occurrenceTextAudience(occurrence).audience)
+		)
 	};
 }
 
@@ -217,7 +222,8 @@ export function textCorpusQuery(
 						? unit.identity.tableId
 						: undefined,
 			editing,
-			notes: withoutNotes ? "missing" : "present"
+			notes: withoutNotes ? "missing" : "present",
+			audience: presentation.audience ?? "unknown"
 		};
 		return {
 			presentation,
@@ -432,7 +438,8 @@ export function textCorpusQuery(
 					: entries.every((entry) => entry.withoutNotes)
 			)
 				? "missing"
-				: "present"
+				: "present",
+			audience: lineTextAudience(entries.map((entry) => entry.facts.audience))
 		};
 	}
 	const hasClause = (filter: TextFilter | undefined, field: TextFilterField) =>
@@ -467,6 +474,9 @@ export function textCorpusQuery(
 						}),
 				...(wanted.assets ? { assets: textAssetFacet(base("asset")) } : undefined),
 				...(wanted.origins ? { origins: textOriginFacet(base("origin")) } : undefined),
+				...(wanted.audiences
+					? { audiences: textAudienceFacet(base("audience")) }
+					: undefined),
 				...(wanted.cultures && cultures !== undefined
 					? { cultures: cultures() }
 					: undefined)

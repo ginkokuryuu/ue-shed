@@ -174,7 +174,9 @@ describe.skipIf(!executable)("localization CLI with the real reader", () => {
 			expect(yield* Ref.get(output)).toContain(`"rows": ${cpp.page.total}`);
 			const csv = yield* Effect.promise(() => readFile(csvFile, "utf8"));
 			const header = csv.replace(/^﻿/u, "").split("\r\n")[0];
-			expect(header).toMatch(/^"Namespace","Key","Source","Where","Kind","en","en state"/u);
+			expect(header).toMatch(
+				/^"Namespace","Key","Source","Where","Kind","Audience","en","en state"/u
+			);
 			expect(csv.split("\r\n").filter(Boolean)).toHaveLength(cpp.page.total + 1);
 			// Existing files are never overwritten.
 			yield* Ref.set(output, "");

@@ -1,5 +1,7 @@
 import {
+	TEXT_AUDIENCE_LABELS,
 	TEXT_ORIGIN_LABELS,
+	TextAudience,
 	TEXT_PROBLEM_LABELS,
 	TextEditing,
 	TextFinding,
@@ -48,7 +50,8 @@ export const FIELD_LABELS = {
 	asset: "Asset",
 	namespace: "Namespace",
 	editing: "Editing",
-	notes: "Translator notes"
+	notes: "Translator notes",
+	audience: "Audience"
 } satisfies Record<TextFilterField, string>;
 
 /** Fields whose values are a fixed list, with how each value reads. */
@@ -58,7 +61,8 @@ export const CHOICE_FIELDS = {
 	finding: { values: TextFinding.literals, labels: FINDING_LABELS },
 	origin: { values: TextOriginKind.literals, labels: TEXT_ORIGIN_LABELS },
 	editing: { values: TextEditing.literals, labels: EDITING_LABELS },
-	notes: { values: TextNotes.literals, labels: NOTES_LABELS }
+	notes: { values: TextNotes.literals, labels: NOTES_LABELS },
+	audience: { values: TextAudience.literals, labels: TEXT_AUDIENCE_LABELS }
 } as const;
 export type ChoiceField = keyof typeof CHOICE_FIELDS;
 
@@ -190,6 +194,10 @@ function withValues(
 			const kept = values.filter(isNotes);
 			return kept.length === 0 ? undefined : { ...clause, values: kept };
 		}
+		case "audience": {
+			const kept = values.filter(isAudience);
+			return kept.length === 0 ? undefined : { ...clause, values: kept };
+		}
 		case "folder":
 		case "asset":
 		case "namespace":
@@ -209,6 +217,8 @@ const isEditing = (value: string): value is TextEditing =>
 	TextEditing.literals.some((item) => item === value);
 const isNotes = (value: string): value is TextNotes =>
 	TextNotes.literals.some((item) => item === value);
+const isAudience = (value: string): value is TextAudience =>
+	TextAudience.literals.some((item) => item === value);
 
 /** The saved filters of an earlier Game Text, before pills. */
 export interface LegacyFilters {

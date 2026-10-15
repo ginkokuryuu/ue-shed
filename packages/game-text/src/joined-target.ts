@@ -11,7 +11,16 @@ import { snapshotCheck, MAX_SNAPSHOT_SECTION_BYTES } from "./snapshot-format.js"
 import type { SnapshotSourceColumn } from "./snapshot-file.js";
 import { snapshotNodeChecksum } from "./snapshot-file.js";
 import { localizationStates, LocalizationUnknownReason } from "./localization-schema.js";
-import { localizationTextMatches, manifestPackageFile } from "./localization.js";
+import {
+	localizationGathersEditorOnlyData,
+	localizationTextMatches,
+	manifestPackageFile
+} from "./localization.js";
+import {
+	TEXT_OUT_OF_SCOPE_REASONS,
+	isEditorOnlyTextCode,
+	textAudienceBit
+} from "./text-audience.js";
 import { textFileLabel, textFolderLabel, manifestPathOrigin } from "./text-origin.js";
 import {
 	absent,
@@ -109,7 +118,7 @@ export const refreshJoinedTarget = Effect.fn("JoinedTarget.refresh")(function* (
 			.sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))
 	);
 	const key =
-		"joined-v12:" +
+		"joined-v13:" +
 		createHash("sha256")
 			.update(
 				JSON.stringify([
@@ -137,7 +146,7 @@ export const refreshJoinedTarget = Effect.fn("JoinedTarget.refresh")(function* (
 	}
 	const reader = yield* store.open();
 	let incrementalFallback: string | undefined;
-	if (!input.force && (root.active.joined ?? "").startsWith("joined-v12:")) {
+	if (!input.force && (root.active.joined ?? "").startsWith("joined-v13:")) {
 		const incremental = yield* incrementJoinedTarget(
 			input,
 			key,
@@ -389,6 +398,9 @@ export const refreshJoinedTarget = Effect.fn("JoinedTarget.refresh")(function* (
 			"origins",
 			"editing",
 			"notes",
+			// Audience mask of the visible saved places (textAudienceBit), and from bit 4 the
+			// out-of-scope reason's index in TEXT_OUT_OF_SCOPE_REASONS plus one.
+			"audience",
 			"key_change",
 			"folder_start",
 			"folder_end",
@@ -543,6 +555,8 @@ export const refreshJoinedTarget = Effect.fn("JoinedTarget.refresh")(function* (
 			cursor++;
 		return { cursor, row: cursor === start ? absent : rows[start]!, count: cursor - start };
 	}
+	// Unreal skips editor-only text when the target does not gather editor-only data.
+	const skipsEditorOnlyData = localizationGathersEditorOnlyData(input.target) === false;
 	let row = 0;
 	for (const group of groups()) {
 		const { os, oe, ms, me, ns, key: keyId } = group;
@@ -569,7 +583,9 @@ export const refreshJoinedTarget = Effect.fn("JoinedTarget.refresh")(function* (
 			rowFiles = new Set<number>();
 		let inside = false,
 			outside = true,
+			editorOnlyOutside = true,
 			coverageReasons = 0,
+			audience = 0,
 			origins = 0,
 			editing = 0,
 			notes = 0,
@@ -617,6 +633,7 @@ export const refreshJoinedTarget = Effect.fn("JoinedTarget.refresh")(function* (
 						visibleOccurrence[member] = 1;
 						origins |=
 							1 << (c.location[member] === 2 ? 0 : c.location[member] === 1 ? 1 : 2);
+						audience |= textAudienceBit(c.audience[member]!);
 						editing |= c.editable[member] ? 1 : 2;
 						if (
 							c.notes[member] !== empty &&
@@ -634,6 +651,7 @@ export const refreshJoinedTarget = Effect.fn("JoinedTarget.refresh")(function* (
 			const coverage = packages.coverage[occurrence]!;
 			inside ||= coverage === 1;
 			outside &&= coverage === 0;
+			editorOnlyOutside &&= coverage === 0 || isEditorOnlyTextCode(c.audience[occurrence]!);
 			if (coverage >= 2)
 				coverageReasons |= reasonBit(
 					(
@@ -701,11 +719,20 @@ export const refreshJoinedTarget = Effect.fn("JoinedTarget.refresh")(function* (
 			pendingSources.push({ row, value });
 			if (pendingSources.length === 8192) yield* flushSources();
 		}
+		let outOfScope = 0;
 		if (oe > os) {
-			if (outside) structural |= stateBit("outside_target");
-			else if (!inside) reasons |= coverageReasons;
-			else if (first === absent && manifest.reader && ns !== absent)
-				structural |= stateBit("not_gathered");
+			if (outside) {
+				structural |= stateBit("outside_target");
+				outOfScope = 1 + TEXT_OUT_OF_SCOPE_REASONS.indexOf("outside_gather_paths");
+			} else if (!inside) reasons |= coverageReasons;
+			else if (first === absent && manifest.reader && ns !== absent) {
+				// Mirrors joinLocalizationTarget: editor text the gather skips is out of scope.
+				if (skipsEditorOnlyData && editorOnlyOutside) {
+					structural |= stateBit("outside_target");
+					outOfScope =
+						1 + TEXT_OUT_OF_SCOPE_REASONS.indexOf("editor_only_data_not_gathered");
+				} else structural |= stateBit("not_gathered");
+			}
 			if (first !== absent && sources.size === 1 && line.source![row] !== m.source![first])
 				structural |= stateBit("changed_since_gather");
 			for (let i = ms; i < me; i++) {
@@ -770,6 +797,7 @@ export const refreshJoinedTarget = Effect.fn("JoinedTarget.refresh")(function* (
 		line.reasons![row] = reasons;
 		line.facts![row] = structural;
 		line.origins![row] = origins;
+		line.audience![row] = audience | (outOfScope << 4);
 		line.editing![row] = editing;
 		line.notes![row] = notes;
 		line.folder_start![row] = folderCount;

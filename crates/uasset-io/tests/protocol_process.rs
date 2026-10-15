@@ -37,7 +37,7 @@ fn header_gather_evidence_is_negotiated_and_legacy_output_stays_unchanged() {
 fn package_text_gather_coverage_is_negotiated() {
     let project_root =
         std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../fixtures/unreal-project");
-    for minor in [8, 9, 10] {
+    for minor in [8, 9, 10, 11] {
         let mut request = base_request(serde_json::json!({
             "kind": "extract_text_packages",
             "paths": ["Content/Fixture/Text/DA_TextOccurrences.uasset"],
@@ -60,6 +60,19 @@ fn package_text_gather_coverage_is_negotiated() {
             assert_eq!(gather["runtimeSites"], 4);
             assert_eq!(gather["missing"], 0);
             assert_eq!(gather["missingSamples"], serde_json::json!([]));
+        }
+        // v1.11: each gathered line carries the table's editor-only bit; all four are runtime.
+        let bits: Vec<_> = record["occurrences"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .filter_map(|occurrence| occurrence.get("gather_editor_only"))
+            .collect();
+        if minor < 11 {
+            assert!(bits.is_empty(), "minor {minor}: {bits:?}");
+        } else {
+            assert_eq!(bits.len(), 4, "{record}");
+            assert!(bits.iter().all(|bit| *bit == false));
         }
     }
 }

@@ -13,6 +13,31 @@ pub struct SavedAssetTextOccurrence {
     pub identity: TextExtractionIdentity,
     pub location: TextExtractionLocation,
     pub edit_capability: EditCapability,
+    /// uasset-io v1.11 package text records: Unreal's editor-only bit for this text from the
+    /// package's gather table, when the table was read and lists the text's namespace, key and
+    /// source. Absent means no gather-table evidence, not runtime text.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub gather_editor_only: Option<bool>,
+}
+
+impl SavedAssetTextOccurrence {
+    /// Records the gather table's editor-only bit for keyed text the table lists.
+    pub fn record_gather_audience(
+        &mut self,
+        audience: &crate::gather_coverage::GatherSiteAudience,
+    ) {
+        if let TextExtractionIdentity::Resolved { namespace, key } = &self.identity {
+            self.gather_editor_only = audience.editor_only(
+                namespace,
+                key,
+                &self.source,
+                matches!(
+                    self.location,
+                    TextExtractionLocation::StringTableEntry { .. }
+                ),
+            );
+        }
+    }
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
@@ -167,6 +192,7 @@ pub fn text_occurrence(occurrence: crate::projection::TextOccurrence) -> SavedAs
             TextEditCapability::SourceEditable => EditCapability::SourceEditable,
             TextEditCapability::ReadOnly => EditCapability::ReadOnly,
         },
+        gather_editor_only: None,
     }
 }
 

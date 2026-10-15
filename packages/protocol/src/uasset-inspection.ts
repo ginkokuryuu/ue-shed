@@ -560,7 +560,13 @@ export const SavedAssetTextOccurrence = Schema.Struct({
 	dev_notes: Schema.String.pipe(Schema.withDecodingDefaultKey(Effect.succeed(""))),
 	identity: TextExtractionIdentity,
 	location: TextExtractionLocation,
-	edit_capability: Schema.Literals(["source_editable", "read_only"])
+	edit_capability: Schema.Literals(["source_editable", "read_only"]),
+	/**
+	 * v1.11 package text records: Unreal's editor-only bit for this text from the package's
+	 * gather table, when the table was read and lists the text's namespace, key and source. Absent
+	 * means no gather-table evidence, not runtime text.
+	 */
+	gather_editor_only: Schema.optionalKey(Schema.Boolean)
 }).annotate({ identifier: "SavedAssetTextOccurrence" });
 export type SavedAssetTextOccurrence = Schema.Schema.Type<typeof SavedAssetTextOccurrence>;
 
