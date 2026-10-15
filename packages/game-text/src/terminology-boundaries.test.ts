@@ -22,6 +22,18 @@ it.each(["prefixTODOsuffix", "éTODO", "TODO界", "2TODO", "TODO٢", "𐐀TODO",
 	}
 );
 
+it("treats combining marks as part of the word around a term", () => {
+	// A decomposed accent before or after the term, as the precomposed "éTODO" above.
+	expect(termMatches("éTODO", "TODO", false)).toEqual([]);
+	expect(termMatches("TODÓsuffix", "TODO", false)).toEqual([]);
+	// An Indic vowel sign continues the word: "क" is not matched inside "किताब".
+	expect(termMatches("किताब", "क", false)).toEqual([]);
+	// A term ending in a mark still matches whole, with UTF-16 offsets.
+	expect(termMatches("x café y", "café", false)).toEqual([
+		{ start: 2, end: 7, matched: "café" }
+	]);
+});
+
 it("keeps case behavior, phrases, punctuation and UTF-16 offsets", () => {
 	expect(termMatches("😀 todo TODO", "TODO", false)).toEqual([
 		{ start: 3, end: 7, matched: "todo" },

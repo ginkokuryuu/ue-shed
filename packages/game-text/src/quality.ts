@@ -96,10 +96,14 @@ function escapedRegExp(value: string): string {
 	return value.replace(/[.*+?^${}()|[\]\\]/gu, "\\$&");
 }
 
-/** Literal terms bounded by Unicode letters/numbers; punctuation inside a term stays literal. */
+/**
+ * Literal terms bounded by Unicode letters, marks and numbers; punctuation inside a term stays
+ * literal. Marks count as word characters so a decomposed accent or an Indic vowel sign keeps a
+ * term from matching inside a word.
+ */
 function terminologyExpression(term: string, caseSensitive: boolean): RegExp {
 	return new RegExp(
-		"(?<![\\p{L}\\p{N}])" + escapedRegExp(term) + "(?![\\p{L}\\p{N}])",
+		"(?<![\\p{L}\\p{M}\\p{N}])" + escapedRegExp(term) + "(?![\\p{L}\\p{M}\\p{N}])",
 		caseSensitive ? "gu" : "giu"
 	);
 }
