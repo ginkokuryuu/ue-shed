@@ -7,6 +7,7 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::mpsc;
 
 use serde::{Deserialize, Serialize};
+use uasset_inspection::blueprint_classes::blueprint_classes;
 use uasset_inspection::gather_coverage::{DecodedTextKeys, GatherCoverage, gather_table};
 use uasset_inspection::projection::{
     TextAssetProjection, TextureRecord, project_text_asset, project_texture_asset,
@@ -925,6 +926,7 @@ fn project_one_path(
         gap_counts: TextGapCounts::default(),
         gap_samples: Vec::new(),
         gather_coverage: None,
+        blueprint_classes: Vec::new(),
     };
     let mut decoded_keys = DecodedTextKeys::default();
     for export in &package.exports {
@@ -940,6 +942,11 @@ fn project_one_path(
         match decode_export(export, &context) {
             Ok(Some(asset)) => match kind {
                 ProjectionKind::Text | ProjectionKind::TextPackages => {
+                    if matches!(kind, ProjectionKind::TextPackages)
+                        && let Some(classes) = blueprint_classes(&package, &asset)
+                    {
+                        record.blueprint_classes.push(classes);
+                    }
                     let projection = project_text_asset(&package, &asset);
                     checkpoint(cancellation, "inspection")?;
                     decoded_keys.record(&projection.occurrences);

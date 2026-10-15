@@ -46,6 +46,7 @@ export * from "./query.js";
 export * from "./search.js";
 export * from "./text-origin.js";
 export * from "./text-audience.js";
+export * from "./text-copies.js";
 export * from "./text-problems.js";
 export * from "./text-groups.js";
 export * from "./localization-key-changes.js";

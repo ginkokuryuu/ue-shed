@@ -400,6 +400,72 @@ const expectSameQuality = Effect.fn("Test.GameText.sameQuality")(function* (
 		}
 });
 
+it.live("checks report each place once, its compiled Blueprint copies folded in", () =>
+	Effect.gen(function* () {
+		const fixture = yield* makeIndexRegressionFixture();
+		// The fixture's package as a Widget Blueprint whose compile saved copies of its widgets.
+		const pkg = "/Game/Text/Table";
+		const place = (object: string, key: string | null, source: string) => ({
+			source,
+			dev_notes: "",
+			identity:
+				key === null
+					? { status: "unresolved" as const, reason: "culture_invariant" as const }
+					: { status: "resolved" as const, namespace: "UI", key },
+			location: {
+				kind: "asset_property" as const,
+				object_path: `${pkg}.${object}`,
+				class_path: "/Script/UMG.TextBlock",
+				property_path: "Text"
+			},
+			edit_capability: "read_only" as const
+		});
+		yield* Effect.promise(() =>
+			writeLocalization(fixture.projectRoot, [
+				{ key: "Title", source: "Play now", de: "Jetzt spielen" },
+				{ key: "Label", source: "Shop", de: "<b>Laden</>" }
+			])
+		);
+		fixture.update(
+			[
+				// Keyed text without a copy, so TextBlock text is localizable once.
+				place("Table.WidgetTree.Title", "Title", "Play now"),
+				place("Table.WidgetTree.Label", "Label", "Shop"),
+				place("Table_C.WidgetTree.Label", "Label", "Shop"),
+				// Invariant text and its copy: one place, so as common as keyed text.
+				place("Table.WidgetTree.Name", null, "Shop name"),
+				place("Table_C.WidgetTree.Name", null, "Shop name")
+			],
+			[
+				{
+					blueprint: `${pkg}.Table`,
+					generatedClass: `${pkg}.Table_C`,
+					classDefault: `${pkg}.Default__Table_C`
+				}
+			]
+		);
+		yield* Effect.gen(function* () {
+			const result = yield* (yield* GameTextIndexRefresh).refresh(fixture.request);
+			const join = result.localizationJoin;
+			const report = checkLocalizationTarget(result.corpus, join, result.evidence);
+			const found = (kind: string) =>
+				report.findings.filter((finding) => finding.kind === kind);
+			for (const kind of ["culture_invariant_text", "rich_text_tags_added"]) {
+				expect(found(kind), kind).toHaveLength(1);
+				expect(
+					found(kind)[0]!.affectedOccurrences.map(
+						(occurrence) => occurrence.location.objectPath
+					),
+					kind
+				).toEqual([
+					`${pkg}.Table.WidgetTree.${kind === "culture_invariant_text" ? "Name" : "Label"}`
+				]);
+			}
+			yield* expectSameQuality(result);
+		}).pipe(Effect.provide(fixture.layer()));
+	}).pipe(Effect.scoped)
+);
+
 it.live("rows the query hides are neither checked nor counted in the limits", () =>
 	Effect.gen(function* () {
 		const fixture = yield* makeIndexRegressionFixture();

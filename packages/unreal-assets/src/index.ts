@@ -78,6 +78,7 @@ export {
 	SavedAssetScanProgress,
 	SavedAssetScanSummary,
 	SavedAssetTextCoverageGap,
+	SavedAssetBlueprintClasses,
 	SavedAssetGatherCoverage,
 	SavedAssetMissingGatherableText,
 	SavedAssetPackageTextEvent,

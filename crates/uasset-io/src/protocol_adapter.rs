@@ -271,22 +271,27 @@ impl Emitter {
             ) {
             compatible = legacy_header_result(result);
             &compatible
-        } else if self.contract.version.minor < 11
+        } else if self.contract.version.minor < 12
             && let ResultFrame::ExtractTextPackages {
                 event: SavedAssetPackageTextEvent::Package { record },
             } = result
-            && ((self.contract.version.minor < 10 && record.gather_coverage.is_some())
-                || record
-                    .occurrences
-                    .iter()
-                    .any(|occurrence| occurrence.gather_editor_only.is_some()))
+            && (!record.blueprint_classes.is_empty()
+                || (self.contract.version.minor < 11
+                    && ((self.contract.version.minor < 10 && record.gather_coverage.is_some())
+                        || record
+                            .occurrences
+                            .iter()
+                            .any(|occurrence| occurrence.gather_editor_only.is_some()))))
         {
             let mut record = record.clone();
+            record.blueprint_classes.clear();
             if self.contract.version.minor < 10 {
                 record.gather_coverage = None;
             }
-            for occurrence in &mut record.occurrences {
-                occurrence.gather_editor_only = None;
+            if self.contract.version.minor < 11 {
+                for occurrence in &mut record.occurrences {
+                    occurrence.gather_editor_only = None;
+                }
             }
             compatible = ResultFrame::ExtractTextPackages {
                 event: SavedAssetPackageTextEvent::Package { record },

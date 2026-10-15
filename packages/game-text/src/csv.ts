@@ -19,6 +19,8 @@ export function textReviewSignalLabel(signal: TextReviewSignal): string {
 			return "key has different text";
 		case "evidence_only":
 			return "read only";
+		case "compiled_copy_differs":
+			return "Blueprint not compiled since edit";
 	}
 }
 
