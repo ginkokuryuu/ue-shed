@@ -1,4 +1,5 @@
-import { resolve } from "node:path";
+import { rm } from "node:fs/promises";
+import { join, resolve } from "node:path";
 import { it } from "@effect/vitest";
 import { Effect, Layer, Ref, Schema } from "effect";
 import { LocalizationTargetsReport } from "@ue-shed/localization/browser";
@@ -6,9 +7,12 @@ import { LocalizationEvidenceNodeLive } from "@ue-shed/localization";
 import { GameTextIndexRefresh, GameTextIndexError } from "@ue-shed/game-text";
 import { LocalizationError } from "@ue-shed/localization";
 import { expect } from "vitest";
+import { useSavedFixtureProject } from "../../../fixtures/unreal-project/saved-project.test-support.js";
 import { CliRuntime } from "./cli-runtime.js";
 import { runCli } from "./command.js";
 import { loadLocalizationContext } from "./workflows/localization.js";
+
+const fixture = useSavedFixtureProject();
 
 const Failure = Schema.Struct({
 	schemaVersion: Schema.Literal(1),
@@ -28,18 +32,27 @@ it.effect("loc status provides safe recovery for missing manifests and reader fa
 				setExitCode: (code) => Ref.set(exitCode, code)
 			})
 		);
+		// Game now has gathered problem cases; explicitly remove its manifest in this copy.
+		yield* Effect.promise(() =>
+			rm(join(fixture.root, "Content/Localization/Game/Game.manifest"))
+		);
 		yield* runCli([
 			"loc",
 			"status",
-			resolve("fixtures/unreal-project"),
+			fixture.root,
 			"--target",
-			"Game"
+			"Game",
+			"--reader",
+			"missing-private-reader"
 		]).pipe(Effect.provide(runtime));
 		const missing = yield* Schema.decodeUnknownEffect(Schema.fromJsonString(Failure))(
 			yield* Ref.get(output)
 		);
 		expect(missing.error.code).toBe("missing_manifest");
+		expect(missing.error.recovery).toContain("Gather");
+		expect(yield* Ref.get(exitCode)).toBe(2);
 		yield* Ref.set(output, "");
+		yield* Ref.set(exitCode, 0);
 		yield* runCli([
 			"loc",
 			"status",
