@@ -255,8 +255,8 @@ describe("translation shape checks", () => {
 		expect(kind(tags, "rich_text_tags_added")).toEqual([]);
 		// Added tags alone are low: they style more text, but drop nothing.
 		const added = line(
-			"I should've brought little Stephen.",
-			"Eu devia ter trazido o pequeno <NPCName>Stephen</>."
+			"I should've brought little Sam.",
+			"Eu devia ter trazido o pequeno <NPCName>Sam</>."
 		);
 		expect(kind(added, "rich_text_tags")).toEqual([]);
 		expect(
@@ -659,9 +659,9 @@ describe("built-in source checks", () => {
 			[]
 		);
 		expect(
-			markup(
-				"<NPCName>Valentina</> said <NPCName>Macy got this incredible new video game."
-			).map((finding) => finding.actual.richText)
+			markup("<NPCName>Rosa</> said <NPCName>Ida got this incredible new video game.").map(
+				(finding) => finding.actual.richText
+			)
 		).toEqual([{ opening: 2, closing: 1 }]);
 		const workspace = (source: string) => {
 			const text = corpus([unit("K", source)]);
@@ -683,7 +683,7 @@ describe("built-in source checks", () => {
 		).toEqual(["en · Closes with </timeAnd>; rich text closes with </>"]);
 	});
 	it("skips bytecode fragments and ungathered lines in the source checks", () => {
-		const fragment = "Charles: I'm about ";
+		const fragment = "Ada: I'm about ";
 		const text = corpus([]);
 		const files = evidence(
 			[
@@ -757,7 +757,7 @@ describe("built-in source checks", () => {
 			invariantUnit("a", "Blessing Description", textBlock),
 			// A property mostly invariant: a credits column of backer names with one localized
 			// heading.
-			...["Lizzie Jenkins", "Michelle Sims"].map((name, index) =>
+			...["Ada Example", "Ben Sample"].map((name, index) =>
 				invariantUnit(`b${index}`, name, backers(`${11860 + index}`))
 			),
 			TextUnit.make({
@@ -780,7 +780,7 @@ describe("built-in source checks", () => {
 					"/Game/UI/Debug/WBP_NpcDebugPanel.WBP_NpcDebugPanel_C.WidgetTree.TextBlock_5"
 			}),
 			// Text renders placed in a level, a sequence or a Blueprint template.
-			invariantUnit("d", "Betty Bird Feeder Spot", {
+			invariantUnit("d", "Bird Feeder Spot", {
 				objectPath:
 					"/Game/Maps/Waypoints.Waypoints.PersistentLevel.C_AnimationWaypoint_198.Text",
 				classPath: "/Script/Engine.TextRenderComponent",
