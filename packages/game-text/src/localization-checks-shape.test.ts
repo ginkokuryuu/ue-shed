@@ -618,7 +618,8 @@ describe("built-in source checks", () => {
 		);
 		expect(terms.map((finding) => finding.actual)).toMatchObject([{ start: 6, end: 17 }]);
 		// A role that does not select the line's place leaves the placeholder to the built-in.
-		const elsewhere = rules({
+		const elsewhere = Schema.decodeUnknownSync(TextQualityRuleDocument)({
+			...STARTER_GAME_TEXT_RULES,
 			roles: [
 				...STARTER_GAME_TEXT_RULES.roles,
 				{
@@ -642,7 +643,7 @@ describe("built-in source checks", () => {
 					recovery: "Finish the text."
 				}
 			]
-		} as unknown as Partial<TextQualityRuleDocument>);
+		});
 		expect(matches(line(source, source, {}, elsewhere))).toEqual([["TODO", "placeholder"]]);
 	});
 	it("checks source markup the way Slate reads it", () => {
