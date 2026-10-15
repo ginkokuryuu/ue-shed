@@ -1,13 +1,98 @@
-import { PassThrough } from "node:stream";
+import { EventEmitter } from "node:events";
+import { PassThrough, Writable } from "node:stream";
 import { Effect } from "effect";
 import { expect, it } from "vitest";
 import { AssetReaderError } from "./asset-reader.js";
 import {
 	invokeProtocolSessionSingle,
 	makeProtocolRequest,
+	type ProtocolProcessFactory,
 	type ProtocolSessionProcess,
+	ProtocolStreamFailure,
+	runUassetProtocolEvents,
 	UassetProtocolSession
 } from "./protocol-transport.js";
+
+const MAX_PROTOCOL_REQUEST_BYTES = 4 * 1024 * 1024;
+
+function closedPipeError(): Error {
+	return Object.assign(new Error("write EPIPE"), { code: "EPIPE" });
+}
+
+/** A real stream whose writes fail like a pipe the worker already closed. */
+function closedPipeInput(): Writable {
+	return new Writable({
+		write(_chunk, _encoding, callback) {
+			callback(closedPipeError());
+		}
+	});
+}
+
+/** A one-shot `protocol` worker that exits before reading its request. */
+class EarlyExitProtocolChild extends EventEmitter {
+	readonly pid = 7;
+	readonly stdin = closedPipeInput();
+	readonly stdout = new PassThrough();
+	readonly stderr = new PassThrough();
+	killed = false;
+
+	constructor() {
+		super();
+		setImmediate(() => {
+			this.stdout.end();
+			this.stderr.end();
+			setImmediate(() => this.emit("close", 1, null));
+		});
+	}
+
+	kill(): boolean {
+		this.killed = true;
+		return true;
+	}
+}
+
+function inspectRequestWithFrameBytes(frameBytes: number) {
+	const request = makeProtocolRequest(
+		{ assetPath: "", kind: "inspect" },
+		{ maximumOutputBytes: 1_024, timeoutMs: 1_000 }
+	);
+	const emptyFrameBytes = Buffer.byteLength(`${JSON.stringify(request)}\n`, "utf8");
+	const assetPath = "a".repeat(frameBytes - emptyFrameBytes);
+	const sized = { ...request, operation: { assetPath, kind: "inspect" as const } };
+	expect(Buffer.byteLength(`${JSON.stringify(sized)}\n`, "utf8")).toBe(frameBytes);
+	return sized;
+}
+
+/** Counts spawns so tests can prove a request was rejected before any worker started. */
+class EarlyExitProtocolSpawner {
+	spawns = 0;
+
+	readonly factory: ProtocolProcessFactory = () => {
+		this.spawns += 1;
+		return new EarlyExitProtocolChild();
+	};
+}
+
+async function drainProtocolEvents(
+	spawner: EarlyExitProtocolSpawner,
+	request: ReturnType<typeof makeProtocolRequest>
+): Promise<ProtocolStreamFailure | undefined> {
+	try {
+		for await (const _event of runUassetProtocolEvents({
+			configuration: { executable: "early-exit-reader" },
+			processFactory: spawner.factory,
+			request,
+			signal: undefined,
+			timeoutMs: 1_000
+		})) {
+			// Drain until the worker failure surfaces.
+		}
+	} catch (cause) {
+		if (cause instanceof ProtocolStreamFailure) return cause;
+		throw cause;
+	}
+	return undefined;
+}
 
 class RejectingProtocolInput {
 	destroyed = false;
@@ -19,6 +104,10 @@ class RejectingProtocolInput {
 
 	end(): void {
 		this.destroyed = true;
+	}
+
+	on(_event: "error", _listener: (cause: Error) => void): this {
+		return this;
 	}
 
 	destroy(): void {
@@ -37,7 +126,7 @@ class RejectingProtocolInput {
 
 class StalledInputProcess implements ProtocolSessionProcess {
 	readonly pid = 42;
-	readonly stdin: RejectingProtocolInput;
+	readonly stdin: RejectingProtocolInput | Writable;
 	readonly stdout = new PassThrough();
 	readonly stderr = new PassThrough();
 	exitCode: number | null = null;
@@ -52,9 +141,10 @@ class StalledInputProcess implements ProtocolSessionProcess {
 	constructor(
 		private readonly closesOnKill = true,
 		inputMessage?: string,
-		onWrite?: () => void
+		onWrite?: () => void,
+		stdin?: Writable
 	) {
-		this.stdin = new RejectingProtocolInput(inputMessage, onWrite);
+		this.stdin = stdin ?? new RejectingProtocolInput(inputMessage, onWrite);
 	}
 
 	kill = (): boolean => {
@@ -221,4 +311,76 @@ it("ignores delayed events from a terminated worker after its replacement starts
 	expect(failure.message).toContain("replacement input closed");
 	expect(failure.message).not.toContain("stale worker error");
 	await session.close();
+});
+
+it("fails a session request when stdin emits a closed-pipe error", async () => {
+	const assetPath = "C:/Fixture/BP_ClosedPipe.uasset";
+	const worker = new StalledInputProcess(true, undefined, undefined, closedPipeInput());
+	const configuration = {
+		catalogTimeoutMs: 1_000,
+		executable: "closed-pipe-reader",
+		timeoutMs: 1_000
+	};
+	const session = new UassetProtocolSession(configuration, () => worker);
+	const failure = await Effect.runPromise(
+		invokeProtocolSessionSingle({
+			configuration,
+			expected: "inspect",
+			operation: "inspect",
+			path: assetPath,
+			request: makeProtocolRequest(
+				{ assetPath, kind: "inspect" },
+				{ maximumOutputBytes: 1_024, timeoutMs: 1_000 }
+			),
+			select: () => undefined,
+			session
+		}).pipe(Effect.timeout("1 second"), Effect.flip)
+	);
+	// Let the stream's deferred "error" emission run; an unhandled one fails the test run.
+	await new Promise((resolvePromise) => setImmediate(resolvePromise));
+
+	expect(failure).toBeInstanceOf(AssetReaderError);
+	if (!(failure instanceof AssetReaderError)) return;
+	expect(failure.kind).toBe("process");
+	expect(failure.message).toContain("write EPIPE");
+	await session.close();
+});
+
+it("fails a one-shot request when the worker closes stdin before reading", async () => {
+	const spawner = new EarlyExitProtocolSpawner();
+
+	const failure = await drainProtocolEvents(
+		spawner,
+		makeProtocolRequest(
+			{ assetPath: "C:/Fixture/BP_EarlyExit.uasset", kind: "inspect" },
+			{ maximumOutputBytes: 1_024, timeoutMs: 1_000 }
+		)
+	);
+
+	expect(spawner.spawns).toBe(1);
+	expect(failure?.kind).toBe("process");
+	expect(failure?.message).toBe("write EPIPE");
+});
+
+it("rejects a one-shot request over the native 4 MiB frame limit before spawning", async () => {
+	const spawner = new EarlyExitProtocolSpawner();
+
+	const oversized = await drainProtocolEvents(
+		spawner,
+		inspectRequestWithFrameBytes(MAX_PROTOCOL_REQUEST_BYTES + 1)
+	);
+
+	expect(spawner.spawns).toBe(0);
+	expect(oversized?.kind).toBe("contract");
+	expect(oversized?.message).toBe(
+		"Native reader request exceeds 4 MiB; split package paths into batches"
+	);
+
+	// The native reader accepts a frame of exactly 4 MiB, trailing newline included.
+	const atLimit = await drainProtocolEvents(
+		spawner,
+		inspectRequestWithFrameBytes(MAX_PROTOCOL_REQUEST_BYTES)
+	);
+	expect(spawner.spawns).toBe(1);
+	expect(atLimit?.kind).toBe("process");
 });

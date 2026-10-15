@@ -8,6 +8,7 @@ import type { GameTextIndexRefreshResult } from "./index-contract.js";
 import { GameTextIndexRefresh } from "./index-refresh.js";
 import { makeIndexRegressionFixture } from "./index-refresh-regressions.test-support.js";
 import { checkLocalizationTarget } from "./localization-checks.js";
+import type { LocalizationQualityProgress } from "./localization-quality-index.js";
 import type { LocalizationCheckOptions } from "./localization-quality-schema.js";
 import { localizationLineFingerprint } from "./localization-review.js";
 import {
@@ -199,6 +200,29 @@ it.live(
 						expect([filter, all.counts[filter]]).not.toEqual([filter, 0]);
 					expect(all.suggestedFixCount).toBeGreaterThan(0);
 					whitespace.push(all.counts.whitespace);
+					// Source-level checks: one finding per line, under the native culture only.
+					const other = join.cultures.find((culture) => culture !== join.nativeCulture)!;
+					const translated = legacy.search({
+						target: join.target,
+						filter: "all",
+						culture: other
+					});
+					expect([
+						translated.counts.duplicate_source,
+						translated.counts.missing_translator_notes
+					]).toEqual([0, 0]);
+					for (const filter of [
+						"duplicate_source",
+						"missing_translator_notes"
+					] as const) {
+						const found = legacy.export({ target: join.target, filter }).findings;
+						expect(new Set(found.map(({ culture }) => culture))).toEqual(
+							new Set([join.nativeCulture])
+						);
+						expect(new Set(found.map(({ context }) => context)).size).toBe(
+							found.length
+						);
+					}
 					for (const culture of [undefined, ...join.cultures])
 						for (const filter of WorkspaceQualityFilter.literals) {
 							const request: WorkspaceQualityRequest = {
@@ -325,16 +349,16 @@ it.live("lines whose IDs compare equal keep the in-memory report's order", () =>
 			expect(join.lines[0]!.id).not.toBe(join.lines[1]!.id);
 			expect(join.lines[0]!.id.localeCompare(join.lines[1]!.id)).toBe(0);
 			// One accepted finding on each line; the other line's text has another fingerprint.
-			const accept = (key: string, check: string) => {
+			const accept = (key: string, check: string, culture: string = "de") => {
 				const line = join.lines.find((item) => item.identity?.key === key)!;
 				return {
 					check,
-					culture: "de",
+					culture,
 					namespace: "UI",
 					key,
 					fingerprint: localizationLineFingerprint(
 						line,
-						line.cultures.find((culture) => culture.culture === "de")!
+						line.cultures.find((item) => item.culture === culture)!
 					),
 					by: "Reviewer",
 					at: "2026-10-14T00:00:00Z"
@@ -346,7 +370,8 @@ it.live("lines whose IDs compare equal keep the in-memory report's order", () =>
 				records: [],
 				acceptedFindings: [
 					accept("\u00e9", "translation.limit"),
-					accept("e\u0301", "localization.duplicate_source")
+					// Source-level findings are reported under the native culture.
+					accept("e\u0301", "localization.duplicate_source", join.nativeCulture!)
 				]
 			});
 			const total = (options: LocalizationCheckOptions) =>
@@ -363,6 +388,17 @@ it.live("lines whose IDs compare equal keep the in-memory report's order", () =>
 				).search({ target: join.target, filter: "all" }).total;
 			expect(total({ review })).toBe(total({}) - 2);
 			yield* expectSameQuality(result, [{}, { review }]);
+			// Lines checked as one block count once each.
+			let last: LocalizationQualityProgress | undefined;
+			const quality = yield* result.localizationQuality!({
+				review,
+				onProgress: (step) => (last = step)
+			});
+			expect(last).toEqual({
+				checkedLines: join.lines.length,
+				totalLines: join.lines.length,
+				findings: quality.findings.length
+			});
 		}).pipe(Effect.provide(fixture.layer()));
 	}).pipe(Effect.scoped)
 );
@@ -402,6 +438,38 @@ it.live("a scan across many pages equals the in-memory checks", () =>
 					legacy.search({ ...request, offset: 500 })
 				);
 			}
+
+			// Progress: once before the scan, then per page, ending at every line and finding.
+			const progress: LocalizationQualityProgress[] = [];
+			const reported = yield* result.localizationQuality!({
+				onProgress: (step) => progress.push(step)
+			});
+			const totalLines = join.lines.length;
+			expect(progress[0]).toEqual({ checkedLines: 0, totalLines, findings: 0 });
+			expect(progress.length).toBeGreaterThan(3);
+			for (const [index, step] of progress.entries()) {
+				expect(step.totalLines).toBe(totalLines);
+				if (index === 0) continue;
+				expect(step.checkedLines).toBeGreaterThan(progress[index - 1]!.checkedLines);
+				expect(step.findings).toBeGreaterThanOrEqual(progress[index - 1]!.findings);
+			}
+			expect(progress.at(-1)).toEqual({
+				checkedLines: totalLines,
+				totalLines,
+				findings: reported.findings.length
+			});
+			// The callback changes nothing: the same findings, order and IDs.
+			const plain = yield* result.localizationQuality!();
+			expect(reported.findings.length).toBe(plain.findings.length);
+			const everyPosition = Array.from(
+				{ length: plain.findings.length },
+				(_, position) => position
+			);
+			expect(reported.findings.items(everyPosition)).toEqual(
+				plain.findings.items(everyPosition)
+			);
+			expect(reported.findings.limits(undefined)).toEqual(plain.findings.limits(undefined));
+			expect(reported.metadata.rules).toEqual(plain.metadata.rules);
 		}).pipe(Effect.provide(fixture.layer()));
 	}).pipe(Effect.scoped)
 );

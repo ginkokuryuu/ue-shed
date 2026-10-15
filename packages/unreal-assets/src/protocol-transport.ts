@@ -1,6 +1,6 @@
 import { spawn } from "node:child_process";
 import { createInterface } from "node:readline";
-import type { Readable } from "node:stream";
+import type { Readable, Writable } from "node:stream";
 import {
 	SavedAssetManifestEntry,
 	SavedAssetScan,
@@ -53,6 +53,9 @@ export interface ProtocolSingleEvidence<A> {
 const TYPE_SIDE_VALIDATION_MIN_FRAME_CHARACTERS = 8 * 1024 * 1024;
 const PROJECT_INDEX_TYPE_SIDE_MIN_FRAME_CHARACTERS = 128 * 1024;
 const MAX_PROTOCOL_TERMINATION_WAIT_MS = 1_000;
+// Mirrors `MAX_REQUEST_BYTES` in crates/uasset-io/src/protocol_adapter.rs. The one-shot
+// `protocol` command bounds the raw stdin frame, trailing newline included.
+const MAX_PROTOCOL_REQUEST_BYTES = 4 * 1024 * 1024;
 const exactProtocolParseOptions = { onExcessProperty: "error" } as const;
 const validateProtocolEventType = Schema.decodeUnknownExit(
 	Schema.toType(UAssetIoEvent),
@@ -678,8 +681,38 @@ export function mapProtocolFailure(
 	});
 }
 
+/** @internal Narrow one-shot process boundary used to verify failures without a native worker. */
+export interface ProtocolProcess {
+	readonly pid?: number | undefined;
+	readonly stdin: Writable | null;
+	readonly stdout: Readable | null;
+	readonly stderr: Readable | null;
+	readonly killed: boolean;
+	kill(): boolean;
+	once(event: "error", listener: (cause: Error) => void): void;
+	once(event: "close", listener: (code: number | null, signal: string | null) => void): void;
+}
+
+/** @internal */
+export type ProtocolProcessFactory = (
+	executable: string,
+	options: { readonly signal: AbortSignal | undefined; readonly timeoutMs: number }
+) => ProtocolProcess;
+
+function spawnProtocolProcess(
+	executable: string,
+	options: { readonly signal: AbortSignal | undefined; readonly timeoutMs: number }
+): ProtocolProcess {
+	return spawn(executable, ["protocol"], {
+		signal: options.signal,
+		timeout: options.timeoutMs,
+		windowsHide: true
+	});
+}
+
 export async function* runUassetProtocolEvents(options: {
 	readonly configuration: Pick<AssetReaderConfiguration, "executable" | "protocolObserver">;
+	readonly processFactory?: ProtocolProcessFactory;
 	readonly request: UAssetIoRequest;
 	readonly signal: AbortSignal | undefined;
 	readonly telemetry?: ProtocolTelemetry;
@@ -700,6 +733,9 @@ export async function* runUassetProtocolEvents(options: {
 			},
 			operation: options.request.operation.kind,
 			path: "project-index",
+			...(options.processFactory === undefined
+				? undefined
+				: { processFactory: options.processFactory }),
 			request: options.request,
 			signal: options.signal,
 			telemetry,
@@ -721,6 +757,7 @@ export interface ProtocolSessionProcess {
 		readonly destroyed: boolean;
 		readonly destroy: () => void;
 		readonly end: () => void;
+		readonly on: (event: "error", listener: (cause: Error) => void) => void;
 		readonly setDefaultEncoding: (encoding: BufferEncoding) => void;
 		readonly write: (chunk: string, callback: (cause?: Error | null) => void) => boolean;
 	} | null;
@@ -832,6 +869,12 @@ export class UassetProtocolSession {
 		this.stderr = "";
 		this.processError = undefined;
 		this.terminating = false;
+		// A worker may close its pipe while a request write is pending. Without a listener the
+		// stream's EOF/EPIPE "error" event would crash the host instead of failing the request.
+		child.stdin.on("error", (cause) => {
+			if (this.child !== child) return;
+			this.processError = cause;
+		});
 		if (child.stderr !== null) {
 			child.stderr.setEncoding("utf8");
 			child.stderr.on("data", (chunk: string) => {
@@ -1042,6 +1085,7 @@ async function* protocolEvents(options: {
 	readonly configuration: AssetReaderConfiguration;
 	readonly operation: string;
 	readonly path: string;
+	readonly processFactory?: ProtocolProcessFactory;
 	readonly request: UAssetIoRequest;
 	readonly signal: AbortSignal | undefined;
 	readonly telemetry: ProtocolTelemetry;
@@ -1049,11 +1093,17 @@ async function* protocolEvents(options: {
 	readonly onEvent?: (event: ProtocolEvent) => void;
 }): AsyncGenerator<ProtocolEvent> {
 	const queuedAt = options.telemetry.queuedAt;
-	const child = spawn(options.configuration.executable, ["protocol"], {
-		signal: options.signal,
-		timeout: options.timeoutMs,
-		windowsHide: true
-	});
+	const requestFrame = `${JSON.stringify(options.request)}\n`;
+	if (Buffer.byteLength(requestFrame, "utf8") > MAX_PROTOCOL_REQUEST_BYTES) {
+		throw new ProtocolStreamFailure(
+			"contract",
+			"Native reader request exceeds 4 MiB; split package paths into batches"
+		);
+	}
+	const child = (options.processFactory ?? spawnProtocolProcess)(
+		options.configuration.executable,
+		{ signal: options.signal, timeoutMs: options.timeoutMs }
+	);
 	if (child.pid !== undefined) {
 		options.telemetry.workerPid = child.pid;
 		notifyProtocolObserver(options.telemetry, { kind: "worker_started", pid: child.pid });
@@ -1094,7 +1144,12 @@ async function* protocolEvents(options: {
 			);
 		}
 		child.stdin.setDefaultEncoding("utf8");
-		child.stdin.end(`${JSON.stringify(options.request)}\n`);
+		// A worker may reject input and close its pipe before the pending write completes.
+		// Surface EOF/EPIPE through the typed process failure instead of crashing Node.
+		child.stdin.on("error", (cause) => {
+			processError = cause;
+		});
+		child.stdin.end(requestFrame);
 		child.stdout.setEncoding("utf8");
 		const lines = new ProtocolLineDecoder();
 		const outputBudget = new ProtocolOutputBudget(

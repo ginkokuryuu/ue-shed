@@ -216,12 +216,15 @@ describe("built-in localization quality checks", () => {
 			checkLocalizationTarget(text, joined, files, { culture: cultureCode("fr") })
 		).toThrow("selection is invalid");
 	});
-	it("finds missing notes but accepts occurrence and manifest notes", () => {
-		expect(
-			findings(checked("Source", "Translation").report).some(
-				(finding) => finding.kind === "missing_translator_notes"
-			)
-		).toBe(true);
+	it("finds missing notes once per line and accepts occurrence and manifest notes", () => {
+		const noteCultures = (options: LocalizationCheckOptions) =>
+			findings(checked("Source", "Translation", options).report)
+				.filter((finding) => finding.kind === "missing_translator_notes")
+				.map((finding) => finding.culture);
+		// The native culture carries the line's one finding; another culture's selection has none.
+		expect(noteCultures({})).toEqual(["en"]);
+		expect(noteCultures({ culture: cultureCode("en") })).toEqual(["en"]);
+		expect(noteCultures({ culture: cultureCode("de") })).toEqual([]);
 		const original = unit();
 		const text = corpus([
 			{
@@ -264,9 +267,15 @@ describe("built-in localization quality checks", () => {
 		);
 		const joined = joinLocalizationTarget(text, files, files.target);
 		const report = checkLocalizationTarget(text, joined, files);
+		// A fact about the source: once per line, under the native culture, not once per culture.
 		expect(
-			findings(report).filter((finding) => finding.kind === "duplicate_source")
-		).toHaveLength(4);
+			findings(report)
+				.filter((finding) => finding.kind === "duplicate_source")
+				.map((finding) => [finding.identity.key, finding.culture])
+		).toEqual([
+			["A", "en"],
+			["B", "en"]
+		]);
 		expect(
 			joined.lines.find((line) => line.identity?.key === "B")?.cultures[0]?.archive
 		).toBeNull();

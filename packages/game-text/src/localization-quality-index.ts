@@ -55,6 +55,25 @@ const ITEM_BATCH = 2048;
 
 type Finding = LocalizationQualityFinding | LocalizationPolicyFinding;
 
+/** How far an indexed quality scan has got. */
+export interface LocalizationQualityProgress {
+	/** The join's lines checked so far. */
+	readonly checkedLines: number;
+	/** The join's lines the scan checks, known from the first call. */
+	readonly totalLines: number;
+	/** Findings so far, accepted findings left out; the last call has the scan's count. */
+	readonly findings: number;
+}
+
+/** Check options of an indexed quality scan. */
+export interface IndexedLocalizationQualityOptions extends LocalizationCheckOptions {
+	/**
+	 * Called once before the scan with no lines checked, then after each page of lines, the last
+	 * call with every line checked. It runs inside the scan, so it must be cheap and must not throw.
+	 */
+	readonly onProgress?: ((progress: LocalizationQualityProgress) => void) | undefined;
+}
+
 /** Growable u32 column; scans append, then trim. */
 function u32Builder() {
 	let values = new Uint32Array(4096),
@@ -190,9 +209,10 @@ export const indexedLocalizationQuality = Effect.fn("GameText.localizationQualit
 	corpus: Pick<TextCorpus, "status" | "coverage">,
 	evidence: LocalizationTargetEvidence,
 	joinRows: Uint32Array,
-	options: LocalizationCheckOptions = {},
+	options: IndexedLocalizationQualityOptions = {},
 	ruleDocument?: GameTextRuleDocument
 ) {
+	options.onProgress?.({ checkedLines: 0, totalLines: joinRows.length, findings: 0 });
 	const data = new JoinedQueryData(joined);
 	const target = data.joined.meta.input.target;
 	const join = {
@@ -213,6 +233,7 @@ export const indexedLocalizationQuality = Effect.fn("GameText.localizationQualit
 		joinPosition[joinRows[position]!] = position;
 	const context: LocalizationLineCheckContext = {
 		target: target.name,
+		nativeCulture: target.nativeCulture,
 		options,
 		enabled,
 		duplicates: yield* duplicateSources(data, target.cultures, joinPosition)
@@ -371,6 +392,8 @@ export const indexedLocalizationQuality = Effect.fn("GameText.localizationQualit
 		storedSecond = u32Builder();
 	const blockStart = new Uint32Array(lineCount),
 		blockSize = new Uint32Array(lineCount);
+	let checkedLines = 0;
+	/** Checks one page of blocks, then reports progress. */
 	const checkBlocks = (firsts: readonly number[]) => {
 		const blocks = blockLines(firsts);
 		for (let block = 0; block < firsts.length; block++) {
@@ -392,7 +415,13 @@ export const indexedLocalizationQuality = Effect.fn("GameText.localizationQualit
 					recordLimit("", diagnostic.code, seen);
 					recordLimit(diagnostic.culture, diagnostic.code, seen);
 				}
+			checkedLines += lines.length;
 		}
+		options.onProgress?.({
+			checkedLines,
+			totalLines: lineCount,
+			findings: storedFacts.length
+		});
 	};
 	// One-line blocks in storage order, so each page hydrates adjacent rows.
 	let page: number[] = [];

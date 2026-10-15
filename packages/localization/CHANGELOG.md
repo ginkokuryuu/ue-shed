@@ -1,5 +1,12 @@
 # @ue-shed/localization
 
+## 0.15.0
+
+### Patch Changes
+
+- @ue-shed/config-explorer@0.15.0
+    - @ue-shed/engine@0.15.0
+
 ## 0.14.0
 
 ### Patch Changes
