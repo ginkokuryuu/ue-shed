@@ -15,6 +15,9 @@ use uasset_parser::property::{
     PropertyRecord, PropertyStream, PropertyValue, RawReason, TextHistory, TextValue,
 };
 
+/// The property path of a text literal in a compiled function's script bytecode.
+pub const SCRIPT_BYTECODE_PROPERTY_PATH: &str = "ScriptBytecode";
+
 /// Exact serialized class path used by `UTexture2D` exports.
 pub const TEXTURE2D_CLASS: &str = "/Script/Engine.Texture2D";
 
@@ -170,6 +173,42 @@ pub fn project_text_asset(package: &Package, asset: &DecodedAsset) -> TextAssetP
                 TextEditCapability::ReadOnly,
                 &mut output,
             );
+        }
+        DecodedAsset::Function(function) => {
+            let object = &function.object;
+            visit_text_stream(
+                package,
+                &object.properties,
+                "",
+                &|property_path| TextLocation::AssetProperty {
+                    object_path: object.object_path.to_string(),
+                    class_path: object.class_path.to_string(),
+                    property_path: property_path.to_owned(),
+                },
+                TextEditCapability::ReadOnly,
+                &mut output,
+            );
+            // A compiled function's text literals. Unreal gathers each id once per function
+            // (`[Script Bytecode]` sites), so a literal the compiler emitted twice is one place.
+            let mut seen = Vec::new();
+            for text in &function.script_texts {
+                let identity = identity_for_text(text);
+                if seen.contains(&(identity.clone(), text.source.clone())) {
+                    continue;
+                }
+                seen.push((identity.clone(), text.source.clone()));
+                output.occurrences.push(TextOccurrence {
+                    source: text.source.clone(),
+                    dev_notes: String::new(),
+                    identity,
+                    location: TextLocation::AssetProperty {
+                        object_path: object.object_path.to_string(),
+                        class_path: object.class_path.to_string(),
+                        property_path: SCRIPT_BYTECODE_PROPERTY_PATH.to_owned(),
+                    },
+                    edit_capability: TextEditCapability::ReadOnly,
+                });
+            }
         }
         DecodedAsset::BlueprintGraphNode(node) => visit_text_stream(
             package,

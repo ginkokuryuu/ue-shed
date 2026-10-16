@@ -330,6 +330,13 @@ export const TEXT_AUDIENCE_POLICY = [
 		reason: "player_asset",
 		when: [{ kind: "object", value: "WidgetTree", position: "equals" }],
 		why: "Widgets placed in a Widget Blueprint's designer tree."
+	},
+	{
+		id: "script_bytecode",
+		audience: "player",
+		reason: "player_asset",
+		when: [{ kind: "property", value: "ScriptBytecode" }],
+		why: "Text literals compiled into a Blueprint function's bytecode, which the game runs."
 	}
 ] as const satisfies readonly TextAudienceRule[];
 

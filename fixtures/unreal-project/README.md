@@ -223,9 +223,10 @@ What UE 5.7 does:
 - **A compiled literal follows its pin.** The Print Text pin and the compiled BeginPlay bytecode
   hold the same id.
 
-The reader does not read Blueprint script bytecode text yet: the Print Text literals Unreal gathers
-from `ExecuteUbergraph` are missing, and the package still reports as fully read. They are pinned
-in `readerGaps`.
+The reader finds every runtime text Unreal gathers here, including the Print Text literals it
+reads from `ExecuteUbergraph` bytecode; `readerGaps` pins any it misses and is empty. A file-level
+copy keeps its original saved package name, and the reader still reports that name as the copy's
+object path, where Unreal uses the file's location (`Branched/...`).
 
 ## Large World Partition map
 

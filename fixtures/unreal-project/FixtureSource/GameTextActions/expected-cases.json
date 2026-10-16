@@ -229,30 +229,5 @@
 			"id": "different"
 		}
 	],
-	"readerGaps": [
-		{
-			"site": "BP_ActionSign.BP_ActionSign_C:ExecuteUbergraph_BP_ActionSign [Script Bytecode]",
-			"source": "The door is barred"
-		},
-		{
-			"site": "BP_ActionSign.BP_ActionSign_C:ExecuteUbergraph_BP_ActionSign [Script Bytecode]",
-			"source": "The door is locked"
-		},
-		{
-			"site": "BP_ActionSign_Duplicate.BP_ActionSign_Duplicate_C:ExecuteUbergraph_BP_ActionSign_Duplicate [Script Bytecode]",
-			"source": "The door is barred"
-		},
-		{
-			"site": "BP_ActionSign_Duplicate.BP_ActionSign_Duplicate_C:ExecuteUbergraph_BP_ActionSign_Duplicate [Script Bytecode]",
-			"source": "The door is locked"
-		},
-		{
-			"site": "Branched/BP_ActionSign.BP_ActionSign_C:ExecuteUbergraph_BP_ActionSign [Script Bytecode]",
-			"source": "The door is barred"
-		},
-		{
-			"site": "Branched/BP_ActionSign.BP_ActionSign_C:ExecuteUbergraph_BP_ActionSign [Script Bytecode]",
-			"source": "The door is locked"
-		}
-	]
+	"readerGaps": []
 }

@@ -465,41 +465,44 @@ impl Serialize for AssetView<'_> {
                 curve_rows: CurveRowsView { package, rows: &[] },
                 rows: RowsView { package, rows: &[] },
             },
-            DecodedAsset::UObject(object) => AssetFields {
-                kind: "UObject",
-                object_path: object.object_path.as_str(),
-                class_path: Some(object.class_path.as_str()),
-                object_guid: object.object_guid.as_ref().map(GuidView),
-                row_struct: None,
-                parent_tables: ObjectPathsView(&[]),
-                string_table_namespace: None,
-                string_table_entries: StringTableEntriesView(&[]),
-                string_table_metadata: None,
-                enum_cpp_form: None,
-                enum_entries: EnumEntriesView {
-                    package,
-                    entries: &[],
-                },
-                struct_flags: None,
-                struct_fields: StructFieldsView {
-                    package,
-                    fields: &[],
-                },
-                properties: PropertiesView::new(package, &object.properties),
-                native_data: object
-                    .native_data
-                    .as_deref()
-                    .map(|value| PropertyValueView::new(package, value, 0)),
-                tail_bytes: object.tail.len(),
-                reference_pose: None,
-                bones: BonesView {
-                    package,
-                    bones: &[],
-                },
-                row_count: 0,
-                curve_rows: CurveRowsView { package, rows: &[] },
-                rows: RowsView { package, rows: &[] },
-            },
+            DecodedAsset::UObject(object)
+            | DecodedAsset::Function(uasset_parser::asset::DecodedFunction { object, .. }) => {
+                AssetFields {
+                    kind: "UObject",
+                    object_path: object.object_path.as_str(),
+                    class_path: Some(object.class_path.as_str()),
+                    object_guid: object.object_guid.as_ref().map(GuidView),
+                    row_struct: None,
+                    parent_tables: ObjectPathsView(&[]),
+                    string_table_namespace: None,
+                    string_table_entries: StringTableEntriesView(&[]),
+                    string_table_metadata: None,
+                    enum_cpp_form: None,
+                    enum_entries: EnumEntriesView {
+                        package,
+                        entries: &[],
+                    },
+                    struct_flags: None,
+                    struct_fields: StructFieldsView {
+                        package,
+                        fields: &[],
+                    },
+                    properties: PropertiesView::new(package, &object.properties),
+                    native_data: object
+                        .native_data
+                        .as_deref()
+                        .map(|value| PropertyValueView::new(package, value, 0)),
+                    tail_bytes: object.tail.len(),
+                    reference_pose: None,
+                    bones: BonesView {
+                        package,
+                        bones: &[],
+                    },
+                    row_count: 0,
+                    curve_rows: CurveRowsView { package, rows: &[] },
+                    rows: RowsView { package, rows: &[] },
+                }
+            }
             DecodedAsset::BlueprintGraphNode(node) => AssetFields {
                 kind: "UObject",
                 object_path: node.object_path.as_str(),

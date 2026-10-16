@@ -343,31 +343,34 @@ fn asset_output_from_decoded(package: &Package, decoded: DecodedAsset) -> AssetO
                 rows: Vec::new(),
             }
         }
-        DecodedAsset::UObject(object) => AssetOutput {
-            kind: "UObject",
-            object_path: object.object_path.into_string(),
-            class_path: Some(object.class_path.into_string()),
-            object_guid: object.object_guid.map(|guid| guid.to_string()),
-            row_struct: None,
-            parent_tables: Vec::new(),
-            string_table_namespace: None,
-            string_table_entries: Vec::new(),
-            string_table_metadata: Default::default(),
-            enum_cpp_form: None,
-            enum_entries: Vec::new(),
-            struct_flags: None,
-            struct_fields: Vec::new(),
-            properties: property_outputs(package, object.properties),
-            native_data: object
-                .native_data
-                .map(|value| Box::new(value_output(package, *value))),
-            tail_bytes: object.tail.len(),
-            bones: Vec::new(),
-            reference_pose: None,
-            row_count: 0,
-            curve_rows: Vec::new(),
-            rows: Vec::new(),
-        },
+        DecodedAsset::UObject(object)
+        | DecodedAsset::Function(uasset_parser::asset::DecodedFunction { object, .. }) => {
+            AssetOutput {
+                kind: "UObject",
+                object_path: object.object_path.into_string(),
+                class_path: Some(object.class_path.into_string()),
+                object_guid: object.object_guid.map(|guid| guid.to_string()),
+                row_struct: None,
+                parent_tables: Vec::new(),
+                string_table_namespace: None,
+                string_table_entries: Vec::new(),
+                string_table_metadata: Default::default(),
+                enum_cpp_form: None,
+                enum_entries: Vec::new(),
+                struct_flags: None,
+                struct_fields: Vec::new(),
+                properties: property_outputs(package, object.properties),
+                native_data: object
+                    .native_data
+                    .map(|value| Box::new(value_output(package, *value))),
+                tail_bytes: object.tail.len(),
+                bones: Vec::new(),
+                reference_pose: None,
+                row_count: 0,
+                curve_rows: Vec::new(),
+                rows: Vec::new(),
+            }
+        }
         DecodedAsset::BlueprintGraphNode(node) => AssetOutput {
             kind: "UObject",
             object_path: node.object_path.into_string(),
