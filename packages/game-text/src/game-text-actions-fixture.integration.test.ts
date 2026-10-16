@@ -5,6 +5,7 @@ import { Effect, Schema, Stream } from "effect";
 import { describe, expect, it } from "vitest";
 import { useSavedFixtureProject } from "../../../fixtures/unreal-project/saved-project.test-support.js";
 import { textCorpusFromExtractionEvents } from "./corpus.js";
+import { textCorpusQuery } from "./query.js";
 
 const ROOT = "/Game/Fixture/GameTextActions/";
 const ENGINES = ["5.7", "5.8"] as const;
@@ -200,6 +201,47 @@ describe("Game Text identity cases in the saved fixture", () => {
 			);
 			const key = (item: typeof Place.Type) => JSON.stringify([item.site, item.source]);
 			expect([...new Set(missing.map(key))].sort()).toEqual(cases.readerGaps.map(key).sort());
+		}
+	);
+
+	it.skipIf(!executable)(
+		"keeps two keys with the same text in one compiled function apart",
+		async () => {
+			// The duplicated Blueprint's ubergraph prints "The door is locked" under two keys: the
+			// Content Browser duplicate re-keyed the original node but not its pasted copy.
+			const corpus = textCorpusFromExtractionEvents({
+				projectRoot: fixture.root,
+				events: await Effect.runPromise(
+					Stream.runCollect(
+						extractProjectTextPackages({
+							projectRoot: fixture.root,
+							paths: [
+								join(
+									fixture.root,
+									"Content/Fixture/GameTextActions/BP_ActionSign_Duplicate.uasset"
+								)
+							]
+						})
+					).pipe(Effect.provide(assetReaderLayer({ executable: executable! })))
+				)
+			});
+			const locked = corpus.units.flatMap((unit) =>
+				unit.occurrences.filter(
+					(occurrence) =>
+						occurrence.source === "The door is locked" &&
+						occurrence.location.kind === "asset_property" &&
+						occurrence.location.propertyPath.startsWith("ScriptBytecode")
+				)
+			);
+			expect(new Set(locked.map((occurrence) => occurrence.id)).size).toBe(2);
+			expect(
+				textCorpusQuery(corpus).search({
+					capability: "all",
+					lens: "duplicate_source",
+					pageSize: 50,
+					query: "The door is locked"
+				}).units
+			).toHaveLength(2);
 		}
 	);
 });

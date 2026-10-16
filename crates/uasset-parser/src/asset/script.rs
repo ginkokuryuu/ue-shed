@@ -238,14 +238,37 @@ mod token {
     pub const AUTO_RTFM_ABORT: u8 = 0x73;
 }
 
-/// `EBlueprintTextLiteralType`.
-mod literal {
-    pub const EMPTY: u8 = 0;
-    pub const LOCALIZED_TEXT: u8 = 1;
-    pub const INVARIANT_TEXT: u8 = 2;
-    pub const LITERAL_STRING: u8 = 3;
-    pub const STRING_TABLE_ENTRY: u8 = 4;
+/// `EBlueprintTextLiteralType`, as `XFERTEXT` reads the saved byte.
+///
+/// UE 5.8 inserted `LocalizedTextWithNotes` at 2 (`Script.h`), moving the later types up by one.
+/// The bytecode carries no version of its own; the change shipped with FText translator notes,
+/// FortniteMain `AddDevNotesToFText` (260), which is the only saved marker for it.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum TextLiteral {
+    Empty,
+    Localized,
+    LocalizedWithNotes,
+    Invariant,
+    LiteralString,
+    StringTableEntry,
 }
+
+impl TextLiteral {
+    fn from_saved(byte: u8, notes_layout: bool) -> Option<Self> {
+        Some(match (byte, notes_layout) {
+            (0, _) => Self::Empty,
+            (1, _) => Self::Localized,
+            (2, true) => Self::LocalizedWithNotes,
+            (2, false) | (3, true) => Self::Invariant,
+            (3, false) | (4, true) => Self::LiteralString,
+            (4, false) | (5, true) => Self::StringTableEntry,
+            _ => return None,
+        })
+    }
+}
+
+/// FortniteMain `AddDevNotesToFText`, from which saved text literals use the UE 5.8 numbering.
+const FORTNITE_MAIN_TEXT_DEV_NOTES: i32 = 260;
 
 struct ScriptWalk<'r, 'a> {
     reader: crate::archive::Reader<'r>,
@@ -253,6 +276,7 @@ struct ScriptWalk<'r, 'a> {
     path: &'a str,
     large_world_coordinates: bool,
     field_path_owner: bool,
+    text_literal_notes_layout: bool,
     texts: Vec<TextValue>,
 }
 
@@ -279,6 +303,8 @@ impl<'r, 'a> ScriptWalk<'r, 'a> {
                 .is_at_least_ue5(UE5_LARGE_WORLD_COORDINATES),
             field_path_owner: version(RELEASE_OBJECT_VERSION) >= RELEASE_FIELD_PATH_OWNER
                 || version(FORTNITE_MAIN_VERSION) >= FORTNITE_MAIN_FIELD_PATH_OWNER,
+            text_literal_notes_layout: version(FORTNITE_MAIN_VERSION)
+                >= FORTNITE_MAIN_TEXT_DEV_NOTES,
             texts: Vec::new(),
         }
     }
@@ -621,29 +647,38 @@ impl<'r, 'a> ScriptWalk<'r, 'a> {
 
     /// `XFERTEXT`, recording the literal Unreal's gather sees.
     fn text(&mut self) -> Result<(), AssetError> {
-        match self.read_u8()? {
-            literal::EMPTY => {}
-            literal::LOCALIZED_TEXT => {
+        let saved = self.read_u8()?;
+        let Some(literal) = TextLiteral::from_saved(saved, self.text_literal_notes_layout) else {
+            return Err(self.malformed(format!("unknown text literal type {saved}")));
+        };
+        match literal {
+            TextLiteral::Empty => {}
+            TextLiteral::Localized | TextLiteral::LocalizedWithNotes => {
                 let source = self.string()?;
                 let key = self.string()?;
                 let namespace = self.string()?;
+                let dev_notes = if literal == TextLiteral::LocalizedWithNotes {
+                    self.string()?
+                } else {
+                    String::new()
+                };
                 self.texts.push(TextValue {
                     source,
                     history: TextHistory::Base {
                         namespace,
                         key,
-                        dev_notes: String::new(),
+                        dev_notes,
                     },
                 });
             }
-            literal::INVARIANT_TEXT | literal::LITERAL_STRING => {
+            TextLiteral::Invariant | TextLiteral::LiteralString => {
                 let source = self.string()?;
                 self.texts.push(TextValue {
                     source,
                     history: TextHistory::None,
                 });
             }
-            literal::STRING_TABLE_ENTRY => {
+            TextLiteral::StringTableEntry => {
                 self.object()?;
                 let table_id = self.string()?;
                 let key = self.string()?;
@@ -652,7 +687,6 @@ impl<'r, 'a> ScriptWalk<'r, 'a> {
                     history: TextHistory::StringTableEntry { table_id, key },
                 });
             }
-            other => return Err(self.malformed(format!("unknown text literal type {other}"))),
         }
         Ok(())
     }
@@ -688,7 +722,26 @@ mod tests {
     /// Walks a synthetic script under the fixture package's versions (UE 5.7: large world
     /// coordinates, field path owners).
     fn walk(script: &[u8]) -> Result<Vec<TextValue>, AssetError> {
-        let package = Package::parse(SIGN).expect("fixture parses");
+        walk_saved_by(script, None)
+    }
+
+    /// Walks a synthetic script as if the package were saved with the given FortniteMain
+    /// version (UE 5.7 saves 225, UE 5.8 saves 268).
+    fn walk_saved_by(
+        script: &[u8],
+        fortnite_main: Option<i32>,
+    ) -> Result<Vec<TextValue>, AssetError> {
+        let mut package = Package::parse(SIGN).expect("fixture parses");
+        if let Some(saved) = fortnite_main {
+            let version = package
+                .summary
+                .custom_versions
+                .iter_mut()
+                .find(|version| version.key == FORTNITE_MAIN_VERSION)
+                .expect("the fixture records FortniteMain");
+            assert_eq!(version.version, 225, "the fixture is saved by UE 5.7");
+            version.version = saved;
+        }
         let context = AssetDecodeContext {
             source: script,
             package: &package,
@@ -698,14 +751,51 @@ mod tests {
         ScriptWalk::new(reader, &context, "/Game/Test.Test_C:Function").texts()
     }
 
-    fn localized(source: &str, key: &str, namespace: &str) -> Vec<u8> {
-        let mut bytes = vec![token::TEXT_CONST, literal::LOCALIZED_TEXT];
-        for value in [source, key, namespace] {
-            bytes.push(token::STRING_CONST);
-            bytes.extend_from_slice(value.as_bytes());
-            bytes.push(0);
+    fn string_const(script: &mut Vec<u8>, value: &str) {
+        script.push(token::STRING_CONST);
+        script.extend_from_slice(value.as_bytes());
+        script.push(0);
+    }
+
+    /// An `EX_TextConst` with the raw saved literal byte and string operands.
+    fn text_const(saved_literal: u8, operands: &[&str]) -> Vec<u8> {
+        let mut bytes = vec![token::TEXT_CONST, saved_literal];
+        for value in operands {
+            string_const(&mut bytes, value);
         }
         bytes
+    }
+
+    fn localized(source: &str, key: &str, namespace: &str) -> Vec<u8> {
+        text_const(1, &[source, key, namespace])
+    }
+
+    fn base(source: &str, namespace: &str, key: &str, dev_notes: &str) -> TextValue {
+        TextValue {
+            source: source.to_owned(),
+            history: TextHistory::Base {
+                namespace: namespace.to_owned(),
+                key: key.to_owned(),
+                dev_notes: dev_notes.to_owned(),
+            },
+        }
+    }
+
+    fn untracked(source: &str) -> TextValue {
+        TextValue {
+            source: source.to_owned(),
+            history: TextHistory::None,
+        }
+    }
+
+    fn string_table(table_id: &str, key: &str) -> TextValue {
+        TextValue {
+            source: String::new(),
+            history: TextHistory::StringTableEntry {
+                table_id: table_id.to_owned(),
+                key: key.to_owned(),
+            },
+        }
     }
 
     #[test]
@@ -740,51 +830,71 @@ mod tests {
         assert!(!function.object.object_path.as_str().is_empty());
     }
 
+    /// Saved bytes as UE 5.7's `KismetCompilerVMBackend` writes them: Empty 0, Localized 1,
+    /// Invariant 2, LiteralString 3, StringTableEntry 4.
     #[test]
-    fn records_every_text_literal_type() {
-        let mut script = localized("Open", "Key", "[PKG]");
-        script.extend([token::TEXT_CONST, literal::EMPTY]);
-        script.extend([
-            token::TEXT_CONST,
-            literal::INVARIANT_TEXT,
-            token::UNICODE_STRING_CONST,
-        ]);
-        for unit in "Ünïcode".encode_utf16().chain([0]) {
-            script.extend(unit.to_le_bytes());
+    fn reads_every_text_literal_type_saved_by_ue_5_7() {
+        for fortnite_main in [None, Some(259)] {
+            let mut script = localized("Open", "Key", "[PKG]");
+            script.extend([token::TEXT_CONST, 0]);
+            script.extend([token::TEXT_CONST, 2, token::UNICODE_STRING_CONST]);
+            for unit in "Ünïcode".encode_utf16().chain([0]) {
+                script.extend(unit.to_le_bytes());
+            }
+            script.extend(text_const(3, &["Literal"]));
+            script.extend([token::TEXT_CONST, 4]);
+            script.extend(0_i32.to_le_bytes());
+            string_const(&mut script, "ST_Menu");
+            string_const(&mut script, "Resume");
+            script.push(token::END_OF_SCRIPT);
+            assert_eq!(
+                walk_saved_by(&script, fortnite_main).expect("script walks"),
+                [
+                    base("Open", "[PKG]", "Key", ""),
+                    untracked("Ünïcode"),
+                    untracked("Literal"),
+                    string_table("ST_Menu", "Resume"),
+                ]
+            );
         }
-        script.extend([token::TEXT_CONST, literal::STRING_TABLE_ENTRY]);
+    }
+
+    /// Saved bytes as UE 5.8 writes them (`Script.h`): LocalizedTextWithNotes is 2 and carries
+    /// translator notes as a fourth string; Invariant 3, LiteralString 4, StringTableEntry 5.
+    #[test]
+    fn reads_every_text_literal_type_saved_by_ue_5_8() {
+        let mut script = localized("Open", "Key", "");
+        script.extend(text_const(
+            2,
+            &["Close", "Key2", "", "The window, not the app"],
+        ));
+        script.extend([token::TEXT_CONST, 0]);
+        script.extend(text_const(3, &["Invariant"]));
+        script.extend(text_const(4, &["Literal"]));
+        script.extend([token::TEXT_CONST, 5]);
         script.extend(0_i32.to_le_bytes());
-        for value in ["ST_Menu", "Resume"] {
-            script.push(token::STRING_CONST);
-            script.extend_from_slice(value.as_bytes());
-            script.push(0);
-        }
+        string_const(&mut script, "ST_Menu");
+        string_const(&mut script, "Resume");
         script.push(token::END_OF_SCRIPT);
-        let texts = walk(&script).expect("script walks");
         assert_eq!(
-            texts,
+            walk_saved_by(&script, Some(268)).expect("script walks"),
             [
-                TextValue {
-                    source: "Open".to_owned(),
-                    history: TextHistory::Base {
-                        namespace: "[PKG]".to_owned(),
-                        key: "Key".to_owned(),
-                        dev_notes: String::new(),
-                    },
-                },
-                TextValue {
-                    source: "Ünïcode".to_owned(),
-                    history: TextHistory::None,
-                },
-                TextValue {
-                    source: String::new(),
-                    history: TextHistory::StringTableEntry {
-                        table_id: "ST_Menu".to_owned(),
-                        key: "Resume".to_owned(),
-                    },
-                },
+                base("Open", "", "Key", ""),
+                base("Close", "", "Key2", "The window, not the app"),
+                untracked("Invariant"),
+                untracked("Literal"),
+                string_table("ST_Menu", "Resume"),
             ]
         );
+
+        let mut unknown = text_const(6, &[]);
+        unknown.push(token::END_OF_SCRIPT);
+        let unknown = walk_saved_by(&unknown, Some(268)).expect_err("no literal type 6");
+        assert!(unknown.message().contains("unknown text literal type 6"));
+        let mut before = text_const(5, &[]);
+        before.push(token::END_OF_SCRIPT);
+        let before = walk_saved_by(&before, Some(259)).expect_err("no literal type 5 before 5.8");
+        assert!(before.message().contains("unknown text literal type 5"));
     }
 
     #[test]
@@ -833,7 +943,7 @@ mod tests {
         let field = walk(&field).expect_err("absurd field path");
         assert!(field.message().contains("field path has"));
 
-        let mut operand = vec![token::TEXT_CONST, literal::INVARIANT_TEXT, token::INT_ZERO];
+        let mut operand = vec![token::TEXT_CONST, 2, token::INT_ZERO];
         operand.push(token::END_OF_SCRIPT);
         let operand = walk(&operand).expect_err("non-string operand");
         assert!(operand.message().contains("not a string constant"));

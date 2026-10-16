@@ -53,7 +53,7 @@ Excluded packages have `not_gatherable`, which does not prove the absence of tex
 
 The table is written with the package, so it matches the saved exports. Packages with bytecode
 have no table at all, so Blueprint text keeps the decoder-gap rule. Their compiled text literals
-are read from the bytecode itself (`ScriptBytecode` places). An unread table entry is reported with its source string and site even though the reader
+are read from the bytecode itself, one `ScriptBytecode[N]` place per distinct literal in a function. UE 5.8 renumbered the saved literal types when it added translator notes; the reader takes the 5.8 numbering from FortniteMain `AddDevNotesToFText` (260), the only saved marker for that change. An unread table entry is reported with its source string and site even though the reader
 could not place it.
 
 There are also blind spots outside those counters: source files are not scanned, default inventory

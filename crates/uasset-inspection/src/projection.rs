@@ -190,21 +190,24 @@ pub fn project_text_asset(package: &Package, asset: &DecodedAsset) -> TextAssetP
             );
             // A compiled function's text literals. Unreal gathers each id once per function
             // (`[Script Bytecode]` sites), so a literal the compiler emitted twice is one place.
+            // Distinct literals are distinct places, `ScriptBytecode[N]` in first-emission order,
+            // so two keys with the same source in one function stay two occurrences.
             let mut seen = Vec::new();
             for text in &function.script_texts {
                 let identity = identity_for_text(text);
                 if seen.contains(&(identity.clone(), text.source.clone())) {
                     continue;
                 }
+                let index = seen.len();
                 seen.push((identity.clone(), text.source.clone()));
                 output.occurrences.push(TextOccurrence {
                     source: text.source.clone(),
-                    dev_notes: String::new(),
+                    dev_notes: text.dev_notes().unwrap_or_default().to_owned(),
                     identity,
                     location: TextLocation::AssetProperty {
                         object_path: object.object_path.to_string(),
                         class_path: object.class_path.to_string(),
-                        property_path: SCRIPT_BYTECODE_PROPERTY_PATH.to_owned(),
+                        property_path: format!("{SCRIPT_BYTECODE_PROPERTY_PATH}[{index}]"),
                     },
                     edit_capability: TextEditCapability::ReadOnly,
                 });
