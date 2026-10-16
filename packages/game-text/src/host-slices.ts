@@ -112,9 +112,6 @@ export function runHostStepsSync<A>(steps: HostSteps<A>): A {
 		if (next.done) return next.value;
 	}
 }
-
-/** Promise continuations are microtasks; only a macrotask lets timers and I/O callbacks run. */
-export const nextMacrotask = () => new Promise<void>((resolve) => nextTurn(resolve));
 /** Ascending distinct IDs of `columns`, marked in one byte per ID up to the largest ID. */
 export function* uniqueIdsSteps(
 	columns: readonly Uint32Array[],

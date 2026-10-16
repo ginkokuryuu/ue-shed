@@ -3,7 +3,9 @@ import { randomUUID } from "node:crypto";
 import { constants, zstdCompressSync, zstdDecompressSync } from "node:zlib";
 import { join } from "node:path";
 import { performance } from "node:perf_hooks";
-import { HostSliceClock, nextMacrotask } from "./host-slices.js";
+// Promise continuations are microtasks; only a macrotask lets timers and I/O callbacks run.
+import { setImmediate as nextMacrotask } from "node:timers/promises";
+import { HostSliceClock } from "./host-slices.js";
 import { Schema } from "effect";
 import {
 	encodeStringBlock,
