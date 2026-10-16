@@ -14,6 +14,11 @@ layer.
   selected, direct the user to the shell picker. See
   [project ownership](docs/showcase.md#project-ownership).
 - Do not introduce studio-project names, paths, assets, schemas, credentials, or assumptions.
+- Provide the base, not the constraints. Unreal's own behaviour (its parsers, validators and how it
+  reads data) is fixed. Every judgment beyond that is policy: which checks run, their thresholds,
+  word lists, severities and scope. A host or the project's files must be able to change, extend or
+  drop any policy without changing UE Shed. See
+  [base, not constraints](docs/vision-and-architecture.md#base-not-constraints).
 - Treat existing internal tooling as behavioral reference, not source code or architecture to copy.
 - Keep Unreal integrations capability-driven and separately enabled.
 

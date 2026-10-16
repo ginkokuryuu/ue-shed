@@ -874,6 +874,13 @@ such as `"//"` that joins a line's segments and must appear as often in each tra
 `optionalTags`, rich-text tags a translation may add or leave out; and `optionalArguments`,
 arguments the game always supplies, which a translation may add along with a tag around only
 them. None changes the source rules. The package README lists every check with its severity and rule.
+
+This falls short of [base, not constraints](../vision-and-architecture.md#base-not-constraints).
+The parsers follow Unreal, but every built-in's severity and the heuristics' thresholds and word
+lists (length ratios, placeholder words, boundary whitespace policy) are fixed in code. Projects and
+hosts can only disable a check, and a host cannot add its own checks to the same report.
+Moving each check's severity, scope and parameters into the rule document, with the current values
+as an optional default preset, and opening the report to host-defined checks is open work.
 Hosts whose projects cannot store translator notes (packages saved by UE 4.27 and by UE5 before 5.8;
 String Tables and UE 5.8+ can) can pass `disabledChecks: ["missing_translator_notes"]`.
 
