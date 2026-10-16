@@ -1,5 +1,21 @@
 # @ue-shed/game-text
 
+## 0.16.1
+
+### Patch Changes
+
+- 865af31: Quality workspace findings name the first place they affect (`location`) and how many places they affect (`locations`), so hosts can show a place instead of the key.
+- f58a14a: Reduce full joined-index build time by sharing duplicate-source analysis, counting only shared-source candidates, and hashing canonical place columns with exact collision checks.
+- ab5973d: Keep incremental duplicate-source updates fast with numeric occurrence sources and source-group
+  invalidation while preserving same-place exclusions and unresolved identity handling.
+- f403603: Quality workspace pages no longer build every source finding up front.
+- a156e06: Require duplicate-source counterparts to have a different identity and a different place, so re-keyed text does not pair with its own old manifest or saved key.
+- 5915876: Measure long-text review signals and source counts on the longest individual source variant.
+- f8e067f: Match literal terminology on Unicode letter, mark and number boundaries in source and translation rules, avoiding matches inside words (including beside combining marks) while preserving case handling, phrases and punctuation.
+- 636f5db: Exclude text without a resolved key from both sides of duplicate-source review signals.
+- @ue-shed/localization@0.16.1
+    - @ue-shed/unreal-assets@0.16.1
+
 ## 0.16.0
 
 ### Minor Changes
