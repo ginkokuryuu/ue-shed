@@ -174,7 +174,7 @@ describe("ue-shed CLI process", () => {
 			issueCount: 0,
 			referenceCount: 2,
 			resolvedCount: 2,
-			snapshotCount: 15
+			snapshotCount: 18
 		});
 		expect(report.edges).toEqual(
 			expect.arrayContaining([
