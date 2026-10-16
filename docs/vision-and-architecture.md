@@ -194,6 +194,27 @@ This preserves the deletion test: deleting Workbench removes one distribution su
 authoring engine, CLI access, or reusable authoring UI. See
 [`products/data-authoring.md`](products/data-authoring.md) for the product contract.
 
+## Base, not constraints
+
+Complete workflows must not turn into fixed policy. UE Shed is the base that studios and their
+hosts build on, so it separates two kinds of behaviour:
+
+- **Unreal's behaviour** is fact: how the engine parses format text, plural and gender forms and rich
+  text, what its validators reject, which text a gather collects, when a translation is ignored. UE
+  Shed implements these exactly and does not make them configurable, because a project cannot
+  change what the engine does.
+- **Judgment** is policy: which checks run, their thresholds and word lists, how severe a finding
+  is, which text a check applies to, and what counts as an exception. UE Shed may ship defaults,
+  but each one is a value in a versioned, project-authored document or a host option, never a
+  constant a host has to fork, filter after the fact or ask UE Shed to change.
+
+Hosts must be able to add their own checks and rules beside the built-in ones through public
+contracts, with the same evidence, reporting and recovery model. A default preset is a starting
+point that a host may replace entirely; it is not the definition of correct.
+
+The test: a studio can apply its own policy, stricter, looser or different, using only UE Shed's
+public packages and its own files. If that needs a UE Shed change, the boundary is wrong.
+
 ## Connection and protocol model
 
 UE Shed starts with stock Unreal Remote Control for request/response operations and uses the existing
