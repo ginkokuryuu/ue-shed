@@ -2,6 +2,7 @@ import { absent, type JoinPackages } from "./joined-target-input.js";
 import { duplicateOccurrencePlace } from "./duplicate-sources.js";
 import { manifestPlace } from "./localization-key-changes.js";
 import { normalizeTextPath, textFileKey } from "./text-origin.js";
+import { HostSliceClock, runHostStepsSync, type HostSteps } from "./host-slices.js";
 
 const hashUnit = (hash: number, unit: number) => Math.imul(hash ^ unit, 16777619) >>> 0;
 function hashString(hash: number, value: string) {
@@ -35,20 +36,30 @@ function hashField(hash: number, bytes: Uint8Array): number | undefined {
 	return hash;
 }
 
+type DuplicatePlaceInput = {
+	readonly occurrence: Pick<
+		JoinPackages["occurrence"],
+		"object" | "property" | "row" | "location"
+	>;
+	readonly packageRow: Uint32Array;
+	readonly packageFile: (row: number) => string;
+	readonly string: (id: number) => string;
+	readonly bytes: (id: number) => Uint8Array;
+};
+
 /** Numeric hashes avoid decoded keys for unique places; collisions use the original exact key. */
-export function joinedDuplicatePlaces(
-	packages: {
-		readonly occurrence: Pick<
-			JoinPackages["occurrence"],
-			"object" | "property" | "row" | "location"
-		>;
-		readonly packageRow: Uint32Array;
-		readonly packageFile: (row: number) => string;
-		readonly string: (id: number) => string;
-		readonly bytes: (id: number) => Uint8Array;
-	},
-	order: Uint32Array
-) {
+export function joinedDuplicatePlaces(packages: DuplicatePlaceInput, order: Uint32Array) {
+	return runHostStepsSync(
+		joinedDuplicatePlacesSteps(packages, order, new HostSliceClock(Infinity))
+	);
+}
+
+/** Host steps for `joinedDuplicatePlaces`, yielding whenever `clock` ends a slice. */
+export function* joinedDuplicatePlacesSteps(
+	packages: DuplicatePlaceInput,
+	order: Uint32Array,
+	clock = new HostSliceClock()
+): HostSteps<Uint32Array> {
 	const c = packages.occurrence;
 	const files = new Map<number, { path: string; hash: number }>();
 	const objects = new Map<
@@ -103,6 +114,7 @@ export function joinedDuplicatePlaces(
 		return key;
 	};
 	for (const member of order) {
+		if (clock.step()) yield;
 		const file = fileOf(member);
 		const objectId = c.object[member]!;
 		let object = objects.get(objectId);

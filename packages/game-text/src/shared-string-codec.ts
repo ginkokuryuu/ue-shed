@@ -1,6 +1,7 @@
 import { isUtf8 } from "node:buffer";
 import { decodeWtf8, encodeWtf8, hasWtf8Surrogate, isWtf8 } from "./wtf8.js";
 import { snapshotCheck } from "./snapshot-format.js";
+import { HostSliceClock, runHostStepsSync, type HostSteps } from "./host-slices.js";
 export interface PackedStrings {
 	readonly bytes: Buffer;
 	readonly offsets: Uint32Array | Float64Array;
@@ -88,6 +89,20 @@ export function sortPackedStringsByLocale(
 	order = Uint32Array.from({ length: strings.offsets.length - 1 }, (_, row) => row),
 	runSize = 8192
 ): Uint32Array {
+	return runHostStepsSync(
+		sortPackedStringsByLocaleSteps(strings, order, runSize, new HostSliceClock(Infinity))
+	);
+}
+
+/** Host steps for `sortPackedStringsByLocale`. The merge is stable, so every run size gives the
+ * same order as one stable sort; callers in host slices use smaller runs.
+ */
+export function* sortPackedStringsByLocaleSteps(
+	strings: PackedStrings,
+	order = Uint32Array.from({ length: strings.offsets.length - 1 }, (_, row) => row),
+	runSize = 8192,
+	clock = new HostSliceClock()
+): HostSteps<Uint32Array> {
 	snapshotCheck(Number.isInteger(runSize) && runSize > 0, "sort.locale", "Invalid sort run size");
 	const rows = order.slice(),
 		boundaries = [0];
@@ -110,6 +125,7 @@ export function sortPackedStringsByLocale(
 		rows.set(sorted, start);
 		boundaries.push(end);
 		start = end;
+		if (clock.expired()) yield;
 	}
 	const runCount = boundaries.length - 1,
 		cursors = Uint32Array.from(boundaries.slice(0, -1)),
@@ -144,6 +160,7 @@ export function sortPackedStringsByLocale(
 			keys[run] = decodeWtf8(stringBytes(strings, rows[cursor + 1]!));
 		else heap[0] = heap[--size]!;
 		if (size) down(0);
+		if (clock.step()) yield;
 	}
 	return result;
 }
@@ -264,14 +281,27 @@ export class StringArena {
 				: new Uint32Array(stringCapacity + 1);
 	}
 	add(value: Uint8Array) {
+		this.reserve(value.length);
+		this.bytes.set(value, this.size);
+		this.size += value.length;
+	}
+	/** Adds the WTF-8 bytes of `value` without allocating a buffer per well-formed string. */
+	addString(value: string) {
+		if (!value.isWellFormed()) return this.add(encodeWtf8(value));
+		// UTF-8 of a well-formed string is its WTF-8 encoding.
+		this.reserve(Buffer.byteLength(value, "utf8"));
+		this.size += this.bytes.write(value, this.size, "utf8");
+	}
+	/** Starts a value of `length` bytes at the current size, growing the arena when needed. */
+	private reserve(length: number) {
 		snapshotCheck(
-			value.length <= 1024 ** 2 && this.size + value.length <= 16 * 1024 ** 3,
+			length <= 1024 ** 2 && this.size + length <= 16 * 1024 ** 3,
 			"strings",
 			"String arena exceeds the 16 GiB byte cap"
 		);
-		if (this.size + value.length > this.bytes.length) {
+		if (this.size + length > this.bytes.length) {
 			const next = Buffer.allocUnsafe(
-				Math.min(16 * 1024 ** 3, Math.max(this.size + value.length, this.bytes.length * 2))
+				Math.min(16 * 1024 ** 3, Math.max(this.size + length, this.bytes.length * 2))
 			);
 			next.set(this.bytes.subarray(0, this.size));
 			this.bytes = next;
@@ -284,11 +314,9 @@ export class StringArena {
 			next.set(this.offsets);
 			this.offsets = next;
 		}
-		if (this.size + value.length >= 0xffffffff && this.offsets instanceof Uint32Array)
+		if (this.size + length >= 0xffffffff && this.offsets instanceof Uint32Array)
 			this.offsets = Float64Array.from(this.offsets);
 		this.offsets[this.count++] = this.size;
-		this.bytes.set(value, this.size);
-		this.size += value.length;
 	}
 	finish(): PackedStrings {
 		this.offsets[this.count] = this.size;

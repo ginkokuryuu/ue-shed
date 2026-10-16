@@ -25,18 +25,27 @@ function worker() {
 	);
 }
 
-/** Parallel bounded shard preparation; publishCold performs the one target-wide external sort.
- * Record files contain validated PackageTextStored NDJSON, already grouped by the fixed shard hash.
- */
-export const importColdPackageTextLayer = Effect.fn("PackageText.importCold")(function* (input: {
+export interface ColdPackageTextInput {
 	readonly inventory: readonly PackageTextInventoryEntry[];
 	readonly recordDirectory: string;
 	readonly stagingRoot: string;
 	readonly additionalSources?: readonly ColdLayerSource[];
-}) {
+}
+
+/** Parallel bounded shard preparation; publishCold performs the one target-wide external sort.
+ * Record files contain validated PackageTextStored NDJSON, already grouped by the fixed shard hash.
+ */
+export const importColdPackageTextLayer = (input: ColdPackageTextInput) =>
+	Effect.suspend(() => importColdPackageTextShards(input, packageTextSelection(input.inventory)));
+
+/** Cold import for a refresh that has already selected the same inventory. */
+export const importColdPackageTextShards = Effect.fn("PackageText.importCold")(function* (
+	input: ColdPackageTextInput,
+	inventorySelection: ReturnType<typeof packageTextSelection>
+) {
 	const store = yield* SharedIndex,
 		writer = yield* store.writer();
-	const selection = packageTextSelection(input.inventory).filter((shard) => shard.entries.length);
+	const selection = inventorySelection.filter((shard) => shard.entries.length);
 	const prepared = yield* Effect.acquireRelease(
 		Effect.tryPromise({
 			try: async (signal) => {

@@ -1,5 +1,6 @@
 import { decodeWtf8 } from "./wtf8.js";
-import { relative, resolve } from "node:path";
+import { projectRelativePath } from "./project-relative-path.js";
+import { HostSliceClock, sortRowsInSlices } from "./host-slices.js";
 import { Effect, Schema } from "effect";
 import type { LocalizationTarget } from "@ue-shed/localization";
 import { localizationGatherCoverage } from "./localization.js";
@@ -46,12 +47,28 @@ export class JoinStrings {
 		return index;
 	}
 	need(columns: readonly Uint32Array[]) {
-		const selected = new Uint8Array(this.reader.manifest.segments.length);
-		for (const values of columns)
-			for (const id of values) if (id !== this.empty) selected[this.segment(id)] = 1;
-		const loaded = this.loaded,
+		const empty = this.empty,
+			segmentOf = (id: number) => this.segment(id),
+			loaded = this.loaded,
 			reader = this.reader;
 		return Effect.gen(function* () {
+			const segments = reader.manifest.segments,
+				selected = new Uint8Array(segments.length),
+				clock = new HostSliceClock();
+			// Consecutive IDs usually share a segment, which skips its binary search.
+			let low = 0,
+				high = 0;
+			for (const values of columns)
+				for (let row = 0; row < values.length; row++) {
+					const id = values[row]!;
+					if (id !== empty && (id < low || id >= high)) {
+						const segment = segmentOf(id);
+						selected[segment] = 1;
+						low = segments[segment]!.start;
+						high = low + segments[segment]!.count;
+					}
+					if (clock.step()) yield* Effect.yieldNow;
+				}
 			for (let segment = 0; segment < selected.length; segment++)
 				if (selected[segment] && !loaded.has(segment))
 					loaded.set(segment, yield* reader.packedSegment(segment));
@@ -176,10 +193,7 @@ export function pathHash(path: string) {
 	return hash >>> 0;
 }
 export function packagePath(packages: JoinPackages, row: number) {
-	return relative(
-		packages.projectRoot,
-		resolve(packages.projectRoot, packages.strings.string(packages.paths[row]!))
-	);
+	return projectRelativePath(packages.projectRoot, packages.strings.string(packages.paths[row]!));
 }
 export function packageStatus(packages: JoinPackages, path: string): number | undefined {
 	const hash = pathHash(path),
@@ -239,6 +253,7 @@ export const loadJoinPackages = Effect.fn("JoinedTarget.packages")(function* (
 	projectRoot: string,
 	target: LocalizationTarget
 ) {
+	const clock = new HostSliceClock();
 	const names = Object.keys(reader.manifest.active)
 		.filter((name) => name.startsWith("package-text."))
 		.sort();
@@ -299,6 +314,7 @@ export const loadJoinPackages = Effect.fn("JoinedTarget.packages")(function* (
 				"Invalid occurrence range"
 			);
 			packageRow.fill(pkg, offset + start, offset + end);
+			if (clock.step()) yield* Effect.yieldNow;
 		}
 		offset += shard.columns["occurrence.source"]!.length;
 	}
@@ -319,10 +335,13 @@ export const loadJoinPackages = Effect.fn("JoinedTarget.packages")(function* (
 	let previousPackage = absent;
 	let ratings = new Map<number, number>();
 	let currentPath = "";
-	for (let row = 0; row < packageCount; row++)
+	for (let row = 0; row < packageCount; row++) {
 		hash[row] = pathHash(normalizedPackagePath(packagePath(packages, row)));
-	packages.order.sort((a, b) => hash[a]! - hash[b]! || a - b);
+		if (clock.step()) yield* Effect.yieldNow;
+	}
+	yield* sortRowsInSlices(packages.order, (a, b) => hash[a]! - hash[b]! || a - b, clock);
 	for (let row = 0; row < occurrenceCount; row++) {
+		if (clock.step()) yield* Effect.yieldNow;
 		const packageIndex = packageRow[row]!;
 		if (packageIndex !== previousPackage) {
 			previousPackage = packageIndex;

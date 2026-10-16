@@ -62,6 +62,7 @@ import type { refreshJoinedTarget, JoinedTargetInput } from "./joined-target.js"
 import type { LocalizationReviewSnapshot } from "@ue-shed/localization";
 import type { GameTextProjectView } from "./project-index-view.js";
 import { encodeWtf8 } from "./wtf8.js";
+import { withHostSlices } from "./host-slices.js";
 import { mountPackageTextEvent } from "./package-object-path.js";
 import {
 	observeGameTextImport,
@@ -738,7 +739,21 @@ export const makeGameTextIndexSteps = (
 				})
 			);
 		});
-		return { openProject, refreshProject, importTarget, buildTarget, openTarget, invalidate };
+		// Index work runs on the host's event loop; slicing keeps a server host answering meanwhile.
+		const sliced =
+			<Args extends ReadonlyArray<unknown>, A, E, R>(
+				step: (...args: Args) => Effect.Effect<A, E, R>
+			) =>
+			(...args: Args) =>
+				withHostSlices(step(...args));
+		return {
+			openProject: sliced(openProject),
+			refreshProject: sliced(refreshProject),
+			importTarget: sliced(importTarget),
+			buildTarget: sliced(buildTarget),
+			openTarget: sliced(openTarget),
+			invalidate: sliced(invalidate)
+		};
 	});
 
 export class GameTextIndexSteps extends Context.Service<

@@ -1,16 +1,16 @@
-import { encodeWtf8 } from "./wtf8.js";
 import { absent, unitId, packagePath, type JoinPackages } from "./joined-target-input.js";
 import {
 	StringArena,
 	packedStringReader,
-	sortPackedStringsByLocale
+	sortPackedStringsByLocaleSteps
 } from "./shared-string-codec.js";
 import { snapshotCheck } from "./snapshot-format.js";
+import { HostSliceClock, runHostStepsSync, type HostSteps } from "./host-slices.js";
 import { textAudienceBit } from "./text-audience.js";
 import { OCCURRENCE_COPY_DIFFERS } from "./package-text-columns.js";
 import { longestSource } from "./source-metrics.js";
 import { DuplicateSources } from "./duplicate-sources.js";
-import { joinedDuplicatePlaces } from "./joined-duplicate-places.js";
+import { joinedDuplicatePlacesSteps } from "./joined-duplicate-places.js";
 
 /** Canonical place IDs keep source overlays numeric without retaining decoded occurrences. */
 export function joinedDuplicateSources(
@@ -19,8 +19,21 @@ export function joinedDuplicateSources(
 	order: Uint32Array,
 	empty: number
 ) {
+	return runHostStepsSync(
+		joinedDuplicateSourcesSteps(packages, line, order, empty, new HostSliceClock(Infinity))
+	);
+}
+
+/** Host steps for `joinedDuplicateSources`, yielding whenever `clock` ends a slice. */
+export function* joinedDuplicateSourcesSteps(
+	packages: JoinPackages,
+	line: Record<string, Uint32Array>,
+	order: Uint32Array,
+	empty: number,
+	clock = new HostSliceClock()
+): HostSteps<{ readonly duplicate: Uint8Array; readonly places: Uint32Array }> {
 	const c = packages.occurrence;
-	const places = joinedDuplicatePlaces(
+	const places = yield* joinedDuplicatePlacesSteps(
 		{
 			occurrence: c,
 			packageRow: packages.packageRow,
@@ -28,7 +41,8 @@ export function joinedDuplicateSources(
 			string: (id) => packages.strings.string(id),
 			bytes: (id) => packages.strings.bytes(id)
 		},
-		order
+		order,
+		clock
 	);
 	const identities = new Uint32Array(order.length);
 	// A source confined to one gathered identity can never have an outside-identity counterpart.
@@ -37,7 +51,8 @@ export function joinedDuplicateSources(
 	const sourceIdentities = new Uint32Array(maximumSource + 1).fill(absent);
 	const sharedSources = new Uint8Array(maximumSource + 1);
 	const sources = new DuplicateSources<number, number, number>();
-	for (let row = 0; row < line.source!.length; row++)
+	for (let row = 0; row < line.source!.length; row++) {
+		if (clock.step()) yield;
 		for (let position = line.occ_start![row]!; position < line.occ_end![row]!; position++) {
 			const member = order[position]!;
 			identities[member] = row;
@@ -48,20 +63,27 @@ export function joinedDuplicateSources(
 				else if (first !== row) sharedSources[source] = 1;
 			}
 		}
-	for (const member of order)
+	}
+	for (const member of order) {
 		if (c.identity[member] === 0 && c.key[member] !== empty && sharedSources[c.source[member]!])
 			sources.add(c.source[member]!, identities[member]!, places[member]!);
+		if (clock.step()) yield;
+	}
 	const duplicate = new Uint8Array(order.length);
-	for (const member of order)
+	for (const member of order) {
 		if (c.identity[member] === 0 && c.key[member] !== empty && sharedSources[c.source[member]!])
 			duplicate[member] = Number(
 				sources.hasOther(c.source[member]!, identities[member]!, places[member]!)
 			);
+		if (clock.step()) yield;
+	}
 	return { duplicate, places };
 }
 
-/** Numeric query entries retain raw-unit predicates and each gathered occurrence slice. */
-export function joinedQueryColumns(input: {
+/** Numeric query entries retain raw-unit predicates and each gathered occurrence slice.
+ * Host steps yield between bounded slices; `runHostSteps` drives them from an Effect.
+ */
+export function* joinedQueryColumns(input: {
 	readonly packages: JoinPackages;
 	readonly line: Record<string, Uint32Array>;
 	readonly order: Uint32Array;
@@ -71,8 +93,9 @@ export function joinedQueryColumns(input: {
 	readonly packageFiles: Uint32Array;
 	readonly empty: number;
 	readonly duplicates: ReturnType<typeof joinedDuplicateSources>;
-}) {
+}): HostSteps<Record<string, Uint32Array>> {
 	const { packages, line, order, rawOrder, representative, next, packageFiles, empty } = input;
+	const clock = new HostSliceClock();
 	const c = packages.occurrence,
 		strings = packages.strings;
 	const occurrenceLine = new Uint32Array(order.length);
@@ -89,6 +112,7 @@ export function joinedQueryColumns(input: {
 		}
 		groupFlags[row] =
 			(line.occ_end![row]! - line.occ_start![row]! > 1 ? 1 : 0) | (sources.size > 1 ? 16 : 0);
+		if (clock.step()) yield;
 	}
 	let rawCount = 0;
 	for (const member of rawOrder) if (representative[member] === member) rawCount++;
@@ -108,6 +132,7 @@ export function joinedQueryColumns(input: {
 		for (let position = line.occ_start![row]!; position < line.occ_end![row]!; position++)
 			units.add(representative[order[position]!]!);
 		sliceCount += units.size;
+		if (clock.step()) yield;
 	}
 	lineStarts[line.source!.length] = sliceCount;
 	const fields = [
@@ -167,7 +192,10 @@ export function joinedQueryColumns(input: {
 			strings.string(c.namespace[member]!),
 			strings.string(c.key[member]!)
 		);
-	for (const member of rawRepresentatives) ids.add(Buffer.from(encodeWtf8(unitName(member))));
+	for (const member of rawRepresentatives) {
+		ids.addString(unitName(member));
+		if (clock.step()) yield;
+	}
 	const packedIds = ids.finish();
 	const id = packedStringReader(packedIds);
 	function add(
@@ -245,16 +273,24 @@ export function joinedQueryColumns(input: {
 		columns.words![row] = words;
 		columns.visible![row] = Number(visible);
 	}
-	for (let row = 0; row < rawCount; row++)
+	for (let row = 0; row < rawCount; row++) {
 		add(raw, row, rawRepresentatives[row]!, absent, rawMembers, rawSources, rawFiles);
+		if (clock.step()) yield;
+	}
 	const rawOrderColumn = Uint32Array.from({ length: rawCount }, (_, row) => row);
 	let ordered = true;
-	for (let row = 1; row < rawCount; row++)
+	for (let row = 1; row < rawCount; row++) {
 		if (id(row - 1).localeCompare(id(row)) > 0) {
 			ordered = false;
 			break;
 		}
-	if (!ordered) rawOrderColumn.set(sortPackedStringsByLocale(packedIds, rawOrderColumn));
+		if (clock.step()) yield;
+	}
+	// Smaller runs keep each locale-sorted run inside one slice; the stable merge is unchanged.
+	if (!ordered)
+		rawOrderColumn.set(
+			yield* sortPackedStringsByLocaleSteps(packedIds, rawOrderColumn, 1024, clock)
+		);
 	let sliceRow = 0;
 	for (let row = 0; row < line.source!.length; row++) {
 		const units = new Set<number>();
@@ -267,6 +303,7 @@ export function joinedQueryColumns(input: {
 		});
 		for (const first of selected)
 			add(slice, sliceRow++, first, row, sliceMembers, sliceSources, sliceFiles);
+		if (clock.step()) yield;
 	}
 	for (const [prefix, columns, members, sources, files] of [
 		["raw", raw, rawMembers, rawSources, rawFiles],

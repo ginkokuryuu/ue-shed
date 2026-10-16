@@ -17,6 +17,7 @@ import {
 import type { PackageTextInventoryEntry } from "./package-text-layer.js";
 import { encodeWtf8 } from "./wtf8.js";
 import { GameTextIndexProgressReporter } from "./index-progress.js";
+import { HostSliceClock, sortRowsInSlices } from "./host-slices.js";
 
 const FileStamp = Schema.Struct({ size: Schema.Number, modifiedMs: Schema.Number });
 const Signature = Schema.Array(Schema.NullOr(FileStamp));
@@ -96,10 +97,19 @@ export function gameTextIndexSourceNodeLayer(
 					return yield* Effect.fail(
 						failure("inventory", "The committed signature inventory is incomplete.")
 					);
-				result.sort((left, right) =>
-					Buffer.compare(encodeWtf8(left.path), encodeWtf8(right.path))
+				// Encode each path once, then sort row numbers in host slices.
+				const clock = new HostSliceClock(),
+					keys: Uint8Array[] = [];
+				for (const entry of result) {
+					keys.push(encodeWtf8(entry.path));
+					if (clock.step()) yield* Effect.yieldNow;
+				}
+				const rows = yield* sortRowsInSlices(
+					Uint32Array.from(keys, (_, row) => row),
+					(left, right) => Buffer.compare(keys[left]!, keys[right]!),
+					clock
 				);
-				return result;
+				return Array.from(rows, (row) => result[row]!);
 			});
 			const inventories = yield* Cache.makeWith(pages, {
 				capacity: 2,
