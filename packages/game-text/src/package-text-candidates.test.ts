@@ -5,7 +5,6 @@ import { textCorpusQuery } from "./query.js";
 import { textPackageCoverageSummary } from "./corpus-summary.js";
 import {
 	isPackageTextCandidate,
-	packageTextExternalReferences,
 	textCorpusWithExcludedPackages
 } from "./package-text-candidates.js";
 
@@ -15,7 +14,7 @@ const header = {
 	gatherableTextDataOffset: 0,
 	hasTextProperty: false
 };
-it("uses the saved gather flag, summary and external references without a class whitelist", () => {
+it("uses the saved gather flag and summary without a class whitelist", () => {
 	expect(isPackageTextCandidate({ ...header, packageFlags: 0x00040000 })).toBe(true);
 	expect(
 		isPackageTextCandidate({
@@ -25,22 +24,7 @@ it("uses the saved gather flag, summary and external references without a class 
 		})
 	).toBe(true);
 	expect(isPackageTextCandidate({ ...header, gatherableTextDataCount: 1 })).toBe(false);
-	expect(isPackageTextCandidate(header, true)).toBe(true);
 	expect(isPackageTextCandidate({ ...header, hasTextProperty: true })).toBe(false);
-});
-it("relates saved external actors and objects to their outer packages from inventory", () => {
-	const paths = [
-		"/project/Content/Maps/L_World.umap",
-		"/project/Content/__ExternalActors__/Maps/L_World/0/AB/Actor.uasset",
-		"/project/Content/Features/Feature.uasset",
-		"/project/Content/__ExternalObjects__/Features/Feature/1/CD/Object.uasset",
-		"/project/Content/Maps/L_Conventional.umap"
-	];
-	expect([...packageTextExternalReferences(paths)].sort()).toEqual(paths.slice(0, 4).sort());
-	const relativePaths = paths.map((path) => path.replace("/project/", ""));
-	expect([...packageTextExternalReferences(relativePaths)].sort()).toEqual(
-		relativePaths.slice(0, 4).sort()
-	);
 });
 it("keeps old corpus decoding and makes exclusions visible in loc status coverage", () => {
 	const corpus = Schema.decodeUnknownSync(TextCorpus)({
