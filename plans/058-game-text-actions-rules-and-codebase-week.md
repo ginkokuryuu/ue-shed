@@ -61,6 +61,8 @@
 | D10  | Workspace orchestration as a package           | D    | TODO  |
 | D11  | JSDoc on public exports                        | D    | TODO  |
 | D12  | Small cleanups                                 | D    | TODO  |
+| D13  | API surface of the other host-facing packages  | D    | TODO  |
+| D14  | Native error audit                             | D    | TODO  |
 | R    | 0.17.0 release preparation                     | —    | TODO  |
 
 ## Context
@@ -232,7 +234,10 @@ to this plan.
 
 ### A4. Identity fixture, slice 2
 
-Add cases, each checked against Unreal's gather: String Table references; a child Blueprint that
+Add cases, each checked against Unreal's gather: compiled text literals of every saved type on
+both engines (culture-invariant text, a String Table reference and, on 5.8, text with translator
+notes, since 5.8 renumbered the saved literal types; PR #99 covers these only with synthetic bytes);
+String Table references; a child Blueprint that
 inherits a parent's text and one that overrides it; level actor text; World Partition external
 actor text; C++ `LOCTEXT` (gather-only, documented as such). Extend `expected-cases.json` and the
 integration test.
@@ -334,8 +339,14 @@ processes, verified result hashes, never summed worker time as wall time.
 
 ## Lane D: API surface and the Effect and errors audit
 
-Order matters: shrink the public surface (D1) before documenting it (D11) or wrapping its decoders
-(D7). Every fix lands with a lint or `check-effect-architecture` rule so it cannot regress.
+**Scope.** The Effect and errors audit (D4–D8, D11, D12) covered all TypeScript in
+`packages/*/src`, `apps/*/src` and `extensions/*/src` (667 files, about 192k lines, tests excluded),
+and its fixes apply to every package; package names below set the order, not the scope. The API
+review behind D1, D2, D9 and D10 looked only at `game-text` and its neighbours; D13 repeats it for the
+other host-facing packages. The audit did not cover Rust or the C++ editor plugins; D14 does.
+
+Order matters: shrink the public surface (D1, D13) before documenting it (D11) or wrapping its
+decoders (D7). Every fix lands with a lint or `check-effect-architecture` rule so it cannot regress.
 
 - **D1. `game-text` entry points** (breaking imports). Subpaths `./schema` (browser-safe wire types
   and ids), `./rules`, `./checks`, `./index` (Node: steps, layers, retained model, errors,
@@ -348,8 +359,8 @@ Order matters: shrink the public surface (D1) before documenting it (D11) or wra
   `TopLevelAssetPath`, `ProjectRelativeFile`; public `owningAssetPath` and `packageFileKey`; locate
   requests take `TopLevelAssetPath`. Game Text namespace and key use localization's brands.
 - **D4. One error shape** (breaking): `{ code, message, recovery, retrySafe, nextStep, cause }`
-  across game-text, localization, unreal-assets and unreal-connection; named failure schemas instead
-  of positional union members. Architecture check: every TaggedError has `message`, `recovery`,
+  across every package (141 error classes today); named failure schemas instead of positional union
+  members. Architecture check: every TaggedError has `message`, `recovery`,
   `retrySafe` and `nextStep`. Fill the 56 missing recoveries, starting with `AssetReaderError`,
   `UnrealConnectionError`, `UnrealCapabilityError`, `RemoteControlClientError` and the camera errors.
 - **D5. Classified causes instead of prose** (message text changes). Replace `String(cause)` and
@@ -386,6 +397,16 @@ Order matters: shrink the public surface (D1) before documenting it (D11) or wra
   pipeable transforms straight to `Effect.fn`; add the `Verified by:` lines (decision 6); document
   decisions 4, 5 and 9; mark Plans 053 and 054 current (both still say they wait on PR #58, which
   merged on 2026-10-09).
+- **D13. API surface of the other host-facing packages.** Repeat D1's review for `protocol`,
+  `unreal-connection`, `localization`, `unreal-assets`, `engine`, `cameras` and `host`: which exports a
+  host uses, which are internal, and entry points with named exports. Measure first (an AST scan of
+  each package's exports against its uses in `apps/` and other packages), then cut.
+- **D14. Native error audit.** Apply the error checklist to the Rust crates and the C++ editor
+  plugins where their failures reach a host: `AssetError` kinds and messages (what failed, the path
+  and byte offset, a way forward) as they appear in CLI and protocol output; `unwrap`/`expect`/panics
+  in non-test decoder code (a malformed package must be a typed error, never a crash); and
+  `UEShed*` plugin results over Remote Control (stable codes, no prose-only failures). Add
+  `clippy::unwrap_used`/`expect_used` for non-test code where it holds.
 
 ## R. 0.17.0 release preparation
 
@@ -402,5 +423,5 @@ approves and publishes.
 | 3   | A1, A3 | B3, B7 | C2     | D5, D6           |
 | 4   | A3     | B4, B8 | C3     | D3 (with A1), D7 |
 | 5   | A3, A4 | B5     | C4, C6 | D8, D9           |
-| 6   | A4, A5 | B6     | C5     | D10              |
-| 7   | A5     | —      | C7     | D11, D12, R      |
+| 6   | A4, A5 | B6     | C5     | D10, D13         |
+| 7   | A5     | —      | C7     | D11, D12, D14, R |
