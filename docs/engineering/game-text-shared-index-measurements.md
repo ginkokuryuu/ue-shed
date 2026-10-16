@@ -449,8 +449,9 @@ a time in the localization process lane. Any future 10× command retains a singl
 startup-to-cleanup deadline and the 20 GB total RSS cap; exceeding the deadline is failure.
 
 **Rule and source evidence.** Select raw `PKG_RequiresLocalizationGather` (`0x00040000`), or a
-positive gatherable-text count and offset, or external actor/package relationships. No class
-whitelist. `TextProperty` adds **zero** candidates beyond the flag on every committed root and
+positive gatherable-text count and offset. No class whitelist. (This phase also selected every
+external actor/object package and its outer package; 0.16.3 dropped that clause, see
+"External packages follow their own header" below. The fixture table records the original rule.) `TextProperty` adds **zero** candidates beyond the flag on every committed root and
 both retained engines, so drop that clause. Summary evidence is necessary: each legacy save root
 has three selected packages but only two flagged packages. `FText` serialization marks the
 archive only when `ShouldGatherForLocalization()`; save propagates the linker's archive state
@@ -530,6 +531,27 @@ Both retained 5.7 and 5.8 fixtures also retain **62 units / 71 occurrences**, se
 packages and excluding 42; each moves the same single native gap to exclusion evidence. All
 **12 committed + 2 engine audits pass** the documented mapping. Raw per-root timings, byte counts,
 excluded paths and gap coordinates: `test-results/game-text-scale/phase4-candidate-audit.json`.
+
+### External packages follow their own header (0.16.3)
+
+The clause above that selected every external actor/object package misread the commandlet. In
+UE 5.7 and 5.8 `DiscoverExternalActors` adds a gathered world's external actors to the pending
+list, but `CalculatePackageLocCacheState` then treats each current-version actor package like any
+other: its text comes from the saved gather table, and it is loaded only when its header carries
+the gather flag without a current table (5.7 lines 1751–1806, 5.8 lines 1899–1962). The
+`Package->RequiresLocalizationGather() || ExternalActors.Num() > 0` condition at 5.7 line 382 is
+for a world loaded on behalf of those flagged actors, not for every actor. An actor package whose
+header claims no text gives Unreal none, so the header rule now applies to external packages too.
+
+On a large World Partition project (507,114 packages), the old rule read 429,625 packages
+(16.4 GB), 423,434 of them external actors (11.8 GB). The header rule reads 9,056 (4.7 GB), of which
+2,932 are external actors (34 MB). 20 external actor packages held 29 decoded units that their
+headers do not claim. All 20 are Blueprint actors with the text on TextRender components, and
+Unreal's save recorded none of it in their gather tables, so Unreal's gather takes none of it
+from them either. The likely cause, not checked value by value, is that values matching the
+component archetype are marked as default text rather than gathered
+(`PropertyLocalizationDataGathering.cpp`, 5.7 lines 399–416). A project without external
+packages selects exactly as before.
 
 ### Package layer implementation and final measurements
 

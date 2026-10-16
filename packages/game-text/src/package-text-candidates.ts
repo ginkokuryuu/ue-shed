@@ -4,54 +4,19 @@ import { HostSliceClock, runHostStepsSync, type HostSteps } from "./host-slices.
 
 export const REQUIRES_LOCALIZATION_GATHER = 0x00040000;
 
-/** Saved external-object layout relates an external package to its outer package.
- * Use the complete inventory, including packages outside a caller's changed selection.
+/** Header evidence is mandatory: older workers must be upgraded before candidate pruning.
+ * External actor and object packages follow their own header like any other package. Unreal's
+ * gatherer adds a gathered world's external actors to its list, then takes their text from the
+ * saved gather table and loads one only when its header is flagged without a current table
+ * (`CalculatePackageLocCacheState`, UE 5.7 and 5.8). An actor whose header claims no text gives
+ * Unreal none, and neither the outer world nor its other actors are read on its behalf.
  */
-export function packageTextExternalReferences(paths: readonly string[]): ReadonlySet<string> {
-	const scan = new PackageTextExternalScan();
-	for (const path of paths) scan.visit(path);
-	for (let index = 0; index < paths.length; index++) scan.revisit(index, paths[index]!);
-	return scan.references;
-}
-
-/** The two-pass external-reference scan, advanced one path at a time for bounded host slices. */
-export class PackageTextExternalScan {
-	readonly references = new Set<string>();
-	private readonly normalized: string[] = [];
-	private readonly outers = new Set<string>();
-	/** First pass: records external packages and the outer packages they name. */
-	visit(path: string) {
-		const normalized = path.replaceAll("\\", "/");
-		this.normalized.push(normalized);
-		const match =
-			/^((?:.*\/)?Content\/)__(?:ExternalActors|ExternalObjects)__\/(.+)\/(?:[^/]+\/){2}[^/]+\.(?:uasset|umap)$/u.exec(
-				normalized
-			);
-		if (match) {
-			this.references.add(path);
-			this.outers.add(`${match[1]}${match[2]}`);
-		}
-	}
-	/** Without outer packages, the second pass cannot add a reference. */
-	get hasOuters() {
-		return this.outers.size > 0;
-	}
-	/** Second pass, by visit index: outer packages of external packages are references too. */
-	revisit(index: number, path: string) {
-		if (this.outers.has(this.normalized[index]!.replace(/\.(?:uasset|umap)$/u, "")))
-			this.references.add(path);
-	}
-}
-
-/** Header evidence is mandatory: older workers must be upgraded before candidate pruning. */
 export function isPackageTextCandidate(
-	header: NonNullable<ProjectIndexHeader["headerData"]>,
-	hasExternalPackages = false
+	header: NonNullable<ProjectIndexHeader["headerData"]>
 ): boolean {
 	return (
 		(header.packageFlags & REQUIRES_LOCALIZATION_GATHER) !== 0 ||
-		(header.gatherableTextDataCount > 0 && header.gatherableTextDataOffset > 0) ||
-		hasExternalPackages
+		(header.gatherableTextDataCount > 0 && header.gatherableTextDataOffset > 0)
 	);
 }
 
