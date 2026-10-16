@@ -1,0 +1,258 @@
+{
+	"schemaVersion": 1,
+	"target": "GameTextActions",
+	"cases": [
+		{
+			"case": "Row duplicated",
+			"a": {
+				"site": "DT_ActionRows.DT_ActionRows.Lantern.DisplayName",
+				"source": "Brass lantern"
+			},
+			"b": {
+				"site": "DT_ActionRows.DT_ActionRows.Lantern_Copy.DisplayName",
+				"source": "Brass lantern"
+			},
+			"id": "same"
+		},
+		{
+			"case": "Duplicated row, retyped",
+			"a": {
+				"site": "DT_ActionRows.DT_ActionRows.Rope.DisplayName",
+				"source": "Coil of rope"
+			},
+			"b": {
+				"site": "DT_ActionRows.DT_ActionRows.Rope_Copy.DisplayName",
+				"source": "Coil of old rope"
+			},
+			"id": "different"
+		},
+		{
+			"case": "Node pasted",
+			"a": {
+				"site": "BP_ActionSign.BP_ActionSign:EventGraph.K2Node_CallFunction_1.InText",
+				"source": "The door is locked"
+			},
+			"b": {
+				"site": "BP_ActionSign.BP_ActionSign:EventGraph.K2Node_CallFunction_2.InText",
+				"source": "The door is locked"
+			},
+			"id": "same"
+		},
+		{
+			"case": "Pasted node, retyped",
+			"a": {
+				"site": "BP_ActionSign.BP_ActionSign:EventGraph.K2Node_CallFunction_1.InText",
+				"source": "The door is locked"
+			},
+			"b": {
+				"site": "BP_ActionSign.BP_ActionSign:EventGraph.K2Node_CallFunction_0.InText",
+				"source": "The door is barred"
+			},
+			"id": "different"
+		},
+		{
+			"case": "Compiled literal follows its pin",
+			"a": {
+				"site": "BP_ActionSign.BP_ActionSign:EventGraph.K2Node_CallFunction_0.InText",
+				"source": "The door is barred"
+			},
+			"b": {
+				"site": "BP_ActionSign.BP_ActionSign_C:ExecuteUbergraph_BP_ActionSign [Script Bytecode]",
+				"source": "The door is barred"
+			},
+			"id": "same"
+		},
+		{
+			"case": "Duplicate, data asset",
+			"a": {
+				"site": "DA_ActionNotes.DA_ActionNotes.SharedPrimary",
+				"source": "Keep the lamp lit"
+			},
+			"b": {
+				"site": "DA_ActionNotes_Duplicate.DA_ActionNotes_Duplicate.SharedPrimary",
+				"source": "Keep the lamp lit"
+			},
+			"id": "different",
+			"packageNamespace": "different"
+		},
+		{
+			"case": "Duplicate, row",
+			"a": {
+				"site": "DT_ActionRows.DT_ActionRows.Lantern.DisplayName",
+				"source": "Brass lantern"
+			},
+			"b": {
+				"site": "DT_ActionRows_Duplicate.DT_ActionRows_Duplicate.Lantern.DisplayName",
+				"source": "Brass lantern"
+			},
+			"id": "different",
+			"packageNamespace": "different"
+		},
+		{
+			"case": "Duplicate splits a shared row id",
+			"a": {
+				"site": "DT_ActionRows_Duplicate.DT_ActionRows_Duplicate.Lantern.DisplayName",
+				"source": "Brass lantern"
+			},
+			"b": {
+				"site": "DT_ActionRows_Duplicate.DT_ActionRows_Duplicate.Lantern_Copy.DisplayName",
+				"source": "Brass lantern"
+			},
+			"id": "different"
+		},
+		{
+			"case": "Duplicate, Blueprint variable default",
+			"a": {
+				"site": "BP_ActionSign.Default__BP_ActionSign_C.Greeting",
+				"source": "Welcome, traveler"
+			},
+			"b": {
+				"site": "BP_ActionSign_Duplicate.Default__BP_ActionSign_Duplicate_C.Greeting",
+				"source": "Welcome, traveler"
+			},
+			"id": "different",
+			"packageNamespace": "different"
+		},
+		{
+			"case": "Duplicate, component template",
+			"a": {
+				"site": "BP_ActionSign.BP_ActionSign_C:Plate_GEN_VARIABLE.Text",
+				"source": "Harbor Road"
+			},
+			"b": {
+				"site": "BP_ActionSign_Duplicate.BP_ActionSign_Duplicate_C:Plate_GEN_VARIABLE.Text",
+				"source": "Harbor Road"
+			},
+			"id": "different",
+			"packageNamespace": "different"
+		},
+		{
+			"case": "Duplicate splits a shared pin id",
+			"a": {
+				"site": "BP_ActionSign_Duplicate.BP_ActionSign_Duplicate:EventGraph.K2Node_CallFunction_1.InText",
+				"source": "The door is locked"
+			},
+			"b": {
+				"site": "BP_ActionSign_Duplicate.BP_ActionSign_Duplicate:EventGraph.K2Node_CallFunction_2.InText",
+				"source": "The door is locked"
+			},
+			"id": "different"
+		},
+		{
+			"case": "Duplicate, widget, retyped",
+			"a": {
+				"site": "WBP_ActionPanel.WBP_ActionPanel_C:WidgetTree.Heading.Text",
+				"source": "Harbor master"
+			},
+			"b": {
+				"site": "WBP_ActionPanel_Duplicate.WBP_ActionPanel_Duplicate_C:WidgetTree.Heading.Text",
+				"source": "Harbor mistress"
+			},
+			"id": "different",
+			"packageNamespace": "different"
+		},
+		{
+			"case": "Branch copy, Blueprint variable default",
+			"a": {
+				"site": "BP_ActionSign.Default__BP_ActionSign_C.Greeting",
+				"source": "Welcome, traveler"
+			},
+			"b": {
+				"site": "Branched/BP_ActionSign.Default__BP_ActionSign_C.Greeting",
+				"source": "Welcome, traveler"
+			},
+			"id": "same",
+			"packageNamespace": "same"
+		},
+		{
+			"case": "Branch copy, compiled literal",
+			"a": {
+				"site": "BP_ActionSign.BP_ActionSign_C:ExecuteUbergraph_BP_ActionSign [Script Bytecode]",
+				"source": "The door is locked"
+			},
+			"b": {
+				"site": "Branched/BP_ActionSign.BP_ActionSign_C:ExecuteUbergraph_BP_ActionSign [Script Bytecode]",
+				"source": "The door is locked"
+			},
+			"id": "same",
+			"packageNamespace": "same"
+		},
+		{
+			"case": "Branch copy, row",
+			"a": {
+				"site": "DT_ActionRows.DT_ActionRows.Rope.DisplayName",
+				"source": "Coil of rope"
+			},
+			"b": {
+				"site": "Branched/DT_ActionRows.DT_ActionRows.Rope.DisplayName",
+				"source": "Coil of rope"
+			},
+			"id": "same",
+			"packageNamespace": "same"
+		},
+		{
+			"case": "Branch copy, data asset, retyped",
+			"a": {
+				"site": "DA_ActionNotes.DA_ActionNotes.SharedPrimary",
+				"source": "Keep the lamp lit"
+			},
+			"b": {
+				"site": "Branched/DA_ActionNotes.DA_ActionNotes.SharedPrimary",
+				"source": "Keep the lamp lit at night"
+			},
+			"id": "same",
+			"packageNamespace": "same"
+		},
+		{
+			"case": "Branch copy, widget, retyped",
+			"a": {
+				"site": "WBP_ActionPanel.WBP_ActionPanel_C:WidgetTree.Heading.Text",
+				"source": "Harbor master"
+			},
+			"b": {
+				"site": "Branched/WBP_ActionPanel.WBP_ActionPanel_C:WidgetTree.Heading.Text",
+				"source": "Harbor master's office"
+			},
+			"id": "same",
+			"packageNamespace": "same"
+		},
+		{
+			"case": "Branch copy, shared row id, retyped",
+			"a": {
+				"site": "Branched/DT_ActionRows.DT_ActionRows.Lantern_Copy.DisplayName",
+				"source": "Brass lantern"
+			},
+			"b": {
+				"site": "Branched/DT_ActionRows.DT_ActionRows.Lantern.DisplayName",
+				"source": "Brass ship lantern"
+			},
+			"id": "different"
+		}
+	],
+	"readerGaps": [
+		{
+			"site": "BP_ActionSign.BP_ActionSign_C:ExecuteUbergraph_BP_ActionSign [Script Bytecode]",
+			"source": "The door is barred"
+		},
+		{
+			"site": "BP_ActionSign.BP_ActionSign_C:ExecuteUbergraph_BP_ActionSign [Script Bytecode]",
+			"source": "The door is locked"
+		},
+		{
+			"site": "BP_ActionSign_Duplicate.BP_ActionSign_Duplicate_C:ExecuteUbergraph_BP_ActionSign_Duplicate [Script Bytecode]",
+			"source": "The door is barred"
+		},
+		{
+			"site": "BP_ActionSign_Duplicate.BP_ActionSign_Duplicate_C:ExecuteUbergraph_BP_ActionSign_Duplicate [Script Bytecode]",
+			"source": "The door is locked"
+		},
+		{
+			"site": "Branched/BP_ActionSign.BP_ActionSign_C:ExecuteUbergraph_BP_ActionSign [Script Bytecode]",
+			"source": "The door is barred"
+		},
+		{
+			"site": "Branched/BP_ActionSign.BP_ActionSign_C:ExecuteUbergraph_BP_ActionSign [Script Bytecode]",
+			"source": "The door is locked"
+		}
+	]
+}

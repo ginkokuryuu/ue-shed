@@ -30,7 +30,11 @@ describe("Unreal target settings and recipes", () => {
 	it("reads the real remove/add Dashboard file and its native-index sentinel", () => {
 		const parsed = success(parseDashboardTargets(editor));
 		expect(parsed.diagnostics).toEqual([]);
-		expect(parsed.targets.map((target) => target.name)).toEqual(["Game", "FixtureGame"]);
+		expect(parsed.targets.map((target) => target.name)).toEqual([
+			"Game",
+			"FixtureGame",
+			"GameTextActions"
+		]);
 		// The stock Game target holds the Game Text problem cases.
 		const game = parsed.targets[0];
 		expect([game?.nativeCulture, game?.cultures]).toEqual(["en", ["en", "de", "fr", "ja"]]);
@@ -139,14 +143,14 @@ describe("Unreal target settings and recipes", () => {
 		const parsed = success(
 			parseDashboardTargets(`${editor}\n+GameTargetsSettings=(Name="Broken",Unknown=True)\n`)
 		);
-		expect(parsed.targets).toHaveLength(2);
+		expect(parsed.targets).toHaveLength(3);
 		expect(parsed.diagnostics[0]?.error.code).toBe("malformed_struct");
 		const unknown = success(
 			parseDashboardTargets(
 				editor.replace('Name="FixtureGame",', 'Unknown=True,Name="FixtureGame",')
 			)
 		);
-		expect(unknown.targets).toHaveLength(1);
+		expect(unknown.targets).toHaveLength(2);
 		expect(unknown.diagnostics[0]?.error.code).toBe("malformed_struct");
 	});
 

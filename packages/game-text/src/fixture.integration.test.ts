@@ -28,14 +28,16 @@ describe.skipIf(!executable)("game text fixture corpus", () => {
 			// String Table, DataTable and data asset add twenty-two localized units and occurrences, and
 			// the user-defined enum adds its two display names. The ten Game Text problem packages add
 			// 46 units and 53 occurrences: this scan does not fold the three Widget Blueprints'
-			// compiled copies (eight occurrences of three keys), and one row is culture invariant.
-			discoveredPackages: 94,
-			inspectedPackages: 94,
+			// compiled copies (eight occurrences of three keys), and one row is culture invariant. The twelve
+			// Game Text identity packages add 16 units and 35 occurrences; their Print Text literals live in
+			// Blueprint bytecode, which this reader does not read.
+			discoveredPackages: 106,
+			inspectedPackages: 106,
 			partialPackages: 1,
 			failedPackages: 0,
-			textUnits: 110,
-			textOccurrences: 126,
-			resolvedOccurrences: 125,
+			textUnits: 126,
+			textOccurrences: 161,
+			resolvedOccurrences: 160,
 			unsupportedTextProperties: 0
 		});
 		const holdMatches = searchTextCorpus(corpus, "Hold to skip");
