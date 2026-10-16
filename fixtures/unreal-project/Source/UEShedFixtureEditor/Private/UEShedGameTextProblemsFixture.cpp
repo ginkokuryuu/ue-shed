@@ -196,7 +196,8 @@ bool Items()
 
 bool Quests()
 {
-	// Two rows keep one key with different text, as a row copied and then edited does.
+	// Two rows keep one key with different text, set directly. A copy retyped in the editor would get
+	// a new key instead (README, "Game Text identity cases").
 	UDataTable* Rows = NewRows(TEXT("DT_FixtureQuestLog"));
 	Rows->AddRow(TEXT("Intro"), Row(Text(QuestsNamespace, TEXT("QuestIntro"), TEXT("Find the lighthouse keeper"))));
 	Rows->AddRow(TEXT("IntroRetold"), Row(Text(QuestsNamespace, TEXT("QuestIntro"), TEXT("Find the old lighthouse keeper"))));
@@ -238,7 +239,8 @@ bool Objective(const FString& Name, const FString& Title)
 
 bool Widgets()
 {
-	// A Widget Blueprint and its duplicate share their text keys; the duplicate's title was edited.
+	// A Widget Blueprint and a branch copy of it share their text keys, and the copy's title was
+	// edited on its own. A Content Browser Duplicate would give the copy new keys.
 	if (!Objective(TEXT("WBP_FixtureObjective"), TEXT("Reach the lighthouse"))
 		|| !Objective(TEXT("WBP_FixtureObjective_Copy"), TEXT("Reach the old lighthouse"))) return false;
 	// Compiled, then edited in the designer and saved without compiling: the generated class keeps

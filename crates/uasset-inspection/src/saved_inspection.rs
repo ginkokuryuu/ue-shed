@@ -213,16 +213,19 @@ fn saved_asset(package: &Package, decoded: DecodedAsset) -> SavedAsset {
                 }
             }
         }
-        DecodedAsset::UObject(object) => SavedAsset::UObject {
-            object_guid: object.object_guid.map(|guid| guid.to_string()),
-            native_data: object
-                .native_data
-                .map(|value| Box::new(saved_value(package, *value))),
-            object_path: object.object_path.into_string(),
-            class_path: object.class_path.into_string(),
-            properties: saved_properties(package, object.properties),
-            tail_bytes: (!object.tail.is_empty()).then_some(object.tail.len()),
-        },
+        DecodedAsset::UObject(object)
+        | DecodedAsset::Function(uasset_parser::asset::DecodedFunction { object, .. }) => {
+            SavedAsset::UObject {
+                object_guid: object.object_guid.map(|guid| guid.to_string()),
+                native_data: object
+                    .native_data
+                    .map(|value| Box::new(saved_value(package, *value))),
+                object_path: object.object_path.into_string(),
+                class_path: object.class_path.into_string(),
+                properties: saved_properties(package, object.properties),
+                tail_bytes: (!object.tail.is_empty()).then_some(object.tail.len()),
+            }
+        }
         DecodedAsset::BlueprintGraphNode(node) => SavedAsset::UObject {
             object_guid: node.object_guid.map(|guid| guid.to_string()),
             native_data: None,

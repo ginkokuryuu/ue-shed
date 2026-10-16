@@ -145,14 +145,18 @@ compares Unreal's own `Game_Conflicts.txt`.
 | Row re-keyed after gather    | Key changed: `Moonstone` → `MoonstoneRelic`                 | `DT_FixtureItems` · row `Moonstone`                 |
 | Two tables, one namespace    | `string_table_key_collision`; Same key, different text      | `ST_FixtureMenuA`/`ST_FixtureMenuB` · `Resume`      |
 | Menu labels over budget      | `character_budget`; de `localization_character_budget`      | `ST_FixtureMenuB` · `Resume`, `Quit`                |
-| Copied row, edited           | Same key, different text                                    | `DT_FixtureQuestLog` · `QuestIntro`                 |
-| Duplicated widget, edited    | Same key, different text                                    | `WBP_FixtureObjective`(`_Copy`) · `ObjectiveTitle`  |
+| Row set by key, edited       | Same key, different text                                    | `DT_FixtureQuestLog` · `QuestIntro`                 |
+| Branched widget, edited      | Same key, different text                                    | `WBP_FixtureObjective`(`_Copy`) · `ObjectiveTitle`  |
 | Edited, not compiled         | Blueprint not compiled since edit (`compiled_copy_differs`) | `WBP_FixtureStaleCompile` · `StaleHint`             |
 | Variable category            | Editor text; out of scope, editor-only data not gathered    | `WBP_FixtureObjective` · `ObjectiveCategory`        |
 | Excluded folder              | Out of scope, outside gather paths                          | `Excluded/DA_FixtureExcluded` · `OverlayLabel`      |
 | Self-serializing struct      | Partly read package: gathered text the reader cannot decode | `DA_FixturePartlyRead` · `RewardLabel`              |
 
-The duplicated widget is built twice with the same keys, as Unreal's duplicate leaves them. The
+The branched widget is built twice with the same keys, as a file-level copy (a Perforce branch or
+integrate) edited on its own keeps them. The quest log's two rows are given one key directly. Neither
+comes from copying inside the editor: a Content Browser Duplicate gives every text a new key, and
+a copy retyped in the same package gets a new key too (see
+[Game Text identity cases](#game-text-identity-cases)). The
 stale widget is compiled, its designer text block is edited, and it is saved without compiling.
 The pinned counts also hold what the cases imply: every untranslated foreign line and every
 outdated line has an empty PO `msgstr` (`empty_translation`), untranslated lines of a source with
@@ -166,6 +170,63 @@ its properties; the reader cannot decode its bytes, so the gather table has a si
 `PoEscape`'s German PO entry is blanked after export because a PO file cannot carry a literal
 `\n`: Unreal's PO import turns it into a line break. Translations of `Moonstone` stay under the old
 key; the re-keyed row is not gathered.
+
+## Game Text identity cases
+
+The `GameTextActions` target (native `en`, foreign `de`) records what Unreal does to text ids when
+text is copied, so that actions which give text a new id or merge ids can be tested against real
+behavior. It gathers `Content/Fixture/GameTextActions/*` with Unreal's default gather cache and
+without editor-only data. Assets are under `/Game/Fixture/GameTextActions/`.
+
+No text gets a chosen key. Each is typed as the details panel and graph pins type it:
+`TextNamespaceUtil::GetTextIdForEdit` keeps the current id only when no other text in the package
+uses it, otherwise it makes a GUID key, inside the package's localization namespace. Copies use
+the editor's own paths: `FDataTableEditorUtils::DuplicateRow`, node paste
+(`FEdGraphUtilities::ImportNodesFromText`, then a new node GUID, as `PasteNodesHere` does) and
+`IAssetTools::DuplicateAsset`. A branch is a plain file copy made without loading the package, as
+a Perforce branch or integrate makes.
+
+`pnpm fixture:generate-game-text-actions` builds the editor and runs each stage in a fresh process:
+author the assets and target settings, copy inside packages, duplicate assets, branch, edit the
+branch, gather, reports, then record evidence. It resets only `Content/Localization/GameTextActions`
+and `Content/Fixture/GameTextActions`. The committed packages are generated with UE 5.7. For 5.8,
+set `UE_SHED_LOCALIZATION_FIXTURE_ROOT` to a disposable copy and pass this checkout's
+`FixtureExpected/game-text-actions` as the output directory.
+
+`FixtureExpected/game-text-actions/evidence.ue<version>.json` is Unreal's own gather table for every
+package, from `FPropertyLocalizationDataGatherer`, with each package's localization namespace.
+Keys are GUIDs, so the evidence changes with every generation. The authored
+[`expected-cases.json`](FixtureSource/GameTextActions/expected-cases.json) states only relations:
+whether two places share an id and whether their packages share a localization namespace.
+`game-text-actions-fixture.integration.test.ts` checks both engines' evidence against it, compares
+Unreal's `GameTextActions_Conflicts.txt`, and checks that the saved-package reader finds every
+runtime text Unreal gathers, apart from pinned gaps.
+
+| Assets            | Where the text lives                                                   |
+| ----------------- | ---------------------------------------------------------------------- |
+| `DT_ActionRows`   | DataTable rows `Lantern`, `Rope` and their duplicates                  |
+| `DA_ActionNotes`  | Data asset property                                                    |
+| `BP_ActionSign`   | Variable default, Print Text literal in BeginPlay, TextRender template |
+| `WBP_ActionPanel` | Widget designer text block                                             |
+| `*_Duplicate`     | Content Browser Duplicate of each; the widget's copy is retyped        |
+| `Branched/*`      | File copy of each; the data asset, a row and the widget are retyped    |
+
+What UE 5.7 does:
+
+- **A duplicated row and a pasted node keep their ids.** Retyping one copy gives it a new key.
+- **Content Browser Duplicate gives every text a new key** in a new package namespace, and splits
+  ids the original shared.
+- **A branch keeps every id**, package namespace included. A branch copy retyped on its own keeps
+  its key, so the data asset and the widget collide with their originals: they are the only two
+  entries in Unreal's conflict report. The branched `Lantern` row gets a new key when retyped,
+  because `Lantern_Copy` uses the same id in that package.
+- **A compiled literal follows its pin.** The Print Text pin and the compiled BeginPlay bytecode
+  hold the same id.
+
+The reader finds every runtime text Unreal gathers here, including the Print Text literals it
+reads from `ExecuteUbergraph` bytecode; `readerGaps` pins any it misses and is empty. A file-level
+copy keeps its original saved package name, and the reader still reports that name as the copy's
+object path, where Unreal uses the file's location (`Branched/...`).
 
 ## Large World Partition map
 

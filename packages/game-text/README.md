@@ -219,6 +219,7 @@ The policy table, first match wins, editor rows first:
 | `string_table`, `data_table`                                                       | player   | String Table entry, DataTable cell                                                       |
 | `user_defined_enum_display_name`                                                   | player   | class `UserDefinedEnum`, leaf `DisplayNameMap`                                           |
 | `widget_tree`                                                                      | player   | object `WidgetTree` in the outer chain                                                   |
+| `script_bytecode`                                                                  | player   | property `ScriptBytecode` (a compiled Blueprint function's text literals)                |
 
 See [player and editor text](../../docs/products/game-text.md#player-and-editor-text) for each
 row's reason and evidence. Changing the table re-encodes stored index shards from their saved
