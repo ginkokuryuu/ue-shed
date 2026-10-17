@@ -413,6 +413,8 @@ export type LocalizationCheckParams = {
 };
 
 // SAFETY: one entry per `BuiltInCheckId`, each the catalogue's defaults for that ID.
+// Verified by: localization-check-catalogue.test.ts —
+// "describes every built-in check once, under its own ID".
 const defaults = Object.fromEntries(
 	BuiltInCheckId.literals.map((id) => [id, localizationCheckCatalogue[id].defaults])
 ) as LocalizationCheckParams;
