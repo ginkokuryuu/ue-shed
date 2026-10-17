@@ -828,6 +828,64 @@ export async function checkLocalizationBoundaries(root: string = repositoryRoot)
 	return failures;
 }
 
+function rawDecoderExportSites(source: ts.SourceFile) {
+	const bindings = new Map<string, ts.Expression>();
+	const exported = new Map<string, { readonly local: string; readonly node: ts.Node }>();
+	for (const statement of source.statements) {
+		if (ts.isVariableStatement(statement)) {
+			for (const declaration of statement.declarationList.declarations) {
+				if (!ts.isIdentifier(declaration.name) || !declaration.initializer) continue;
+				const name = declaration.name.text;
+				bindings.set(name, declaration.initializer);
+				if (statement.modifiers?.some((item) => item.kind === ts.SyntaxKind.ExportKeyword))
+					exported.set(name, { local: name, node: statement });
+			}
+		} else if (
+			ts.isExportDeclaration(statement) &&
+			!statement.moduleSpecifier &&
+			!statement.isTypeOnly &&
+			statement.exportClause &&
+			ts.isNamedExports(statement.exportClause)
+		) {
+			for (const item of statement.exportClause.elements)
+				if (!item.isTypeOnly)
+					exported.set(item.name.text, {
+						local: (item.propertyName ?? item.name).text,
+						node: item
+					});
+		} else if (ts.isExportAssignment(statement) && !statement.isExportEquals) {
+			bindings.set("#default", statement.expression);
+			exported.set("default", { local: "#default", node: statement });
+		}
+	}
+	const rawBinding = (local: string, visited = new Set<string>()): string | undefined => {
+		if (visited.has(local)) return undefined;
+		visited.add(local);
+		let expression = bindings.get(local);
+		if (!expression) return undefined;
+		while (
+			ts.isParenthesizedExpression(expression) ||
+			ts.isAsExpression(expression) ||
+			ts.isTypeAssertionExpression(expression) ||
+			ts.isSatisfiesExpression(expression) ||
+			ts.isNonNullExpression(expression)
+		)
+			expression = expression.expression;
+		if (ts.isIdentifier(expression)) return rawBinding(expression.text, visited);
+		return ts.isCallExpression(expression) &&
+			ts.isPropertyAccessExpression(expression.expression) &&
+			ts.isIdentifier(expression.expression.expression) &&
+			expression.expression.expression.text === "Schema" &&
+			/^(?:decode|validate)\w*$/u.test(expression.expression.name.text)
+			? local
+			: undefined;
+	};
+	return [...exported].flatMap(([name, site]) => {
+		const origin = rawBinding(site.local);
+		return origin === undefined ? [] : [{ name, node: site.node, origin }];
+	});
+}
+
 /**
  * Library entry points parse their input with unary domain parsers that fail with the package's
  * domain error. An exported raw `Schema.decode*` or `Schema.validate*` factory leaks Schema's
@@ -846,14 +904,14 @@ export async function checkDecoderExports(
 				continue;
 			if (!/^(?:apps|packages|extensions)\/[^/]+\/src\//u.test(path)) continue;
 			const text = await readFile(absolute, "utf8");
-			for (const match of text.matchAll(
-				/^export const (\w+)\s*(?::[^\n]*?)?=\s*Schema\.(?:decode|validate)\w*\(/gmu
-			)) {
-				const site = `${path}:${match[1]!}`;
+			const source = ts.createSourceFile(path, text, ts.ScriptTarget.Latest, true);
+			for (const { name, node, origin } of rawDecoderExportSites(source)) {
+				const site = `${path}:${name}`;
 				found.add(site);
-				if (!baseline.has(site))
+				// Existing aliases retain their factory's waiver; the factory must remain in the baseline.
+				if (!baseline.has(site) && !baseline.has(`${path}:${origin}`))
 					failures.push(
-						`${path}:${lineOf(text, match.index)}: ${match[1]!} exports a raw Schema decoder; export a domain parser`
+						`${path}:${lineOf(text, node.getStart(source))}: ${name} exports a raw Schema decoder; export a domain parser`
 					);
 			}
 		}

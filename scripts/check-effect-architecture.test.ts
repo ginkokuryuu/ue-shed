@@ -399,3 +399,58 @@ test("rejects new exported raw Schema decoders outside the baseline", async () =
 		await rm(fixtureRoot, { recursive: true, force: true });
 	}
 });
+
+test("checks named, renamed and default decoder exports through their local bindings", async () => {
+	const fixtureRoot = await mkdtemp(join(tmpdir(), "ue-shed-decoder-bindings-"));
+	try {
+		const source = join(fixtureRoot, "packages/example/src");
+		await mkdir(source, { recursive: true });
+		await writeFile(
+			join(source, "schema.ts"),
+			[
+				'import { Effect, Schema } from "effect";',
+				"const decodeNamed = Schema.decodeUnknownEffect(New);",
+				"const decodeRenamed = Schema.decodeUnknownSync(New);",
+				"const decodeKnown = Schema.validateSync(Known);",
+				"const decodeLocal = Schema.decodeUnknownEffect(Local);",
+				"const parseLocal = (input: Local) => decodeLocal(input).pipe(Effect.orDie);",
+				"export { decodeNamed };",
+				"export { decodeRenamed as parseRenamed };",
+				"export { decodeKnown as parseKnown };",
+				"export type { decodeLocal };",
+				"export { parseLocal };",
+				"export default decodeLocal;",
+				"export type { decodeNamed as DecoderType };",
+				"// export const decodeComment = Schema.decodeUnknownSync(New);",
+				'export const label = "export const decodeString = Schema.decodeUnknownSync(New);";',
+				"export { decodeLater as parseLater };",
+				"const decodeLater = Schema.validateSync(New);",
+				"const decodeAlias = decodeNamed;",
+				"export { decodeAlias as parseAlias };",
+				"const decodeWrapped = (Schema.validateSync(New) satisfies (input: unknown) => New);",
+				"export { decodeWrapped };",
+				"export const decodePreviouslyKnown = Schema.decodeUnknownEffect(Known);",
+				"export { decodePreviouslyKnown as decodeCompatibilityAlias };"
+			].join("\n")
+		);
+		assert.deepEqual(
+			await checkDecoderExports(
+				fixtureRoot,
+				new Set([
+					"packages/example/src/schema.ts:parseKnown",
+					"packages/example/src/schema.ts:decodePreviouslyKnown"
+				])
+			),
+			[
+				"packages/example/src/schema.ts:7: decodeNamed exports a raw Schema decoder; export a domain parser",
+				"packages/example/src/schema.ts:8: parseRenamed exports a raw Schema decoder; export a domain parser",
+				"packages/example/src/schema.ts:12: default exports a raw Schema decoder; export a domain parser",
+				"packages/example/src/schema.ts:16: parseLater exports a raw Schema decoder; export a domain parser",
+				"packages/example/src/schema.ts:19: parseAlias exports a raw Schema decoder; export a domain parser",
+				"packages/example/src/schema.ts:21: decodeWrapped exports a raw Schema decoder; export a domain parser"
+			]
+		);
+	} finally {
+		await rm(fixtureRoot, { recursive: true, force: true });
+	}
+});
