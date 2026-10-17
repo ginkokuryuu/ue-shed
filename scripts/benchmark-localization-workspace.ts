@@ -2,7 +2,7 @@ import { createHash } from "node:crypto";
 import { resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { Effect, Schema } from "effect";
-import { GameTextRuleDocument } from "../packages/game-text/src/quality-rules-v2.ts";
+import { GameTextRuleDocument } from "../packages/game-text/src/game-text-rules.ts";
 import {
 	workspaceScaleFixture,
 	workspaceScaleRules

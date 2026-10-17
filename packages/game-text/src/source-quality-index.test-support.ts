@@ -7,7 +7,7 @@ import {
 	textQualityQuery,
 	type TextQualityQuery
 } from "./quality-query.js";
-import { evaluateGameTextSourceQuality, type GameTextRuleDocument } from "./quality-rules-v2.js";
+import { evaluateGameTextSourceQuality, type GameTextRuleDocument } from "./game-text-rules.js";
 import type { TextCorpus, TextOccurrenceId } from "./schema.js";
 
 /** Walks every search page by cursor, as a host does. */

@@ -12,7 +12,9 @@ import { GameTextIndexProgressReporter, type GameTextIndexProgress } from "./ind
 import {
 	TEXT_PROPERTY_NAME,
 	TextCorpusScanError,
+	TextCorpusScanLimit,
 	TextCorpusService,
+	parseTextCorpusScanOptions,
 	TextCorpusServiceLive
 } from "./corpus.js";
 
@@ -240,7 +242,7 @@ it.effect("maps a reader asset limit onto scan_limit_exceeded", () =>
 		);
 
 		const error = yield* Effect.flatMap(TextCorpusService, (service) =>
-			service.scan({ maximumAssets: 2, projectRoot: "C:/Fixture" })
+			service.scan({ maximumAssets: TextCorpusScanLimit.make(2), projectRoot: "C:/Fixture" })
 		).pipe(Effect.flip, Effect.provide(TextCorpusServiceLive), Effect.provide(reader));
 
 		expect(error).toBeInstanceOf(TextCorpusScanError);
@@ -411,4 +413,20 @@ it.effect(
 			);
 			expect(corpus.coverage.partialPackages).toBe(2);
 		})
+);
+
+it.effect("parses untrusted scan options once, as a typed corpus failure", () =>
+	Effect.gen(function* () {
+		const parsed = yield* parseTextCorpusScanOptions({
+			projectRoot: "C:/Fixture",
+			concurrency: 4
+		});
+		expect(parsed).toEqual({ projectRoot: "C:/Fixture", concurrency: 4 });
+		const error = yield* Effect.flip(
+			parseTextCorpusScanOptions({ projectRoot: "C:/Fixture", maximumAssets: 0 })
+		);
+		expect(error).toBeInstanceOf(TextCorpusScanError);
+		expect(error).toMatchObject({ code: "invalid_options", retrySafe: false });
+		expect(error.cause).toBeDefined();
+	})
 );

@@ -6,7 +6,7 @@ import {
 	decodeGameTextRuleDocumentJson,
 	evaluateGameTextSourceQuality,
 	TextQualityRuleDocumentV2
-} from "./quality-rules-v2.js";
+} from "./game-text-rules.js";
 import { decodeTextQualityRuleDocumentJson } from "./quality-schema.js";
 import { evaluateTextQuality } from "./quality.js";
 import { STARTER_GAME_TEXT_RULES } from "./starter-rules.js";

@@ -356,7 +356,13 @@ export async function shrinkJoinFuzzInput(
 export async function compareJoinFuzzInput(
 	input: JoinFuzzInput,
 	cache: string,
-	persisted = false
+	persisted = false,
+	buildJoined?: (
+		configuration: ReturnType<
+			typeof import("./columnar-join.test-support.ts").joinStoreOptions
+		>,
+		input: import("../packages/game-text/src/joined-target.ts").JoinedTargetInput
+	) => Promise<void>
 ): Promise<FuzzDifference[]> {
 	const projectRoot = join(cache, "project");
 	if (persisted) await mkdir(projectRoot, { recursive: true });
@@ -647,7 +653,12 @@ export async function compareJoinFuzzInput(
 	);
 	const joinedInput = { projectRoot, target: authored };
 	if (input.review) Object.assign(joinedInput, { review: input.review });
-	await run(refreshJoinedTarget(joinedInput));
+	if (buildJoined) {
+		await buildJoined(
+			{ projectKey: projectRoot, cacheRoot: cache, targetKey: "Fuzz" },
+			joinedInput
+		);
+	} else await run(refreshJoinedTarget(joinedInput));
 	const actual = await run(
 		Effect.gen(function* () {
 			const joined = yield* openJoinedTarget();

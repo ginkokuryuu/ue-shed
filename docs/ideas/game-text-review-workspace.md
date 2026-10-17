@@ -1,7 +1,7 @@
 # Game Text review workspace
 
 > Status: graduated to [`products/game-text.md`](../products/game-text.md#reviewing-text-in-workbench)
-> by [Plan 053](../../plans/053-game-text-review-workspace.md). The mockup below is the design as
+> by [Plan 053](../../plans/archive/053-game-text-review-workspace.md). The mockup below is the design as
 > proposed; where the product differs, the product document is authoritative. Named culture sets
 > became a multi-select culture picker (Unreal has no culture groups), keyboard navigation and
 > saved views were dropped as polish, and line history waits for a baseline store.

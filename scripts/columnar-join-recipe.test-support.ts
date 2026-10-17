@@ -38,7 +38,7 @@ export async function expectJoinRecipe(
 		outside_target: recipe.outside,
 		unknown: recipe.keyless + recipe.notFound
 	};
-	// All apparent old-key packages are excluded by Phase 4's selected header flags:
+	// All apparent old-key packages are excluded by the selected package header flags:
 	// not_gatherable does not establish absence, so no recipe pair is provable here.
 	const count = Object.values(expected).reduce((sum, value) => sum + value, 0);
 	for (const [culture, actual] of Object.entries(census.states))

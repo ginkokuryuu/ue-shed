@@ -136,6 +136,8 @@ describe("live authoring workflow", () => {
 			})
 		);
 		expect(outcome.kind).toBe("indeterminate");
+		// The port's own failure value is what callers receive, not a wrapped workflow error.
+		expect(outcome.kind === "indeterminate" ? outcome.cause : undefined).toBe(transportError);
 		expect(outcome.session.applyReceipts.at(-1)?.status).toBe("indeterminate");
 		expect(outcome.session.commands).toEqual(session.commands);
 	});

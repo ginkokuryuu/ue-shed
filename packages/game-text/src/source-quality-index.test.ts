@@ -6,7 +6,7 @@ import { expect } from "vitest";
 import type { SavedAssetPackageTextRecord } from "@ue-shed/unreal-assets";
 import { GameTextIndexRefresh } from "./index-refresh.js";
 import { makeIndexRegressionFixture } from "./index-refresh-regressions.test-support.js";
-import { GameTextRuleDocument, decodeGameTextRuleDocumentJson } from "./quality-rules-v2.js";
+import { GameTextRuleDocument, decodeGameTextRuleDocumentJson } from "./game-text-rules.js";
 import { GameTextIndexProgressReporter, type GameTextIndexProgress } from "./index-progress.js";
 import { expectSameSourceQuality } from "./source-quality-index.test-support.js";
 

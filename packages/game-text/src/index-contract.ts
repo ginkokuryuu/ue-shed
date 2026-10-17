@@ -16,7 +16,7 @@ import type { LocalizationJoin } from "./localization-schema.js";
 import type { IndexedLocalizationQualityOptions } from "./localization-quality-index.js";
 import type { LocalizationQuality } from "./localization-workspace.js";
 import type { TextQualityQuery } from "./quality-query.js";
-import type { GameTextRuleDocument } from "./quality-rules-v2.js";
+import type { GameTextRuleDocument } from "./game-text-rules.js";
 import { LocalizationKeyChangePair } from "./localization-key-changes.js";
 import type { refreshJoinedTarget } from "./joined-target.js";
 import type { GameTextProjectIndex } from "./index-steps.js";

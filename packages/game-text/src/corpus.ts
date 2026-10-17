@@ -58,21 +58,46 @@ const reportExtraction = (progress: ExtractionProgress): Effect.Effect<void> =>
 export class TextCorpusScanError extends Schema.TaggedError<TextCorpusScanError>()(
 	"TextCorpusScanError",
 	{
-		code: Schema.Literals(["invalid_project", "scan_limit_exceeded"]),
+		code: Schema.Literals(["invalid_project", "invalid_options", "scan_limit_exceeded"]),
 		message: Schema.String,
 		recovery: Schema.String,
-		retrySafe: Schema.Boolean
+		retrySafe: Schema.Boolean,
+		cause: Schema.optionalKey(Schema.Defect())
 	}
 ) {}
 
+/**
+ * A positive concurrency or asset limit. The brand is the evidence that the value was checked,
+ * so the scan service never decodes its own typed options again.
+ */
+export const TextCorpusScanLimit = Schema.Int.check(Schema.isGreaterThanOrEqualTo(1)).pipe(
+	Schema.brand("TextCorpusScanLimit")
+);
+export type TextCorpusScanLimit = typeof TextCorpusScanLimit.Type;
+
 export const TextCorpusScanOptions = Schema.Struct({
-	concurrency: Schema.optional(Schema.Int.check(Schema.isGreaterThanOrEqualTo(1))),
-	maximumAssets: Schema.optional(Schema.Int.check(Schema.isGreaterThanOrEqualTo(1))),
+	concurrency: Schema.optional(TextCorpusScanLimit),
+	maximumAssets: Schema.optional(TextCorpusScanLimit),
 	projectRoot: Schema.String
 });
 export type TextCorpusScanOptions = Schema.Schema.Type<typeof TextCorpusScanOptions>;
 
 const decodeScanOptions = Schema.decodeUnknownEffect(TextCorpusScanOptions);
+
+/** Scan options from an untrusted source (a CLI flag, a request body), checked once. */
+export const parseTextCorpusScanOptions = (encoded: typeof TextCorpusScanOptions.Encoded) =>
+	decodeScanOptions(encoded).pipe(
+		Effect.mapError(
+			(cause) =>
+				new TextCorpusScanError({
+					code: "invalid_options",
+					message: "The text corpus scan options do not match their schema.",
+					recovery: "Provide a project root and positive scan limits.",
+					retrySafe: false,
+					cause
+				})
+		)
+	);
 
 export const STRING_TABLE_CLASS = "/Script/Engine.StringTable";
 
@@ -1063,36 +1088,15 @@ export const TextCorpusServiceLive = Layer.effect(
 	TextCorpusService,
 	Effect.gen(function* () {
 		const reader = yield* AssetReader;
-		const scan = Effect.fn("TextCorpus.scan")(function* (options: TextCorpusScanOptions) {
-			const validated = yield* decodeScanOptions(options).pipe(
-				Effect.mapError(
-					(cause) =>
-						new TextCorpusScanError({
-							code: "scan_limit_exceeded",
-							message: `Invalid text corpus scan options: ${String(cause)}`,
-							recovery: "Provide a project root and positive scan limits.",
-							retrySafe: false
-						})
-				)
-			);
-			return yield* scanTextCorpusWith(reader, validated);
-		});
+		// Branded scan limits have already been validated at the boundary.
+		const scan = Effect.fn("TextCorpus.scan")((options: TextCorpusScanOptions) =>
+			scanTextCorpusWith(reader, options)
+		);
 		const scanFromProjectIndex = Effect.fn("TextCorpus.scanFromProjectIndex")(function* (
 			index: SavedAssetScan,
 			options: TextCorpusScanOptions
 		) {
-			const validated = yield* decodeScanOptions(options).pipe(
-				Effect.mapError(
-					(cause) =>
-						new TextCorpusScanError({
-							code: "scan_limit_exceeded",
-							message: `Invalid text corpus scan options: ${String(cause)}`,
-							recovery: "Provide a project root and positive scan limits.",
-							retrySafe: false
-						})
-				)
-			);
-			return yield* scanTextCorpusFromProjectIndexWith(reader, index, validated);
+			return yield* scanTextCorpusFromProjectIndexWith(reader, index, options);
 		});
 		return TextCorpusService.of({ scan, scanFromProjectIndex });
 	})

@@ -68,9 +68,13 @@ function authoringModelMutation(mutation: CellMutation): CellMutation | undefine
 		return undefined;
 	}
 	// SAFETY: the offset helper validates integer coordinates before restoring Peculiar's brand.
+	// Verified by: extensions/data-authoring/src/authoring-grid-model.test.ts ("maps only field
+	// columns into model coordinates", "translates physical and visual addresses ...")
 	const projected = { ...mutation, address: { ...mutation.address, col: col as ColumnIndex } };
 	if (mutation.viewAddress) {
 		// SAFETY: viewCol is defined whenever viewAddress is, checked by the early return above.
+		// Verified by: extensions/data-authoring/src/authoring-grid-model.test.ts ("rejects a
+		// field edit whose visual address lands on the pinned name column")
 		projected.viewAddress = { ...mutation.viewAddress, col: viewCol as ColumnIndex };
 	}
 	return projected;

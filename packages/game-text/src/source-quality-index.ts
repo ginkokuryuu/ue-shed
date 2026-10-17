@@ -15,7 +15,7 @@ import {
 	textQualityQueryOf,
 	type TextQualityQuery
 } from "./quality-query.js";
-import type { GameTextRuleDocument } from "./quality-rules-v2.js";
+import type { GameTextRuleDocument } from "./game-text-rules.js";
 import type { TextQualityAffectedOccurrence, TextQualityFinding } from "./quality-schema.js";
 import type { TextCorpus, TextLocation } from "./schema.js";
 import { snapshotCheck } from "./snapshot-format.js";

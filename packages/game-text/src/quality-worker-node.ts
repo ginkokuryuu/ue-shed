@@ -1,7 +1,7 @@
 import { existsSync } from "node:fs";
 import { performance } from "node:perf_hooks";
 import { MessageChannel, Worker, type MessagePort } from "node:worker_threads";
-import { Effect, Metric, Schema } from "effect";
+import { Effect, Exit, Metric, Schema, Scope } from "effect";
 import {
 	QualityWorkerCall,
 	QualityWorkerCallReply,
@@ -15,7 +15,7 @@ import {
 } from "./quality-worker-protocol.js";
 import type { LocalizationQuality } from "./localization-workspace.js";
 import type { IndexedLocalizationQualityOptions } from "./localization-quality-index.js";
-import type { GameTextRuleDocument } from "./quality-rules-v2.js";
+import type { GameTextRuleDocument } from "./game-text-rules.js";
 import type { TextCorpus } from "./schema.js";
 import { receiveSyncReply, type SyncCallChannel } from "./worker-calls.js";
 import { GameTextIndexProgressReporter, type GameTextIndexProgress } from "./index-progress.js";
@@ -78,6 +78,7 @@ function hostQuality(
 			groups: findings.groups,
 			culture: (position) => group(position).culture,
 			filter: (position) => group(position).filter,
+			severity: (position) => group(position).severity,
 			ruleId: (position) => group(position).ruleId,
 			eligible: (position) => group(position).eligible,
 			reportedBySource: (position) => group(position).reportedBySource,
@@ -150,151 +151,168 @@ export interface QualityWorkerScanRequest {
  * thread. A scope owns the worker; each scan's findings stay in the worker until the host's
  * result object is collected.
  */
-export const makeGameTextQualityWorkerResource = Effect.fn("GameTextIndex.qualityWorker")(
-	function* (input: QualityWorkerInput) {
-		const boundary = yield* Schema.decodeUnknownEffect(QualityWorkerInput)(input).pipe(
-			Effect.mapError((cause) => qualityWorkerFailure("quality.worker.input", cause))
-		);
-		const channel = new MessageChannel(),
-			signal = new SharedArrayBuffer(4);
-		const calls: SyncCallChannel = { port: channel.port1, signal: new Int32Array(signal) };
-		const worker = yield* Effect.acquireRelease(
-			Effect.try({
-				try: () => launch(boundary, channel.port2, signal),
-				catch: (cause) => qualityWorkerFailure("quality.worker.start", cause)
-			}),
-			(worker) =>
-				Effect.promise(async () => {
-					calls.port.close();
-					await worker.terminate();
-				})
-		);
-		yield* Metric.update(started, 1);
-		const pending = new Map<number, Pending>();
-		let sequence = 0,
-			callSequence = 0;
-		let failed: QualityWorkerFailure | undefined;
-		let readyResolve: () => void = () => {};
-		let readyReject: (cause: QualityWorkerFailure) => void = () => {};
-		const ready = new Promise<void>((resolve, reject) => {
-			readyResolve = resolve;
-			readyReject = reject;
-		});
-		const fail = (cause: unknown) => {
-			failed = qualityWorkerFailure("quality.worker", cause);
-			readyReject(failed);
-			for (const scan of pending.values()) scan.reject(failed);
-			pending.clear();
-		};
-		// The worker forgets a scan once the host objects that read it, its findings and its
-		// metadata, are both collected; hosts often keep only one of them.
-		const holders = new Map<number, number>();
-		const released = new FinalizationRegistry<number>((id) => {
-			const remaining = (holders.get(id) ?? 1) - 1;
-			if (remaining > 0) {
-				holders.set(id, remaining);
+const acquireGameTextQualityWorker = Effect.fn("GameTextIndex.qualityWorker.acquire")(function* (
+	input: QualityWorkerInput
+) {
+	const boundary = yield* Schema.decodeUnknownEffect(QualityWorkerInput)(input).pipe(
+		Effect.mapError((cause) => qualityWorkerFailure("quality.worker.input", cause))
+	);
+	const channel = yield* Effect.acquireRelease(
+		Effect.sync(() => new MessageChannel()),
+		(channel) =>
+			Effect.sync(() => {
+				channel.port1.close();
+				channel.port2.close();
+			})
+	);
+	const signal = new SharedArrayBuffer(4);
+	const calls: SyncCallChannel = { port: channel.port1, signal: new Int32Array(signal) };
+	const worker = yield* Effect.acquireRelease(
+		Effect.try({
+			try: () => launch(boundary, channel.port2, signal),
+			catch: (cause) => qualityWorkerFailure("quality.worker.start", cause)
+		}),
+		(worker) =>
+			Effect.promise(async () => {
+				calls.port.close();
+				await worker.terminate();
+			})
+	);
+	yield* Metric.update(started, 1);
+	const pending = new Map<number, Pending>();
+	let sequence = 0,
+		callSequence = 0;
+	let failed: QualityWorkerFailure | undefined;
+	let readyResolve: () => void = () => {};
+	let readyReject: (cause: QualityWorkerFailure) => void = () => {};
+	const ready = new Promise<void>((resolve, reject) => {
+		readyResolve = resolve;
+		readyReject = reject;
+	});
+	const fail = (cause: unknown) => {
+		failed = qualityWorkerFailure("quality.worker", cause);
+		readyReject(failed);
+		for (const scan of pending.values()) scan.reject(failed);
+		pending.clear();
+	};
+	// The worker forgets a scan once the host objects that read it, its findings and its
+	// metadata, are both collected; hosts often keep only one of them.
+	const holders = new Map<number, number>();
+	const released = new FinalizationRegistry<number>((id) => {
+		const remaining = (holders.get(id) ?? 1) - 1;
+		if (remaining > 0) {
+			holders.set(id, remaining);
+			return;
+		}
+		holders.delete(id);
+		if (!failed)
+			worker.postMessage(Schema.encodeSync(QualityWorkerTask)({ kind: "release", id }));
+	});
+	worker.on("error", fail);
+	worker.on("exit", (code) => fail(new Error(`Game Text quality worker exited (${code}).`)));
+	worker.on("message", (raw: typeof QualityWorkerReply.Encoded) => {
+		try {
+			const reply = Schema.decodeUnknownSync(QualityWorkerReply)(raw);
+			if (reply.kind === "ready") return readyResolve();
+			if (reply.kind === "failed" && reply.id === undefined) return fail(reply.error);
+			if (reply.kind === "cancelled" || reply.id === undefined) return;
+			const scan = pending.get(reply.id);
+			if (!scan) return;
+			if (reply.kind === "progress") {
+				scan.onProgress(reply.progress);
 				return;
 			}
-			holders.delete(id);
-			if (!failed)
-				worker.postMessage(Schema.encodeSync(QualityWorkerTask)({ kind: "release", id }));
-		});
-		worker.on("error", fail);
-		worker.on("exit", (code) => fail(new Error(`Game Text quality worker exited (${code}).`)));
-		worker.on("message", (raw: typeof QualityWorkerReply.Encoded) => {
-			try {
-				const reply = Schema.decodeUnknownSync(QualityWorkerReply)(raw);
-				if (reply.kind === "ready") return readyResolve();
-				if (reply.kind === "failed" && reply.id === undefined) return fail(reply.error);
-				if (reply.kind === "cancelled" || reply.id === undefined) return;
-				const scan = pending.get(reply.id);
-				if (!scan) return;
-				if (reply.kind === "progress") {
-					scan.onProgress(reply.progress);
+			pending.delete(reply.id);
+			if (reply.kind === "done") scan.resolve(reply.findings);
+			else scan.reject(reply.error);
+		} catch (cause) {
+			fail(cause);
+		}
+	});
+	yield* Effect.tryPromise({
+		try: () => ready,
+		catch: (cause) => qualityWorkerFailure("quality.worker.open", cause)
+	}).pipe(
+		Effect.timeout("30 seconds"),
+		Effect.mapError((cause) => qualityWorkerFailure("quality.worker.open", cause))
+	);
+	const scan = Effect.fn("GameTextIndex.qualityWorker.scan")(function* (
+		request: QualityWorkerScanRequest
+	) {
+		const id = ++sequence;
+		const options = request.options ?? {};
+		const onProgress = yield* GameTextIndexProgressReporter;
+		const scanned = performance.now();
+		const findings = yield* Effect.callback<QualityWorkerFindings, QualityWorkerFailure>(
+			(resume) => {
+				if (failed) {
+					resume(Effect.fail(failed));
 					return;
 				}
-				pending.delete(reply.id);
-				if (reply.kind === "done") scan.resolve(reply.findings);
-				else scan.reject(reply.error);
-			} catch (cause) {
-				fail(cause);
-			}
-		});
-		yield* Effect.tryPromise({
-			try: () => ready,
-			catch: (cause) => qualityWorkerFailure("quality.worker.open", cause)
-		}).pipe(
-			Effect.timeout("30 seconds"),
-			Effect.mapError((cause) => qualityWorkerFailure("quality.worker.open", cause))
-		);
-		const scan = Effect.fn("GameTextIndex.qualityWorker.scan")(function* (
-			request: QualityWorkerScanRequest
-		) {
-			const id = ++sequence;
-			const options = request.options ?? {};
-			// The scan reports through the caller's reporter, as a scan on this thread would.
-			const onProgress = yield* GameTextIndexProgressReporter;
-			const scanned = performance.now();
-			const findings = yield* Effect.callback<QualityWorkerFindings, QualityWorkerFailure>(
-				(resume) => {
-					if (failed) {
-						resume(Effect.fail(failed));
-						return;
-					}
-					pending.set(id, {
-						onProgress,
-						resolve: (findings) => resume(Effect.succeed(findings)),
-						reject: (cause) => resume(Effect.fail(cause))
-					});
-					try {
-						// A copy the worker owns; the query keeps its cached rows.
-						const rows = request.rows.slice();
-						worker.postMessage(
-							Schema.encodeSync(QualityWorkerTask)({
-								kind: "scan",
-								id,
-								corpus: {
-									status: request.corpus.status,
-									coverage: request.corpus.coverage
-								},
-								rows,
-								options,
-								...(request.ruleDocument === undefined
-									? undefined
-									: { ruleDocument: request.ruleDocument })
-							}),
-							[rows.buffer]
-						);
-					} catch (cause) {
-						pending.delete(id);
-						resume(Effect.fail(qualityWorkerFailure("quality.worker.scan", cause)));
-					}
-					// Interrupted: the worker stops the scan, and its late replies are ignored.
-					return Effect.sync(() => {
-						if (!pending.delete(id) || failed) return;
-						worker.postMessage(
-							Schema.encodeSync(QualityWorkerTask)({ kind: "cancel", id })
-						);
-					});
+				pending.set(id, {
+					onProgress,
+					resolve: (findings) => resume(Effect.succeed(findings)),
+					reject: (cause) => resume(Effect.fail(cause))
+				});
+				try {
+					// A copy the worker owns; the query keeps its cached rows.
+					const rows = request.rows.slice();
+					worker.postMessage(
+						Schema.encodeSync(QualityWorkerTask)({
+							kind: "scan",
+							id,
+							corpus: {
+								status: request.corpus.status,
+								coverage: request.corpus.coverage
+							},
+							rows,
+							options,
+							...(request.ruleDocument === undefined
+								? undefined
+								: { ruleDocument: request.ruleDocument })
+						}),
+						[rows.buffer]
+					);
+				} catch (cause) {
+					pending.delete(id);
+					resume(Effect.fail(qualityWorkerFailure("quality.worker.scan", cause)));
 				}
-			);
-			yield* Metric.update(scans, 1);
-			yield* Effect.annotateCurrentSpan({
-				"game_text.quality.worker_scan_ms": performance.now() - scanned,
-				"game_text.quality.findings": findings.length
-			});
-			const quality = hostQuality(
-				calls,
-				() => failed,
-				() => ++callSequence,
-				id,
-				findings
-			);
-			holders.set(id, 2);
-			released.register(quality.findings, id);
-			released.register(quality.metadata, id);
-			return quality;
+				// Interrupted: the worker stops the scan, and its late replies are ignored.
+				return Effect.sync(() => {
+					if (!pending.delete(id) || failed) return;
+					worker.postMessage(
+						Schema.encodeSync(QualityWorkerTask)({ kind: "cancel", id })
+					);
+				});
+			}
+		);
+		yield* Metric.update(scans, 1);
+		yield* Effect.annotateCurrentSpan({
+			"game_text.quality.worker_scan_ms": performance.now() - scanned,
+			"game_text.quality.findings": findings.length
 		});
-		return { scan, healthy: () => failed === undefined };
+		const quality = hostQuality(
+			calls,
+			() => failed,
+			() => ++callSequence,
+			id,
+			findings
+		);
+		holders.set(id, 2);
+		released.register(quality.findings, id);
+		released.register(quality.metadata, id);
+		return quality;
+	});
+	return { scan, healthy: () => failed === undefined };
+});
+
+/** Failed or interrupted readiness closes the candidate; a ready worker belongs to its parent. */
+export const makeGameTextQualityWorkerResource = Effect.fn("GameTextIndex.qualityWorker")(
+	function* (input: QualityWorkerInput) {
+		const candidate = yield* Scope.fork(yield* Scope.Scope);
+		return yield* acquireGameTextQualityWorker(input).pipe(
+			Effect.provideService(Scope.Scope, candidate),
+			Effect.onError(() => Scope.close(candidate, Exit.void))
+		);
 	}
 );

@@ -67,6 +67,7 @@ function hostFindings(quality: LocalizationQuality): QualityWorkerFindings {
 			join: metadata.join,
 			rules: metadata.rules,
 			unsupportedRuleCultures: metadata.unsupportedRuleCultures,
+			...(metadata.customChecks ? { customChecks: metadata.customChecks } : undefined),
 			status: metadata.status,
 			coverage: metadata.coverage,
 			sourceKeys: metadata.sourceKeyOfUnit !== undefined
@@ -163,14 +164,15 @@ void Effect.runPromise(
 						fiber.addObserver(() => running.delete(task.id));
 					} else if (task.kind === "cancel") {
 						const fiber = running.get(task.id);
-						if (fiber)
-							Effect.runFork(
-								Fiber.interrupt(fiber).pipe(
-									Effect.andThen(
-										Effect.sync(() => reply({ kind: "cancelled", id: task.id }))
-									)
-								)
-							);
+						// Completion can win before cancellation, or while interruption settles.
+						// Always forget the result after the running fiber can no longer publish it.
+						const forget = Effect.sync(() => {
+							scans.delete(task.id);
+							reply({ kind: "cancelled", id: task.id });
+						});
+						Effect.runFork(
+							fiber ? Fiber.interrupt(fiber).pipe(Effect.andThen(forget)) : forget
+						);
 					} else scans.delete(task.id);
 				};
 				const call = (raw: typeof QualityWorkerCall.Encoded) => {

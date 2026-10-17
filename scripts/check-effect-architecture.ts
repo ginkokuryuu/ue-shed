@@ -3,6 +3,7 @@ import { dirname, join, relative, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import ts from "typescript";
 import { isJsonObject, parseJsonObject } from "./json.ts";
+import { rawDecoderExportBaseline } from "./raw-decoder-export-baseline.ts";
 
 const repositoryRoot = dirname(dirname(fileURLToPath(import.meta.url)));
 const sourceRoots = ["apps", "packages", "extensions"];
@@ -66,6 +67,9 @@ const approvedRuntimeExits = new Set([
 	"packages/unreal-assets/src/protocol-transport.ts"
 ]);
 const approvedPromiseAdapters = new Set([
+	// Native build staging adapts Node filesystem/snapshot Promise ports below the scoped
+	// Effect builder; leases, temporary files and the protocol process share its scope.
+	"packages/game-text/src/native-index-builder.ts",
 	// The search adapter bridges Node worker messages once; callers receive scoped Effects.
 	"packages/game-text/src/search-worker-node.ts",
 	// The quality adapter bridges worker messages once; callers receive Effects in the model scope.
@@ -835,6 +839,101 @@ export async function checkLocalizationBoundaries(root: string = repositoryRoot)
 	return failures;
 }
 
+function rawDecoderExportSites(source: ts.SourceFile) {
+	const bindings = new Map<string, ts.Expression>();
+	const exported = new Map<string, { readonly local: string; readonly node: ts.Node }>();
+	for (const statement of source.statements) {
+		if (ts.isVariableStatement(statement)) {
+			for (const declaration of statement.declarationList.declarations) {
+				if (!ts.isIdentifier(declaration.name) || !declaration.initializer) continue;
+				const name = declaration.name.text;
+				bindings.set(name, declaration.initializer);
+				if (statement.modifiers?.some((item) => item.kind === ts.SyntaxKind.ExportKeyword))
+					exported.set(name, { local: name, node: statement });
+			}
+		} else if (
+			ts.isExportDeclaration(statement) &&
+			!statement.moduleSpecifier &&
+			!statement.isTypeOnly &&
+			statement.exportClause &&
+			ts.isNamedExports(statement.exportClause)
+		) {
+			for (const item of statement.exportClause.elements)
+				if (!item.isTypeOnly)
+					exported.set(item.name.text, {
+						local: (item.propertyName ?? item.name).text,
+						node: item
+					});
+		} else if (ts.isExportAssignment(statement) && !statement.isExportEquals) {
+			bindings.set("#default", statement.expression);
+			exported.set("default", { local: "#default", node: statement });
+		}
+	}
+	const rawBinding = (local: string, visited = new Set<string>()): string | undefined => {
+		if (visited.has(local)) return undefined;
+		visited.add(local);
+		let expression = bindings.get(local);
+		if (!expression) return undefined;
+		while (
+			ts.isParenthesizedExpression(expression) ||
+			ts.isAsExpression(expression) ||
+			ts.isTypeAssertionExpression(expression) ||
+			ts.isSatisfiesExpression(expression) ||
+			ts.isNonNullExpression(expression)
+		)
+			expression = expression.expression;
+		if (ts.isIdentifier(expression)) return rawBinding(expression.text, visited);
+		return ts.isCallExpression(expression) &&
+			ts.isPropertyAccessExpression(expression.expression) &&
+			ts.isIdentifier(expression.expression.expression) &&
+			expression.expression.expression.text === "Schema" &&
+			/^(?:decode|validate)\w*$/u.test(expression.expression.name.text)
+			? local
+			: undefined;
+	};
+	return [...exported].flatMap(([name, site]) => {
+		const origin = rawBinding(site.local);
+		return origin === undefined ? [] : [{ name, node: site.node, origin }];
+	});
+}
+
+/**
+ * Library entry points parse their input with unary domain parsers that fail with the package's
+ * domain error. An exported raw `Schema.decode*` or `Schema.validate*` factory leaks Schema's
+ * parse error to every caller instead.
+ */
+export async function checkDecoderExports(
+	root: string,
+	baseline: ReadonlySet<string> = rawDecoderExportBaseline
+) {
+	const failures: string[] = [];
+	const found = new Set<string>();
+	for (const directory of sourceRoots)
+		for (const absolute of await filesUnder(root, directory)) {
+			const path = relative(root, absolute).replaceAll("\\", "/");
+			if (!/\.tsx?$/u.test(path) || path.endsWith(".d.ts") || testSourcePattern.test(path))
+				continue;
+			if (!/^(?:apps|packages|extensions)\/[^/]+\/src\//u.test(path)) continue;
+			const text = await readFile(absolute, "utf8");
+			const source = ts.createSourceFile(path, text, ts.ScriptTarget.Latest, true);
+			for (const { name, node, origin } of rawDecoderExportSites(source)) {
+				const site = `${path}:${name}`;
+				found.add(site);
+				// Existing aliases retain their factory's waiver; the factory must remain in the baseline.
+				if (!baseline.has(site) && !baseline.has(`${path}:${origin}`))
+					failures.push(
+						`${path}:${lineOf(text, node.getStart(source))}: ${name} exports a raw Schema decoder; export a domain parser`
+					);
+			}
+		}
+	// A converted site leaves the baseline in the same change, so it cannot come back unnoticed.
+	if (root === repositoryRoot && baseline === rawDecoderExportBaseline)
+		for (const site of baseline)
+			if (!found.has(site))
+				failures.push(`scripts/raw-decoder-export-baseline.ts: remove converted ${site}`);
+	return failures;
+}
+
 /**
  * Exported `make*` functions no other module uses. Each is a public package helper that predates
  * the rule; removing it from the package's exports belongs to that package's entry-point review
@@ -917,6 +1016,7 @@ export async function checkArchitecture(root: string = repositoryRoot) {
 		...(await checkDomainServices(root)),
 		...(await checkLocalizationBoundaries(root)),
 		...(await checkWorkbenchBoundaries(root)),
+		...(await checkDecoderExports(root)),
 		...(await checkCompositionPolicy(root))
 	];
 }
