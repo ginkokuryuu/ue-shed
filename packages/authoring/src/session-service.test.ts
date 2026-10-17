@@ -2,15 +2,23 @@ import type { AuthoringTableSnapshot, AuthoringTableSnapshotV1 } from "@ue-shed/
 import { mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { Deferred, Effect, Fiber, Schema } from "effect";
+import { Deferred, Effect, Fiber, Layer, Schema } from "effect";
 import { describe, expect, it } from "vitest";
 import {
 	authoringIdGeneratorLayer,
+	type AuthoringIdGenerator,
 	authoringSessionLivePortLayer,
 	buildSetCellCommand,
 	makeAuthoringSessionService,
+	AuthoringIdGeneratorLive,
 	workingTable
 } from "./index.js";
+
+/** A session service over generated ids, or over the ids a test supplies. */
+const sessionService = (
+	config: Parameters<typeof makeAuthoringSessionService>[0],
+	ids: Layer.Layer<AuthoringIdGenerator> = AuthoringIdGeneratorLive
+) => makeAuthoringSessionService(config).pipe(Effect.provide(ids));
 
 function snapshot(value = "1"): AuthoringTableSnapshotV1 {
 	return {
@@ -89,7 +97,7 @@ describe("AuthoringSessionService", () => {
 		let tick = 0;
 		const makeService = () =>
 			Effect.runPromise(
-				makeAuthoringSessionService(
+				sessionService(
 					{ projectId: "fixture", projectRoot: root, storageRoot },
 					authoringIdGeneratorLayer(() =>
 						tick++ === 0 ? "draft-1" : `generated-${tick}`
@@ -175,7 +183,7 @@ describe("AuthoringSessionService", () => {
 		const otherPath = "/Game/Fixture/DT_Other.DT_Other";
 		try {
 			const service = await Effect.runPromise(
-				makeAuthoringSessionService({ projectId: "fixture", projectRoot: root })
+				sessionService({ projectId: "fixture", projectRoot: root })
 			);
 			await Effect.runPromise(
 				service.create([snapshot(), snapshotAt(otherPath)], { id: "multi" })
@@ -227,7 +235,7 @@ describe("AuthoringSessionService", () => {
 		const storageRoot = join(root, "sessions");
 		try {
 			const service = await Effect.runPromise(
-				makeAuthoringSessionService({
+				sessionService({
 					projectId: "fixture",
 					projectRoot: root,
 					storageRoot
@@ -251,7 +259,7 @@ describe("AuthoringSessionService", () => {
 		const storageRoot = join(root, "sessions");
 		try {
 			const service = await Effect.runPromise(
-				makeAuthoringSessionService({
+				sessionService({
 					projectId: "fixture",
 					projectRoot: root,
 					storageRoot
@@ -267,7 +275,7 @@ describe("AuthoringSessionService", () => {
 				"utf8"
 			);
 			const restarted = await Effect.runPromise(
-				makeAuthoringSessionService({
+				sessionService({
 					projectId: "fixture",
 					projectRoot: root,
 					storageRoot
@@ -289,7 +297,7 @@ describe("AuthoringSessionService", () => {
 		const root = await mkdtemp(join(tmpdir(), "ue-shed-session-atomic-"));
 		try {
 			const service = await Effect.runPromise(
-				makeAuthoringSessionService(
+				sessionService(
 					{ projectId: "fixture", projectRoot: root },
 					authoringIdGeneratorLayer(() => "generated")
 				)
@@ -328,7 +336,7 @@ describe("AuthoringSessionService", () => {
 		let nextId = 0;
 		const makeService = () =>
 			Effect.runPromise(
-				makeAuthoringSessionService(
+				sessionService(
 					{ projectId: "fixture", projectRoot: root, storageRoot },
 					authoringIdGeneratorLayer(() => `id-${nextId++}`)
 				)
@@ -426,7 +434,7 @@ describe("AuthoringSessionService", () => {
 		const root = await mkdtemp(join(tmpdir(), "ue-shed-session-row-errors-"));
 		try {
 			const service = await Effect.runPromise(
-				makeAuthoringSessionService({ projectId: "fixture", projectRoot: root })
+				sessionService({ projectId: "fixture", projectRoot: root })
 			);
 			await Effect.runPromise(service.create([snapshot()], { id: "row-errors" }));
 			const duplicated = await Effect.runPromise(
@@ -518,7 +526,7 @@ describe("AuthoringSessionService", () => {
 				}
 			};
 			const service = await Effect.runPromise(
-				makeAuthoringSessionService({ projectId: "fixture", projectRoot: root })
+				sessionService({ projectId: "fixture", projectRoot: root })
 			);
 			await Effect.runPromise(service.create([live], { id: "text-defaults" }));
 			const error = await Effect.runPromise(
@@ -543,7 +551,7 @@ describe("AuthoringSessionService", () => {
 		const root = await mkdtemp(join(tmpdir(), "ue-shed-session-value-errors-"));
 		try {
 			const service = await Effect.runPromise(
-				makeAuthoringSessionService({ projectId: "fixture", projectRoot: root })
+				sessionService({ projectId: "fixture", projectRoot: root })
 			);
 			await Effect.runPromise(service.create([snapshotV2()], { id: "typed" }));
 			const incompatible = await Effect.runPromise(
@@ -615,7 +623,7 @@ describe("AuthoringSessionService", () => {
 		const root = await mkdtemp(join(tmpdir(), "ue-shed-session-invalid-review-"));
 		try {
 			const service = await Effect.runPromise(
-				makeAuthoringSessionService({ projectId: "fixture", projectRoot: root })
+				sessionService({ projectId: "fixture", projectRoot: root })
 			);
 			const created = await Effect.runPromise(
 				service.create([snapshotV2()], { id: "invalid-review" })
@@ -674,7 +682,7 @@ describe("AuthoringSessionService", () => {
 		const storageRoot = join(root, "sessions");
 		const makeService = () =>
 			Effect.runPromise(
-				makeAuthoringSessionService(
+				sessionService(
 					{ projectId: "fixture", projectRoot: root, storageRoot },
 					authoringIdGeneratorLayer(() => "generated")
 				)
@@ -769,7 +777,7 @@ describe("AuthoringSessionService", () => {
 		const storageRoot = join(root, "sessions");
 		try {
 			const service = await Effect.runPromise(
-				makeAuthoringSessionService(
+				sessionService(
 					{ projectId: "fixture", projectRoot: root, storageRoot },
 					authoringIdGeneratorLayer(() => "generated")
 				)
@@ -833,7 +841,7 @@ describe("AuthoringSessionService", () => {
 		const storageRoot = join(root, "sessions");
 		try {
 			const service = await Effect.runPromise(
-				makeAuthoringSessionService(
+				sessionService(
 					{ projectId: "fixture", projectRoot: root, storageRoot },
 					authoringIdGeneratorLayer(() => "generated")
 				)
@@ -899,7 +907,7 @@ describe("AuthoringSessionService", () => {
 		const storageRoot = join(root, "sessions");
 		try {
 			const service = await Effect.runPromise(
-				makeAuthoringSessionService(
+				sessionService(
 					{ projectId: "fixture", projectRoot: root, storageRoot },
 					authoringIdGeneratorLayer(() => "generated")
 				)

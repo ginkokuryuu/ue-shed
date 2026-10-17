@@ -97,6 +97,17 @@ describe("authoring sheet coordinates", () => {
 		expect(operation.mutation.viewAddress?.col).toBe(1);
 	});
 
+	it("rejects a field edit whose visual address lands on the pinned name column", () => {
+		// SAFETY: these integer coordinates use Peculiar's distinct visual-row brand.
+		const viewAddress = { col: 0, row: 1 } as NonNullable<CellMutation["viewAddress"]>;
+		expect(
+			projectAuthoringSheetOperation({
+				type: "cell-edit",
+				mutation: { ...sheetMutation, viewAddress }
+			})
+		).toEqual({ message: "Row names are read-only in the grid.", status: "failed" });
+	});
+
 	it.each(["user", "paste", "delete", "formula", "external", "fill"] as const)(
 		"maps %s mutations through the same decoding boundary",
 		(source) => {

@@ -134,6 +134,7 @@ export class AssetReaderError extends Schema.TaggedError<AssetReaderError>()("As
 	code: Schema.optional(Schema.String),
 	kind: Schema.Literals(["timeout", "process", "contract", "discovery", "resource_limit"]),
 	operation: Schema.Literals([
+		"game_text_index",
 		"authoring",
 		"blueprint",
 		"level_sequence",
@@ -542,15 +543,17 @@ function makeAssetReader(
 	const savedWorldProgress = Effect.fn("AssetReader.savedWorldProgress")(() =>
 		Effect.sync(() => savedWorldStore.current)
 	);
-	const scanProject = Effect.fn("AssetReader.scanProject")(function* (
-		options: SavedAssetScanOptions
-	) {
-		return yield* invokeProtocolScan(configuration, options, scanStore).pipe(
-			Effect.withSpan("unreal_assets.scan_project", {
-				attributes: { "unreal.project_root": options.projectRoot }
-			})
-		);
-	});
+	const scanProject = Effect.fn("AssetReader.scanProject")(
+		function* (options: SavedAssetScanOptions) {
+			return yield* invokeProtocolScan(configuration, options, scanStore);
+		},
+		(effect, options) =>
+			effect.pipe(
+				Effect.withSpan("unreal_assets.scan_project", {
+					attributes: { "unreal.project_root": options.projectRoot }
+				})
+			)
+	);
 	const extractProjectText = (options: SavedAssetExtractionOptions) =>
 		options.paths?.length === 0
 			? Stream.empty
@@ -713,7 +716,7 @@ function makeAssetReader(
 	const discoverTables = Effect.fn("AssetReader.discoverTables")(function* (
 		options: SavedTableCatalogOptions
 	) {
-		return yield* invokeProtocolScan(
+		const scan = yield* invokeProtocolScan(
 			configuration,
 			{
 				...(options.cachePath === undefined ? undefined : { cachePath: options.cachePath }),
@@ -725,7 +728,8 @@ function makeAssetReader(
 				projectRoot: options.projectRoot
 			},
 			catalogProgressBridge(progress)
-		).pipe(Effect.map(savedTableCatalogFromScan));
+		);
+		return savedTableCatalogFromScan(scan);
 	});
 	const source = Effect.fn("AssetReader.source")(() => Effect.succeed(configuration.source));
 	return AssetReader.of({

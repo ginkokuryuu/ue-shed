@@ -38,7 +38,7 @@ const failure = (cause: unknown) =>
 	new CameraWorkspaceError({ message: cause instanceof Error ? cause.message : String(cause) });
 
 /** Workbench composition of public camera ports. No independent synchronization protocol. */
-export const makeCameraWorkspace = Effect.fn("Workbench.CameraWorkspace.make")(function* () {
+const makeCameraWorkspace = Effect.fn("Workbench.CameraWorkspace.make")(function* () {
 	const authoring = yield* ReviewAuthoring;
 	const repository = yield* ReviewRepository;
 	const client = yield* RemoteControlClient;
@@ -427,6 +427,11 @@ export const WorkbenchCameraWorkspaceLive = Layer.effect(
 	makeCameraWorkspace()
 );
 
+/**
+ * A camera workspace with no Unreal session and no saved camera sets, as a host without an
+ * editor has: requests report the error the live workspace reports when it cannot open a set. Tests replace
+ * the operations they exercise.
+ */
 export function makeWorkbenchCameraWorkspaceTestLayer(
 	service: Partial<WorkbenchCameraWorkspaceApi> = {}
 ): Layer.Layer<WorkbenchCameraWorkspace> {
@@ -434,8 +439,15 @@ export function makeWorkbenchCameraWorkspaceTestLayer(
 		WorkbenchCameraWorkspace,
 		WorkbenchCameraWorkspace.of({
 			close: () => Effect.void,
-			request: () => Effect.die("not used"),
-			setupSets: () => Effect.die("not used"),
+			request: () =>
+				Effect.succeed({
+					preview: null,
+					panel: null,
+					sets: [],
+					recovery: null,
+					error: "No Unreal camera workspace is available."
+				}),
+			setupSets: () => Effect.succeed([]),
 			...service
 		})
 	);

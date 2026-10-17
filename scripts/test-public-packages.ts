@@ -153,6 +153,8 @@ try {
 	assert.ok(gameTextFiles.includes("package/dist/search-worker.js"));
 	assert.ok(gameTextFiles.includes("package/dist/search-worker-node.js"));
 	assert.ok(gameTextFiles.includes("package/dist/search-worker-protocol.js"));
+	assert.ok(gameTextFiles.includes("package/dist/quality-worker.js"));
+	assert.ok(gameTextFiles.includes("package/dist/quality-worker-node.js"));
 	const gameTextAdoption = JSON.parse(
 		run(
 			"tar",

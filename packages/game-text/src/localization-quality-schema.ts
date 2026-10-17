@@ -264,6 +264,34 @@ export const LocalizationQualityFinding = Schema.Union([
 ]);
 export type LocalizationQualityFinding = typeof LocalizationQualityFinding.Type;
 
+const CustomMatch = Schema.Struct({ match: Schema.String, start: Count, end: Count });
+/**
+ * A finding of a check the rule file defines (`customChecks`). `ruleId` is the check's ID and
+ * `label` its name; `check` is its kind. `actual.text` is the text checked: the source for a
+ * `source` check, the culture's shipped translation for a `translation` check.
+ */
+export const LocalizationCustomFinding = Schema.Struct({
+	...Base,
+	kind: Schema.Literal("custom"),
+	check: Schema.Literals(["pattern", "length", "forbidden_term"]),
+	label: Schema.String,
+	subject: Schema.Literals(["source", "translation"]),
+	actual: Schema.Struct({
+		text: Schema.String,
+		length: Schema.optionalKey(Count),
+		matches: Schema.optionalKey(Schema.Array(CustomMatch).check(Schema.isMaxLength(16)))
+	}),
+	expectation: Schema.Struct({
+		pattern: Schema.optionalKey(Schema.String),
+		report: Schema.optionalKey(Schema.Literals(["match", "no_match"])),
+		measure: Schema.optionalKey(Schema.Literals(["visible", "characters"])),
+		minimum: Schema.optionalKey(Count),
+		maximum: Schema.optionalKey(Count),
+		terms: Schema.optionalKey(Strings)
+	})
+});
+export type LocalizationCustomFinding = typeof LocalizationCustomFinding.Type;
+
 export const LocalizationPolicyFinding = Schema.Union([
 	Schema.Struct({
 		...Base,
@@ -324,9 +352,18 @@ export type LocalizationCheckDiagnostic = typeof LocalizationCheckDiagnostic.Typ
 export const LocalizationQualityReport = TextQualityReport.mapFields((fields) => ({
 	...fields,
 	findings: Schema.Array(
-		Schema.Union([TextQualityFinding, LocalizationQualityFinding, LocalizationPolicyFinding])
+		Schema.Union([
+			TextQualityFinding,
+			LocalizationQualityFinding,
+			LocalizationPolicyFinding,
+			LocalizationCustomFinding
+		])
 	),
-	ruleDocumentVersion: Schema.Literals([1, 2]),
+	/** The rule file's custom checks, by rule ID, with the label lists and filters show. */
+	customChecks: Schema.optionalKey(
+		Schema.Array(Schema.Struct({ ruleId: TextQualityRuleId, label: Schema.String }))
+	),
+	ruleDocumentVersion: Schema.Literals([1, 2, 3]),
 	ruleDiagnostics: Schema.optionalKey(Schema.Array(LocalizationRuleDiagnostic)),
 	target: LocalizationTargetName,
 	gatherEvidence: Schema.Array(LocalizationFileStatus),

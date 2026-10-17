@@ -24,7 +24,7 @@ type EditableRule = TextQualityRule | LocalizationProjectRule;
 function documentRules(document: GameTextRuleDocument): readonly EditableRule[] {
 	return [
 		...document.rules,
-		...(document.schemaVersion === 2 ? (document.localizationRules ?? []) : [])
+		...(document.schemaVersion !== 1 ? (document.localizationRules ?? []) : [])
 	];
 }
 
@@ -92,7 +92,7 @@ function replaceLocalizationRule(
 	document: GameTextRuleDocument,
 	updated: LocalizationProjectRule
 ): GameTextRuleDocument {
-	if (document.schemaVersion !== 2) return document;
+	if (document.schemaVersion === 1) return document;
 	return {
 		...document,
 		localizationRules: (document.localizationRules ?? []).map((rule) =>
@@ -107,7 +107,7 @@ function replaceRecovery(
 	recovery: string
 ): GameTextRuleDocument {
 	const source = replaceRule(document, id, (rule) => ({ ...rule, recovery }));
-	if (source.schemaVersion !== 2 || !source.localizationRules) return source;
+	if (source.schemaVersion === 1 || !source.localizationRules) return source;
 	return {
 		...source,
 		localizationRules: source.localizationRules.map((rule) =>
@@ -149,7 +149,7 @@ export function GameTextRuleEditor(props: {
 	const addLocalizationRule = (kind: LocalizationProjectRule["kind"]) => {
 		const document = draft();
 		const role = document.roles[0]?.id;
-		if (document.schemaVersion !== 2 || !role) return;
+		if (document.schemaVersion === 1 || !role) return;
 		let index = 1;
 		while (rules().some((rule) => rule.id === "translation.rule." + index)) index++;
 		const id = TextQualityRuleId.make("translation.rule." + index);
@@ -190,7 +190,7 @@ export function GameTextRuleEditor(props: {
 					<span>Rules</span>
 					<b {...stylex.attrs(styles.panelCount)}>{rules().length}</b>
 				</header>
-				<Show when={draft().schemaVersion === 2}>
+				<Show when={draft().schemaVersion !== 1}>
 					<div {...stylex.attrs(styles.addTerms)}>
 						<button
 							type="button"

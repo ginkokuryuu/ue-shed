@@ -13,6 +13,10 @@ import {
 	localizationKeyChanges,
 	mergeLocalizationKeyChanges,
 	textCorpusQuery,
+	checkLocalizationTarget,
+	localizationQuality,
+	evaluateGameTextSourceQuality,
+	textQualityQuery,
 	type GameTextIndexRefreshResult,
 	type TextCorpus
 } from "@ue-shed/game-text";
@@ -118,6 +122,28 @@ export function oracleGameTextIndexLayer<E>(
 						corpus,
 						query,
 						search: (request) => Effect.sync(() => query.search(request)),
+						// The in-memory checks are the oracle the indexed scans match.
+						localizationQuality: (ruleDocument, options) =>
+							Effect.sync(() => {
+								if (!join || !files)
+									throw new Error("No target in this oracle request");
+								return localizationQuality(
+									checkLocalizationTarget(
+										corpus,
+										join,
+										files,
+										options,
+										ruleDocument
+									),
+									join
+								);
+							}),
+						sourceQuality: (ruleDocument) =>
+							Effect.sync(() =>
+								textQualityQuery(
+									evaluateGameTextSourceQuality(corpus, ruleDocument)
+								)
+							),
 						get localizationJoin(): GameTextIndexRefreshResult["localizationJoin"] {
 							if (!join) throw new Error("No target in this oracle request");
 							return join;

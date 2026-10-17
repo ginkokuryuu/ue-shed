@@ -41,8 +41,8 @@ import {
 	WorldTransform,
 	applyWorldObservationEvent,
 	connectingState,
-	decodeWorldScoutFocusResult,
-	decodeWorldScoutResult,
+	parseWorldScoutFocusResult,
+	parseWorldScoutResult,
 	type ActorId,
 	type WorldObservationSample,
 	type WorldObservationState,
@@ -65,7 +65,7 @@ const CameraStatusResult = Schema.Union([
 
 const loadWorldSnapshot = (): Effect.Effect<WorldScoutResult, MapReviewClientError> =>
 	request({
-		decode: decodeWorldScoutResult,
+		decode: parseWorldScoutResult,
 		invoke: () => window.ueShed.mapReview.worldSnapshot(),
 		operation: "mapReview.worldSnapshot"
 	});
@@ -276,7 +276,7 @@ export const mapReviewClient: MapReviewClientApi = MapReviewClient.of({
 	connectWorld: Effect.fn("MapReviewClient.connectWorld")(() => loadWorldSnapshot()),
 	focusActor: Effect.fn("MapReviewClient.focusActor")((actorId: ActorId, bringToFront: boolean) =>
 		request({
-			decode: decodeWorldScoutFocusResult,
+			decode: parseWorldScoutFocusResult,
 			invoke: () => window.ueShed.mapReview.focusActor(actorId, bringToFront),
 			operation: "mapReview.focusActor"
 		})

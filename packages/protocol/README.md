@@ -33,6 +33,13 @@ consumers must validate untrusted wire input instead of casting it to an exporte
 
 This package does not connect to Unreal Engine, launch processes, or depend on the UE Shed Workbench.
 
+The uasset-io contract adds `game_text_index` at version 1.13. A scoped protocol session owns the
+native build lease and accepts typed preparation, dictionary, join and compaction operations.
+Older minors reject that operation. Snapshot paths refer to caller-staged files in the paired
+private Game Text format; roots and layer records are validated again by the domain adapter.
+Intern strings are bounded to 1 MiB each, and join inputs and selected-string output files to
+32 MiB. See the [native preparation guide](../../docs/engineering/native-game-text-index.md).
+
 ## License
 
 MIT. Unreal Engine is a trademark of Epic Games, Inc. This project is not affiliated with or

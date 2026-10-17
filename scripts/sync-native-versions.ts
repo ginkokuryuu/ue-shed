@@ -11,12 +11,19 @@ const cargoManifestPaths = [
 	"crates/uasset-parser/Cargo.toml",
 	"crates/uasset-inspection/Cargo.toml",
 	"crates/uasset-io/Cargo.toml",
+	"crates/game-text-index/Cargo.toml",
 	"crates/uasset-inspection-wasm/Cargo.toml"
 ];
 const cargoLocks = [
 	{
 		path: "Cargo.lock",
-		crates: ["engine-process-supervisor", "uasset-parser", "uasset-inspection", "uasset-io"]
+		crates: [
+			"engine-process-supervisor",
+			"uasset-parser",
+			"uasset-inspection",
+			"uasset-io",
+			"game-text-index"
+		]
 	},
 	{
 		path: "crates/uasset-inspection-wasm/Cargo.lock",

@@ -3,6 +3,7 @@ import { dirname, join, relative, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import ts from "typescript";
 import { isJsonObject, parseJsonObject } from "./json.ts";
+import { rawDecoderExportBaseline } from "./raw-decoder-export-baseline.ts";
 
 const repositoryRoot = dirname(dirname(fileURLToPath(import.meta.url)));
 const sourceRoots = ["apps", "packages", "extensions"];
@@ -35,6 +36,9 @@ const approvedRuntimeExits = new Set([
 	"packages/game-text/src/localization-import-worker.ts",
 	// Search messages are a Node boundary; the host scope terminates its pinned worker reader.
 	"packages/game-text/src/search-worker.ts",
+	// Quality scan messages are a Node boundary; the model scope terminates the worker and its
+	// pinned reader, and each scan runs as a fiber the host can cancel.
+	"packages/game-text/src/quality-worker.ts",
 	// The browser worker is a foreign entrypoint; each read's scope terminates its runtime.
 	"apps/site/src/blueprints/blueprint.worker.ts",
 	"apps/cli/src/index.ts",
@@ -63,8 +67,13 @@ const approvedRuntimeExits = new Set([
 	"packages/unreal-assets/src/protocol-transport.ts"
 ]);
 const approvedPromiseAdapters = new Set([
+	// Native build staging adapts Node filesystem/snapshot Promise ports below the scoped
+	// Effect builder; leases, temporary files and the protocol process share its scope.
+	"packages/game-text/src/native-index-builder.ts",
 	// The search adapter bridges Node worker messages once; callers receive scoped Effects.
 	"packages/game-text/src/search-worker-node.ts",
+	// The quality adapter bridges worker messages once; callers receive Effects in the model scope.
+	"packages/game-text/src/quality-worker-node.ts",
 	// The cold importer adapts worker messages and staged snapshot handles below SharedIndex.
 	"packages/game-text/src/localization-cold-import.ts",
 	// Package cold import owns the same worker-message Promise bridge under Effect.acquireRelease;
@@ -173,6 +182,9 @@ const approvedResourceAdapters = new Set([
 	// Search listeners and cancellation flags belong to the pinned reader's worker scope.
 	"packages/game-text/src/search-worker-node.ts",
 	"packages/game-text/src/search-worker.ts",
+	// Quality listeners and the finalization registry belong to the model's worker scope.
+	"packages/game-text/src/quality-worker-node.ts",
+	"packages/game-text/src/quality-worker.ts",
 	// Parser workers and their listeners are closed on success, failure and scope cancellation.
 	"packages/game-text/src/localization-cold-import.ts",
 	// Package workers, reply/abort listeners, readers and staging belong to the cold-import scope.
@@ -827,6 +839,175 @@ export async function checkLocalizationBoundaries(root: string = repositoryRoot)
 	return failures;
 }
 
+function rawDecoderExportSites(source: ts.SourceFile) {
+	const bindings = new Map<string, ts.Expression>();
+	const exported = new Map<string, { readonly local: string; readonly node: ts.Node }>();
+	for (const statement of source.statements) {
+		if (ts.isVariableStatement(statement)) {
+			for (const declaration of statement.declarationList.declarations) {
+				if (!ts.isIdentifier(declaration.name) || !declaration.initializer) continue;
+				const name = declaration.name.text;
+				bindings.set(name, declaration.initializer);
+				if (statement.modifiers?.some((item) => item.kind === ts.SyntaxKind.ExportKeyword))
+					exported.set(name, { local: name, node: statement });
+			}
+		} else if (
+			ts.isExportDeclaration(statement) &&
+			!statement.moduleSpecifier &&
+			!statement.isTypeOnly &&
+			statement.exportClause &&
+			ts.isNamedExports(statement.exportClause)
+		) {
+			for (const item of statement.exportClause.elements)
+				if (!item.isTypeOnly)
+					exported.set(item.name.text, {
+						local: (item.propertyName ?? item.name).text,
+						node: item
+					});
+		} else if (ts.isExportAssignment(statement) && !statement.isExportEquals) {
+			bindings.set("#default", statement.expression);
+			exported.set("default", { local: "#default", node: statement });
+		}
+	}
+	const rawBinding = (local: string, visited = new Set<string>()): string | undefined => {
+		if (visited.has(local)) return undefined;
+		visited.add(local);
+		let expression = bindings.get(local);
+		if (!expression) return undefined;
+		while (
+			ts.isParenthesizedExpression(expression) ||
+			ts.isAsExpression(expression) ||
+			ts.isTypeAssertionExpression(expression) ||
+			ts.isSatisfiesExpression(expression) ||
+			ts.isNonNullExpression(expression)
+		)
+			expression = expression.expression;
+		if (ts.isIdentifier(expression)) return rawBinding(expression.text, visited);
+		return ts.isCallExpression(expression) &&
+			ts.isPropertyAccessExpression(expression.expression) &&
+			ts.isIdentifier(expression.expression.expression) &&
+			expression.expression.expression.text === "Schema" &&
+			/^(?:decode|validate)\w*$/u.test(expression.expression.name.text)
+			? local
+			: undefined;
+	};
+	return [...exported].flatMap(([name, site]) => {
+		const origin = rawBinding(site.local);
+		return origin === undefined ? [] : [{ name, node: site.node, origin }];
+	});
+}
+
+/**
+ * Library entry points parse their input with unary domain parsers that fail with the package's
+ * domain error. An exported raw `Schema.decode*` or `Schema.validate*` factory leaks Schema's
+ * parse error to every caller instead.
+ */
+export async function checkDecoderExports(
+	root: string,
+	baseline: ReadonlySet<string> = rawDecoderExportBaseline
+) {
+	const failures: string[] = [];
+	const found = new Set<string>();
+	for (const directory of sourceRoots)
+		for (const absolute of await filesUnder(root, directory)) {
+			const path = relative(root, absolute).replaceAll("\\", "/");
+			if (!/\.tsx?$/u.test(path) || path.endsWith(".d.ts") || testSourcePattern.test(path))
+				continue;
+			if (!/^(?:apps|packages|extensions)\/[^/]+\/src\//u.test(path)) continue;
+			const text = await readFile(absolute, "utf8");
+			const source = ts.createSourceFile(path, text, ts.ScriptTarget.Latest, true);
+			for (const { name, node, origin } of rawDecoderExportSites(source)) {
+				const site = `${path}:${name}`;
+				found.add(site);
+				// Existing aliases retain their factory's waiver; the factory must remain in the baseline.
+				if (!baseline.has(site) && !baseline.has(`${path}:${origin}`))
+					failures.push(
+						`${path}:${lineOf(text, node.getStart(source))}: ${name} exports a raw Schema decoder; export a domain parser`
+					);
+			}
+		}
+	// A converted site leaves the baseline in the same change, so it cannot come back unnoticed.
+	if (root === repositoryRoot && baseline === rawDecoderExportBaseline)
+		for (const site of baseline)
+			if (!found.has(site))
+				failures.push(`scripts/raw-decoder-export-baseline.ts: remove converted ${site}`);
+	return failures;
+}
+
+/**
+ * Exported `make*` functions no other module uses. Each is a public package helper that predates
+ * the rule; removing it from the package's exports belongs to that package's entry-point review
+ * (Plan 058 D1 for game-text, D13 for the others). Remove an entry once it is no longer exported.
+ */
+const exportedMakeBaseline = new Set([
+	"packages/cameras/src/map-tile-repository.ts:makeMapCaptureRepositoryTestLayer",
+	"packages/cameras/src/review-visibility-policy.ts:makeReviewViewId",
+	"packages/cameras/src/review-visibility-policy.ts:makeVisibilityPolicyId",
+	"packages/config-explorer/src/file-access.ts:makeConfigFileAccessTestLayer",
+	"packages/config-explorer/src/service.ts:makeConfigExplorerTestLayer",
+	"packages/engine/src/project-launcher.ts:makeUnrealProjectLauncherTestLayer",
+	"packages/engine/src/supervised-editor-session.ts:makeSupervisedEditorSessionTestLayer",
+	"packages/game-text/src/quality-query.ts:makeTextQualityFindingId",
+	"packages/host/src/configuration.ts:makeShedHostConfiguration",
+	"packages/host/src/saved-table-index.ts:makeSavedTableIndexTestLayer",
+	"packages/project-custodian/src/service.ts:makeCustodianTestLayer",
+	"packages/protocol/src/editor-play-session.ts:makeEditorPlaySessionJsonSchema"
+]);
+
+/** The parameter list of each exported function or arrow constant, with its name. */
+function exportedSignatures(text: string) {
+	return [
+		...text.matchAll(/export (?:async )?function (\w+)(?:<[^(]*?>)?\(([^)]*)\)/gsu),
+		...text.matchAll(/export const (\w+) = (?:<[^(]*?>)?\(([^)]*)\)\s*(?::[^=]*)?=>/gsu)
+	].map((match) => ({ name: match[1]!, parameters: match[2]!, offset: match.index }));
+}
+
+/**
+ * Layers compose through requirements: no exported factory takes a Layer, which hides a
+ * dependency a caller can no longer replace. An exported `make*` constructor is used by another
+ * module (production or test); one only its own module uses stays private.
+ */
+export async function checkCompositionPolicy(root: string) {
+	const failures: string[] = [];
+	const files = (
+		await Promise.all(
+			[...sourceRoots, "scripts"].map((directory) => filesUnder(root, directory))
+		)
+	)
+		.flat()
+		.filter((path) => /\.tsx?$/u.test(path) && !path.endsWith(".d.ts"));
+	const texts = new Map<string, string>();
+	for (const absolute of files)
+		texts.set(relative(root, absolute).replaceAll("\\", "/"), await readFile(absolute, "utf8"));
+	for (const [path, text] of texts) {
+		if (path.startsWith("scripts/") || testSourcePattern.test(path)) continue;
+		if (!/^(?:apps|packages|extensions)\/[^/]+\/src\//u.test(path)) continue;
+		for (const { name, parameters, offset } of exportedSignatures(text))
+			if (/\bLayer\.Layer</u.test(parameters))
+				failures.push(
+					`${path}:${lineOf(text, offset)}: ${name} takes a Layer; require its service instead`
+				);
+		for (const match of text.matchAll(
+			/^export (?:const|function|async function) (make[A-Z]\w*)/gmu
+		)) {
+			const name = match[1]!;
+			if (exportedMakeBaseline.has(`${path}:${name}`)) continue;
+			const used = new RegExp(`\\b${name}\\b`, "u");
+			let elsewhere = false;
+			for (const [other, otherText] of texts)
+				if (other !== path && used.test(otherText)) {
+					elsewhere = true;
+					break;
+				}
+			if (!elsewhere)
+				failures.push(
+					`${path}:${lineOf(text, match.index)}: ${name} is used only in its module; do not export it`
+				);
+		}
+	}
+	return failures;
+}
+
 export async function checkArchitecture(root: string = repositoryRoot) {
 	return [
 		...(await checkCatalogUsage(root)),
@@ -834,7 +1015,9 @@ export async function checkArchitecture(root: string = repositoryRoot) {
 		...(await checkServiceStrategies(root)),
 		...(await checkDomainServices(root)),
 		...(await checkLocalizationBoundaries(root)),
-		...(await checkWorkbenchBoundaries(root))
+		...(await checkWorkbenchBoundaries(root)),
+		...(await checkDecoderExports(root)),
+		...(await checkCompositionPolicy(root))
 	];
 }
 

@@ -57,6 +57,10 @@ pub struct ScanFilters {
 #[derive(Clone, Debug, Deserialize, PartialEq, Eq)]
 #[serde(tag = "kind", deny_unknown_fields)]
 pub enum Operation {
+    #[serde(rename = "game_text_index")]
+    GameTextIndex {
+        request: game_text_index::builder::BuildRequest,
+    },
     #[serde(rename = "inspect")]
     Inspect {
         #[serde(rename = "assetPath")]
@@ -254,6 +258,8 @@ pub struct Request {
 #[derive(Clone, Debug, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "lowercase")]
 pub enum OperationKind {
+    #[serde(rename = "game_text_index")]
+    GameTextIndex,
     #[serde(rename = "project_index_count")]
     ProjectIndexCount,
     Inspect,
@@ -598,6 +604,16 @@ fn validate_request(request: &Request) -> Result<(), ProtocolError> {
         ));
     }
     match &request.operation {
+        Operation::GameTextIndex { request: build } => {
+            if request.contract.version.minor < 13 {
+                return Err(ProtocolError(
+                    "game_text_index requires uasset-io v1.13".into(),
+                ));
+            }
+            build
+                .validate()
+                .map_err(|error| ProtocolError(error.to_string()))
+        }
         Operation::Inspect { asset_path }
         | Operation::Blueprint { asset_path }
         | Operation::LevelSequence { asset_path }
@@ -811,6 +827,20 @@ fn validate_event(event: &Event) -> Result<(), ProtocolError> {
 
 fn validate_result_frame(result: &ResultFrame) -> Result<(), ProtocolError> {
     match result {
+        ResultFrame::GameTextIndex { outcome } => {
+            if outcome
+                .stage_seconds
+                .values()
+                .any(|v| !v.is_finite() || *v < 0.0)
+                || outcome
+                    .capabilities
+                    .iter()
+                    .any(|v| v != "game_text_index_v1")
+            {
+                return Err(ProtocolError("invalid native index outcome".into()));
+            }
+            Ok(())
+        }
         ResultFrame::ExtractTextPackages {
             event: crate::protocol_result::SavedAssetPackageTextEvent::Package { record },
         } => {
@@ -1230,5 +1260,15 @@ mod tests {
         let request = VALID_REQUEST.as_bytes();
         assert!(decode_request_frame(request, request.len()).is_ok());
         assert!(decode_request_frame(request, request.len() - 1).is_err());
+    }
+}
+
+#[cfg(test)]
+mod game_text_contract_tests {
+    #[test]
+    fn capabilities_require_the_additive_minor_and_validate_results() {
+        assert!(super::decode_request(include_bytes!("../../../packages/protocol/contracts/uasset-io/v1/fixtures/valid/game-text-index-capabilities-request.json")).is_ok());
+        assert!(super::decode_request(include_bytes!("../../../packages/protocol/contracts/uasset-io/v1/fixtures/invalid/game-text-index-request-old-minor.json")).is_err());
+        assert!(super::decode_event(include_bytes!("../../../packages/protocol/contracts/uasset-io/v1/fixtures/valid/game-text-index-result-event.json")).is_ok());
     }
 }

@@ -10,7 +10,7 @@ import {
 } from "./localization.test-support.js";
 import { joinLocalizationTarget } from "./localization.js";
 import { checkLocalizationTarget } from "./localization-checks.js";
-import { GameTextRuleDocument, evaluateGameTextSourceQuality } from "./quality-rules-v2.js";
+import { GameTextRuleDocument, evaluateGameTextSourceQuality } from "./game-text-rules.js";
 import { localizationQualityWorkspace, localizationReportPage } from "./localization-workspace.js";
 import { createLocalizationBaseline, localizationProgressReport } from "./localization-reports.js";
 

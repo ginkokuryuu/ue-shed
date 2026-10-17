@@ -165,3 +165,5 @@ export * from "./editor-foreground-responsiveness.js";
 export * from "./level-sequence.js";
 
 export { makeWireJsonSchemaDocument, canonicalJsonSchemaReferences } from "./json-schema.js";
+
+export * from "./game-text-index.js";

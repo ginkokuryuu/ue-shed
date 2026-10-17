@@ -374,6 +374,7 @@ fn contract_value(contract: &Contract) -> Value {
 
 fn operation_kind(operation: &Operation) -> &'static str {
     match operation {
+        Operation::GameTextIndex { .. } => "game_text_index",
         Operation::Inspect { .. } => "inspect",
         Operation::Blueprint { .. } => "blueprint",
         Operation::LevelSequence { .. } => "level_sequence",
@@ -406,6 +407,7 @@ fn execute_direct(
                 | Operation::Authoring { .. }
                 | Operation::ProjectIndexQuery { .. }
                 | Operation::ProjectIndexCount { .. }
+                | Operation::GameTextIndex { .. }
         )
     {
         return Err(Failure::new(
@@ -415,6 +417,28 @@ fn execute_direct(
         ));
     }
     match &request.operation {
+        Operation::GameTextIndex { request: build } => {
+            let outcome = if let Some(session) = query_session {
+                session.game_text.execute(build)
+            } else if matches!(build, game_text_index::builder::BuildRequest::Capabilities) {
+                game_text_index::builder::BuildSession::default().execute(build)
+            } else {
+                return Err(Failure::new(
+                    "unsupported_session_operation",
+                    "Game Text writes require protocol-session",
+                    false,
+                ));
+            }
+            .map_err(|error| {
+                Failure::new(
+                    game_text_index::builder::failure_code(error.as_ref()),
+                    error.to_string(),
+                    true,
+                )
+            })?;
+            emit_typed_result(emitter, &ResultFrame::GameTextIndex { outcome })?;
+            Ok(false)
+        }
         Operation::Inspect { asset_path } => {
             let (inspection, partial) =
                 direct_executor::inspect_with_cancellation(asset_path, cancellation)?;

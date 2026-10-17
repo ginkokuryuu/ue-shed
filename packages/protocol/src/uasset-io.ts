@@ -1,4 +1,5 @@
 import { Schema } from "effect";
+import { GameTextIndexBuildRequest, GameTextIndexBuildOutcome } from "./game-text-index.js";
 import { makeWireJsonSchemaDocument } from "./json-schema.js";
 import { AuthoringTableSnapshot } from "./authoring.js";
 import { BlueprintGraphProjection } from "./blueprint-graph.js";
@@ -296,7 +297,12 @@ const ExistingOperation = Schema.Union([
 		query: UAssetIoProjectIndexQuery
 	})
 ]);
+const GameTextIndexOperation = Schema.Struct({
+	kind: Schema.Literal("game_text_index"),
+	request: GameTextIndexBuildRequest
+});
 export const UAssetIoOperation = Schema.Union([
+	GameTextIndexOperation,
 	...ExistingOperation.members,
 	PackageTextOperation
 ]).annotate({ identifier: "UAssetIoOperation" });
@@ -307,6 +313,18 @@ const RequestFields = {
 	requestId: NonEmptyString
 };
 export const UAssetIoRequest = Schema.Union([
+	Schema.Struct({
+		...RequestFields,
+		contract: UAssetIoContract.pipe(
+			Schema.fieldsAssign({
+				version: Schema.Struct({
+					major: Schema.Literal(1),
+					minor: Schema.Int.check(Schema.isGreaterThanOrEqualTo(13))
+				})
+			})
+		).annotate({ identifier: "UAssetIoGameTextIndexContract" }),
+		operation: GameTextIndexOperation
+	}),
 	Schema.Struct({ ...RequestFields, contract: UAssetIoContract, operation: ExistingOperation }),
 	Schema.Struct({
 		...RequestFields,
@@ -324,6 +342,7 @@ export const UAssetIoRequest = Schema.Union([
 export type UAssetIoRequest = Schema.Schema.Type<typeof UAssetIoRequest>;
 
 const UAssetIoOperationKind = Schema.Literals([
+	"game_text_index",
 	"inspect",
 	"blueprint",
 	"level_sequence",
@@ -343,6 +362,7 @@ export type UAssetIoOperationKind = Schema.Schema.Type<typeof UAssetIoOperationK
 
 /** Typed result frames carried between the IO worker and its Effect consumer. */
 export const UAssetIoResult = Schema.Union([
+	Schema.Struct({ kind: Schema.Literal("game_text_index"), outcome: GameTextIndexBuildOutcome }),
 	Schema.Struct({
 		kind: Schema.Literal("project_index_count"),
 		result: UAssetIoProjectIndexCountResult
