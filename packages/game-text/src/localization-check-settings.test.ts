@@ -54,7 +54,11 @@ const german = (value: LocalizationQualityReport) =>
 	);
 const kinds = (value: LocalizationQualityReport) => german(value).map((finding) => finding.kind);
 
-type V3Fields = Omit<typeof TextQualityRuleDocumentV3.Encoded, "schemaVersion" | "roles" | "rules">;
+type V3Fields = Omit<
+	typeof TextQualityRuleDocumentV3.Encoded,
+	"schemaVersion" | "roles" | "rules"
+> &
+	Partial<Pick<typeof TextQualityRuleDocumentV3.Encoded, "roles">>;
 type V1Fields = Partial<typeof TextQualityRuleDocument.Encoded>;
 /** A version-3 file's JSON with these fields, decoded as a host reads it. */
 const decode = (fields: string) =>
@@ -66,7 +70,13 @@ const decode = (fields: string) =>
 		)
 	);
 const v3 = (fields: V3Fields) => {
-	const result = decode(JSON.stringify(fields).slice(1, -1));
+	const result = Effect.runSync(
+		Effect.result(
+			decodeGameTextRuleDocumentJson(
+				JSON.stringify({ schemaVersion: 3, roles: [], rules: [], ...fields })
+			)
+		)
+	);
 	if (result._tag === "Failure") throw new Error(result.failure.code);
 	return result.success;
 };
@@ -291,5 +301,84 @@ describe("rule file v3", () => {
 			expect(after.findings).toEqual(before.findings);
 			expect(after.rules).toEqual(before.rules);
 		}
+	});
+
+	it("applies a check's scope after its finding, by culture, role and object path", () => {
+		const roles = [
+			{
+				id: "ui",
+				scopes: [
+					{ matchers: [{ kind: "object_path", operator: "prefix", value: "/Game/UI/" }] }
+				]
+			}
+		] as const;
+		const outlier = (
+			checks: NonNullable<V3Fields["checks"]>,
+			objectPath = "/Game/Text/Asset.Asset"
+		) => {
+			const text = corpus([
+				{
+					...unit("K", harbour),
+					occurrences: unit("K", harbour).occurrences.map((occurrence) => ({
+						...occurrence,
+						location: { ...occurrence.location, objectPath }
+					}))
+				}
+			]);
+			const files = evidence(
+				[manifestEntry("K", harbour)],
+				[archiveEntry("K", harbour, "Hafen")],
+				noPO()
+			);
+			const joined = joinLocalizationTarget(text, files, files.target);
+			return kinds(checkLocalizationTarget(text, joined, files, {}, v3({ roles, checks })));
+		};
+		expect(outlier({ length_outlier: { scope: { cultures: ["de"] } } })).toContain(
+			"length_outlier"
+		);
+		expect(outlier({ length_outlier: { scope: { cultures: ["fr"] } } })).not.toContain(
+			"length_outlier"
+		);
+		expect(outlier({ length_outlier: { scope: { roles: ["ui"] } } })).not.toContain(
+			"length_outlier"
+		);
+		expect(
+			outlier({ length_outlier: { scope: { roles: ["ui"] } } }, "/Game/UI/Menu.Menu")
+		).toContain("length_outlier");
+		expect(outlier({ length_outlier: { scope: { pathPrefixes: ["/Game/Text/"] } } })).toContain(
+			"length_outlier"
+		);
+		expect(
+			outlier({ length_outlier: { scope: { pathPrefixes: ["/Game/UI/"] } } })
+		).not.toContain("length_outlier");
+		// Both dimensions must hold for one saved place.
+		expect(
+			outlier(
+				{ length_outlier: { scope: { roles: ["ui"], pathPrefixes: ["/Game/Text/"] } } },
+				"/Game/UI/Menu.Menu"
+			)
+		).not.toContain("length_outlier");
+	});
+
+	it("lets a check report what an out-of-scope check would have taken", () => {
+		const elsewhere = { scope: { cultures: ["fr"] } };
+		// Added tags are rich_text_tags_added's own finding when rich_text_tags is out of scope.
+		const tagged = [
+			"<b>Bold</> and <i>more</> text",
+			"<i>Fett</> und <u>mehr</> Text"
+		] as const;
+		expect(kinds(line(...tagged))).toContain("rich_text_tags");
+		expect(kinds(line(...tagged))).not.toContain("rich_text_tags_added");
+		expect(kinds(line(...tagged, v3({ checks: { rich_text_tags: elsewhere } })))).toContain(
+			"rich_text_tags_added"
+		);
+		// A rename is two format_arguments differences when format_argument_renamed is out of scope.
+		const renamed = ["Hello {Name}, welcome", "Hallo {Nom}, willkommen"] as const;
+		const actual = (value: LocalizationQualityReport) =>
+			german(value).find((finding) => finding.kind === "format_arguments")?.actual;
+		expect(actual(line(...renamed))).toBeUndefined();
+		expect(
+			actual(line(...renamed, v3({ checks: { format_argument_renamed: elsewhere } })))
+		).toMatchObject({ missing: ["Name"], added: ["Nom"] });
 	});
 });

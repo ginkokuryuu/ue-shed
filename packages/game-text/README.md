@@ -319,6 +319,16 @@ returns each check's resolved `enabled`, `severity`, `scope` and `params`. Every
 default, except `segment_separator` until it has a separator. The host's `checks` and
 `disabledChecks` options still narrow what runs.
 
+A check's `scope` limits where its findings are reported. Every listed dimension must hold: the
+finding's culture is one of `cultures`, and one saved place of its line is both at a place of one
+of `roles` (the file's roles) and under one of `pathPrefixes` (object paths, compared as written).
+A finding without a saved place, such as gathered-only text, is outside any `roles` or
+`pathPrefixes` scope. Scope is applied after a check finds something, so a line's saved places are
+read only for scoped findings. Where one check's finding takes the place of another's (a
+placeholder translation instead of its length, missing tags instead of added ones, a rename
+instead of a dropped and an added argument), the first check takes it only when it runs and is in
+scope for the line and culture; otherwise the second reports it.
+
 `localizationCheckCatalogue` describes every built-in check: its `basis` (`unreal` when the
 finding states what Unreal does with the text, so only its severity and whether it runs are the
 project's; `heuristic` when it is a judgment with thresholds or word lists), its `label`, its

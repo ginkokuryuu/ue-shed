@@ -36,6 +36,7 @@ import type { TextQualityAffectedOccurrence } from "./quality-schema.js";
 import {
 	resolveLocalizationChecks,
 	type GameTextRuleDocument,
+	type LocalizationCheckScope,
 	type ResolvedLocalizationChecks
 } from "./game-text-rules.js";
 import { matchesTextRole, prepareTextQualityRules, termMatches } from "./quality.js";
@@ -168,6 +169,8 @@ export interface LocalizationLineCheckContext {
 	readonly checks: ResolvedLocalizationChecks;
 	/** The checks' tag and argument lists as sets, prepared once from `checks`. */
 	readonly lists: LocalizationCheckLists;
+	/** The rule file's roles by ID, for check scopes. */
+	readonly roles: ReadonlyMap<string, TextRole>;
 	/** The rule file's source terminology rules: each role and the terms it discourages. */
 	readonly sourceTerminology: readonly SourceTerminology[];
 
@@ -389,6 +392,7 @@ export function localizationRuleContext(ruleDocument: GameTextRuleDocument | und
 	return {
 		checks,
 		lists: localizationCheckLists(checks),
+		roles: new Map((ruleDocument?.roles ?? []).map((role) => [role.id, role])),
 		sourceTerminology: (ruleDocument ? prepareTextQualityRules(ruleDocument) : []).flatMap(
 			({ rule, role, terms }): SourceTerminology[] =>
 				rule.kind === "terminology"
@@ -445,6 +449,34 @@ function unreportedPlaceholders(
 			({ start, end }) => !reported.some((range) => range.start < end && start < range.end)
 		)
 		.map(({ match }) => match);
+}
+
+/**
+ * Whether a check's scope holds for a finding in `culture` with these saved places: its culture is
+ * listed, and one saved place is at a place of a listed role and under a listed path prefix. A
+ * finding without saved places is outside any role or path scope. No scope holds everywhere.
+ */
+export function localizationCheckInScope(
+	scope: LocalizationCheckScope | undefined,
+	culture: CultureCode,
+	occurrences: () => ReadonlyArray<Pick<TextOccurrence, "location">>,
+	roles: ReadonlyMap<string, TextRole>
+): boolean {
+	if (!scope) return true;
+	if (scope.cultures && !scope.cultures.includes(culture)) return false;
+	if (!scope.roles && !scope.pathPrefixes) return true;
+	const scopeRoles = scope.roles?.flatMap((id) => {
+		const role = roles.get(id);
+		return role ? [role] : [];
+	});
+	return occurrences().some(
+		(occurrence) =>
+			(!scopeRoles || scopeRoles.some((role) => matchesTextRole(occurrence, role))) &&
+			(!scope.pathPrefixes ||
+				scope.pathPrefixes.some((prefix) =>
+					occurrence.location.objectPath.startsWith(prefix)
+				))
+	);
 }
 
 /** Rejects a selection outside the target and lists the built-in checks that run. */
@@ -860,8 +892,16 @@ export function checkLocalizationLine(
 	let lineUnits: readonly TextUnit[] | undefined,
 		affected: TextQualityAffectedOccurrence[] | undefined;
 	const unitsOnce = () => (lineUnits ??= units());
+	const savedPlaces = () => unitsOnce().flatMap((unit) => unit.occurrences);
+	/**
+	 * Whether a check runs and its scope holds for this line in `culture`. Scope is asked after a
+	 * check has something to report, so a line's units are built only for a scoped finding.
+	 */
+	const active = (id: BuiltInCheckId, culture: CultureCode) =>
+		enabled.includes(id) &&
+		localizationCheckInScope(context.checks[id].scope, culture, savedPlaces, context.roles);
 	const add = (finding: UnratedFinding) => {
-		if (!enabled.includes(finding.kind)) return false;
+		if (!active(finding.kind, finding.culture)) return false;
 		// SAFETY: `finding` is one member of the union without its severity, and the severity
 		// added is the one the rule file gives that member's kind.
 		// Verified by: localization-check-settings.test.ts — applies enabled, preset, severity and parameters.
@@ -1240,7 +1280,10 @@ export function checkLocalizationLine(
 			);
 		const added = addedArguments(context.lists.renamedArguments);
 		// A dropped and an added name pair up, in order of appearance, as a rename.
-		const pairs = Math.min(missing.length, added.length);
+		const pairs =
+			missing.length && added.length && active("format_argument_renamed", culture.culture)
+				? Math.min(missing.length, added.length)
+				: 0;
 		let reportedPairs = 0;
 		if (canComparePattern && pairs > 0) {
 			const finding: Unrated<
@@ -1369,10 +1412,10 @@ export function checkLocalizationLine(
 			});
 		const lengthParams = context.checks.length_outlier.params;
 		const minimumRatio = lengthOutlierMinimumRatio(culture.culture, lengthParams);
-		// A placeholder is placeholder_translation's finding, when that check runs.
+		// A placeholder is placeholder_translation's finding, when that check runs here.
 		const outlier =
 			translated &&
-			(placeholder === undefined || !enabled.includes("placeholder_translation"))
+			(placeholder === undefined || !active("placeholder_translation", culture.culture))
 				? lengthOutlier(
 						source,
 						translation,

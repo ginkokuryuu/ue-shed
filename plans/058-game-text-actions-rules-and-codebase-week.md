@@ -39,8 +39,8 @@
 | A5   | UE 4.27 identity slice                         | A    | TODO               |
 | A6   | Stretch: text diff of two package versions     | A    | DONE — #104        |
 | B1   | Check catalogue                                | B    | DONE — #106        |
-| B2   | Rules file v3                                  | B    | IN PROGRESS — #109 |
-| B3   | Parameterised, scoped checks                   | B    | TODO               |
+| B2   | Rules file v3                                  | B    | DONE — #109        |
+| B3   | Parameterised, scoped checks                   | B    | IN PROGRESS — #111 |
 | B4   | Severity stored per finding                    | B    | TODO               |
 | B5   | Host-supplied policies                         | B    | TODO               |
 | B6   | Studio-defined checks                          | B    | TODO               |

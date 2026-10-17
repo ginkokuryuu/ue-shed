@@ -876,7 +876,10 @@ over a `default` or `none` preset. Version-1 and version-2 files keep loading, a
 segments and must appear as often in each translation), `optionalTags` (rich-text tags a
 translation may add or leave out) and `optionalArguments` (arguments the game always supplies)
 read as the equivalent check settings; `migrateGameTextRuleDocument` rewrites them as version 3.
-None changes the source rules. `localizationCheckCatalogue` describes every check: whether
+A check's scope (cultures, roles, object path prefixes) is applied after it finds something, and a
+check that takes another's finding (a placeholder translation instead of its length) does so only
+when it runs and is in scope, so an out-of-scope check never hides an in-scope one. None changes
+the source rules. `localizationCheckCatalogue` describes every check: whether
 it models Unreal (`unreal`) or is a judgment (`heuristic`), its label, default severity, parameter
 schema with defaults and a condition text generated from those parameters. The package README's
 check table is generated from it, so hosts can show the same descriptions instead of writing their
