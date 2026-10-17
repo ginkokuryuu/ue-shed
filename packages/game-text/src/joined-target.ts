@@ -104,6 +104,7 @@ function compareUnit(c: JoinPackages["occurrence"], a: number, b: number, empty:
 export const refreshJoinedTarget = Effect.fn("JoinedTarget.refresh")(function* (
 	input: JoinedTargetInput
 ) {
+	const stages = new StageClock();
 	const store = yield* SharedIndex,
 		writer = yield* store.writer(),
 		root = writer.manifest();
@@ -163,7 +164,6 @@ export const refreshJoinedTarget = Effect.fn("JoinedTarget.refresh")(function* (
 	}
 	// A full join runs on the host thread in bounded slices.
 	const clock = new HostSliceClock();
-	const stages = new StageClock();
 	const empty = (yield* writer.intern("identity", [""]))[0]!;
 	const strings = new JoinStrings(reader, empty);
 	const manifest = yield* loadJoinFile(reader, paths[0]!, input.fileErrors?.[paths[0]!]);

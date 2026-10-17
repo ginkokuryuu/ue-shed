@@ -1,8 +1,12 @@
 import { it } from "@effect/vitest";
-import { Effect } from "effect";
-import { expect } from "vitest";
+import { performance } from "node:perf_hooks";
+import { join } from "node:path";
+import { Effect, Layer } from "effect";
+import { expect, vi } from "vitest";
 import { GameTextIndexRefresh } from "../packages/game-text/src/index-refresh.ts";
 import { makeIndexRegressionFixture } from "../packages/game-text/src/index-refresh-regressions.test-support.ts";
+import { refreshJoinedTarget } from "../packages/game-text/src/joined-target.ts";
+import { SharedIndex, sharedIndexNodeLayer } from "../packages/game-text/src/shared-index.ts";
 import { coveredMs, makeStageRecorder } from "./game-text-stage-timings.ts";
 
 it("counts overlapping intervals once and adds separate ones", () => {
@@ -59,3 +63,100 @@ it.live("records the join and quality scan stages of a real index build", () =>
 		expect(counts["stage.GameTextIndex.openTarget.count"]).toBe(1);
 	})
 );
+
+for (const fallback of [false, true]) {
+	it.live(
+		`includes reader setup${fallback ? " and incremental fallback" : ""} in full join stages`,
+		() =>
+			Effect.gen(function* () {
+				const fixture = yield* makeIndexRegressionFixture();
+				const changedTarget = fixture.addTarget("Changed");
+				let now = 0;
+				let delayedIncrementalRead = false;
+				yield* Effect.acquireRelease(
+					Effect.sync(() => vi.spyOn(performance, "now").mockImplementation(() => now)),
+					(clock) => Effect.sync(() => clock.mockRestore())
+				);
+				const monitored = Layer.effect(
+					SharedIndex,
+					Effect.gen(function* () {
+						const store = yield* SharedIndex;
+						return SharedIndex.of({
+							...store,
+							open: () =>
+								Effect.gen(function* () {
+									const reader = yield* store.open();
+									// Advance measured time without depending on a real sleep or runner speed.
+									now += 50;
+									return {
+										...reader,
+										layer: (name: string) => {
+											if (name === "joined" && !delayedIncrementalRead) {
+												delayedIncrementalRead = true;
+												now += 70;
+											}
+											return reader.layer(name);
+										}
+									};
+								})
+						});
+					})
+				).pipe(
+					Layer.provide(
+						sharedIndexNodeLayer({
+							cacheRoot: join(fixture.projectRoot, "stage-cache"),
+							projectKey: "stages",
+							targetKey: fixture.target.name
+						})
+					)
+				);
+				yield* Effect.gen(function* () {
+					const input = { projectRoot: fixture.projectRoot, target: fixture.target };
+					yield* Effect.gen(function* () {
+						const writer = yield* (yield* SharedIndex).writer();
+						yield* writer.intern("identity", [""]);
+						yield* writer.publishIds(
+							"seed",
+							"seed",
+							{
+								columns: [
+									{
+										name: "seed",
+										kind: "u32",
+										load: async () => Uint32Array.of(0)
+									}
+								]
+							},
+							writer.manifest().generation
+						);
+					}).pipe(Effect.scoped);
+					if (fallback)
+						yield* refreshJoinedTarget({ ...input, force: true }).pipe(Effect.scoped);
+					now = 0;
+					delayedIncrementalRead = false;
+					const recorder = makeStageRecorder();
+					const result = yield* refreshJoinedTarget({
+						...input,
+						target: changedTarget
+					}).pipe(Effect.scoped, Effect.withTracer(recorder.tracer));
+					expect(result).toMatchObject({ rebuilt: true, strategy: "full" });
+					if (fallback)
+						expect(result).toMatchObject({
+							incrementalFallback: "generation-target-review-or-absence"
+						});
+					const counts = recorder.counts();
+					expect(delayedIncrementalRead).toBe(fallback);
+					const expected = fallback ? 120 : 50;
+					expect(counts["stage.JoinedTarget.refresh.join.stage_ms.inputs"]).toBe(
+						expected
+					);
+					const total = Object.entries(counts)
+						.filter(([key]) =>
+							key.startsWith("stage.JoinedTarget.refresh.join.stage_ms.")
+						)
+						.reduce((sum, [, value]) => sum + value, 0);
+					expect(total).toBe(expected);
+				}).pipe(Effect.provide(monitored));
+			}).pipe(Effect.scoped)
+	);
+}
