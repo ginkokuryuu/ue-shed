@@ -934,16 +934,15 @@ export const WorkbenchMapReviewLive = Layer.effect(
 
 		const resolveSavedProject = Effect.fn("Workbench.WorkbenchMapReview.resolveSavedProject")(
 			function* () {
-				return yield* project.savedProject().pipe(
-					Effect.mapError(
-						(error) =>
-							new SavedWorldUnavailable({
-								message: error.message,
-								recovery: error.recovery
-							})
-					)
-				);
-			}
+				return yield* project.savedProject();
+			},
+			Effect.mapError(
+				(error) =>
+					new SavedWorldUnavailable({
+						message: error.message,
+						recovery: error.recovery
+					})
+			)
 		);
 
 		const matchingEditorWorld = Effect.fn("Workbench.MapReview.matchingEditorWorld")(function* (

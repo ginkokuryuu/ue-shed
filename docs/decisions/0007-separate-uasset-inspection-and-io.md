@@ -196,3 +196,17 @@ profile 2); Game Text owns eligibility and excluded-package coverage. These fiel
 9 and are suppressed for older minors, preserving strict old wire decoding. Candidate pruning
 requires paired workers with this evidence; its absence is
 an upgrade failure, never permission to assume an empty package. No Unreal save behavior changes.
+
+## Amendment: opt-in native Game Text index builder
+
+Protocol 1.13 adds scoped `game_text_index` operations in the existing IO process. The native-only
+`game-text-index` crate writes Game Text's derived cache through its existing builder seam; it is
+not part of the portable parser or inspection API. This supersedes the earlier choice to avoid
+native shared-store writes for hosts that explicitly select `nativeIndexBuilderLayer`.
+
+One session owns the dictionary writer lease. TypeScript producers retain package extraction,
+candidate selection and localization import, while native publication and joins use the same
+format-4 store and JavaScript query readers. The TypeScript builder remains the default. This
+adds no Workbench authority, second executable or automatic backend switch after a write failure.
+The [native preparation guide](../engineering/native-game-text-index.md) records compatibility,
+limits and the scope of the prototype measurements.

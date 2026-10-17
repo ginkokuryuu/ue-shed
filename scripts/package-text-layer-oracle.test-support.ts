@@ -45,7 +45,7 @@ export function candidateCorpusFromEvents(input: {
 	);
 }
 
-/** Phase 5 can reuse this without changing the event-stream or eligibility oracles. */
+/** Compare a published package-text layer with the event-stream and eligibility oracles. */
 export const comparePackageTextLayerWithEvents = Effect.fn("PackageText.layerOracle")(
 	function* (input: {
 		projectRoot: string;

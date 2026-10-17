@@ -12,8 +12,8 @@ import {
 	CustodianProposal,
 	CustodianProposalId,
 	CustodianScanRequest,
-	decodeCustodianReceipt,
-	decodeCustodianReport,
+	parseCustodianReceipt,
+	parseCustodianReport,
 	type CustodianCancelResult,
 	type CustodianReceipt,
 	type CustodianReport
@@ -88,7 +88,7 @@ export const CustodianNodeLive = Layer.effect(
 						cause
 					})
 			});
-			return yield* decodeCustodianReport(report).pipe(
+			return yield* parseCustodianReport(report).pipe(
 				Effect.mapError(
 					(cause) =>
 						new CustodianError({
@@ -200,7 +200,7 @@ export const CustodianNodeLive = Layer.effect(
 						cause
 					})
 			}).pipe(
-				Effect.flatMap(decodeCustodianReceipt),
+				Effect.flatMap(parseCustodianReceipt),
 				Effect.mapError((cause) =>
 					cause instanceof CustodianError
 						? cause

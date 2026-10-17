@@ -1,6 +1,7 @@
 export * from "./corpus.js";
 export * from "./package-text-record.js";
 export * from "./package-text-candidates.js";
+export * from "./package-text-diff.js";
 export * from "./snapshot-format.js";
 export * from "./localization-import.js";
 export {
@@ -53,6 +54,7 @@ export * from "./localization-key-changes.js";
 export * from "./localization-export.js";
 export * from "./localization-gate.js";
 export * from "./schema.js";
+export * from "./response-parser.js";
 export * from "./localization-schema.js";
 export * from "./localization.js";
 export * from "./localization-query.js";
@@ -97,3 +99,4 @@ export {
 	inspectJoinedTarget,
 	type JoinedTargetReader
 } from "./joined-target-reader.js";
+export { nativeIndexBuilderLayer } from "./native-index-builder.js";

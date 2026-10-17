@@ -9,6 +9,7 @@ import {
 import { GameTextRuleDocument } from "./game-text-rules.js";
 import { textCountLabel } from "./csv.js";
 import { TextCorpus, TextLocation, TextOccurrenceId, TextUnitId } from "./schema.js";
+import { gameTextResponseParser } from "./response-parser.js";
 
 const Count = Schema.Int.check(Schema.isGreaterThanOrEqualTo(0));
 const PageSize = Schema.Int.check(Schema.isBetween({ minimum: 1, maximum: 50 }));
@@ -70,8 +71,10 @@ export const TextQualityQueryRunResult = Schema.Union([
 	})
 ]);
 export type TextQualityQueryRunResult = Schema.Schema.Type<typeof TextQualityQueryRunResult>;
-export const decodeTextQualityQueryRunResult =
-	Schema.decodeUnknownEffect(TextQualityQueryRunResult);
+export const parseTextQualityQueryRunResult = gameTextResponseParser(
+	TextQualityQueryRunResult,
+	"quality rule load result"
+);
 
 export const TextQualityRuleUpdateResult = Schema.Union([
 	Schema.Struct({
@@ -92,8 +95,9 @@ export const TextQualityRuleUpdateResult = Schema.Union([
 	})
 ]);
 export type TextQualityRuleUpdateResult = Schema.Schema.Type<typeof TextQualityRuleUpdateResult>;
-export const decodeTextQualityRuleUpdateResult = Schema.decodeUnknownEffect(
-	TextQualityRuleUpdateResult
+export const parseTextQualityRuleUpdateResult = gameTextResponseParser(
+	TextQualityRuleUpdateResult,
+	"quality rule update result"
 );
 
 export const TextQualityFindingSummary = Schema.Struct({
@@ -130,7 +134,10 @@ export const TextQualitySearchResult = Schema.Union([
 	Schema.Struct({ status: Schema.Literal("not_ready") })
 ]);
 export type TextQualitySearchResult = Schema.Schema.Type<typeof TextQualitySearchResult>;
-export const decodeTextQualitySearchResult = Schema.decodeUnknownEffect(TextQualitySearchResult);
+export const parseTextQualitySearchResult = gameTextResponseParser(
+	TextQualitySearchResult,
+	"quality search result"
+);
 
 export const TextQualityFocusRequest = Schema.Struct({
 	id: TextQualityFindingId,
@@ -190,7 +197,10 @@ export const TextQualityFocusResult = Schema.Union([
 	Schema.Struct({ status: Schema.Literal("not_ready") })
 ]);
 export type TextQualityFocusResult = Schema.Schema.Type<typeof TextQualityFocusResult>;
-export const decodeTextQualityFocusResult = Schema.decodeUnknownEffect(TextQualityFocusResult);
+export const parseTextQualityFocusResult = gameTextResponseParser(
+	TextQualityFocusResult,
+	"quality finding focus result"
+);
 
 function excerpt(source: string, maximum: number): string {
 	return source.length <= maximum ? source : `${source.slice(0, maximum - 1)}…`;
