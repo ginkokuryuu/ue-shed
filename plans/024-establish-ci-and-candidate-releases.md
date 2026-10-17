@@ -6,6 +6,10 @@
 
 ## Status
 
+Runner update (2026-10-17): all checked-in hosted jobs now use GitHub-hosted Ubuntu 24.04 runners.
+Blacksmith references below describe the original implementation; current CI behavior is documented
+in [the testing guide](../docs/engineering/testing.md).
+
 - **Status**: IN PROGRESS on 2026-07-23 — workflows, candidate tooling, and runbook implemented;
   first hosted and trusted protected runs remain after the move to the `ue-shed` organization
 - **Priority**: P1
