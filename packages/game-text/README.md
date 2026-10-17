@@ -288,11 +288,36 @@ file provenance/diagnostics and unchanged corpus coverage. Source-quality report
 Check IDs are stable string literals: `LocalizationCheckId` for checks of a translation against its
 source and `SourceCheckId` for checks of the source itself; `BuiltInCheckId` is both. Review files
 record them as `localization.<id>`. Pass `{ culture?, checks?, disabledChecks? }` to select them.
-They need no rule document; v1 and v2 `Config/UEShed/GameTextRules.json` documents can optionally
-contain `disabledLocalizationChecks` (any built-in ID), `segmentSeparator`, `optionalTags` and
-`optionalArguments`. Version 2 adds
-per-culture project policy and progress reports, described below. Every check is on by default,
-except `segment_separator` until a rule file names a separator.
+They need no rule document. A version-3 `Config/UEShed/GameTextRules.json` sets each check's
+policy under `checks`, keyed by check ID: `enabled`, `severity` (`blocking`, `normal` or `low`),
+`scope` and `params` (the catalogue's parameters; unlisted fields keep their defaults). `preset`
+is `default` (every check runs with its catalogue severity) or `none` (only the checks the file
+enables run). Version 3 rejects unknown keys, so a misspelt check or parameter is an
+`invalid_structure` error rather than ignored. Version 2 adds per-culture project policy and
+progress reports, described below, and version 3 keeps them.
+
+```json
+{
+	"schemaVersion": 3,
+	"roles": [],
+	"rules": [],
+	"checks": {
+		"length_outlier": { "severity": "low", "params": { "maximumRatio": 4 } },
+		"segment_separator": { "params": { "separator": "//" } },
+		"missing_translator_notes": { "enabled": false }
+	}
+}
+```
+
+V1 and v2 files keep loading: their `disabledLocalizationChecks` (any built-in ID),
+`segmentSeparator`, `optionalTags` and `optionalArguments` read as the equivalent v3 settings
+(`enabled: false`; `segment_separator`'s `separator`; the `optionalTags` of `rich_text_tags` and
+`rich_text_tags_added`; the `optionalArguments` of those two, `format_arguments`,
+`format_argument_renamed` and `rich_text_tag_case`). `migrateGameTextRuleDocument(document)`
+writes a v1 or v2 file as v3 with the same behaviour, and `resolveLocalizationChecks(document)`
+returns each check's resolved `enabled`, `severity`, `scope` and `params`. Every check is on by
+default, except `segment_separator` until it has a separator. The host's `checks` and
+`disabledChecks` options still narrow what runs.
 
 `localizationCheckCatalogue` describes every built-in check: its `basis` (`unreal` when the
 finding states what Unreal does with the text, so only its severity and whether it runs are the
@@ -324,7 +349,7 @@ severity.
 | `rich_text_tags`              | unreal    | normal   | Tags (`<b>…</>`, `<Name>…</>`, `<img/>`) the translation drops, compared without case                                                              |
 | `rich_text_tag_case`          | heuristic | low      | The same tag in another case, as `<italic>` for `<Italic>`; Slate matches names without case                                                       |
 | `line_breaks`                 | heuristic | normal   | A different number of line breaks inside the text than the source; edges are `whitespace`'s                                                        |
-| `segment_separator`           | heuristic | normal   | The rule file's `segmentSeparator` used a different number of times than in the source                                                             |
+| `segment_separator`           | heuristic | normal   | The `separator` parameter used a different number of times than in the source; off until it is set                                                 |
 | `length_outlier`              | heuristic | normal   | A translation under a third (zh, ja, ko, th: a quarter) or over three times the source's length, for a source of 20 or more visible characters     |
 | `outdated_translation`        | unreal    | blocking | An archive translation recorded for older source text; Unreal ships the source instead                                                             |
 | `inconsistent_translation`    | heuristic | normal   | Short shared source text (3 or more visible characters, up to four words) translated differently in one culture                                    |
@@ -369,11 +394,12 @@ lines the gather does not collect. `source_markup` reads tags as Slate does: att
 `name="value"` pairs, `<{Argument}>` opens a tag, and a tag right after an ASCII letter, digit or
 underscore is code (`GetSubsystem<UMySubsystem>()`).
 
-Shape checks leave an empty translation to `empty_translation`. Rule files can list
-`optionalTags`, tag names a translation may add or leave out (compared without case), and
-`optionalArguments`, argument names the game always supplies: a translation may add them, and the
-tags that wrap only such an argument (`<PlayerName>{ParentLabel}</>`), without a finding. An
-optional argument does not pair with a dropped one as a rename.
+Shape checks leave an empty translation to `empty_translation`. The tag checks take
+`optionalTags`, tag names a translation may add or leave out (compared without case), and the
+argument and tag checks take `optionalArguments`, argument names the game always supplies: a
+translation may add them, and the tags that wrap only such an argument
+(`<PlayerName>{ParentLabel}</>`), without a finding. An optional argument does not pair with a
+dropped one as a rename.
 
 `length_outlier` measures visible length: rich-text tags, argument modifiers and `{arguments}`
 removed, whitespace runs counted once; East Asian wide characters count two. A source shorter than

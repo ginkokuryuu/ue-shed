@@ -4,7 +4,7 @@ import { expect } from "vitest";
 import { GameTextIndexRefresh } from "./index-refresh.js";
 import { checkLocalizationTarget } from "./localization-checks.js";
 import { CheckSeverity } from "./localization-check-ids.js";
-import { evaluateGameTextSourceQuality } from "./quality-rules-v2.js";
+import { evaluateGameTextSourceQuality } from "./game-text-rules.js";
 import {
 	WorkspaceQualityFilter,
 	eligibleLocalizationChange,

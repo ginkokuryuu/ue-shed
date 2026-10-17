@@ -1,6 +1,6 @@
 export * from "./quality-schema.js";
 export * from "./snapshot-format.js";
-export * from "./quality-rules-v2.js";
+export * from "./game-text-rules.js";
 export * from "./localization-reports.js";
 export * from "./localization-words.js";
 export * from "./quality.js";

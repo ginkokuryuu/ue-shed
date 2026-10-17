@@ -100,6 +100,46 @@ export const InconsistentTranslationParams = Schema.Struct({
 });
 export type InconsistentTranslationParams = typeof InconsistentTranslationParams.Type;
 
+const TagName = Schema.String.check(Schema.isPattern(/^[A-Za-z_][\w.-]*$/u));
+const ArgumentName = Schema.String.check(Schema.isNonEmpty(), Schema.isMaxLength(128));
+
+/**
+ * Format argument names the game always supplies, so a translation may add them, such as a
+ * player's name a culture's grammar asks for. Case-sensitive, as argument names are.
+ */
+const optionalArguments = withDefault(
+	Schema.Array(ArgumentName).check(Schema.isMaxLength(256)),
+	[]
+);
+
+/**
+ * `format_arguments`, `format_argument_renamed` and `rich_text_tag_case`: adding an optional
+ * argument, or a rich-text tag wrapped around only that argument, is not reported, and an added
+ * optional argument does not pair with a dropped one as a rename.
+ */
+export const OptionalArgumentParams = Schema.Struct({ optionalArguments });
+export type OptionalArgumentParams = typeof OptionalArgumentParams.Type;
+
+/**
+ * `rich_text_tags` and `rich_text_tags_added`: `optionalTags` are tag names a translation may use
+ * or leave out, such as a name style a culture applies differently, compared without case;
+ * `optionalArguments` as for `format_arguments`, so a tag around only such an argument is left out.
+ */
+export const RichTextTagParams = Schema.Struct({
+	optionalTags: withDefault(Schema.Array(TagName).check(Schema.isMaxLength(256)), []),
+	optionalArguments
+});
+export type RichTextTagParams = typeof RichTextTagParams.Type;
+
+/**
+ * `segment_separator`: text the project uses to join segments of one line, such as `"//"`. Each
+ * translation must use it as often as its source. The check has nothing to compare until it is set.
+ */
+export const SegmentSeparatorParams = Schema.Struct({
+	separator: Schema.optionalKey(Schema.String.check(Schema.isNonEmpty(), Schema.isMaxLength(16)))
+});
+export type SegmentSeparatorParams = typeof SegmentSeparatorParams.Type;
+
 /** One built-in check: what it is, how it is rated by default and what it can be tuned with. */
 export interface LocalizationCheckDescriptor<
 	Id extends BuiltInCheckId,
@@ -173,6 +213,13 @@ const timesText = (ratio: number) => TIMES_WORDS.get(ratio) ?? `${ratio} times`;
 const countText = (count: number) => NUMBER_WORDS[count] ?? String(count);
 const quoted = (values: readonly string[]) => values.map((value) => `"${value}"`).join(", ");
 const codes = (values: readonly string[]) => values.map((value) => `\`${value}\``).join(", ");
+const suppliedArguments = (params: { readonly optionalArguments: readonly string[] }) =>
+	params.optionalArguments.length
+		? `; the game always supplies ${codes(params.optionalArguments)}`
+		: "";
+const optionalTagText = (params: RichTextTagParams) =>
+	(params.optionalTags.length ? `; ${codes(params.optionalTags)} are optional` : "") +
+	suppliedArguments(params);
 
 /**
  * Every built-in check, in `BuiltInCheckId` order. Severities, labels, parameter defaults and
@@ -184,8 +231,9 @@ export const localizationCheckCatalogue = {
 		basis: "unreal",
 		label: "Format arguments",
 		severity: "normal",
-		params: NoCheckParams,
-		condition: fixed("Source arguments the translation drops, or arguments it adds")
+		params: OptionalArgumentParams,
+		condition: (params) =>
+			`Source arguments the translation drops, or arguments it adds${suppliedArguments(params)}`
 	}),
 	argument_modifiers: check("argument_modifiers", {
 		basis: "unreal",
@@ -244,30 +292,27 @@ export const localizationCheckCatalogue = {
 		basis: "unreal",
 		label: "Renamed format arguments",
 		severity: "normal",
-		params: NoCheckParams,
-		condition: fixed(
-			"A dropped and an added argument paired in order, as `{qty}` → `{qté}`; one rename stages a change"
-		)
+		params: OptionalArgumentParams,
+		condition: (params) =>
+			`A dropped and an added argument paired in order, as \`{qty}\` → \`{qté}\`; one rename stages a change${suppliedArguments(params)}`
 	}),
 	// A dropped tag loses styling or an inline image; an added one only styles more text.
 	rich_text_tags: check("rich_text_tags", {
 		basis: "unreal",
 		label: "Missing tags",
 		severity: "normal",
-		params: NoCheckParams,
-		condition: fixed(
-			"Tags (`<b>…</>`, `<Name>…</>`, `<img/>`) the translation drops, compared without case"
-		)
+		params: RichTextTagParams,
+		condition: (params) =>
+			`Tags (\`<b>…</>\`, \`<Name>…</>\`, \`<img/>\`) the translation drops, compared without case${optionalTagText(params)}`
 	}),
 	// Slate matches style and decorator names without case, so a case change usually still renders.
 	rich_text_tag_case: check("rich_text_tag_case", {
 		basis: "heuristic",
 		label: "Tag case changed",
 		severity: "low",
-		params: NoCheckParams,
-		condition: fixed(
-			"The same tag in another case, as `<italic>` for `<Italic>`; Slate matches names without case"
-		)
+		params: OptionalArgumentParams,
+		condition: (params) =>
+			`The same tag in another case, as \`<italic>\` for \`<Italic>\`; Slate matches names without case${suppliedArguments(params)}`
 	}),
 	line_breaks: check("line_breaks", {
 		basis: "heuristic",
@@ -282,10 +327,11 @@ export const localizationCheckCatalogue = {
 		basis: "heuristic",
 		label: "Segment separators",
 		severity: "normal",
-		params: NoCheckParams,
-		condition: fixed(
-			"The rule file's `segmentSeparator` used a different number of times than in the source"
-		)
+		params: SegmentSeparatorParams,
+		condition: (params) =>
+			params.separator === undefined
+				? "The `separator` parameter used a different number of times than in the source; off until it is set"
+				: `\`${params.separator}\` used a different number of times than in the source`
 	}),
 	length_outlier: check("length_outlier", {
 		basis: "heuristic",
@@ -321,8 +367,8 @@ export const localizationCheckCatalogue = {
 		basis: "heuristic",
 		label: "Extra tags",
 		severity: "low",
-		params: NoCheckParams,
-		condition: fixed("Tags the translation adds and drops none")
+		params: RichTextTagParams,
+		condition: (params) => `Tags the translation adds and drops none${optionalTagText(params)}`
 	}),
 	// The recorded source differs from the current one only in CRLF against LF line endings.
 	source_line_endings_changed: check("source_line_endings_changed", {

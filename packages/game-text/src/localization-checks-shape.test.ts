@@ -41,7 +41,7 @@ import {
 	workspaceQualityCsv
 } from "./localization-workspace.js";
 import { STARTER_GAME_TEXT_RULES } from "./starter-rules.js";
-import { evaluateGameTextSourceQuality } from "./quality-rules-v2.js";
+import { evaluateGameTextSourceQuality } from "./game-text-rules.js";
 import { TextQualityRuleDocument } from "./quality-schema.js";
 import { TextUnit, type TextCorpus } from "./schema.js";
 

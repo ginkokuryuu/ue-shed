@@ -6,7 +6,7 @@ import {
 	type TextQualityFinding,
 	type TextQualityReport
 } from "./quality-schema.js";
-import { GameTextRuleDocument } from "./quality-rules-v2.js";
+import { GameTextRuleDocument } from "./game-text-rules.js";
 import { textCountLabel } from "./csv.js";
 import { TextCorpus, TextLocation, TextOccurrenceId, TextUnitId } from "./schema.js";
 import { gameTextResponseParser } from "./response-parser.js";
@@ -31,7 +31,7 @@ export const TextQualityQuerySummary = Schema.Struct({
 	findingCount: Count,
 	roles: Schema.Array(TextQualityRoleSummary),
 	rules: Schema.Array(TextQualityRuleSummary),
-	ruleDocumentVersion: Schema.Literals([1, 2]),
+	ruleDocumentVersion: Schema.Literals([1, 2, 3]),
 	schemaVersion: Schema.Literal(1),
 	status: TextCorpus.fields.status,
 	terminologyCount: Count

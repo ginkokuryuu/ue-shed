@@ -53,9 +53,12 @@ import { JoinedQueryData } from "./joined-query-data.js";
 import { u32 } from "./joined-target-input.js";
 import { runJoinedQuery } from "./joined-query-node.js";
 import type { JoinedTargetReader } from "./joined-target-reader.js";
-import type { GameTextRuleDocument } from "./quality-rules-v2.js";
+import type { GameTextRuleDocument } from "./game-text-rules.js";
 import type { TextQualityRuleId } from "./quality-schema.js";
-import { localizationRuleId } from "./localization-check-catalogue.js";
+import {
+	localizationRuleId,
+	type InconsistentTranslationParams
+} from "./localization-check-catalogue.js";
 import type { TextCorpus, TextUnit, TextUnitId } from "./schema.js";
 import { snapshotCheck } from "./snapshot-format.js";
 import { decodeTextAudience } from "./text-audience.js";
@@ -417,10 +420,11 @@ const translationVariants = Effect.fn("GameText.localizationQuality.translations
 	data: JoinedQueryData,
 	shared: Parameters<typeof localizationTranslationVariants>[0],
 	rows: readonly number[],
-	rowSources: readonly string[]
+	rowSources: readonly string[],
+	params: InconsistentTranslationParams
 ) {
 	const target = data.joined.meta.input.target;
-	const variants = localizationTranslationVariants(shared, target.nativeCulture);
+	const variants = localizationTranslationVariants(shared, target.nativeCulture, params);
 	const outside = localizationStates.indexOf("outside_target"),
 		notSynced = 1 << localizationStates.indexOf("not_synced");
 	const cultures = target.cultures.flatMap((culture, index) =>
@@ -449,7 +453,7 @@ const translationVariants = Effect.fn("GameText.localizationQuality.translations
 		) {
 			const row = rows[index]!,
 				source = rowSources[index]!;
-			if (!consistentTranslationCandidate(source)) continue;
+			if (!consistentTranslationCandidate(source, params)) continue;
 			for (const culture of cultures) {
 				if (culture.state[row] === outside) continue;
 				const pending = (culture.facts[row]! & notSynced) !== 0,
@@ -628,7 +632,7 @@ export const indexedLocalizationQuality = Effect.fn("GameText.localizationQualit
 	};
 	const enabled = enabledLocalizationChecks(join, evidence, options, ruleDocument);
 	const policy =
-		ruleDocument?.schemaVersion === 2
+		ruleDocument !== undefined && ruleDocument.schemaVersion !== 1
 			? localizationPolicyRules(target.cultures, ruleDocument)
 			: undefined;
 	const keep = acceptedFindingFilter(options.review);
@@ -638,6 +642,7 @@ export const indexedLocalizationQuality = Effect.fn("GameText.localizationQualit
 	for (let position = 0; position < lineCount; position++)
 		joinPosition[joinRows[position]!] = position;
 	const duplicates = yield* duplicateSources(data, target.cultures, joinPosition);
+	const ruleContext = localizationRuleContext(ruleDocument);
 	const context: LocalizationLineCheckContext = {
 		target: target.name,
 		nativeCulture: target.nativeCulture,
@@ -649,10 +654,11 @@ export const indexedLocalizationQuality = Effect.fn("GameText.localizationQualit
 					data,
 					duplicates.shared,
 					duplicates.rows,
-					duplicates.rowSources
+					duplicates.rowSources,
+					ruleContext.checks.inconsistent_translation.params
 				)
 			: new Map(),
-		...localizationRuleContext(ruleDocument),
+		...ruleContext,
 		localizableProperties: enabled.includes("culture_invariant_text")
 			? yield* localizableProperties(data)
 			: new Set(),
@@ -1045,7 +1051,7 @@ export const indexedLocalizationQuality = Effect.fn("GameText.localizationQualit
 		metadata: {
 			join,
 			rules: [
-				...(ruleDocument?.schemaVersion === 2
+				...(ruleDocument !== undefined && ruleDocument.schemaVersion !== 1
 					? (ruleDocument.localizationRules ?? []).map((rule) => rule.id)
 					: []),
 				...enabled.map(localizationRuleId)

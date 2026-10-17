@@ -299,7 +299,7 @@ export const TextQualityReport = Schema.Struct({
 	...TextCorpusDiagnosticSummary.fields,
 	findings: Schema.Array(TextQualityFinding),
 	roles: Schema.Array(TextQualityRoleSummary),
-	ruleDocumentVersion: Schema.Literals([1, 2]),
+	ruleDocumentVersion: Schema.Literals([1, 2, 3]),
 	rules: Schema.Array(TextQualityRuleSummary),
 	schemaVersion: Schema.Literal(1),
 	status: TextCorpus.fields.status

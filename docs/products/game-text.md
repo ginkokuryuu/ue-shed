@@ -869,23 +869,25 @@ decorator names without case).
 UE Shed adds checks the compile validator does not perform: source/translation argument and modifier
 comparison, malformed modifier parameters that Unreal treats as literals, whitespace and line-break
 drift relative to source, PO escape safety, empty entries, notes, and duplicate source identities.
-These are evidence-based built-ins; no rule file is required. Version-1 and version-2 project rule
-files may add `disabledLocalizationChecks`, an array of built-in IDs; `segmentSeparator`, text
-such as `"//"` that joins a line's segments and must appear as often in each translation;
-`optionalTags`, rich-text tags a translation may add or leave out; and `optionalArguments`,
-arguments the game always supplies, which a translation may add along with a tag around only
-them. None changes the source rules. `localizationCheckCatalogue` describes every check: whether
+These are evidence-based built-ins; no rule file is required. A version-3 project rule file sets
+each check's policy under `checks`: whether it runs, its severity, its scope and its parameters,
+over a `default` or `none` preset. Version-1 and version-2 files keep loading, and their
+`disabledLocalizationChecks`, `segmentSeparator` (text such as `"//"` that joins a line's
+segments and must appear as often in each translation), `optionalTags` (rich-text tags a
+translation may add or leave out) and `optionalArguments` (arguments the game always supplies)
+read as the equivalent check settings; `migrateGameTextRuleDocument` rewrites them as version 3.
+None changes the source rules. `localizationCheckCatalogue` describes every check: whether
 it models Unreal (`unreal`) or is a judgment (`heuristic`), its label, default severity, parameter
 schema with defaults and a condition text generated from those parameters. The package README's
 check table is generated from it, so hosts can show the same descriptions instead of writing their
 own.
 
 This falls short of [base, not constraints](../vision-and-architecture.md#base-not-constraints).
-The parsers follow Unreal, but every built-in's severity and the heuristics' thresholds and word
-lists (length ratios, placeholder words, boundary whitespace policy) are fixed in code. Projects and
-hosts can only disable a check, and a host cannot add its own checks to the same report.
-Moving each check's severity, scope and parameters into the rule document, with the current values
-as an optional default preset, and opening the report to host-defined checks is open work.
+The parsers follow Unreal, and a version-3 rule file now sets each built-in's severity and the
+heuristics' thresholds and word lists (length ratios, placeholder words and markers, short-text
+limits). Some policy is still fixed in code (the audience and debug-content rules behind
+`culture_invariant_text`, boundary whitespace policy), and a host cannot add its own checks to the
+same report; both are open work.
 Hosts whose projects cannot store translator notes (packages saved by UE 4.27 and by UE5 before 5.8;
 String Tables and UE 5.8+ can) can pass `disabledChecks: ["missing_translator_notes"]`.
 
