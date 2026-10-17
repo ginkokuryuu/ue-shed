@@ -326,7 +326,7 @@ export const LocalizationQualityReport = TextQualityReport.mapFields((fields) =>
 	findings: Schema.Array(
 		Schema.Union([TextQualityFinding, LocalizationQualityFinding, LocalizationPolicyFinding])
 	),
-	ruleDocumentVersion: Schema.Literals([1, 2]),
+	ruleDocumentVersion: Schema.Literals([1, 2, 3]),
 	ruleDiagnostics: Schema.optionalKey(Schema.Array(LocalizationRuleDiagnostic)),
 	target: LocalizationTargetName,
 	gatherEvidence: Schema.Array(LocalizationFileStatus),

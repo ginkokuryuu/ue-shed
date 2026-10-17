@@ -19,7 +19,7 @@ import {
 	type WorkspaceQualityRequest
 } from "./localization-workspace.js";
 import { TextQualityFindingId } from "./quality-query.js";
-import { GameTextRuleDocument, evaluateGameTextSourceQuality } from "./quality-rules-v2.js";
+import { GameTextRuleDocument, evaluateGameTextSourceQuality } from "./game-text-rules.js";
 
 /**
  * One problem per key pattern; German carries the translation problems. `deSource` is the source

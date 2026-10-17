@@ -905,7 +905,7 @@ it.effect(
 					code: "invalid_rules",
 					message: "The Game Text quality rule file is not valid JSON.",
 					recovery:
-						"Correct the JSON syntax and retry with a version-1 or version-2 rule document.",
+						"Correct the JSON syntax and retry with a version-1, version-2 or version-3 rule document.",
 					retrySafe: true
 				},
 				status: "failed"
