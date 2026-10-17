@@ -51,6 +51,11 @@ export type AssetReaderTestShape = import("./asset-reader.js").AssetReaderTestAp
 /** @deprecated Use `ProjectIndexApi`. */
 export type ProjectIndexShape = import("./project-index.js").ProjectIndexApi;
 export {
+	batchProtocolPaths,
+	MAX_PROTOCOL_PATH_BYTES,
+	MAX_PROTOCOL_REQUEST_BYTES
+} from "./protocol-request-limit.js";
+export {
 	ProtocolOutputBudget,
 	ProtocolStreamFailure,
 	ProtocolStreamValidator,
