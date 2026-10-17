@@ -32,5 +32,24 @@ export default defineConfig({
 		"anti-slop/no-unsafe-dictionary-type": "error",
 		"anti-slop/no-widen-then-assert": "error",
 		"anti-slop/require-safety-comment-for-type-assertion": "error"
-	}
+	},
+	overrides: [
+		{
+			// Plan 058 D11: public packages document every export, one package at a time.
+			files: ["packages/protocol/src/**/*.ts", "packages/unreal-connection/src/**/*.ts"],
+			rules: { "anti-slop/require-jsdoc-on-exports": "error" }
+		},
+		{
+			// Tests, and the files lane D4 (#118) is rewriting; D4 documents those.
+			files: [
+				"packages/*/src/**/*.test.ts",
+				"packages/*/src/**/*.test-support.ts",
+				"packages/protocol/src/index.ts",
+				"packages/protocol/src/error-guidance.ts",
+				"packages/unreal-connection/src/index.ts",
+				"packages/unreal-connection/src/remote-control-client.ts"
+			],
+			rules: { "anti-slop/require-jsdoc-on-exports": "off" }
+		}
+	]
 });

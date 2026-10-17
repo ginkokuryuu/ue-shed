@@ -3,6 +3,7 @@ import { describe, it } from "vitest";
 
 import { noModuleMockingRule } from "./no-module-mocking.ts";
 import { noForbiddenTermInSymbolNamesRule } from "./no-shape-in-symbol-names.ts";
+import { requireJsdocOnExportsRule } from "./require-jsdoc-on-exports.ts";
 
 RuleTester.describe = describe;
 RuleTester.it = it;
@@ -61,5 +62,32 @@ export type ServiceShape = OtherApi;`,
 type ServiceShape = ServiceApi;`,
 			errors: [{ messageId: "forbiddenSymbolName" }]
 		}
+	]
+});
+
+ruleTester.run("require-jsdoc-on-exports", requireJsdocOnExportsRule, {
+	valid: [
+		`/** Seconds the editor waits before it reports a stalled frame. */
+export const timeout = 5;`,
+		`/** A frame, decoded at the process boundary. */
+export const Frame = {};
+export type Frame = typeof Frame;`,
+		'export { helper } from "./helper.js";',
+		"const local = 1;"
+	],
+	invalid: [
+		{ code: "export const timeout = 5;", errors: [{ messageId: "missingJsdoc" }] },
+		{
+			code: `// A line comment is not documentation.
+export function open() {}`,
+			errors: [{ messageId: "missingJsdoc" }]
+		},
+		{
+			code: `/** Detached. */
+const gap = 1;
+export interface Request {}`,
+			errors: [{ messageId: "missingJsdoc" }]
+		},
+		{ code: "export type Alone = string;", errors: [{ messageId: "missingJsdoc" }] }
 	]
 });
