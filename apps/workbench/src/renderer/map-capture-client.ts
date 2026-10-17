@@ -1,12 +1,12 @@
 import {
 	MapCaptureClientError,
-	decodeMapCaptureActorCatalogResult,
-	decodeMapCaptureExecuteResult,
-	decodeMapCaptureLivePreviewResult,
-	decodeMapCaptureOpenResult,
-	decodeMapCaptureSaveResult,
-	decodeMapCaptureSelectionResult,
-	decodeMapCaptureTileResult,
+	parseMapCaptureActorCatalogResult,
+	parseMapCaptureExecuteResult,
+	parseMapCaptureLivePreviewResult,
+	parseMapCaptureOpenResult,
+	parseMapCaptureSaveResult,
+	parseMapCaptureSelectionResult,
+	parseMapCaptureTileResult,
 	type MapCaptureClientApi,
 	type MapCaptureExecuteIntent,
 	type MapCaptureProgressEvent,
@@ -45,31 +45,31 @@ function request<A, HostValue, DecodeError>(args: {
 export const mapCaptureClient: MapCaptureClientApi = {
 	actors: (mapPath) =>
 		request({
-			decode: decodeMapCaptureActorCatalogResult,
+			decode: parseMapCaptureActorCatalogResult,
 			invoke: () => window.ueShed.mapCapture.actors(mapPath),
 			operation: "mapCapture.actors"
 		}),
 	capture: (intent: MapCaptureExecuteIntent) =>
 		request({
-			decode: decodeMapCaptureExecuteResult,
+			decode: parseMapCaptureExecuteResult,
 			invoke: () => window.ueShed.mapCapture.capture(intent),
 			operation: "mapCapture.capture"
 		}),
 	choosePlan: () =>
 		request({
-			decode: decodeMapCaptureSelectionResult,
+			decode: parseMapCaptureSelectionResult,
 			invoke: () => window.ueShed.mapCapture.choosePlan(),
 			operation: "mapCapture.choosePlan"
 		}),
 	newPlan: () =>
 		request({
-			decode: decodeMapCaptureSelectionResult,
+			decode: parseMapCaptureSelectionResult,
 			invoke: () => window.ueShed.mapCapture.newPlan(),
 			operation: "mapCapture.newPlan"
 		}),
 	openMap: (plan) =>
 		request({
-			decode: decodeMapCaptureOpenResult,
+			decode: parseMapCaptureOpenResult,
 			invoke: () => window.ueShed.mapCapture.openMap(plan),
 			operation: "mapCapture.openMap"
 		}),
@@ -93,7 +93,7 @@ export const mapCaptureClient: MapCaptureClientApi = {
 	),
 	preview: (plan) =>
 		request({
-			decode: decodeMapCaptureLivePreviewResult,
+			decode: parseMapCaptureLivePreviewResult,
 			invoke: () => window.ueShed.mapCapture.preview(plan),
 			operation: "mapCapture.preview"
 		}),
@@ -111,13 +111,13 @@ export const mapCaptureClient: MapCaptureClientApi = {
 	),
 	savePlan: (intent: MapCaptureSaveIntent) =>
 		request({
-			decode: decodeMapCaptureSaveResult,
+			decode: parseMapCaptureSaveResult,
 			invoke: () => window.ueShed.mapCapture.savePlan(intent),
 			operation: "mapCapture.savePlan"
 		}),
 	tile: (intent: MapCaptureTileIntent) =>
 		request({
-			decode: decodeMapCaptureTileResult,
+			decode: parseMapCaptureTileResult,
 			invoke: () => window.ueShed.mapCapture.tile(intent),
 			operation: "mapCapture.tile"
 		})

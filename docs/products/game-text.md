@@ -265,7 +265,7 @@ The compact corpus path is governed by Plan 033:
 
 ## Reviewing text in Workbench
 
-> Status: shipped by [Plan 053](../../plans/053-game-text-review-workspace.md); the design is in
+> Status: shipped by [Plan 053](../../plans/archive/053-game-text-review-workspace.md); the design is in
 > [`ideas/game-text-review-workspace.md`](../ideas/game-text-review-workspace.md).
 
 The **Text** view is a list of lines and a page per line, built to stay usable with tens of
@@ -686,7 +686,7 @@ The first quality slice must prove:
 > Unreal processes, PO editing and review state. [Plan 052](../../plans/052-text-identity-and-scope-tools.md)
 > adds origin and changed-file filters, key-change detection with translation carry-over, and an
 > all-languages CSV; its Perforce file-list bridge is planned but not built.
-> [Plan 053](../../plans/053-game-text-review-workspace.md) reshapes the Workbench around problems,
+> [Plan 053](../../plans/archive/053-game-text-review-workspace.md) reshapes the Workbench around problems,
 > Filter, Display, picked cultures, a page per line and bulk actions (see
 > [Reviewing text in Workbench](#reviewing-text-in-workbench)). Plan 051's Phase 8 extensions remain
 > proposals.
@@ -1134,6 +1134,24 @@ disk now, so a problem already in a touched file counts too.
   hold gathered text only warn.
 - Fixes are made in Unreal (ADR 0009 addendum); the way forward names the step, such as carrying
   translations with `loc run prepare --carry`.
+
+### Comparing two copies of a package
+
+`diffPackageText(before, after)` compares the text records the reader produced for two copies of
+one package, for example the depot's head revision and the local file, and lists what changed place
+by place:
+
+- **added** and **removed**: text at a place only one copy has;
+- **re-keyed**: the same place with another id (namespace and key, String Table reference, or a key
+  that became culture invariant), with whether the text changed too;
+- **edited**: the same place and id with other source text or translator notes.
+
+Places match by their position inside the package (object path below the package name, then the
+row, entry or property chain), not by the package's saved name, so a branch copy lines up with its
+original. Text that moved to another place reads as removed and added; pairing moves is the
+caller's policy, as in [Key changes](#key-changes). A diff is marked incomplete when either copy was
+read only in part. It is a pure function: fetching the earlier revision stays with the host (Plan
+052 Phase 3).
 
 ### Source control
 

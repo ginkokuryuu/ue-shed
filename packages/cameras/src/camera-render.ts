@@ -225,23 +225,25 @@ export function makeCameraRenderer(
 	client: RemoteControlClientApi,
 	endpoint: string
 ): CameraRendererApi {
-	const call = Effect.fn("CameraRenderer.remote")(function* (
-		operation: CameraRenderError["operation"],
-		sessionId: string,
-		functionName: string,
-		parameters: Record<string, string>
-	) {
-		return yield* client
-			.request({
+	const call = Effect.fn("CameraRenderer.remote")(
+		function* (
+			operation: CameraRenderError["operation"],
+			sessionId: string,
+			functionName: string,
+			parameters: Record<string, string>
+		) {
+			return yield* client.request({
 				endpoint,
 				objectPath: libraryPath,
 				functionName,
 				parameters,
 				operation: `camera.render.${operation}`,
 				timeout: "30 seconds"
-			})
-			.pipe(Effect.mapError((cause) => renderError(operation, sessionId, cause)));
-	});
+			});
+		},
+		(effect, operation, sessionId) =>
+			effect.pipe(Effect.mapError((cause) => renderError(operation, sessionId, cause)))
+	);
 	const capabilities = Effect.fn("CameraRenderer.capabilities")(function* () {
 		const manifest = yield* client
 			.request({
@@ -306,15 +308,14 @@ export function makeCameraRenderer(
 		yield* Effect.addFinalizer((exit) =>
 			!ownsOrUncertain
 				? Effect.void
-				: call("close", request.sessionId, "EndCameraRender", {
-						SessionId: request.sessionId
+				: Effect.gen(function* () {
+						const value = yield* call("close", request.sessionId, "EndCameraRender", {
+							SessionId: request.sessionId
+						});
+						const result = yield* decode(CameraRenderEndResult, value);
+						if (result.status === "failed" && result.code !== "session_unknown")
+							return yield* Effect.fail(nativeError("close", result));
 					}).pipe(
-						Effect.flatMap((value) => decode(CameraRenderEndResult, value)),
-						Effect.flatMap((result) =>
-							result.status === "failed" && result.code !== "session_unknown"
-								? Effect.fail(nativeError("close", result))
-								: Effect.void
-						),
 						Effect.mapError((cause) => renderError("close", request.sessionId, cause)),
 						Effect.catchCause((cleanup) =>
 							Effect.die(
@@ -355,16 +356,14 @@ export function makeCameraRenderer(
 				message: "The editor returned a different session or renderer policy.",
 				recovery: "Update the plugin and host together; inspect the native session."
 			});
-		yield* Effect.sleep(request.leaseMs / 3).pipe(
-			Effect.andThen(
-				call("open", request.sessionId, "BeginCameraRender", {
-					RequestJson: JSON.stringify(request)
-				})
-			),
-			Effect.flatMap((value) => decode(CameraRenderBeginResult, value)),
-			Effect.flatMap((result) =>
-				result.status === "failed" ? Effect.fail(nativeError("open", result)) : Effect.void
-			),
+		yield* Effect.gen(function* () {
+			yield* Effect.sleep(request.leaseMs / 3);
+			const value = yield* call("open", request.sessionId, "BeginCameraRender", {
+				RequestJson: JSON.stringify(request)
+			});
+			const result = yield* decode(CameraRenderBeginResult, value);
+			if (result.status === "failed") return yield* Effect.fail(nativeError("open", result));
+		}).pipe(
 			Effect.repeat(Schedule.forever),
 			Effect.catch((cause) =>
 				Effect.sync(() => {

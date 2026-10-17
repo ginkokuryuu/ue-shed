@@ -87,6 +87,7 @@ type CheckSettingFields = {
 	>;
 };
 // SAFETY: one optional setting per `BuiltInCheckId`, each with that check's catalogue parameters.
+// Verified by: localization-check-settings.test.ts — resolves every check's own parameter schema and defaults.
 const checkSettingFields = Object.fromEntries(
 	BuiltInCheckId.literals.map((id) => [
 		id,
@@ -204,53 +205,46 @@ function duplicateCultureKey(input: string): boolean {
 export function decodeGameTextRuleDocumentJson(
 	input: string
 ): Effect.Effect<GameTextRuleDocument, GameTextRuleDocumentError> {
-	return Schema.decodeUnknownEffect(Schema.fromJsonString(Schema.Json))(input).pipe(
-		Effect.mapError(() => invalid("invalid_json")),
-		Effect.flatMap((json) =>
-			Schema.decodeUnknownEffect(GameTextRuleDocument)(json).pipe(
-				// Version 3 rejects unknown keys, so a misspelt check or parameter is not ignored.
-				Effect.flatMap(
-					(document): Effect.Effect<GameTextRuleDocument, Schema.SchemaError> =>
-						document.schemaVersion === 3
-							? Schema.decodeUnknownEffect(TextQualityRuleDocumentV3)(json, {
-									onExcessProperty: "error"
-								})
-							: Effect.succeed(document)
-				),
-				Effect.mapError(() => invalid("invalid_structure"))
-			)
-		),
-		Effect.flatMap(
-			(document): Effect.Effect<GameTextRuleDocument, GameTextRuleDocumentError> => {
-				if (document.schemaVersion === 1)
-					return decodeTextQualityRuleDocument(document).pipe(
-						Effect.mapError((error) => invalid(error.code))
-					);
-				if (duplicateCultureKey(input))
-					return Effect.fail(invalid("duplicate_culture_key"));
-				const rules = [...document.rules, ...(document.localizationRules ?? [])];
-				if (rules.length === 0 && document.schemaVersion === 2)
-					return Effect.fail(invalid("invalid_structure"));
-				const roles = new Set(document.roles.map((role) => role.id));
-				if (roles.size !== document.roles.length)
-					return Effect.fail(invalid("duplicate_role_id"));
-				if (new Set(rules.map((rule) => rule.id)).size !== rules.length)
-					return Effect.fail(invalid("duplicate_rule_id"));
-				const scopeRoles =
-					document.schemaVersion === 3
-						? Object.values(document.checks ?? {}).flatMap(
-								(setting) => setting?.scope?.roles ?? []
-							)
-						: [];
-				if (
-					rules.some((rule) => !roles.has(rule.role)) ||
-					scopeRoles.some((role) => !roles.has(role))
-				)
-					return Effect.fail(invalid("unknown_role_id"));
-				return Effect.succeed(document);
-			}
+	return Effect.gen(function* () {
+		const json = yield* Schema.decodeUnknownEffect(Schema.fromJsonString(Schema.Json))(
+			input
+		).pipe(Effect.mapError(() => invalid("invalid_json")));
+		const decoded = yield* Schema.decodeUnknownEffect(GameTextRuleDocument)(json).pipe(
+			Effect.mapError(() => invalid("invalid_structure"))
+		);
+		// Version 3 rejects unknown keys, so a misspelt check or parameter is not ignored.
+		const document =
+			decoded.schemaVersion === 3
+				? yield* Schema.decodeUnknownEffect(TextQualityRuleDocumentV3)(json, {
+						onExcessProperty: "error"
+					}).pipe(Effect.mapError(() => invalid("invalid_structure")))
+				: decoded;
+		if (document.schemaVersion === 1)
+			return yield* decodeTextQualityRuleDocument(document).pipe(
+				Effect.mapError((error) => invalid(error.code))
+			);
+		if (duplicateCultureKey(input)) return yield* Effect.fail(invalid("duplicate_culture_key"));
+		const rules = [...document.rules, ...(document.localizationRules ?? [])];
+		if (rules.length === 0 && document.schemaVersion === 2)
+			return yield* Effect.fail(invalid("invalid_structure"));
+		const roles = new Set(document.roles.map((role) => role.id));
+		if (roles.size !== document.roles.length)
+			return yield* Effect.fail(invalid("duplicate_role_id"));
+		if (new Set(rules.map((rule) => rule.id)).size !== rules.length)
+			return yield* Effect.fail(invalid("duplicate_rule_id"));
+		const scopeRoles =
+			document.schemaVersion === 3
+				? Object.values(document.checks ?? {}).flatMap(
+						(setting) => setting?.scope?.roles ?? []
+					)
+				: [];
+		if (
+			rules.some((rule) => !roles.has(rule.role)) ||
+			scopeRoles.some((role) => !roles.has(role))
 		)
-	);
+			return yield* Effect.fail(invalid("unknown_role_id"));
+		return document;
+	});
 }
 
 export const GameTextSourceQualityReport = TextQualityReport.mapFields((fields) => ({
@@ -305,6 +299,7 @@ export function resolveLocalizationChecks(
 	const presetEnabled = document?.schemaVersion !== 3 || document.preset !== "none";
 	const separated = settings.segment_separator?.params?.separator !== undefined;
 	// SAFETY: one entry per `BuiltInCheckId`, each with that check's catalogue parameters.
+	// Verified by: localization-check-settings.test.ts — resolves every check's own parameter schema and defaults.
 	const resolved = Object.fromEntries(
 		BuiltInCheckId.literals.map((id) => {
 			const setting = settings[id];
@@ -334,6 +329,7 @@ function legacyCheckSettings(document: TextQualityRuleDocument | TextQualityRule
 	const optionalTags = document.optionalTags ?? [];
 	const withParams = <Id extends BuiltInCheckId>(id: Id, params: LocalizationCheckParams[Id]) => {
 		// SAFETY: `params` are check `Id`'s, so the setting is that check's setting.
+		// Verified by: localization-check-settings.test.ts — reads v1 and v2 check fields as their v3 settings and migrates them unchanged.
 		settings[id] = { ...settings[id], params } as LocalizationCheckSettings[Id];
 	};
 	if (document.segmentSeparator !== undefined)

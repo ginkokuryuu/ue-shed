@@ -64,6 +64,7 @@ import type { TextCorpus, TextUnit, TextUnitId } from "./schema.js";
 import { snapshotCheck } from "./snapshot-format.js";
 import { decodeTextAudience } from "./text-audience.js";
 import { encodeWtf8 } from "./wtf8.js";
+import { StageClock } from "./stage-clock.js";
 
 /**
  * Lines hydrated and checked per scan page; the scan yields after each. Measured on 583,507
@@ -622,6 +623,7 @@ export const indexedLocalizationQuality = Effect.fn("GameText.localizationQualit
 	ruleDocument?: GameTextRuleDocument
 ) {
 	options.onProgress?.({ checkedLines: 0, totalLines: joinRows.length, findings: 0 });
+	const stages = new StageClock();
 	const data = new JoinedQueryData(joined);
 	const target = data.joined.meta.input.target;
 	const join = {
@@ -665,8 +667,10 @@ export const indexedLocalizationQuality = Effect.fn("GameText.localizationQualit
 		occurrenceNotes: (line) => units.occurrenceNotes(line),
 		stringTables: (line) => units.stringTables(line)
 	};
+	stages.mark("prepare");
 	const units = unitIndex(data);
 	yield* Effect.yieldNow;
+	stages.mark("units");
 
 	// Report order is line ID order, ties in join order. Decoding every line ID takes about 0.7 s
 	// at 583,507 lines, so it yields per page; the unit index above and the sort below take about
@@ -704,6 +708,7 @@ export const indexedLocalizationQuality = Effect.fn("GameText.localizationQualit
 	sorted.length = 0;
 	const rankOf = new Uint32Array(count);
 	for (let rank = 0; rank < lineCount; rank++) rankOf[order[rank]!] = rank;
+	stages.mark("order");
 	const blockEnd = (first: number) => {
 		let end = first + 1;
 		while (end < lineCount && tied[end]) end++;
@@ -829,11 +834,15 @@ export const indexedLocalizationQuality = Effect.fn("GameText.localizationQualit
 	let checkedLines = 0;
 	/** Checks one page of blocks, then reports progress. */
 	const checkBlocks = (firsts: readonly number[]) => {
+		const hydrating = performance.now();
 		const blocks = blockLines(firsts);
+		stages.add("scan.hydrate", performance.now() - hydrating);
 		for (let block = 0; block < firsts.length; block++) {
 			const lines = blocks[block]!,
 				rank = firsts[block]!;
+			const checking = performance.now();
 			const { findings, diagnostics } = check(lines);
+			stages.add("scan.check", performance.now() - checking);
 			blockStart[rank] = storedFacts.length;
 			blockSize[rank] = findings.length;
 			for (const finding of findings) {
@@ -889,6 +898,8 @@ export const indexedLocalizationQuality = Effect.fn("GameText.localizationQualit
 	}
 	if (page.length) checkBlocks(page);
 	units.releaseMemos();
+	// The whole scan, including its yields; scan.hydrate and scan.check are parts of it.
+	stages.mark("scan");
 	page = [];
 
 	const total = storedFacts.length;
@@ -948,6 +959,12 @@ export const indexedLocalizationQuality = Effect.fn("GameText.localizationQualit
 		group.positions[group.next++] = position;
 		if ((position & 0xffff) === 0xffff) yield* Effect.yieldNow;
 	}
+	stages.mark("columns");
+	yield* Effect.annotateCurrentSpan({
+		"game_text.quality.lines": lineCount,
+		"game_text.quality.findings": total,
+		...stages.attributes("game_text.quality.stage_ms")
+	});
 	const limits = new Map(
 		[...limitCounts].map(([scope, codes]) => [
 			scope,

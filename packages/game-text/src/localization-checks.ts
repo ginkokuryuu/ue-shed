@@ -901,14 +901,16 @@ export function checkLocalizationLine(
 		enabled.includes(id) &&
 		localizationCheckInScope(context.checks[id].scope, culture, savedPlaces, context.roles);
 	const add = (finding: UnratedFinding) => {
-		if (active(finding.kind, finding.culture))
-			// SAFETY: `finding` is one member of the union without its severity, and the severity
-			// added is the one the rule file gives that member's kind.
-			findings.push({
-				...finding,
-				affectedOccurrences: (affected ??= affectedOf(unitsOnce())),
-				severity: context.checks[finding.kind].severity
-			} as LocalizationQualityFinding);
+		if (!active(finding.kind, finding.culture)) return false;
+		// SAFETY: `finding` is one member of the union without its severity, and the severity
+		// added is the one the rule file gives that member's kind.
+		// Verified by: localization-check-settings.test.ts — applies enabled, preset, severity and parameters.
+		findings.push({
+			...finding,
+			affectedOccurrences: (affected ??= affectedOf(unitsOnce())),
+			severity: context.checks[finding.kind].severity
+		} as LocalizationQualityFinding);
+		return true;
 	};
 	const sourceCulture = localizationSourceCulture(line, context.nativeCulture);
 	if (!line.identity) {
@@ -1221,26 +1223,28 @@ export function checkLocalizationLine(
 		const missingTags = tags?.missing.filter(required) ?? [],
 			addedTags = tags?.added.filter(required) ?? [];
 		const addedOnly = tagsWithout(richTextTagsAdded.arguments);
-		const addedOnlyTags =
-			addedOnly?.added.filter((name) => !richTextTagsAdded.tags.has(name.toLowerCase())) ??
-			[];
+		let reportedTagAdditions: readonly string[] = [];
 		if (tags && missingTags.length)
-			add({
-				...base,
-				ruleId: ruleIdOf("rich_text_tags"),
-				kind: "rich_text_tags",
-				actual: { tags: tags.translationTags, missing: missingTags, added: addedTags },
-				expectation: { tags: tags.sourceTags },
-				recovery:
-					"Keep the source's rich-text tags, such as <b>…</> and <img/>, around the matching words; don't add or drop any."
-			});
-		// Missing tags are rich_text_tags' finding, when that check runs here; otherwise the added
-		// ones are reported on their own.
-		if (
-			addedOnly &&
-			addedOnlyTags.length &&
-			!(tags && missingTags.length && active("rich_text_tags", culture.culture))
-		)
+			if (
+				add({
+					...base,
+					ruleId: ruleIdOf("rich_text_tags"),
+					kind: "rich_text_tags",
+					actual: { tags: tags.translationTags, missing: missingTags, added: addedTags },
+					expectation: { tags: tags.sourceTags },
+					recovery:
+						"Keep the source's rich-text tags, such as <b>…</> and <img/>, around the matching words; don't add or drop any."
+				})
+			)
+				reportedTagAdditions = addedTags;
+		const reportedTags = new Set(reportedTagAdditions.map((name) => name.toLowerCase()));
+		const addedOnlyTags =
+			addedOnly?.added.filter(
+				(name) =>
+					!richTextTagsAdded.tags.has(name.toLowerCase()) &&
+					!reportedTags.has(name.toLowerCase())
+			) ?? [];
+		if (addedOnly && addedOnlyTags.length)
 			add({
 				...base,
 				ruleId: ruleIdOf("rich_text_tags_added"),
@@ -1275,12 +1279,12 @@ export function checkLocalizationLine(
 				(name) => !expectedArgs.includes(name) && !optional.has(name)
 			);
 		const added = addedArguments(context.lists.renamedArguments);
-		// A dropped and an added name pair up, in order of appearance, as a rename, when
-		// format_argument_renamed runs here; otherwise format_arguments reports both.
+		// A dropped and an added name pair up, in order of appearance, as a rename.
 		const pairs =
 			missing.length && added.length && active("format_argument_renamed", culture.culture)
 				? Math.min(missing.length, added.length)
 				: 0;
+		let reportedPairs = 0;
 		if (canComparePattern && pairs > 0) {
 			const finding: Unrated<
 				Extract<LocalizationQualityFinding, { kind: "format_argument_renamed" }>
@@ -1335,10 +1339,10 @@ export function checkLocalizationLine(
 					changes.push(change);
 				}
 			}
-			add(finding);
+			if (add(finding)) reportedPairs = pairs;
 		}
-		const renamedFrom = new Set(added.slice(0, pairs));
-		const dropped = missing.slice(pairs).sort(),
+		const renamedFrom = new Set(added.slice(0, reportedPairs));
+		const dropped = missing.slice(reportedPairs).sort(),
 			extra = addedArguments(context.lists.formatArguments)
 				.filter((name) => !renamedFrom.has(name))
 				.sort();
