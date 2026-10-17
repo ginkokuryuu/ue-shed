@@ -823,6 +823,62 @@ it.live("custom checks scan as the in-memory checks do, past the old filter and 
 	}).pipe(Effect.scoped)
 );
 
+it.live("custom regex checks preserve whitespace and zero-width truth in indexed scans", () =>
+	Effect.gen(function* () {
+		const fixture = yield* makeIndexRegressionFixture();
+		const entries = [
+			{ key: "Space", source: "Whitespace translation", de: "  " },
+			{ key: "Empty", source: "Empty translation", de: "" },
+			{ key: "Todo", source: "TODO", de: "TODO" }
+		];
+		yield* Effect.promise(() => writeLocalization(fixture.projectRoot, entries));
+		fixture.update(entries.map(({ key, source }, index) => occurrence(key, source, index)));
+		const checks = Schema.decodeUnknownSync(GameTextRuleDocument)({
+			schemaVersion: 3,
+			roles: [],
+			rules: [],
+			customChecks: ["source", "translation"].flatMap((subject) =>
+				[
+					{ id: `${subject}-space`, pattern: "^\\s*$" },
+					{ id: `${subject}-lookahead`, pattern: "(?=TODO)" },
+					{ id: `${subject}-no-match`, pattern: "(?=TODO)", report: "no_match" }
+				].map((check) => ({
+					...check,
+					subject,
+					kind: "pattern",
+					label: check.id,
+					recovery: "Review text."
+				}))
+			)
+		});
+		yield* Effect.gen(function* () {
+			const result = yield* (yield* GameTextIndexRefresh).refresh(fixture.request);
+			const join = result.localizationJoin;
+			const report = checkLocalizationTarget(
+				result.corpus,
+				join,
+				result.evidence,
+				{},
+				checks
+			);
+			const legacy = localizationQualityWorkspace(undefined, report, join);
+			const indexed = localizationQualityWorkspaceOf(
+				undefined,
+				yield* result.localizationQuality!({}, checks)
+			);
+			const request = { target: join.target, filter: "all" as const };
+			expect(indexed.search(request)).toEqual(legacy.search(request));
+			expect(indexed.export(request)).toEqual(legacy.export(request));
+			const counts = indexed.search(request).counts;
+			for (const subject of ["source", "translation"] as const) {
+				expect(counts[`custom.${subject}-space`]).toBe(subject === "translation" ? 2 : 0);
+				expect(counts[`custom.${subject}-lookahead`]).toBe(1);
+				expect(counts[`custom.${subject}-no-match`]).toBe(2);
+			}
+		}).pipe(Effect.provide(fixture.layer()));
+	}).pipe(Effect.scoped)
+);
+
 it.live("the indexed scan yields between pages and stops when interrupted", () =>
 	Effect.gen(function* () {
 		const fixture = yield* makeIndexRegressionFixture();

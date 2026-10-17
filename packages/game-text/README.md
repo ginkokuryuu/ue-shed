@@ -343,6 +343,11 @@ translation, the native culture aside. The kinds are:
   `visible` characters as `length_outlier` measures them or code point `characters`.
 - `forbidden_term`: text using one of `terms`, matched as the terminology rules match terms.
 
+Custom checks evaluate present text, including empty and whitespace-only strings; absent
+translations are skipped. Zero-width regex matches count as matches without highlight spans.
+Pattern evidence examines at most 16 matches, including zero-width matches; `no_match` stops at
+the first match.
+
 ```json
 {
 	"customChecks": [

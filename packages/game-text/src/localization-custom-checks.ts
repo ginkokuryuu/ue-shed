@@ -47,16 +47,24 @@ export function detectCustomCheck(
 ): Detected | undefined {
 	switch (check.kind) {
 		case "pattern": {
-			const matches = [...text.matchAll(patternOf(check))]
-				.filter((match) => match[0].length > 0)
-				.slice(0, MAX_MATCHES)
-				.map((match) => ({
-					match: match[0],
-					start: match.index,
-					end: match.index + match[0].length
-				}));
 			const report = check.report ?? "match";
-			if ((report === "match") !== matches.length > 0) return undefined;
+			const matches: { match: string; start: number; end: number }[] = [];
+			let matched = false;
+			let examined = 0;
+			for (const match of text.matchAll(patternOf(check))) {
+				matched = true;
+				if (report === "no_match") return undefined;
+				// Empty matches establish regex truth but have no highlightable span. Count them
+				// toward the evidence budget too, so anchor/lookahead checks stop at the limit.
+				if (match[0].length > 0)
+					matches.push({
+						match: match[0],
+						start: match.index,
+						end: match.index + match[0].length
+					});
+				if (++examined === MAX_MATCHES) break;
+			}
+			if (report === "match" && !matched) return undefined;
 			return {
 				actual: { text, ...(report === "match" ? { matches } : undefined) },
 				expectation: { pattern: check.pattern, report }
@@ -144,7 +152,7 @@ export function localizationLineCustomFindings(
 		)
 			return;
 		const source = line.manifest[0]?.source.Text ?? line.source;
-		if (source.trim()) add(sourceCulture, source, "absent");
+		add(sourceCulture, source, "absent");
 		return;
 	}
 	for (const culture of [...line.cultures].sort((a, b) => a.culture.localeCompare(b.culture))) {
@@ -155,7 +163,7 @@ export function localizationLineCustomFindings(
 		)
 			continue;
 		const shipped = localizationShippedTranslation(culture);
-		if (shipped.value === null || !shipped.value.trim()) continue;
+		if (shipped.value === null) continue;
 		add(culture.culture, shipped.value, shipped.origin);
 	}
 }

@@ -1,6 +1,6 @@
 import { Effect, Schema } from "effect";
 import { parsePO } from "@ue-shed/localization/browser";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import {
 	archiveEntry,
 	corpus,
@@ -81,6 +81,99 @@ const base = { recovery: "Fix it.", label: "Custom" };
 const decodeCheck = Schema.decodeUnknownSync(CustomLocalizationCheck);
 
 describe("custom checks", () => {
+	it("counts zero-width matches without inventing highlight spans", () => {
+		for (const pattern of ["(?=TODO)", "^", "$"]) {
+			const check = {
+				...base,
+				id: "anchor",
+				kind: "pattern",
+				subject: "source",
+				pattern
+			} as const;
+			expect(detectCustomCheck(decodeCheck(check), "TODO")).toEqual({
+				actual: { text: "TODO", matches: [] },
+				expectation: { pattern, report: "match" }
+			});
+			expect(
+				detectCustomCheck(decodeCheck({ ...check, report: "no_match" }), "TODO")
+			).toBeUndefined();
+		}
+		const check = decodeCheck({
+			...base,
+			id: "lookahead",
+			kind: "pattern",
+			subject: "source",
+			pattern: "(?=TODO)"
+		});
+		expect(detectCustomCheck(check, "Done")).toBeUndefined();
+		expect(
+			detectCustomCheck(decodeCheck({ ...check, report: "no_match" }), "Done")?.actual
+		).toEqual({
+			text: "Done"
+		});
+	});
+
+	it("stops regex enumeration at the evidence limit or first no-match disproof", () => {
+		const check = decodeCheck({
+			...base,
+			id: "dense",
+			kind: "pattern",
+			subject: "source",
+			pattern: "."
+		});
+		const absent = decodeCheck({ ...check, report: "no_match" });
+		const zero = decodeCheck({ ...check, pattern: "(?=.)" });
+		const text = "😀".repeat(4096);
+		const exec = vi.spyOn(RegExp.prototype, "exec");
+		try {
+			const found = detectCustomCheck(check, text);
+			expect(exec).toHaveBeenCalledTimes(16);
+			expect(found?.actual.matches).toHaveLength(16);
+			expect(found?.actual.matches?.at(-1)).toEqual({ match: "😀", start: 30, end: 32 });
+			exec.mockClear();
+			expect(detectCustomCheck(absent, text)).toBeUndefined();
+			expect(exec).toHaveBeenCalledTimes(1);
+			exec.mockClear();
+			expect(detectCustomCheck(zero, text)?.actual.matches).toEqual([]);
+			expect(exec).toHaveBeenCalledTimes(16);
+		} finally {
+			exec.mockRestore();
+		}
+	});
+
+	it("checks present whitespace source and translations while respecting absence and scope", () => {
+		const text = corpus([unit("Space", " "), unit("Absent", "Absent")]);
+		const files = evidence(
+			[manifestEntry("Space", " "), manifestEntry("Absent", "Absent")],
+			[archiveEntry("Space", " ", "  ")],
+			noPO()
+		);
+		const joined = joinLocalizationTarget(text, files, files.target);
+		const pattern = { ...base, kind: "pattern", pattern: "^\\s*$" } as const;
+		const rules = document([
+			{ ...pattern, id: "source-space", subject: "source" },
+			{ ...pattern, id: "translation-space", subject: "translation" },
+			{ ...pattern, id: "french", subject: "translation", scope: { cultures: ["fr"] } },
+			{ ...pattern, id: "ui", subject: "source", scope: { roles: ["ui"] } }
+		]);
+		const found = custom(checkLocalizationTarget(text, joined, files, {}, rules));
+		expect(found.map(({ ruleId, culture, actual }) => [ruleId, culture, actual.text])).toEqual([
+			["translation-space", "de", "  "],
+			["source-space", "en", " "]
+		]);
+		expect(
+			custom(
+				checkLocalizationTarget(
+					text,
+					joined,
+					files,
+					{ culture: joined.cultures.find((culture) => culture === "de")! },
+					rules
+				)
+			).map(({ ruleId }) => ruleId)
+		).toEqual(["translation-space"]);
+	});
+
 	it("validates custom checks with the rule file", () => {
 		const pattern = {
 			...base,
