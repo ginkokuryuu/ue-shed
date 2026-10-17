@@ -294,38 +294,51 @@ contain `disabledLocalizationChecks` (any built-in ID), `segmentSeparator`, `opt
 per-culture project policy and progress reports, described below. Every check is on by default,
 except `segment_separator` until a rule file names a separator.
 
-Every localization finding has a `severity` from `checkSeverity`: `blocking` (players see wrong or
-untranslated text), `normal` or `low`. It is never part of the finding's ID. Workspace pages list
-blocking findings first, then normal, then low, each in report order, and count findings by
-severity in `severityCounts`; summaries, focus and CSV exports carry the severity.
+`localizationCheckCatalogue` describes every built-in check: its `basis` (`unreal` when the
+finding states what Unreal does with the text, so only its severity and whether it runs are the
+project's; `heuristic` when it is a judgment with thresholds or word lists), its `label`, its
+default `severity`, its parameter schema (`params`, every field defaulted, so `{}` decodes to
+`defaults`) and a `condition` text generated from its parameters. `localizationRuleId(id)` and
+`parseLocalizationRuleId(ruleId)` convert between a check and the `localization.<id>` rule ID its
+findings and review marks record. The table below is generated from the catalogue.
 
-| Check                         | Severity | Reports                                                                                           |
-| ----------------------------- | -------- | ------------------------------------------------------------------------------------------------- |
-| `format_arguments`            | normal   | Source arguments the translation drops, or arguments it adds                                      |
-| `format_argument_renamed`     | normal   | A dropped and an added argument paired in order, as `{qty}` → `{qté}`; one rename stages a change |
-| `argument_modifiers`          | normal   | Plural, ordinal, gender and Hangul modifier syntax and forms                                      |
-| `rich_text`                   | normal   | Unbalanced tags, as Unreal's compile validator counts them                                        |
-| `rich_text_tags`              | normal   | Tags (`<b>…</>`, `<Name>…</>`, `<img/>`) the translation drops, compared without case             |
-| `rich_text_tags_added`        | low      | Tags the translation adds and drops none                                                          |
-| `rich_text_tag_case`          | low      | The same tag in another case, as `<italic>` for `<Italic>`; Slate matches names without case      |
-| `po_escape_safety`            | normal   | Literal `\n`, `\r`, `\t` that Unreal's PO round trip turns into control characters                |
-| `whitespace`                  | normal   | Leading or trailing whitespace that differs from the source, or unsafe edge spaces                |
-| `line_breaks`                 | normal   | A different number of line breaks inside the text than the source; edges are `whitespace`'s       |
-| `segment_separator`           | normal   | The rule file's `segmentSeparator` used a different number of times than in the source            |
-| `length_outlier`              | normal   | A translation under a third (zh, ja, ko, th: a quarter) or over three times the source's length   |
-| `placeholder_translation`     | normal   | A translation that is only a placeholder ("skip", "TBD", "script lama") or punctuation ("...")    |
-| `empty_translation`           | normal   | An existing empty PO or archive entry                                                             |
-| `outdated_translation`        | blocking | An archive translation recorded for older source text; Unreal ships the source instead            |
-| `source_line_endings_changed` | low      | An archive translation recorded for the same source with other line endings (`\r\n`, `\n`)        |
-| `inconsistent_translation`    | normal   | Short shared source text (up to four words) translated differently in one culture                 |
-| `missing_translator_notes`    | low      | No translator notes on any occurrence or manifest entry                                           |
-| `duplicate_source`            | low      | The same source text under different keys                                                         |
-| `culture_invariant_text`      | low      | Culture-invariant player text in a property that is localizable elsewhere: never translated       |
-| `placeholder_text`            | normal   | `TODO`, `TBD`, `FIXME` (upper case only), "lorem ipsum", "to be translated", "placeholder"        |
-| `source_whitespace`           | low      | Whitespace at either end of a gathered source, or doubled spaces inside it                        |
-| `source_markup`               | normal   | Unclosed rich-text tags, `</Name>` closings or unpaired format braces in the source               |
-| `number_only_text`            | low      | Localizable text with digits and no letters or arguments, which could be culture invariant        |
-| `string_table_key_collision`  | normal   | One namespace and key declared by more than one String Table                                      |
+Every localization finding has a `severity`, its check's catalogue severity: `blocking` (players
+see wrong or untranslated text), `normal` or `low`. It is never part of the finding's ID.
+Workspace pages list blocking findings first, then normal, then low, each in report order, and
+count findings by severity in `severityCounts`; summaries, focus and CSV exports carry the
+severity.
+
+<!-- check table: generated from localizationCheckCatalogue; do not edit -->
+
+| Check                         | Basis     | Severity | Reports                                                                                                                                            |
+| ----------------------------- | --------- | -------- | -------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `format_arguments`            | unreal    | normal   | Source arguments the translation drops, or arguments it adds                                                                                       |
+| `argument_modifiers`          | unreal    | normal   | Plural, ordinal, gender and Hangul modifier syntax and forms                                                                                       |
+| `rich_text`                   | unreal    | normal   | Unbalanced tags, as Unreal's compile validator counts them                                                                                         |
+| `po_escape_safety`            | unreal    | normal   | Literal `\n`, `\r`, `\t` that Unreal's PO round trip turns into control characters                                                                 |
+| `whitespace`                  | unreal    | normal   | Leading or trailing whitespace that differs from the source, or unsafe edge spaces                                                                 |
+| `empty_translation`           | unreal    | normal   | An existing empty PO or archive entry                                                                                                              |
+| `missing_translator_notes`    | heuristic | low      | No translator notes on any occurrence or manifest entry                                                                                            |
+| `duplicate_source`            | heuristic | low      | The same source text under different keys                                                                                                          |
+| `format_argument_renamed`     | unreal    | normal   | A dropped and an added argument paired in order, as `{qty}` → `{qté}`; one rename stages a change                                                  |
+| `rich_text_tags`              | unreal    | normal   | Tags (`<b>…</>`, `<Name>…</>`, `<img/>`) the translation drops, compared without case                                                              |
+| `rich_text_tag_case`          | heuristic | low      | The same tag in another case, as `<italic>` for `<Italic>`; Slate matches names without case                                                       |
+| `line_breaks`                 | heuristic | normal   | A different number of line breaks inside the text than the source; edges are `whitespace`'s                                                        |
+| `segment_separator`           | heuristic | normal   | The rule file's `segmentSeparator` used a different number of times than in the source                                                             |
+| `length_outlier`              | heuristic | normal   | A translation under a third (zh, ja, ko, th: a quarter) or over three times the source's length, for a source of 20 or more visible characters     |
+| `outdated_translation`        | unreal    | blocking | An archive translation recorded for older source text; Unreal ships the source instead                                                             |
+| `inconsistent_translation`    | heuristic | normal   | Short shared source text (3 or more visible characters, up to four words) translated differently in one culture                                    |
+| `rich_text_tags_added`        | heuristic | low      | Tags the translation adds and drops none                                                                                                           |
+| `source_line_endings_changed` | unreal    | low      | An archive translation recorded for the same source with other line endings (`\r\n`, `\n`)                                                         |
+| `placeholder_translation`     | heuristic | normal   | A translation that is only one of 13 placeholder words (such as "skip" or "TODO"), or only punctuation ("...") for a source of three words or more |
+| `culture_invariant_text`      | heuristic | low      | Culture-invariant player text in a property that is localizable elsewhere: never translated                                                        |
+| `placeholder_text`            | heuristic | normal   | `TODO`, `TBD`, `FIXME` (as written), "lorem ipsum", "to be translated", "placeholder" (any case)                                                   |
+| `source_whitespace`           | heuristic | low      | Whitespace at either end of a gathered source, or doubled spaces inside it                                                                         |
+| `source_markup`               | unreal    | normal   | Unclosed rich-text tags, `</Name>` closings or unpaired format braces in the source                                                                |
+| `number_only_text`            | heuristic | low      | Localizable text with digits and no letters or arguments, which could be culture invariant                                                         |
+| `string_table_key_collision`  | unreal    | normal   | One namespace and key declared by more than one String Table                                                                                       |
+
+<!-- end of check table -->
 
 `missing_translator_notes`, `duplicate_source` and the `SourceCheckId` checks are facts about the
 source line. Each reports once per line, under the target's native culture (or the line's first

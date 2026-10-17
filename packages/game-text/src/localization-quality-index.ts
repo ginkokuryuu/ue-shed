@@ -54,7 +54,8 @@ import { u32 } from "./joined-target-input.js";
 import { runJoinedQuery } from "./joined-query-node.js";
 import type { JoinedTargetReader } from "./joined-target-reader.js";
 import type { GameTextRuleDocument } from "./quality-rules-v2.js";
-import { TextQualityRuleId } from "./quality-schema.js";
+import type { TextQualityRuleId } from "./quality-schema.js";
+import { localizationRuleId } from "./localization-check-catalogue.js";
 import type { TextCorpus, TextUnit, TextUnitId } from "./schema.js";
 import { snapshotCheck } from "./snapshot-format.js";
 import { decodeTextAudience } from "./text-audience.js";
@@ -1047,7 +1048,7 @@ export const indexedLocalizationQuality = Effect.fn("GameText.localizationQualit
 				...(ruleDocument?.schemaVersion === 2
 					? (ruleDocument.localizationRules ?? []).map((rule) => rule.id)
 					: []),
-				...enabled.map((id) => TextQualityRuleId.make(`localization.${id}`))
+				...enabled.map(localizationRuleId)
 			],
 			unsupportedRuleCultures: policy?.diagnostics.length ?? 0,
 			status: corpus.status,

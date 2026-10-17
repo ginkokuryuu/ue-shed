@@ -5,7 +5,12 @@ import type {
 	LocalizationIdentity,
 	LocalizationTargetEvidence
 } from "@ue-shed/localization/browser";
-import { BuiltInCheckId, checkSeverity } from "./localization-check-ids.js";
+import { BuiltInCheckId } from "./localization-check-ids.js";
+import {
+	localizationCheckCatalogue,
+	localizationCheckDefaults,
+	localizationRuleId
+} from "./localization-check-catalogue.js";
 import { localizationManifestNotes } from "./localization.js";
 import { localizationLineUnits } from "./gathered-text.js";
 import {
@@ -27,7 +32,7 @@ import {
 	type LocalizationCheckDiagnostic
 } from "./localization-quality-schema.js";
 import { localizationEvidenceFileStatuses } from "./localization-status.js";
-import { TextQualityRuleId, type TextQualityAffectedOccurrence } from "./quality-schema.js";
+import type { TextQualityAffectedOccurrence } from "./quality-schema.js";
 import type { GameTextRuleDocument } from "./quality-rules-v2.js";
 import { matchesTextRole, prepareTextQualityRules, termMatches } from "./quality.js";
 import type { TextRole } from "./quality-schema.js";
@@ -40,7 +45,6 @@ export {
 } from "./localization-shipped-translation.js";
 import type { TextCorpus, TextOccurrence, TextUnit } from "./schema.js";
 import {
-	LENGTH_OUTLIER,
 	compareRichTextTags,
 	consistentTranslationCandidate,
 	countOccurrences,
@@ -696,7 +700,7 @@ function conflictingSourceVariants(
 	return sources.size > 1 ? [...sources].sort(byCodeUnit) : undefined;
 }
 
-const ruleIdOf = (id: BuiltInCheckId) => TextQualityRuleId.make(`localization.${id}`);
+const ruleIdOf = localizationRuleId;
 const sameIdentity = (a: LocalizationIdentity | undefined, b: LocalizationIdentity) =>
 	a !== undefined && a.namespace === b.namespace && a.key === b.key;
 const affectedOf = (lineUnits: readonly TextUnit[]): TextQualityAffectedOccurrence[] =>
@@ -819,7 +823,7 @@ export function checkLocalizationLine(
 			findings.push({
 				...finding,
 				affectedOccurrences: (affected ??= affectedOf(unitsOnce())),
-				severity: checkSeverity[finding.kind]
+				severity: localizationCheckCatalogue[finding.kind].severity
 			} as LocalizationQualityFinding);
 	};
 	const sourceCulture = localizationSourceCulture(line, context.nativeCulture);
@@ -1299,7 +1303,7 @@ export function checkLocalizationLine(
 				expectation: {
 					sourceLength: outlier.sourceLength,
 					minimumRatio: Math.round(minimumRatio * 100) / 100,
-					maximumRatio: LENGTH_OUTLIER.maximumRatio
+					maximumRatio: localizationCheckDefaults.length_outlier.maximumRatio
 				},
 				recovery:
 					"Check that the translation belongs to this line and is complete; a translation this much shorter or longer is often another line's text."

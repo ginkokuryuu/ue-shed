@@ -40,7 +40,8 @@ import {
 } from "./localization-status.js";
 import { textCountLabel } from "./csv.js";
 import { textAssetName, spreadsheetCsv } from "./csv.js";
-import { CheckSeverity, checkSeverity } from "./localization-check-ids.js";
+import { CheckSeverity } from "./localization-check-ids.js";
+import { localizationCheckCatalogue, projectRuleKinds } from "./localization-check-catalogue.js";
 
 const Count = Schema.Int.check(Schema.isGreaterThanOrEqualTo(0));
 const Offset = Schema.optionalKey(Count);
@@ -76,41 +77,20 @@ export const WorkspaceQualityFilter = Schema.Literals([
 	"placeholder_translation"
 ]);
 export type WorkspaceQualityFilter = typeof WorkspaceQualityFilter.Type;
-export const workspaceQualityLabels = {
-	all: "All findings",
-	character_budget: "Character limits",
-	terminology: "Terminology",
-	format_arguments: "Format arguments",
-	argument_modifiers: "Plural and gender forms",
-	rich_text: "Rich text tags",
-	po_escape_safety: "Unsafe escapes",
-	whitespace: "Whitespace",
-	empty_translation: "Empty translation",
-	missing_translator_notes: "No translator notes",
-	duplicate_source: "Same text, different keys",
-	format_argument_renamed: "Renamed format arguments",
-	rich_text_tags: "Missing tags",
-	rich_text_tag_case: "Tag case changed",
-	line_breaks: "Line breaks",
-	segment_separator: "Segment separators",
-	length_outlier: "Unusual length",
-	outdated_translation: "Translated from older text",
-	inconsistent_translation: "Translated inconsistently",
-	culture_invariant_text: "Won't be translated",
-	placeholder_text: "Placeholder text",
-	source_whitespace: "Source whitespace",
-	source_markup: "Unbalanced source markup",
-	number_only_text: "Number-only text",
-	string_table_key_collision: "String Table key collision",
-	rich_text_tags_added: "Extra tags",
-	source_line_endings_changed: "Source line endings changed",
-	placeholder_translation: "Placeholder translation"
-} satisfies Record<WorkspaceQualityFilter, string>;
-/** A check's severity; every finding of a check shares it. */
+/** A filter's name in lists: the check's catalogue label, or the project rule kind's. */
+export function workspaceQualityLabel(filter: WorkspaceQualityFilter): string {
+	if (filter === "all") return "All findings";
+	if (filter === "character_budget" || filter === "terminology")
+		return projectRuleKinds[filter].label;
+	return localizationCheckCatalogue[filter].label;
+}
+/** A check's default severity, from the catalogue; every finding of a check shares it. */
 export function workspaceQualitySeverity(
 	filter: Exclude<WorkspaceQualityFilter, "all">
 ): CheckSeverity {
-	return checkSeverity[filter];
+	if (filter === "character_budget" || filter === "terminology")
+		return projectRuleKinds[filter].severity;
+	return localizationCheckCatalogue[filter].severity;
 }
 const Selection = { target: LocalizationTargetName, culture: Schema.optionalKey(CultureCode) };
 export const WorkspaceQualityRequest = Schema.Struct({
@@ -513,7 +493,7 @@ export function workspaceQualityItem(
 				line?.identity?.key ??
 				(location?.kind === "string_table_entry" ? location.entryKey : finding.ruleId))) +
 		" · " +
-		workspaceQualityLabels[workspaceQualityFilterOf(finding)] +
+		workspaceQualityLabel(workspaceQualityFilterOf(finding)) +
 		" · " +
 		textCountLabel(finding.affectedOccurrences.length, "location");
 	const filter = workspaceQualityFilterOf(finding);
@@ -1383,7 +1363,7 @@ export function workspaceQualityCsv(report: WorkspaceQualityReport): string {
 			report.target,
 			finding.culture ?? "Source",
 			finding.severity,
-			workspaceQualityLabels[finding.filter],
+			workspaceQualityLabel(finding.filter),
 			finding.source,
 			finding.problem,
 			finding.context,
