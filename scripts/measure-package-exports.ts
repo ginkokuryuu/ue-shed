@@ -11,7 +11,7 @@
  * uses in other repositories (downstream hosts), are not visible here.
  */
 import { readdirSync, readFileSync, statSync } from "node:fs";
-import { dirname, join, resolve } from "node:path";
+import { dirname, join, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 import { Schema, SchemaGetter } from "effect";
 import ts from "typescript";
@@ -121,7 +121,7 @@ const rows = measured.map(({ folder, name, entries }) => {
 	const used = new Map<string, Set<string>>([...entries.keys()].map((key) => [key, new Set()]));
 	const all = new Set<string>();
 	for (const file of consumers) {
-		if (file.startsWith(ownDirectory)) continue;
+		if (file.startsWith(ownDirectory + sep)) continue;
 		const text = readFileSync(file, "utf8");
 		if (!text.includes(name)) continue;
 		const source = ts.createSourceFile(file, text, ts.ScriptTarget.ESNext, false);

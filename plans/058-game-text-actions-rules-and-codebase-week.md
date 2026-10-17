@@ -35,7 +35,7 @@
 | A1   | Name packages by file location                 | A    | TODO                                    |
 | A2   | Graph pin text as Game Text places             | A    | TODO                                    |
 | A3   | Game Text actions: editor plugin and API       | A    | IN PROGRESS — #112; graph pins await A2 |
-| A4   | Identity fixture, slice 2                      | A    | TODO                                    |
+| A4   | Identity fixture, slice 2                      | A    | DONE — #120; UE 5.7 and UE 5.8          |
 | A5   | UE 4.27 identity slice                         | A    | TODO                                    |
 | A6   | Stretch: text diff of two package versions     | A    | DONE — #104                             |
 | B1   | Check catalogue                                | B    | DONE — #106                             |
@@ -63,10 +63,10 @@
 | D8   | Layers and test layers                         | D    | IN PROGRESS — #125                      |
 | D9   | One progress mechanism, one completeness shape | D    | IN PROGRESS — #125                      |
 | D10  | Workspace orchestration as a package           | D    | DONE — #124                             |
-| D11  | JSDoc on public exports                        | D    | TODO                                    |
+| D11  | JSDoc on public exports                        | D    | IN PROGRESS — #123; two packages        |
 | D12  | Small cleanups                                 | D    | IN PROGRESS — #107                      |
-| D13  | API surface of the other host-facing packages  | D    | TODO                                    |
-| D14  | Native error audit                             | D    | TODO                                    |
+| D13  | API surface of the other host-facing packages  | D    | IN PROGRESS — #123; measured            |
+| D14  | Native error audit                             | D    | IN PROGRESS — #123; Rust subset         |
 | R    | 0.17.0 release preparation                     | —    | TODO                                    |
 
 ## Context

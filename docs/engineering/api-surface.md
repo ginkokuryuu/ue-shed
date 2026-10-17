@@ -17,7 +17,7 @@ asks the TypeScript checker for every name each entry point exports, and scans `
 
 Run with `--json` for the full lists of unused names per entry point.
 
-## Measurement (2026-10-17, integrated with `main` through #122)
+## Measurement (2026-10-17, integrated with `main` through #120)
 
 | Package                      | Entry point             | Potentially used / exported | Whole entry point retained |
 | ---------------------------- | ----------------------- | --------------------------- | -------------------------- |
@@ -53,9 +53,8 @@ public without an explicit entry-point decision.
 - **`@ue-shed/host`**: a private package with one consumer (decision 9). Its entry point now
   lists its 13 used names; the other 13 (configuration value types, the file-picker layer, the
   saved-table index layer and test layer, the sessions layer) are private.
-- **`unreal-connection`, `unreal-assets` and `cameras`**: measurement only. Lane D's D4 is
-  changing their error classes, so this lane changes neither their export lists nor their entry
-  points.
+- **`unreal-connection`, `unreal-assets` and `cameras`**: measurement only. Their published
+  export lists and entry points remain unchanged; any cut needs a separate compatibility review.
 - **`protocol`, `localization` and `engine`**: published packages with downstream hosts
   whose imports are not visible here. Their unused names are candidates, not cuts. The next step
   for each is the D1 pattern:

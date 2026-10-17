@@ -12,6 +12,9 @@
 #include "Dom/JsonObject.h"
 #include "EdGraphSchema_K2.h"
 #include "EdGraphUtilities.h"
+#include "Engine/TextRenderActor.h"
+#include "Engine/World.h"
+#include "Factories/WorldFactory.h"
 #include "Engine/BlueprintGeneratedClass.h"
 #include "Engine/DataTable.h"
 #include "Engine/SCS_Node.h"
@@ -20,6 +23,8 @@
 #include "HAL/FileManager.h"
 #include "IAssetTools.h"
 #include "Internationalization/GatherableTextData.h"
+#include "Internationalization/StringTable.h"
+#include "Internationalization/StringTableCore.h"
 #include "Internationalization/TextPackageNamespaceUtil.h"
 #include "K2Node_CallFunction.h"
 #include "K2Node_Event.h"
@@ -29,6 +34,7 @@
 #include "LocalizationConfigurationScript.h"
 #include "LocalizationSettings.h"
 #include "Misc/EngineVersion.h"
+#include "Misc/EngineVersionComparison.h"
 #include "Misc/FileHelper.h"
 #include "Misc/PackageName.h"
 #include "Misc/Parse.h"
@@ -71,10 +77,11 @@ FString PackageFile(const FString& Name)
 
 bool Save(UObject* Asset)
 {
-	UPackage* Package = Asset->GetOutermost();
+	// GetPackage, not GetOutermost: a World Partition actor saves to its own external package.
+	UPackage* Package = Asset->GetPackage();
 	Package->MarkPackageDirty();
-	const FString Filename = FPackageName::LongPackageNameToFilename(
-		Package->GetName(), FPackageName::GetAssetPackageExtension());
+	const FString Filename = FPackageName::LongPackageNameToFilename(Package->GetName(),
+		Asset->IsA<UWorld>() ? FPackageName::GetMapPackageExtension() : FPackageName::GetAssetPackageExtension());
 	IFileManager::Get().MakeDirectory(*FPaths::GetPath(Filename), true);
 	FSavePackageArgs Args;
 	Args.TopLevelFlags = RF_Public | RF_Standalone;
@@ -384,6 +391,173 @@ bool EditBranch()
 		&& Save(Rows) && Save(Notes) && Save(Panel);
 }
 
+// Slice 2 (Plan 058 A4): text in places slice 1 does not cover, under Slice2/.
+const TCHAR* Slice2 = TEXT("Slice2/");
+
+/** A String Table, and a data asset holding typed text and a reference to one of its entries. */
+bool StringTables()
+{
+	UStringTable* Table = CreateAsset<UStringTable>(ObjectPath(FString(Slice2) + TEXT("ST_IdentityTable")));
+	FStringTableRef Mutable = Table->GetMutableStringTable();
+	Mutable->SetNamespace(FTextKey(TEXT("IdentityTable")));
+#if UE_VERSION_OLDER_THAN(5, 8, 0)
+	Mutable->SetSourceString(FTextKey(TEXT("Welcome")), TEXT("Welcome aboard"));
+	Mutable->SetSourceString(FTextKey(TEXT("Farewell")), TEXT("Fair winds"));
+#else
+	Mutable->SetSourceString(FTextKey(TEXT("Welcome")), TEXT("Welcome aboard"), FString());
+	Mutable->SetSourceString(FTextKey(TEXT("Farewell")), TEXT("Fair winds"), FString());
+#endif
+	if (!Save(Table)) return false;
+	UUEShedFixtureTextAsset* Notes = CreateAsset<UUEShedFixtureTextAsset>(ObjectPath(FString(Slice2) + TEXT("DA_IdentityReferences")));
+	Notes->StringTableReference = FText::FromStringTable(Table->GetStringTableId(), TEXT("Welcome"));
+	Notes->SharedPrimary = TypedText(Notes->GetOutermost(), Notes->SharedPrimary, TEXT("Welcome aboard"));
+	Notes->SharedSecondary = FText::AsCultureInvariant(TEXT("Deck 3"));
+	return Save(Notes);
+}
+
+UBlueprint* CreateActorBlueprint(const FString& Name, UClass* Parent)
+{
+	const FString Path = ObjectPath(Name);
+	UPackage* Package = CreatePackage(*FPackageName::ObjectPathToPackageName(Path));
+	UBlueprint* Blueprint = FKismetEditorUtilities::CreateBlueprint(Parent, Package,
+		*FPackageName::ObjectPathToObjectName(Path), BPTYPE_Normal, UBlueprint::StaticClass(),
+		UBlueprintGeneratedClass::StaticClass());
+	if (Blueprint) FAssetRegistryModule::AssetCreated(Blueprint);
+	return Blueprint;
+}
+
+/** Print Text nodes wired after BeginPlay, one per pin text, in order. */
+bool PrintTexts(UBlueprint* Blueprint, const TArray<FText>& Texts)
+{
+	UK2Node_Event* BeginPlay = FBlueprintEditorUtils::FindOverrideForFunction(
+		Blueprint, AActor::StaticClass(), BeginPlayName);
+	UEdGraph* Graph = BeginPlay ? BeginPlay->GetGraph() : nullptr;
+	if (!Graph) return false;
+	BeginPlay->SetEnabledState(ENodeEnabledState::Enabled, false);
+	UEdGraphPin* Then = BeginPlay->FindPin(UEdGraphSchema_K2::PN_Then);
+	int32 X = BeginPlay->NodePosX;
+	for (const FText& Text : Texts)
+	{
+		UK2Node_CallFunction* Print = NewObject<UK2Node_CallFunction>(Graph);
+		Print->SetFromFunction(UKismetSystemLibrary::StaticClass()->FindFunctionByName(
+			GET_FUNCTION_NAME_CHECKED(UKismetSystemLibrary, PrintText)));
+		X += 320;
+		Print->NodePosX = X;
+		Print->NodePosY = BeginPlay->NodePosY;
+		Graph->AddNode(Print, true, false);
+		Print->CreateNewGuid();
+		Print->PostPlacedNewNode();
+		Print->AllocateDefaultPins();
+		UEdGraphPin* Pin = TextPin(Print);
+		if (!Pin || !Link(Then, Print)) return false;
+		GetDefault<UEdGraphSchema_K2>()->TrySetDefaultText(*Pin, Text);
+		Then = Print->GetThenPin();
+	}
+	return true;
+}
+
+/**
+ * Compiled literals of each saved kind: typed (localized) text, culture-invariant text and a
+ * String Table reference, each a Print Text pin compiled into BeginPlay's bytecode.
+ */
+bool Literals()
+{
+	UBlueprint* Literals = CreateActorBlueprint(FString(Slice2) + TEXT("BP_IdentityLiterals"), AActor::StaticClass());
+	const UStringTable* Table = LoadObject<UStringTable>(nullptr, *ObjectPath(FString(Slice2) + TEXT("ST_IdentityTable")));
+	if (!Literals || !Table) return false;
+	UPackage* Package = Literals->GetOutermost();
+	FText Lamp = TypedText(Package, FText::GetEmpty(), TEXT("Lamp lit"));
+#if !UE_VERSION_OLDER_THAN(5, 8, 0)
+	Lamp = FText::ChangeKey(FTextInspector::GetNamespace(Lamp).Get(FString()),
+		FTextInspector::GetKey(Lamp).Get(FString()), Lamp, TEXT("A lit lantern, not a command"));
+#endif
+	if (!PrintTexts(Literals, { Lamp,
+		FText::AsCultureInvariant(TEXT("v1.0")), FText::FromStringTable(Table->GetStringTableId(), TEXT("Farewell")) }))
+		return false;
+	FKismetEditorUtilities::CompileBlueprint(Literals);
+	return Save(Literals);
+}
+
+FText* DefaultText(UBlueprint* Blueprint, const TCHAR* Property)
+{
+	FTextProperty* Text = CastField<FTextProperty>(Blueprint->GeneratedClass->FindPropertyByName(Property));
+	return Text ? Text->ContainerPtrToValuePtr<FText>(Blueprint->GeneratedClass->GetDefaultObject()) : nullptr;
+}
+
+/** A parent Blueprint's variable default, a child that inherits it and a child that overrides it. */
+bool Inheritance()
+{
+	UBlueprint* Parent = CreateActorBlueprint(FString(Slice2) + TEXT("BP_IdentityParent"), AActor::StaticClass());
+	if (!Parent) return false;
+	FEdGraphPinType TextType;
+	TextType.PinCategory = UEdGraphSchema_K2::PC_Text;
+	if (!FBlueprintEditorUtils::AddMemberVariable(Parent, TEXT("Motto"), TextType)) return false;
+	FKismetEditorUtilities::CompileBlueprint(Parent);
+	FText* Motto = DefaultText(Parent, TEXT("Motto"));
+	if (!Motto) return false;
+	*Motto = TypedText(Parent->GetOutermost(), *Motto, TEXT("Steady as she goes"));
+	FBlueprintEditorUtils::MarkBlueprintAsModified(Parent);
+	FKismetEditorUtilities::CompileBlueprint(Parent);
+	if (!Save(Parent)) return false;
+
+	UBlueprint* Inherits = CreateActorBlueprint(FString(Slice2) + TEXT("BP_IdentityChildInherits"), Parent->GeneratedClass);
+	UBlueprint* Overrides = CreateActorBlueprint(FString(Slice2) + TEXT("BP_IdentityChildOverrides"), Parent->GeneratedClass);
+	if (!Inherits || !Overrides) return false;
+	FKismetEditorUtilities::CompileBlueprint(Inherits);
+	FKismetEditorUtilities::CompileBlueprint(Overrides);
+	FText* Override = DefaultText(Overrides, TEXT("Motto"));
+	if (!Override) return false;
+	// Typed over the inherited value in the child's Class Defaults.
+	*Override = TypedText(Overrides->GetOutermost(), *Override, TEXT("Full speed ahead"));
+	FBlueprintEditorUtils::MarkBlueprintAsModified(Overrides);
+	FKismetEditorUtilities::CompileBlueprint(Overrides);
+	return Save(Inherits) && Save(Overrides);
+}
+
+ATextRenderActor* PlaceSign(UWorld* World, const FString& Source, const bool bExternal)
+{
+	FActorSpawnParameters Spawn;
+	Spawn.bCreateActorPackage = bExternal;
+	ATextRenderActor* Sign = World->SpawnActor<ATextRenderActor>(FVector::ZeroVector, FRotator::ZeroRotator, Spawn);
+	if (!Sign) return nullptr;
+	UTextRenderComponent* Render = Sign->GetTextRender();
+	// The actor's own package: the level's, or its external package in a World Partition map.
+	Render->SetText(TypedText(Sign->GetPackage(), Render->Text, Source));
+	return Sign;
+}
+
+UWorld* CreateMap(const FString& Name, const bool bWorldPartition)
+{
+	const FString Path = ObjectPath(Name);
+	UPackage* Package = CreatePackage(*FPackageName::ObjectPathToPackageName(Path));
+	UWorldFactory* Factory = NewObject<UWorldFactory>();
+	Factory->WorldType = EWorldType::Editor;
+	Factory->bCreateWorldPartition = bWorldPartition;
+	Factory->bEnableWorldPartitionStreaming = false;
+	UWorld* World = Cast<UWorld>(Factory->FactoryCreateNew(UWorld::StaticClass(), Package,
+		*FPackageName::ObjectPathToObjectName(Path), RF_Public | RF_Standalone, nullptr, GWarn));
+	if (World) FAssetRegistryModule::AssetCreated(World);
+	return World;
+}
+
+/** A TextRender actor in a level, and one saved as a World Partition external actor. */
+bool Levels()
+{
+	UWorld* Level = CreateMap(FString(Slice2) + TEXT("L_IdentityLevel"), false);
+	if (!Level) return false;
+	ATextRenderActor* LevelSign = PlaceSign(Level, TEXT("Harbor gate"), false);
+	const bool bLevelSaved = LevelSign && Save(Level);
+	Level->CleanupWorld();
+	if (!bLevelSaved) return false;
+	UWorld* Partitioned = CreateMap(FString(Slice2) + TEXT("L_IdentityWorld"), true);
+	if (!Partitioned) return false;
+	ATextRenderActor* ExternalSign = Partitioned->IsPartitionedWorld() ? PlaceSign(Partitioned, TEXT("Lighthouse"), true) : nullptr;
+	const bool bWorldSaved = ExternalSign && ExternalSign->GetExternalPackage() && Save(Partitioned) && Save(ExternalSign);
+	// An initialized World Partition must be torn down before the commandlet exits.
+	Partitioned->CleanupWorld();
+	return bWorldSaved;
+}
+
 /**
  * Unreal's own gather table for every package, from FPropertyLocalizationDataGatherer: the text a
  * gather takes from each saved package, with each package's localization namespace.
@@ -393,6 +567,10 @@ bool Evidence(const FString& Output)
 	TArray<FString> Files;
 	const FString Directory = FPaths::ProjectContentDir() / TEXT("Fixture/GameTextActions");
 	IFileManager::Get().FindFilesRecursive(Files, *Directory, TEXT("*.uasset"), true, false);
+	IFileManager::Get().FindFilesRecursive(Files, *Directory, TEXT("*.umap"), true, false, false);
+	// World Partition external actors are saved beside the content root, one package per actor.
+	IFileManager::Get().FindFilesRecursive(Files,
+		*(FPaths::ProjectContentDir() / TEXT("__ExternalActors__/Fixture/GameTextActions")), TEXT("*.uasset"), true, false, false);
 	Files.Sort();
 	TArray<TSharedPtr<FJsonValue>> Packages;
 	for (const FString& File : Files)
@@ -414,6 +592,9 @@ bool Evidence(const FString& Output)
 				Text->SetStringField(TEXT("namespace"), Data.NamespaceName);
 				Text->SetStringField(TEXT("key"), Site.KeyName);
 				Text->SetStringField(TEXT("source"), Data.SourceData.SourceString);
+#if !UE_VERSION_OLDER_THAN(5, 8, 0)
+				Text->SetStringField(TEXT("devNotes"), Site.DevNotes);
+#endif
 				Text->SetBoolField(TEXT("editorOnly"), Site.IsEditorOnly);
 				Texts.Add(MakeShared<FJsonValueObject>(Text));
 			}
@@ -456,6 +637,7 @@ bool RunGameTextActionsFixture(const FString& Params)
 	if (Stage == TEXT("DuplicateAssets")) return DuplicateAssets();
 	if (Stage == TEXT("Branch")) return Branch();
 	if (Stage == TEXT("EditBranch")) return EditBranch();
+	if (Stage == TEXT("Slice2")) return StringTables() && Literals() && Inheritance() && Levels();
 	if (Stage == TEXT("Evidence"))
 	{
 		FString Output;

@@ -4,6 +4,19 @@
 	"engineVersion": "5.7",
 	"packages": [
 		{
+			"package": "/Game/__ExternalActors__/Fixture/GameTextActions/Slice2/L_IdentityWorld/1/SG/KWYCKC1DDA97XCIKBA42M2",
+			"packageNamespace": "5B4DEFB791A4F04ED3A950C7A55DDF16",
+			"texts": [
+				{
+					"site": "/Game/Fixture/GameTextActions/Slice2/L_IdentityWorld.L_IdentityWorld:PersistentLevel.TextRenderActor_UAID_D843AE4DD6EBF60B03_1637055744.NewTextRenderComponent.Text",
+					"namespace": "",
+					"key": "9473D0114904DC386546579FEA65E5D5",
+					"source": "Lighthouse",
+					"editorOnly": false
+				}
+			]
+		},
+		{
 			"package": "/Game/Fixture/GameTextActions/BP_ActionSign",
 			"packageNamespace": "188E32724FD5DE7E23F66FE2A62C4028",
 			"texts": [
@@ -416,6 +429,144 @@
 					"namespace": "",
 					"key": "7B17FA1041394C3FDB911F8F097A12F1",
 					"source": "Coil of old rope",
+					"editorOnly": false
+				}
+			]
+		},
+		{
+			"package": "/Game/Fixture/GameTextActions/Slice2/BP_IdentityChildInherits",
+			"packageNamespace": "4728E5B34718D041A2F2F7AB35B1D943",
+			"texts": [
+				{
+					"site": "/Game/Fixture/GameTextActions/Slice2/BP_IdentityChildInherits.BP_IdentityChildInherits_C:SimpleConstructionScript_0.SCS_Node_0.CategoryName",
+					"namespace": "SCS",
+					"key": "Default",
+					"source": "Default",
+					"editorOnly": true
+				}
+			]
+		},
+		{
+			"package": "/Game/Fixture/GameTextActions/Slice2/BP_IdentityChildOverrides",
+			"packageNamespace": "2403EA714BBFA930C9764716EF026709",
+			"texts": [
+				{
+					"site": "/Game/Fixture/GameTextActions/Slice2/BP_IdentityChildOverrides.BP_IdentityChildOverrides_C:SimpleConstructionScript_0.SCS_Node_0.CategoryName",
+					"namespace": "SCS",
+					"key": "Default",
+					"source": "Default",
+					"editorOnly": true
+				},
+				{
+					"site": "/Game/Fixture/GameTextActions/Slice2/BP_IdentityChildOverrides.Default__BP_IdentityChildOverrides_C.Motto",
+					"namespace": "",
+					"key": "BAABF09441142CBF0F57A7B299A7D45D",
+					"source": "Full speed ahead",
+					"editorOnly": false
+				}
+			]
+		},
+		{
+			"package": "/Game/Fixture/GameTextActions/Slice2/BP_IdentityLiterals",
+			"packageNamespace": "CCEABC2135D334FF79B8AD8B4DDF39C3",
+			"texts": [
+				{
+					"site": "/Game/Fixture/GameTextActions/Slice2/BP_IdentityLiterals.BP_IdentityLiterals:EventGraph.K2Node_CallFunction_0.InText",
+					"namespace": "",
+					"key": "782CED2A4DE101C32458348CF8DA060B",
+					"source": "Lamp lit",
+					"editorOnly": true
+				},
+				{
+					"site": "/Game/Fixture/GameTextActions/Slice2/BP_IdentityLiterals.BP_IdentityLiterals_C:ExecuteUbergraph_BP_IdentityLiterals [Script Bytecode]",
+					"namespace": "",
+					"key": "782CED2A4DE101C32458348CF8DA060B",
+					"source": "Lamp lit",
+					"editorOnly": true
+				},
+				{
+					"site": "/Game/Fixture/GameTextActions/Slice2/BP_IdentityLiterals.BP_IdentityLiterals_C:ExecuteUbergraph_BP_IdentityLiterals [Script Bytecode]",
+					"namespace": "",
+					"key": "782CED2A4DE101C32458348CF8DA060B",
+					"source": "Lamp lit",
+					"editorOnly": false
+				},
+				{
+					"site": "/Game/Fixture/GameTextActions/Slice2/BP_IdentityLiterals.BP_IdentityLiterals_C:SimpleConstructionScript_0.SCS_Node_0.CategoryName",
+					"namespace": "SCS",
+					"key": "Default",
+					"source": "Default",
+					"editorOnly": true
+				}
+			]
+		},
+		{
+			"package": "/Game/Fixture/GameTextActions/Slice2/BP_IdentityParent",
+			"packageNamespace": "AB2C3E21EAF191EBB085EC8E0A0A04EB",
+			"texts": [
+				{
+					"site": "/Game/Fixture/GameTextActions/Slice2/BP_IdentityParent.BP_IdentityParent_C:SimpleConstructionScript_0.SCS_Node_0.CategoryName",
+					"namespace": "SCS",
+					"key": "Default",
+					"source": "Default",
+					"editorOnly": true
+				},
+				{
+					"site": "/Game/Fixture/GameTextActions/Slice2/BP_IdentityParent.Default__BP_IdentityParent_C.Motto",
+					"namespace": "",
+					"key": "4897610543C4051B24BB63A6DC0C7D54",
+					"source": "Steady as she goes",
+					"editorOnly": false
+				}
+			]
+		},
+		{
+			"package": "/Game/Fixture/GameTextActions/Slice2/DA_IdentityReferences",
+			"packageNamespace": "D61BBA82195B49C1127F3AF140A48AD5",
+			"texts": [
+				{
+					"site": "/Game/Fixture/GameTextActions/Slice2/DA_IdentityReferences.DA_IdentityReferences.SharedPrimary",
+					"namespace": "",
+					"key": "365050A64C5A2D582A556E8EA37E3A5A",
+					"source": "Welcome aboard",
+					"editorOnly": false
+				}
+			]
+		},
+		{
+			"package": "/Game/Fixture/GameTextActions/Slice2/L_IdentityLevel",
+			"packageNamespace": "CC039144A852B47CA6A9D87A74475D8B",
+			"texts": [
+				{
+					"site": "/Game/Fixture/GameTextActions/Slice2/L_IdentityLevel.L_IdentityLevel:PersistentLevel.TextRenderActor_0.NewTextRenderComponent.Text",
+					"namespace": "",
+					"key": "2201F3C34CAC4BF6D5B89480E97CAB79",
+					"source": "Harbor gate",
+					"editorOnly": false
+				}
+			]
+		},
+		{
+			"package": "/Game/Fixture/GameTextActions/Slice2/L_IdentityWorld",
+			"packageNamespace": "7A5088BFB7FCEE44DCA6F66DF803ED63",
+			"texts": []
+		},
+		{
+			"package": "/Game/Fixture/GameTextActions/Slice2/ST_IdentityTable",
+			"packageNamespace": "B0610D88C59FBFD7087EBD0BC9F5AC77",
+			"texts": [
+				{
+					"site": "/Game/Fixture/GameTextActions/Slice2/ST_IdentityTable.ST_IdentityTable",
+					"namespace": "IdentityTable",
+					"key": "Farewell",
+					"source": "Fair winds",
+					"editorOnly": false
+				},
+				{
+					"site": "/Game/Fixture/GameTextActions/Slice2/ST_IdentityTable.ST_IdentityTable",
+					"namespace": "IdentityTable",
+					"key": "Welcome",
+					"source": "Welcome aboard",
 					"editorOnly": false
 				}
 			]
