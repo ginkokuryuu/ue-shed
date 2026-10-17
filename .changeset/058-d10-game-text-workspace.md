@@ -11,6 +11,8 @@ Ship the Game Text workspace as a library: `@ue-shed/game-text/workspace` export
 - `localizationFiles`, the file access for PO and review writes;
 - the `reviewer` and `changeAuthor` policies.
 
+`makeGameTextOperations(host)` runs Unreal's localization steps (plan, run, cancel, changed files) for the same workspace, with hooks for the explicit engine root and progress notification.
+
 A scan now belongs to the workspace's scope, so it keeps running when the request that started it is interrupted, and a later request for the same project generation joins it. Workbench now runs on this entry point.
 
 The `WorkbenchOperation*` schemas and types are renamed `GameTextOperation*`. The old names remain as deprecated aliases in `/schema` and the deprecated root and `/browser` aggregates.

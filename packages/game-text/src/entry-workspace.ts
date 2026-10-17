@@ -12,3 +12,9 @@ export type {
 	GameTextWorkspaceProjectState
 } from "./workspace-host.js";
 export { makeGameTextWorkspaceLocalization } from "./workspace-localization.js";
+export {
+	makeGameTextOperations,
+	safeLocalizationLogLine,
+	type GameTextOperationsApi,
+	type GameTextOperationsHost
+} from "./workspace-operations.js";
