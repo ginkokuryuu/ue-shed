@@ -3,6 +3,7 @@ import { dirname, join, relative, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import ts from "typescript";
 import { isJsonObject, parseJsonObject } from "./json.ts";
+import { rawDecoderExportBaseline } from "./raw-decoder-export-baseline.ts";
 
 const repositoryRoot = dirname(dirname(fileURLToPath(import.meta.url)));
 const sourceRoots = ["apps", "packages", "extensions"];
@@ -827,6 +828,43 @@ export async function checkLocalizationBoundaries(root: string = repositoryRoot)
 	return failures;
 }
 
+/**
+ * Library entry points parse their input with unary domain parsers that fail with the package's
+ * domain error. An exported raw `Schema.decode*` or `Schema.validate*` factory leaks Schema's
+ * parse error to every caller instead.
+ */
+export async function checkDecoderExports(
+	root: string,
+	baseline: ReadonlySet<string> = rawDecoderExportBaseline
+) {
+	const failures: string[] = [];
+	const found = new Set<string>();
+	for (const directory of sourceRoots)
+		for (const absolute of await filesUnder(root, directory)) {
+			const path = relative(root, absolute).replaceAll("\\", "/");
+			if (!/\.tsx?$/u.test(path) || path.endsWith(".d.ts") || testSourcePattern.test(path))
+				continue;
+			if (!/^(?:apps|packages|extensions)\/[^/]+\/src\//u.test(path)) continue;
+			const text = await readFile(absolute, "utf8");
+			for (const match of text.matchAll(
+				/^export const (\w+)\s*(?::[^\n]*?)?=\s*Schema\.(?:decode|validate)\w*\(/gmu
+			)) {
+				const site = `${path}:${match[1]!}`;
+				found.add(site);
+				if (!baseline.has(site))
+					failures.push(
+						`${path}:${lineOf(text, match.index)}: ${match[1]!} exports a raw Schema decoder; export a domain parser`
+					);
+			}
+		}
+	// A converted site leaves the baseline in the same change, so it cannot come back unnoticed.
+	if (root === repositoryRoot && baseline === rawDecoderExportBaseline)
+		for (const site of baseline)
+			if (!found.has(site))
+				failures.push(`scripts/raw-decoder-export-baseline.ts: remove converted ${site}`);
+	return failures;
+}
+
 export async function checkArchitecture(root: string = repositoryRoot) {
 	return [
 		...(await checkCatalogUsage(root)),
@@ -834,7 +872,8 @@ export async function checkArchitecture(root: string = repositoryRoot) {
 		...(await checkServiceStrategies(root)),
 		...(await checkDomainServices(root)),
 		...(await checkLocalizationBoundaries(root)),
-		...(await checkWorkbenchBoundaries(root))
+		...(await checkWorkbenchBoundaries(root)),
+		...(await checkDecoderExports(root))
 	];
 }
 

@@ -5,6 +5,7 @@ import { join } from "node:path";
 import { after, before, test } from "node:test";
 import {
 	checkCatalogUsage,
+	checkDecoderExports,
 	checkLocalizationBoundaries,
 	checkSourcePolicy,
 	checkServiceStrategies,
@@ -361,4 +362,40 @@ test("rejects renderer IPC access outside transport adapters", async () => {
 			]);
 		}
 	);
+});
+
+test("rejects new exported raw Schema decoders outside the baseline", async () => {
+	const fixtureRoot = await mkdtemp(join(tmpdir(), "ue-shed-raw-decoders-"));
+	try {
+		const source = join(fixtureRoot, "packages/example/src");
+		await mkdir(source, { recursive: true });
+		await writeFile(
+			join(source, "schema.ts"),
+			[
+				'import { Effect, Schema } from "effect";',
+				"export const decodeKnown = Schema.decodeUnknownEffect(Known);",
+				"export const decodeNew = Schema.decodeUnknownSync(New);",
+				"export const validateNew: (input: unknown) => New =",
+				"\tSchema.validateSync(New);",
+				"const decodeLocal = Schema.decodeUnknownEffect(Local);",
+				"export const parseNew = (encoded: New) => decodeLocal(encoded).pipe(Effect.orDie);"
+			].join("\n")
+		);
+		await writeFile(
+			join(source, "schema.test.ts"),
+			"export const decodeInTest = Schema.decodeUnknownSync(New);\n"
+		);
+		assert.deepEqual(
+			await checkDecoderExports(
+				fixtureRoot,
+				new Set(["packages/example/src/schema.ts:decodeKnown"])
+			),
+			[
+				"packages/example/src/schema.ts:3: decodeNew exports a raw Schema decoder; export a domain parser",
+				"packages/example/src/schema.ts:4: validateNew exports a raw Schema decoder; export a domain parser"
+			]
+		);
+	} finally {
+		await rm(fixtureRoot, { recursive: true, force: true });
+	}
 });

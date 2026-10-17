@@ -9,6 +9,7 @@ import {
 	LocalizationSelection
 } from "./localization-schema.js";
 import { TextAudience, TextAudienceReason } from "./text-audience-schema.js";
+import { gameTextResponseParser } from "./response-parser.js";
 export * from "./identifiers.js";
 export * from "./text-audience-schema.js";
 
@@ -189,7 +190,10 @@ export const TextCorpusRunResult = Schema.Union([
 ]);
 export type TextCorpusRunResult = Schema.Schema.Type<typeof TextCorpusRunResult>;
 
-export const decodeTextCorpusRunResult = Schema.decodeUnknownEffect(TextCorpusRunResult);
+export const parseTextCorpusRunResult = gameTextResponseParser(
+	TextCorpusRunResult,
+	"corpus scan result"
+);
 
 /** Upper bound applied at the public query boundary, including Workbench IPC. */
 export const MAX_TEXT_QUERY_PAGE_SIZE = 50;
@@ -518,7 +522,10 @@ export const TextCorpusQueryRunResult = Schema.Union([
 	Schema.Struct({ status: Schema.Literal("failed"), error: TextCorpusPublicError })
 ]);
 export type TextCorpusQueryRunResult = Schema.Schema.Type<typeof TextCorpusQueryRunResult>;
-export const decodeTextCorpusQueryRunResult = Schema.decodeUnknownEffect(TextCorpusQueryRunResult);
+export const parseTextCorpusQueryRunResult = gameTextResponseParser(
+	TextCorpusQueryRunResult,
+	"corpus refresh result"
+);
 
 export const TextCorpusSearchRequest = Schema.Struct({
 	localization: Schema.optionalKey(LocalizationSelection),
@@ -566,7 +573,10 @@ export const TextCorpusSearchResult = Schema.Union([
 	Schema.Struct({ status: Schema.Literal("not_ready") })
 ]);
 export type TextCorpusSearchResult = Schema.Schema.Type<typeof TextCorpusSearchResult>;
-export const decodeTextCorpusSearchResult = Schema.decodeUnknownEffect(TextCorpusSearchResult);
+export const parseTextCorpusSearchResult = gameTextResponseParser(
+	TextCorpusSearchResult,
+	"text search result"
+);
 
 export const TextCorpusFocusRequest = Schema.Struct({
 	id: TextUnitId,
@@ -594,4 +604,7 @@ export const TextCorpusFocusResult = Schema.Union([
 	Schema.Struct({ status: Schema.Literal("not_ready") })
 ]);
 export type TextCorpusFocusResult = Schema.Schema.Type<typeof TextCorpusFocusResult>;
-export const decodeTextCorpusFocusResult = Schema.decodeUnknownEffect(TextCorpusFocusResult);
+export const parseTextCorpusFocusResult = gameTextResponseParser(
+	TextCorpusFocusResult,
+	"text focus result"
+);
