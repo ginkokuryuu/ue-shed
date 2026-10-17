@@ -51,6 +51,11 @@ export type AssetReaderTestShape = import("./asset-reader.js").AssetReaderTestAp
 /** @deprecated Use `ProjectIndexApi`. */
 export type ProjectIndexShape = import("./project-index.js").ProjectIndexApi;
 export {
+	batchProtocolPaths,
+	MAX_PROTOCOL_PATH_BYTES,
+	MAX_PROTOCOL_REQUEST_BYTES
+} from "./protocol-request-limit.js";
+export {
 	ProtocolOutputBudget,
 	ProtocolStreamFailure,
 	ProtocolStreamValidator,
@@ -96,3 +101,10 @@ export {
 export type { SavedProperty, SavedPropertyValue } from "@ue-shed/protocol";
 
 export * from "./saved-review.js";
+
+export {
+	NativeGameTextIndexClient,
+	nativeGameTextIndexClientLayer
+} from "./game-text-index-client.js";
+export { encodeGameTextJoinInput } from "@ue-shed/protocol";
+export type { GameTextIndexBuildRequest, GameTextIndexBuildOutcome } from "@ue-shed/protocol";

@@ -1,0 +1,17 @@
+{
+	"contract": {
+		"name": "uasset-io",
+		"version": {
+			"major": 1,
+			"minor": 13
+		}
+	},
+	"requestId": "index-capabilities",
+	"limits": {},
+	"operation": {
+		"kind": "game_text_index",
+		"request": {
+			"action": "capabilities"
+		}
+	}
+}

@@ -79,10 +79,15 @@ const DraftLocalizationRule = Schema.Union([
 		cultures: Schema.Record(Schema.String, Schema.Array(DraftTerm))
 	}))
 ]);
-const [DocumentV1, DocumentV2] = GameTextRuleDocument.members;
+const [DocumentV1, DocumentV2, DocumentV3] = GameTextRuleDocument.members;
 const DraftDocument = Schema.Union([
 	DocumentV1.mapFields((fields) => ({ ...fields, rules: Schema.Array(DraftSourceRule) })),
 	DocumentV2.mapFields((fields) => ({
+		...fields,
+		rules: Schema.Array(DraftSourceRule),
+		localizationRules: Schema.optionalKey(Schema.Array(DraftLocalizationRule))
+	})),
+	DocumentV3.mapFields((fields) => ({
 		...fields,
 		rules: Schema.Array(DraftSourceRule),
 		localizationRules: Schema.optionalKey(Schema.Array(DraftLocalizationRule))

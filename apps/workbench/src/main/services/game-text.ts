@@ -27,8 +27,6 @@ import {
 import { scopedGameTextOperation as scoped } from "./game-text-scope.js";
 import {
 	decodeGameTextRuleDocumentJson,
-	evaluateGameTextSourceQuality,
-	textQualityQuery,
 	makeRetainedGameTextIndexWith,
 	GameTextIndexSteps,
 	GameTextIndexProgressReporter,
@@ -231,16 +229,11 @@ export const WorkbenchGameTextLive = Layer.effect(
 				})
 			);
 		const retainedCorpus = (index: RetainedGameTextIndexResult) => index.corpus;
-		/** Source rules over the index page by page, or over the corpus where there is no index. */
+		/** Source rules over the index, page by page. */
 		const sourceQualityModel = (
 			index: RetainedGameTextIndexResult,
 			rules: GameTextRuleDocument
-		) =>
-			index.sourceQuality
-				? index.sourceQuality(rules)
-				: Effect.sync(() =>
-						textQualityQuery(evaluateGameTextSourceQuality(index.corpus, rules))
-					);
+		) => index.sourceQuality(rules);
 		const queryModel = (index: RetainedGameTextIndexResult) => index.query;
 		const querySearch = (index: RetainedGameTextIndexResult) => index.search;
 		const qualityModel = yield* Ref.make<TextQualityQuery | undefined>(undefined);
@@ -260,7 +253,10 @@ export const WorkbenchGameTextLive = Layer.effect(
 					localization: "Reading localization files",
 					packages: "Checking saved packages for text",
 					joining: "Building text index",
-					opening: "Opening text index"
+					opening: "Opening text index",
+					corpus: "Reading saved packages",
+					localization_quality: "Checking localization quality",
+					source_quality: "Checking source text"
 				};
 				return {
 					completed: current.completed,
@@ -691,43 +687,40 @@ export const WorkbenchGameTextLive = Layer.effect(
 					);
 					if (created.status === "failed") return created;
 				}
-				return yield* files
-					.readFileWithin(root, GAME_TEXT_RULES_RELATIVE_PATH, { maxBytes: 1_048_576 })
-					.pipe(
-						Effect.flatMap((bytes) =>
-							decodeGameTextRuleDocumentJson(new TextDecoder().decode(bytes))
-						),
-						Effect.flatMap((document) => prepareQualityRules(document)),
-						Effect.flatMap((prepared) =>
-							Effect.gen(function* () {
-								const latest = yield* project.current();
-								if (
-									latest.status !== "ready" ||
-									latest.project.projectRoot !== root ||
-									(latest.project.generation ?? 0) !==
-										(current.project.generation ?? 0)
-								)
-									return { status: "not_ready" as const };
-								if (prepared.status !== "ready") return prepared;
-								yield* Ref.set(qualityRulePath, { path, projectRoot: root });
-								return yield* publishQualityRules(prepared);
-							})
-						),
-						Effect.catch((error) =>
-							Effect.succeed({
-								status: "failed" as const,
-								error: {
-									code:
-										error._tag === "GameTextRuleDocumentError"
-											? ("invalid_rules" as const)
-											: ("read_failed" as const),
-									message: error.message,
-									recovery: error.recovery,
-									retrySafe: true
-								}
-							})
-						)
+				return yield* Effect.gen(function* () {
+					const bytes = yield* files.readFileWithin(root, GAME_TEXT_RULES_RELATIVE_PATH, {
+						maxBytes: 1_048_576
+					});
+					const document = yield* decodeGameTextRuleDocumentJson(
+						new TextDecoder().decode(bytes)
 					);
+					const prepared = yield* prepareQualityRules(document);
+					const latest = yield* project.current();
+					if (
+						latest.status !== "ready" ||
+						latest.project.projectRoot !== root ||
+						(latest.project.generation ?? 0) !== (current.project.generation ?? 0)
+					)
+						return { status: "not_ready" as const };
+					if (prepared.status !== "ready") return prepared;
+					yield* Ref.set(qualityRulePath, { path, projectRoot: root });
+					return yield* publishQualityRules(prepared);
+				}).pipe(
+					Effect.catch((error) =>
+						Effect.succeed({
+							status: "failed" as const,
+							error: {
+								code:
+									error._tag === "GameTextRuleDocumentError"
+										? ("invalid_rules" as const)
+										: ("read_failed" as const),
+								message: error.message,
+								recovery: error.recovery,
+								retrySafe: true
+							}
+						})
+					)
+				);
 			}
 		);
 
@@ -812,17 +805,15 @@ export const WorkbenchGameTextLive = Layer.effect(
 				if (!path) {
 					return yield* chooseQualityRules();
 				}
-				return yield* files.readFile(path, { maxBytes: 1_048_576 }).pipe(
-					Effect.flatMap((bytes) =>
-						decodeGameTextRuleDocumentJson(new TextDecoder().decode(bytes))
-					),
-					Effect.flatMap((document) =>
-						Effect.gen(function* () {
-							if ((yield* currentModel(retainedCorpus)) !== corpus)
-								return { status: "not_ready" as const };
-							return yield* previewQualityRules(document);
-						})
-					),
+				return yield* Effect.gen(function* () {
+					const bytes = yield* files.readFile(path, { maxBytes: 1_048_576 });
+					const document = yield* decodeGameTextRuleDocumentJson(
+						new TextDecoder().decode(bytes)
+					);
+					if ((yield* currentModel(retainedCorpus)) !== corpus)
+						return { status: "not_ready" as const };
+					return yield* previewQualityRules(document);
+				}).pipe(
 					Effect.catch((error) =>
 						Effect.succeed({
 							status: "failed" as const,

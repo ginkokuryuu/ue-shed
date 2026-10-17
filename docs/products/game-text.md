@@ -265,7 +265,7 @@ The compact corpus path is governed by Plan 033:
 
 ## Reviewing text in Workbench
 
-> Status: shipped by [Plan 053](../../plans/053-game-text-review-workspace.md); the design is in
+> Status: shipped by [Plan 053](../../plans/archive/053-game-text-review-workspace.md); the design is in
 > [`ideas/game-text-review-workspace.md`](../ideas/game-text-review-workspace.md).
 
 The **Text** view is a list of lines and a page per line, built to stay usable with tens of
@@ -686,7 +686,7 @@ The first quality slice must prove:
 > Unreal processes, PO editing and review state. [Plan 052](../../plans/052-text-identity-and-scope-tools.md)
 > adds origin and changed-file filters, key-change detection with translation carry-over, and an
 > all-languages CSV; its Perforce file-list bridge is planned but not built.
-> [Plan 053](../../plans/053-game-text-review-workspace.md) reshapes the Workbench around problems,
+> [Plan 053](../../plans/archive/053-game-text-review-workspace.md) reshapes the Workbench around problems,
 > Filter, Display, picked cultures, a page per line and bulk actions (see
 > [Reviewing text in Workbench](#reviewing-text-in-workbench)). Plan 051's Phase 8 extensions remain
 > proposals.
@@ -869,28 +869,40 @@ decorator names without case).
 UE Shed adds checks the compile validator does not perform: source/translation argument and modifier
 comparison, malformed modifier parameters that Unreal treats as literals, whitespace and line-break
 drift relative to source, PO escape safety, empty entries, notes, and duplicate source identities.
-These are evidence-based built-ins; no rule file is required. Version-1 and version-2 project rule
-files may add `disabledLocalizationChecks`, an array of built-in IDs; `segmentSeparator`, text
-such as `"//"` that joins a line's segments and must appear as often in each translation;
-`optionalTags`, rich-text tags a translation may add or leave out; and `optionalArguments`,
-arguments the game always supplies, which a translation may add along with a tag around only
-them. None changes the source rules. The package README lists every check with its severity and rule.
+These are evidence-based built-ins; no rule file is required. A version-3 project rule file sets
+each check's policy under `checks`: whether it runs, its severity, its scope and its parameters,
+over a `default` or `none` preset. Version-1 and version-2 files keep loading, and their
+`disabledLocalizationChecks`, `segmentSeparator` (text such as `"//"` that joins a line's
+segments and must appear as often in each translation), `optionalTags` (rich-text tags a
+translation may add or leave out) and `optionalArguments` (arguments the game always supplies)
+read as the equivalent check settings; `migrateGameTextRuleDocument` rewrites them as version 3.
+A check's scope (cultures, roles, object path prefixes) is applied after it finds something, and a
+check that takes another's finding (a placeholder translation instead of its length) does so only
+when it runs and is in scope, so an out-of-scope check never hides an in-scope one. None changes
+the source rules. `localizationCheckCatalogue` describes every check: whether
+it models Unreal (`unreal`) or is a judgment (`heuristic`), its label, default severity, parameter
+schema with defaults and a condition text generated from those parameters. The package README's
+check table is generated from it, so hosts can show the same descriptions instead of writing their
+own.
 
 This falls short of [base, not constraints](../vision-and-architecture.md#base-not-constraints).
-The parsers follow Unreal, but every built-in's severity and the heuristics' thresholds and word
-lists (length ratios, placeholder words, boundary whitespace policy) are fixed in code. Projects and
-hosts can only disable a check, and a host cannot add its own checks to the same report.
-Moving each check's severity, scope and parameters into the rule document, with the current values
-as an optional default preset, and opening the report to host-defined checks is open work.
+The parsers follow Unreal, and a version-3 rule file now sets each built-in's severity and the
+heuristics' thresholds and word lists (length ratios, placeholder words and markers, short-text
+limits). Some policy is still fixed in code (the audience and debug-content rules behind
+`culture_invariant_text`, boundary whitespace policy) and is open work. A version-3 file can define
+its own checks (`customChecks`: patterns, lengths and forbidden terms on the source or each
+translation, each scoped by culture, role and path) that report beside the built-ins with the same
+evidence, review and workspace model.
 Hosts whose projects cannot store translator notes (packages saved by UE 4.27 and by UE5 before 5.8;
 String Tables and UE 5.8+ can) can pass `disabledChecks: ["missing_translator_notes"]`.
 
-Indexed hosts run these checks through an opened model's `localizationQuality(options?,
-ruleDocument?)`, which checks the join in pages of 256 lines and yields between them. On large
-targets the scan takes minutes, so its options also take `onProgress`, called with
-`{ checkedLines, totalLines, findings }` once before the scan and after each page; `totalLines` is
-known from the first call, so a host can show a percentage. Progress does not change the findings,
-their order or IDs. The callback must be cheap and must not throw.
+Indexed hosts run these checks through an opened model's `localizationQuality(ruleDocument?,
+options?)`, which checks the join in pages of 256 lines and yields between them. On large
+targets the scan takes minutes, so it reports `localization_quality` progress through
+`GameTextIndexProgressReporter`, the same reporter index refreshes use: `{ completed, total,
+findings }` once before the scan and after each page; `total` is known from the first event, so a
+host can show a percentage. Progress does not change the findings, their order or IDs. The
+reporter must be cheap and must not throw.
 
 Notes, shared source text and the source checks are facts about the source line, not a translation.
 They report once per line, under the target's native culture, or the line's first culture in the
@@ -1125,6 +1137,24 @@ disk now, so a problem already in a touched file counts too.
   hold gathered text only warn.
 - Fixes are made in Unreal (ADR 0009 addendum); the way forward names the step, such as carrying
   translations with `loc run prepare --carry`.
+
+### Comparing two copies of a package
+
+`diffPackageText(before, after)` compares the text records the reader produced for two copies of
+one package, for example the depot's head revision and the local file, and lists what changed place
+by place:
+
+- **added** and **removed**: text at a place only one copy has;
+- **re-keyed**: the same place with another id (namespace and key, String Table reference, or a key
+  that became culture invariant), with whether the text changed too;
+- **edited**: the same place and id with other source text or translator notes.
+
+Places match by their position inside the package (object path below the package name, then the
+row, entry or property chain), not by the package's saved name, so a branch copy lines up with its
+original. Text that moved to another place reads as removed and added; pairing moves is the
+caller's policy, as in [Key changes](#key-changes). A diff is marked incomplete when either copy was
+read only in part. It is a pure function: fetching the earlier revision stays with the host (Plan
+052 Phase 3).
 
 ### Source control
 

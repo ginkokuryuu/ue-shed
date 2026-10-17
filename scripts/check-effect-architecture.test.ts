@@ -5,6 +5,8 @@ import { join } from "node:path";
 import { after, before, test } from "node:test";
 import {
 	checkCatalogUsage,
+	checkCompositionPolicy,
+	checkDecoderExports,
 	checkLocalizationBoundaries,
 	checkSourcePolicy,
 	checkServiceStrategies,
@@ -361,4 +363,133 @@ test("rejects renderer IPC access outside transport adapters", async () => {
 			]);
 		}
 	);
+});
+
+test("rejects new exported raw Schema decoders outside the baseline", async () => {
+	const fixtureRoot = await mkdtemp(join(tmpdir(), "ue-shed-raw-decoders-"));
+	try {
+		const source = join(fixtureRoot, "packages/example/src");
+		await mkdir(source, { recursive: true });
+		await writeFile(
+			join(source, "schema.ts"),
+			[
+				'import { Effect, Schema } from "effect";',
+				"export const decodeKnown = Schema.decodeUnknownEffect(Known);",
+				"export const decodeNew = Schema.decodeUnknownSync(New);",
+				"export const validateNew: (input: unknown) => New =",
+				"\tSchema.validateSync(New);",
+				"const decodeLocal = Schema.decodeUnknownEffect(Local);",
+				"export const parseNew = (encoded: New) => decodeLocal(encoded).pipe(Effect.orDie);"
+			].join("\n")
+		);
+		await writeFile(
+			join(source, "schema.test.ts"),
+			"export const decodeInTest = Schema.decodeUnknownSync(New);\n"
+		);
+		assert.deepEqual(
+			await checkDecoderExports(
+				fixtureRoot,
+				new Set(["packages/example/src/schema.ts:decodeKnown"])
+			),
+			[
+				"packages/example/src/schema.ts:3: decodeNew exports a raw Schema decoder; export a domain parser",
+				"packages/example/src/schema.ts:4: validateNew exports a raw Schema decoder; export a domain parser"
+			]
+		);
+	} finally {
+		await rm(fixtureRoot, { recursive: true, force: true });
+	}
+});
+
+test("checks named, renamed and default decoder exports through their local bindings", async () => {
+	const fixtureRoot = await mkdtemp(join(tmpdir(), "ue-shed-decoder-bindings-"));
+	try {
+		const source = join(fixtureRoot, "packages/example/src");
+		await mkdir(source, { recursive: true });
+		await writeFile(
+			join(source, "schema.ts"),
+			[
+				'import { Effect, Schema } from "effect";',
+				"const decodeNamed = Schema.decodeUnknownEffect(New);",
+				"const decodeRenamed = Schema.decodeUnknownSync(New);",
+				"const decodeKnown = Schema.validateSync(Known);",
+				"const decodeLocal = Schema.decodeUnknownEffect(Local);",
+				"const parseLocal = (input: Local) => decodeLocal(input).pipe(Effect.orDie);",
+				"export { decodeNamed };",
+				"export { decodeRenamed as parseRenamed };",
+				"export { decodeKnown as parseKnown };",
+				"export type { decodeLocal };",
+				"export { parseLocal };",
+				"export default decodeLocal;",
+				"export type { decodeNamed as DecoderType };",
+				"// export const decodeComment = Schema.decodeUnknownSync(New);",
+				'export const label = "export const decodeString = Schema.decodeUnknownSync(New);";',
+				"export { decodeLater as parseLater };",
+				"const decodeLater = Schema.validateSync(New);",
+				"const decodeAlias = decodeNamed;",
+				"export { decodeAlias as parseAlias };",
+				"const decodeWrapped = (Schema.validateSync(New) satisfies (input: unknown) => New);",
+				"export { decodeWrapped };",
+				"export const decodePreviouslyKnown = Schema.decodeUnknownEffect(Known);",
+				"export { decodePreviouslyKnown as decodeCompatibilityAlias };"
+			].join("\n")
+		);
+		assert.deepEqual(
+			await checkDecoderExports(
+				fixtureRoot,
+				new Set([
+					"packages/example/src/schema.ts:parseKnown",
+					"packages/example/src/schema.ts:decodePreviouslyKnown"
+				])
+			),
+			[
+				"packages/example/src/schema.ts:7: decodeNamed exports a raw Schema decoder; export a domain parser",
+				"packages/example/src/schema.ts:8: parseRenamed exports a raw Schema decoder; export a domain parser",
+				"packages/example/src/schema.ts:12: default exports a raw Schema decoder; export a domain parser",
+				"packages/example/src/schema.ts:16: parseLater exports a raw Schema decoder; export a domain parser",
+				"packages/example/src/schema.ts:19: parseAlias exports a raw Schema decoder; export a domain parser",
+				"packages/example/src/schema.ts:21: decodeWrapped exports a raw Schema decoder; export a domain parser"
+			]
+		);
+	} finally {
+		await rm(fixtureRoot, { recursive: true, force: true });
+	}
+});
+
+test("rejects layer factories taking a Layer and make* exports only their module uses", async () => {
+	const fixtureRoot = await mkdtemp(join(tmpdir(), "ue-shed-composition-"));
+	try {
+		const source = join(fixtureRoot, "packages/example/src");
+		await mkdir(source, { recursive: true });
+		await writeFile(
+			join(source, "service.ts"),
+			[
+				'import { Layer } from "effect";',
+				"export function serviceLayer(config: string, ids: Layer.Layer<Ids>) {",
+				"\treturn ids;",
+				"}",
+				"export const viewLayer = <E>(",
+				"\tbacking: Layer.Layer<Index, E>",
+				") => backing;",
+				"export const makeUnused = () => 1;",
+				"export function makeShared() {",
+				"\treturn 2;",
+				"}",
+				"export function configuredLayer(config: string) {",
+				"\treturn config;",
+				"}"
+			].join("\n")
+		);
+		await writeFile(
+			join(source, "service.test.ts"),
+			'import { makeShared } from "./service.js";\nmakeShared();\n'
+		);
+		assert.deepEqual(await checkCompositionPolicy(fixtureRoot), [
+			"packages/example/src/service.ts:2: serviceLayer takes a Layer; require its service instead",
+			"packages/example/src/service.ts:5: viewLayer takes a Layer; require its service instead",
+			"packages/example/src/service.ts:8: makeUnused is used only in its module; do not export it"
+		]);
+	} finally {
+		await rm(fixtureRoot, { recursive: true, force: true });
+	}
 });

@@ -30,14 +30,15 @@ it.effect("releases an interrupted retained acquisition before its borrower exit
 		let releases = 0;
 		const acquired = yield* Deferred.make<void>();
 		const retained = yield* makeRetainedGameTextIndexWith(() =>
-			Effect.acquireRelease(Effect.void, () =>
-				Effect.sync(() => {
-					releases++;
-				})
-			).pipe(
-				Effect.andThen(Deferred.succeed(acquired, undefined)),
-				Effect.andThen(Effect.never)
-			)
+			Effect.gen(function* () {
+				yield* Effect.acquireRelease(Effect.void, () =>
+					Effect.sync(() => {
+						releases++;
+					})
+				);
+				yield* Deferred.succeed(acquired, undefined);
+				return yield* Effect.never;
+			})
 		);
 		const fiber = yield* retained.refresh({ projectRoot: "fixture" }).pipe(Effect.forkScoped);
 		yield* Deferred.await(acquired);

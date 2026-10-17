@@ -17,7 +17,7 @@ import { applyLocalizationKeyChanges, localizationKeyChanges } from "./localizat
 import type { LocalizationQualityReport } from "./localization-quality-schema.js";
 import type { LocalizationJoin } from "./localization-schema.js";
 import {
-	WorkspaceQualityFilter,
+	BuiltInQualityFilter,
 	localizationQualityWorkspace,
 	localizationQualityWorkspaceOf
 } from "./localization-workspace.js";
@@ -25,7 +25,7 @@ import { textCorpusQuery } from "./query.js";
 import {
 	decodeGameTextRuleDocumentJson,
 	evaluateGameTextSourceQuality
-} from "./quality-rules-v2.js";
+} from "./game-text-rules.js";
 import type { TextCorpus, TextCorpusSearchRequest } from "./schema.js";
 import { staleRuntimeCopy } from "./text-copies.js";
 import { TextAudience, TextOutOfScopeReason } from "./text-audience-schema.js";
@@ -347,10 +347,10 @@ describe.skipIf(!executable)("Game Text problem cases in the saved fixture", () 
 							);
 							const indexed = localizationQualityWorkspaceOf(
 								indexedSource,
-								yield* result.localizationQuality!({}, ruleDocument)
+								yield* result.localizationQuality(ruleDocument)
 							);
 							for (const culture of [undefined, ...result.localizationJoin.cultures])
-								for (const filter of WorkspaceQualityFilter.literals) {
+								for (const filter of BuiltInQualityFilter.literals) {
 									const request = {
 										target: result.localizationJoin.target,
 										filter,

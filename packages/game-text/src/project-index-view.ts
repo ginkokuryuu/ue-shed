@@ -14,12 +14,13 @@ export type GameTextProjectView =
 	| { readonly kind: "source" }
 	| { readonly kind: "localization"; readonly target: string };
 
-/** Target-specific joined pointers share the same package layers and string IDs. */
-export function projectIndexViewLayer<E, R>(
-	view: GameTextProjectView | undefined,
-	backing: Layer.Layer<SharedIndex, E, R>
-) {
-	if (!view) return backing;
+/**
+ * One view of a shared index: target-specific joined pointers over the same package layers and
+ * string IDs. It wraps the `SharedIndex` it is provided with.
+ */
+export function projectIndexViewLayer(
+	view: GameTextProjectView
+): Layer.Layer<SharedIndex, never, SharedIndex> {
 	const identity = view.kind === "source" ? ["source"] : ["localization", view.target];
 	const namespace = `target-join.${createHash("sha256").update(JSON.stringify(identity)).digest("hex")}.`;
 	const name = (value: string) => (joinedNames.has(value) ? namespace + value : value);
@@ -81,5 +82,5 @@ export function projectIndexViewLayer<E, R>(
 				writer: () => backing.writer().pipe(Effect.map(writer))
 			});
 		})
-	).pipe(Layer.provide(backing));
+	);
 }

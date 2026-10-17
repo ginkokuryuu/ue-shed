@@ -1,6 +1,7 @@
 export * from "./corpus.js";
 export * from "./package-text-record.js";
 export * from "./package-text-candidates.js";
+export * from "./package-text-diff.js";
 export * from "./snapshot-format.js";
 export * from "./localization-import.js";
 export {
@@ -37,7 +38,7 @@ export {
 	type SnapshotManifest
 } from "./snapshot-store.js";
 export * from "./quality-schema.js";
-export * from "./quality-rules-v2.js";
+export * from "./game-text-rules.js";
 export * from "./localization-reports.js";
 export * from "./localization-words.js";
 export * from "./quality.js";
@@ -53,6 +54,7 @@ export * from "./localization-key-changes.js";
 export * from "./localization-export.js";
 export * from "./localization-gate.js";
 export * from "./schema.js";
+export * from "./response-parser.js";
 export * from "./localization-schema.js";
 export * from "./localization.js";
 export * from "./localization-query.js";
@@ -62,6 +64,9 @@ export * from "./localization-edits.js";
 export * from "./localization-review.js";
 export * from "./localization-workspace.js";
 export * from "./localization-check-ids.js";
+export * from "./localization-check-catalogue.js";
+export * from "./localization-check-scope.js";
+export * from "./localization-custom-checks.js";
 export * from "./localization-quality-schema.js";
 export * from "./localization-checks.js";
 export * from "./unreal-text-syntax.js";
@@ -94,3 +99,4 @@ export {
 	inspectJoinedTarget,
 	type JoinedTargetReader
 } from "./joined-target-reader.js";
+export { nativeIndexBuilderLayer } from "./native-index-builder.js";

@@ -358,76 +358,69 @@ export function makeAuthoringHttpClient(options: AuthoringHttpClientOptions): Au
 		readonly operation: string;
 		readonly payload: AuthoringTransportRequest;
 	}) =>
-		Effect.tryPromise({
-			try: (signal) =>
-				fetch(options.endpoint, {
-					body: JSON.stringify(args.payload),
-					headers: { "content-type": "application/json" },
-					method: "POST",
-					signal
-				}),
-			catch: (cause) =>
-				new AuthoringClientError({
-					cause,
-					operation: args.operation,
-					recovery: "Verify the adopted UE Shed host is running, then retry."
-				})
-		}).pipe(
-			Effect.flatMap((response) =>
-				response.ok
-					? Effect.tryPromise({
-							try: () => response.json(),
-							catch: (cause) =>
-								new AuthoringClientError({
-									cause,
-									operation: args.operation,
-									recovery:
-										"The adopted host returned invalid JSON. Restart it and retry."
-								})
+		Effect.gen(function* () {
+			const response = yield* Effect.tryPromise({
+				try: (signal) =>
+					fetch(options.endpoint, {
+						body: JSON.stringify(args.payload),
+						headers: { "content-type": "application/json" },
+						method: "POST",
+						signal
+					}),
+				catch: (cause) =>
+					new AuthoringClientError({
+						cause,
+						operation: args.operation,
+						recovery: "Verify the adopted UE Shed host is running, then retry."
+					})
+			});
+			if (!response.ok)
+				return yield* Effect.fail(
+					new AuthoringClientError({
+						cause: { status: response.status },
+						operation: args.operation,
+						recovery: `The adopted host rejected the request with HTTP ${response.status}.`
+					})
+				);
+			const input = yield* Effect.tryPromise({
+				try: () => response.json(),
+				catch: (cause) =>
+					new AuthoringClientError({
+						cause,
+						operation: args.operation,
+						recovery: "The adopted host returned invalid JSON. Restart it and retry."
+					})
+			});
+			const transport = yield* decodeAuthoringTransportResponse(input).pipe(
+				Effect.mapError(
+					(cause) =>
+						new AuthoringClientError({
+							cause,
+							operation: args.operation,
+							recovery: "The adopted host returned an invalid transport response."
 						})
-					: Effect.fail(
-							new AuthoringClientError({
-								cause: { status: response.status },
-								operation: args.operation,
-								recovery: `The adopted host rejected the request with HTTP ${response.status}.`
-							})
-						)
-			),
-			Effect.flatMap((input) =>
-				decodeAuthoringTransportResponse(input).pipe(
-					Effect.mapError(
-						(cause) =>
-							new AuthoringClientError({
-								cause,
-								operation: args.operation,
-								recovery: "The adopted host returned an invalid transport response."
-							})
-					)
 				)
-			),
-			Effect.flatMap((response) =>
-				response.status === "transport_error"
-					? Effect.fail(
-							new AuthoringClientError({
-								cause: response.error.message,
-								operation: args.operation,
-								recovery: response.error.recovery
-							})
-						)
-					: args.decode(response.value).pipe(
-							Effect.mapError(
-								(cause) =>
-									new AuthoringClientError({
-										cause,
-										operation: args.operation,
-										recovery:
-											"The adopted host response does not match the authoring contract."
-									})
-							)
-						)
-			),
-			Effect.withSpan(args.operation)
-		);
+			);
+			if (transport.status === "transport_error")
+				return yield* Effect.fail(
+					new AuthoringClientError({
+						cause: transport.error.message,
+						operation: args.operation,
+						recovery: transport.error.recovery
+					})
+				);
+			return yield* args.decode(transport.value).pipe(
+				Effect.mapError(
+					(cause) =>
+						new AuthoringClientError({
+							cause,
+							operation: args.operation,
+							recovery:
+								"The adopted host response does not match the authoring contract."
+						})
+				)
+			);
+		}).pipe(Effect.withSpan(args.operation));
 
 	return AuthoringClient.of({
 		getCatalogProgress: () =>
