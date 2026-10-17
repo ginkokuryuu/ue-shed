@@ -16,16 +16,16 @@
 
 ## Status
 
-- **State**: TODO
+- **State**: IN PROGRESS
 - **Priority**: P1
 - **Effort**: XL (four lanes, about a week; unfinished items are acceptable)
 - **Risk**: MEDIUM. Lane A adds the first asset writes for text outside DataTables, and A2 and lane D
   contain breaking API changes. All of it ships together as 0.17.0 with migration notes.
 - **Depends on**: PR #99 (Game Text identity fixture and Blueprint bytecode text) and PR #98
   (external actor text headers) merged. Lane A cannot start without #99.
-- **Engines**: the executing machine has UE 5.7 only (decision 11). Lane A runs and verifies on
-  5.7; 5.8 verification is recorded as a gap per item, and A5 is `BLOCKED`.
-- **PR #101** (draft, opt-in native index builder) merges before the items that change behaviour
+- **Engines**: parser, fixture and Unreal integration changes require verification on UE 5.7 and
+  UE 5.8 (decision 11). Missing engine evidence keeps an item incomplete. A5 separately needs UE 4.27.
+- **PR #101** (opt-in native index builder) merges before the items that change behaviour
   it duplicates (decision 12): A1, A2, B5, B7, B8 and C5.
 - **Category**: direction
 - **Planned at**: `docs/plan-058-ue-shed-week`, 2026-10-17
@@ -36,8 +36,8 @@
 | A2   | Graph pin text as Game Text places             | A    | BLOCKED — waits #101 |
 | A3   | Game Text actions: editor plugin and API       | A    | TODO                 |
 | A4   | Identity fixture, slice 2                      | A    | TODO                 |
-| A5   | UE 4.27 identity slice                         | A    | BLOCKED — no UE 4.27 |
-| A6   | Stretch: text diff of two package versions     | A    | TODO                 |
+| A5   | UE 4.27 identity slice                         | A    | TODO                 |
+| A6   | Stretch: text diff of two package versions     | A    | DONE — #104          |
 | B1   | Check catalogue                                | B    | TODO                 |
 | B2   | Rules file v3                                  | B    | TODO                 |
 | B3   | Parameterised, scoped checks                   | B    | TODO                 |
@@ -49,12 +49,12 @@
 | C1   | Stage breakdown on real projects               | C    | TODO                 |
 | C2   | Prepare the query once, off the main thread    | C    | TODO                 |
 | C3   | Quality scan in a worker                       | C    | TODO                 |
-| C4   | Column cache per reader                        | C    | TODO                 |
+| C4   | Column cache per reader                        | C    | DONE — #116          |
 | C5   | Spike: binary package-text output              | C    | BLOCKED — waits #101 |
 | C6   | Electron vs Node build time                    | C    | TODO                 |
 | C7   | Bytecode reader cost                           | C    | TODO                 |
 | D1   | `game-text` entry points                       | D    | TODO                 |
-| D2   | Reader batching inside the index source        | D    | TODO                 |
+| D2   | Reader batching inside the index source        | D    | DONE — #108          |
 | D3   | Unreal path module                             | D    | TODO                 |
 | D4   | One error shape                                | D    | TODO                 |
 | D5   | Classified causes instead of prose             | D    | TODO                 |
@@ -108,7 +108,7 @@ downstream host, and an audit against an external Effect coding standard and err
   flag, 126 keep no `cause`; messages are built from `String(cause)` (72) and `Cause.pretty` (47);
   134 `instanceof` checks on tagged errors; 13 catch-alls in `packages/host/src/authoring.ts`; 83%
   of exports have no JSDoc.
-- **Native index builder (PR #101, draft).** Adds an opt-in Rust `GameTextIndexBuilder`
+- **Native index builder (PR #101).** Adds an opt-in Rust `GameTextIndexBuilder`
   (`nativeIndexBuilderLayer`, new crate `crates/game-text-index`, uasset-io protocol 1.13
   `game_text_index` operations). TypeScript stays the default and queries stay in JavaScript. The
   crate re-implements part of the TypeScript policy in Rust (`join_policy.rs`: "mirrored from
@@ -140,11 +140,11 @@ downstream host, and an audit against an external Effect coding standard and err
    `docs/engineering/functional-design.md`.
 10. **ID actions run through an editor plugin over Remote Control**, like authoring, with a
     commandlet entry for headless batches.
-11. **Lane A runs on UE 5.7 only.** The executing machine has no UE 5.8 or UE 4.27. Build and
-    verify every lane A item on 5.7; do not install engines. Per `testing.md`, a 5.7 pass does not
-    complete verification, so each lane A PR states "5.8: not run (no engine)" and the item's state
-    becomes `DONE (5.7) — 5.8 pending` instead of `DONE`. 5.8 verification is a follow-up on a
-    machine that has it. A5 stays `BLOCKED`.
+11. **Verify lane A on both UE 5.7 and UE 5.8 before merge**, as required by `AGENTS.md` and
+    `testing.md`. The original executor had only 5.7; that machine limit is not a verification
+    exemption. Discover installed engines or use explicit configuration rather than assuming a
+    version is absent. Report unavailable checks explicitly and keep the affected item incomplete.
+    A5 additionally requires UE 4.27. Do not install engines as part of this plan.
 12. **PR #101 merges first.** Items that change behaviour the native builder duplicates (A1, A2,
     B5, B7, B8, C5; see "Two index builders") wait for #101 to merge and then change both builders.
     Other items do not wait.
@@ -153,10 +153,10 @@ downstream host, and an audit against an external Effect coding standard and err
 
 - Windows, Node 26+, pnpm 11, Rust (CI pins 1.98.1 with rustfmt and clippy), wasm-pack 0.14,
   git and an authenticated `gh`.
-- **Lane A** additionally needs UE 5.7 with engine source and Visual Studio 2022 with the Unreal
-  C++ workload (decision 11: 5.8 and 4.27 are not available). Discover the engine from the
-  registry or `UE_SHED_UNREAL_57_ROOT`; registry entries can outlive an uninstalled engine, so
-  confirm the folder exists. Never commit a machine path.
+- **Lane A** additionally needs UE 5.7 and UE 5.8 with engine source, plus Visual Studio 2022
+  with the Unreal C++ workload. Discover engines from the registry or explicit configuration;
+  registry entries can outlive an uninstalled engine, so confirm each folder exists. A5 separately
+  needs UE 4.27. Never commit a machine path.
 - **Lane C's real-project measurements** need read-only local copies of a large UE 4.27 project
   with a localization target and a large UE 5 World Partition project, provided by the owner. If
   they are absent, use the generated scale harness (`scripts/game-text-scale.md`) and record that
@@ -176,11 +176,11 @@ downstream host, and an audit against an external Effect coding standard and err
   if an editor the plan did not start is open, STOP and ask the owner.
 - Measurements run alone, never while a build, an engine task or another lane's tests run.
 - Run targeted checks while iterating, `pnpm run check:precommit` before each push, and `pnpm check`
-  before asking for review. Parser, fixture and Unreal-integration PRs pass on UE 5.7: the
-  relevant `fixture:*` commands, `test:uasset-conformance`, `check:unreal`, and
-  `test:unreal-plugins` / `test:unreal-authoring` with `UE_SHED_UNREAL_ENGINE_ROOT` set to 5.7. Do
-  not run `pnpm test:uasset-engine-matrix`; it requires 5.8 and fails at startup. List in the PR
-  body which 5.8 checks the change needs, so the follow-up knows what to run. CI must be green.
+  before asking for review. Run relevant `fixture:*` commands, `test:uasset-conformance`,
+  `check:unreal`, and `test:unreal-plugins` / `test:unreal-authoring` on both UE 5.7 and UE 5.8,
+  selecting each engine explicitly. Parser and codegen changes also run
+  `pnpm test:uasset-engine-matrix`. Report each version's result and unavailable checks in the PR
+  body; an unavailable relevant version prevents complete verification. CI must be green.
 - PR bodies say what changed, why, how it was verified (per engine where relevant), what is
   breaking, and the migration note. Link the item ID.
 - **Merging is the owner's**, unless the owner has explicitly authorised merging in the running
@@ -214,7 +214,7 @@ Stop and ask the owner when:
 
 Goal: a host can regenerate a text's key, adopt another id's key (merge), change its source,
 recompile the owning Blueprint and confirm the new ids by re-reading, for every place the identity
-fixture covers, on UE 5.7 (decision 11; 5.8 follows on another machine).
+fixture covers, on both UE 5.7 and UE 5.8 (decision 11).
 
 First PR of the lane: add a short "Asset key fixes" note to Plan 052's out-of-scope section pointing
 to this plan.
@@ -235,7 +235,7 @@ to this plan.
 - Bump any persisted index or snapshot format that stores object paths so old caches rebuild.
 - **Accept when** the identity fixture's `Branched/` packages report `Branched/` object paths, the
   committed 4.27 legacy fixture reports full paths (saved bytes; no engine run needed), PR #99's
-  reader test no longer derives the package from `packageFile`, and the 5.7 checks pass.
+  reader test no longer derives the package from `packageFile`, and both engine versions pass.
 
 ### A2. Graph pin text as Game Text places
 
@@ -244,18 +244,24 @@ to this plan.
 - Fold the compiled bytecode literal (`ScriptBytecode` place from PR #99) under the pin it came
   from only when that is provable. PR #99 deduplicates `(identity, source)` per function and
   reports one `ScriptBytecode` path with no node or pin provenance
-  (`crates/uasset-inspection/src/projection.rs`, `DecodedAsset::Function`). Fold when exactly one
-  pin in the function has that identity; otherwise keep the compiled literal as its own place,
-  marked ambiguous, and do not give any pin a stale state from it. Report stale-compile only
-  when the fold is unique and the compiled literal and the pin differ. Per-pin provenance from
-  bytecode is out of scope.
+  (`crates/uasset-inspection/src/projection.rs`, `DecodedAsset::Function`). Matching identity or
+  source, even with exactly one current pin in the function, does not prove origin: a pin may
+  have been removed or re-keyed since compilation, or a macro may contribute the literal.
+  Require explicit reader evidence linking the compiled site to that pin before folding or
+  assigning a per-pin stale-compile state. Without that evidence, keep the compiled literal as
+  a separate place with unproven attribution; use ambiguous attribution when multiple origins
+  remain possible. Do not assign any pin a stale state from unproven or ambiguous evidence.
+  Adding per-pin bytecode provenance is out of scope, so PR #99's deduplicated output keeps this
+  conservative fallback.
 - Replace "UE 5.7" wording in graph comments and errors with the real version range.
 - With PR #101: the native place keys (`package_evidence.rs` `places`, keyed on location codes
   0–2) and `join_places.rs` need the new pin location kind.
-- **Accept when** the identity fixture's Print Text pins appear as pin places with the same key and
-  source Unreal gathers, compiled copies fold under them, and a deliberately uncompiled edit shows as
-  stale, on 5.7. Include two pins in one function sharing an id and source, with an uncompiled
-  edit of only one of them: the compiled literal stays ambiguous and neither pin is marked stale.
+- **Accept when**, on both engine versions, the fixture's Print Text pins appear as pin places
+  with the same key and source Unreal gathers. Compiled copies fold, and an uncompiled edit
+  produces a stale state, only with explicit pin provenance; otherwise they remain separate.
+  Cover two pins sharing an identity/source, an uncompiled edit to one of them, a removed pin,
+  a re-keyed pin, a macro literal, and a single matching current pin without provenance. In each
+  unproven or ambiguous case the compiled place remains separate and no pin is marked stale.
 
 ### A3. Game Text actions: editor plugin and API
 
@@ -266,26 +272,26 @@ to this plan.
   save, re-read. Places: DataAsset properties, Blueprint CDO variables, SCS components, widget tree,
   graph pins; DataTables keep using `UEShedAuthoring`.
 - Use `TextNamespaceUtil::GetTextIdForEdit` and `FText::ChangeKey` as the fixture does; verify each
-  API in 5.7 source, and list the APIs for the 5.8 follow-up to check.
+  API in both UE 5.7 and UE 5.8 source.
 - `@ue-shed/game-text` actions API: typed requests, dry run, apply, re-read and compare against the
   expected result. Errors follow lane D's shape.
 - **Accept when** tests drive every applicable case in
-  `fixtures/unreal-project/FixtureSource/GameTextActions/expected-cases.json` through the API on 5.7
-  and the re-read ids match Unreal's gather.
+  `fixtures/unreal-project/FixtureSource/GameTextActions/expected-cases.json` through the API on
+  both engine versions and the re-read ids match Unreal's gather.
 
 ### A4. Identity fixture, slice 2
 
-Add cases, each checked against Unreal's 5.7 gather: compiled text literals of every saved type
-(culture-invariant text, a String Table reference). 5.8's renumbered literal types, including text
-with translator notes, stay covered only by PR #99's synthetic bytes; record that as a 5.8 gap;
-String Table references; a child Blueprint that
-inherits a parent's text and one that overrides it; level actor text; World Partition external
-actor text; C++ `LOCTEXT` (gather-only, documented as such). Extend `expected-cases.json` and the
-integration test.
+Add cases checked against Unreal's gather on both UE 5.7 and UE 5.8: compiled text literals of
+every saved type, including culture-invariant text, String Table references, UE 5.8's renumbered
+literal types and text with translator notes; a child Blueprint that inherits a parent's text and
+one that overrides it; level actor text; World Partition external actor text; and C++ `LOCTEXT`
+(gather-only, documented as such). Extend `expected-cases.json` and the integration test. Synthetic
+byte cases supplement, rather than replace, saved-asset evidence from each engine version.
 
 ### A5. UE 4.27 identity slice
 
-`BLOCKED` (decision 11): no UE 4.27 on the executing machine. Kept for a machine that has it.
+Requires an installed UE 4.27 engine with source (decision 11). Discover it or configure it
+explicitly; if unavailable, mark this item `BLOCKED` and report the missing prerequisite.
 
 A 4.27 identity fixture; bytecode literals checked against 4.27 evidence (4.27 support so far comes
 only from reading engine source); pins on 4.27 (version gate and pin-type custom-version minimums
