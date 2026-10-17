@@ -50,7 +50,9 @@ const failingRemoteControl = makeRemoteControlClientTestLayer(() =>
 			functionName: "GetCapabilityManifest",
 			message: "Editor is not connected",
 			operation: "authoring.live_connection",
-			retrySafe: true
+			retrySafe: true,
+			recovery: "Test double: retry the Remote Control call.",
+			nextStep: "retry"
 		})
 	)
 );

@@ -26,6 +26,7 @@ import type {
 } from "./asset-reader.js";
 import {
 	AssetReaderError,
+	assetReaderGuidance,
 	MAX_CAPTURED_STDERR_BYTES,
 	MAX_PROTOCOL_OUTPUT_BYTES,
 	assetReaderCacheOutcome,
@@ -659,14 +660,17 @@ export function mapProtocolFailure(
 	path: string
 ): AssetReaderError {
 	if (cause instanceof ProtocolStreamFailure) {
+		const kind = cause.kind === "timeout" ? "timeout" : cause.kind;
+		const retrySafe =
+			cause.kind === "timeout" || cause.kind === "discovery" || cause.kind === "process";
 		return new AssetReaderError({
 			...(cause.protocolCode === undefined ? undefined : { code: cause.protocolCode }),
-			kind: cause.kind === "timeout" ? "timeout" : cause.kind,
+			kind,
 			operation,
 			message: cause.message,
 			path,
-			retrySafe:
-				cause.kind === "timeout" || cause.kind === "discovery" || cause.kind === "process",
+			retrySafe,
+			...assetReaderGuidance(kind, retrySafe),
 			...(cause.exitCode === undefined ? undefined : { exitCode: cause.exitCode })
 		});
 	}
@@ -677,7 +681,8 @@ export function mapProtocolFailure(
 		operation,
 		message: cause instanceof Error ? cause.message : String(cause),
 		path,
-		retrySafe: false
+		retrySafe: false,
+		...assetReaderGuidance("process", false)
 	});
 }
 

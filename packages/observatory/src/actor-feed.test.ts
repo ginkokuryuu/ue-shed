@@ -223,7 +223,9 @@ function makeRemote(options: {
 						functionName: request.functionName,
 						message: `Unexpected function ${request.functionName}`,
 						operation: request.operation ?? request.functionName,
-						retrySafe: false
+						retrySafe: false,
+						recovery: "Test double: retry the Remote Control call.",
+						nextStep: "escalate"
 					})
 				);
 			}

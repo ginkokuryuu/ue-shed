@@ -1,3 +1,4 @@
+import { ErrorGuidanceFields } from "@ue-shed/protocol";
 import { Effect, Schema } from "effect";
 import { reviseReviewView } from "./review-framing.js";
 import { ReviewRepository, type ReviewStorageError } from "./review-repository.js";
@@ -11,8 +12,7 @@ import {
 export class ReviewViewDefinitionError extends Schema.TaggedError<ReviewViewDefinitionError>()(
 	"ReviewViewDefinitionError",
 	{
-		message: Schema.String,
-		recovery: Schema.String,
+		...ErrorGuidanceFields,
 		viewId: Schema.String
 	}
 ) {}
@@ -36,6 +36,8 @@ export function putReviewView(args: {
 					new ReviewViewDefinitionError({
 						message: "Oriented-area Views must use a world-fixed viewpoint.",
 						recovery: "Provide a world-fixed approved pose for the area View.",
+						retrySafe: true,
+						nextStep: "fix_input",
 						viewId: args.view.id
 					})
 				);
@@ -60,6 +62,8 @@ export function putReviewView(args: {
 				new ReviewViewDefinitionError({
 					message: `Review View ${args.view.id} was not found during revision.`,
 					recovery: "Reload the Review Set and retry the revision.",
+					retrySafe: true,
+					nextStep: "reconcile",
 					viewId: args.view.id
 				})
 			);
@@ -76,6 +80,8 @@ export function putReviewView(args: {
 					message: String(cause),
 					recovery:
 						"Choose existing Capture Profile and Visibility Policy IDs and satisfy the Review View contract.",
+					retrySafe: true,
+					nextStep: "fix_input",
 					viewId: args.view.id
 				})
 		)

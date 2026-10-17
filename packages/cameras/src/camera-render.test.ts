@@ -327,7 +327,9 @@ describe("shared renderer lifecycle", () => {
 							functionName: name,
 							operation: "capture",
 							message: "lost response",
-							retrySafe: true
+							retrySafe: true,
+							recovery: "Test double: retry the Remote Control call.",
+							nextStep: "retry"
 						})
 					)
 				: undefined

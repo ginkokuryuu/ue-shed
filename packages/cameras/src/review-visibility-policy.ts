@@ -1,3 +1,4 @@
+import { ErrorGuidanceFields } from "@ue-shed/protocol";
 import { Effect, Schema } from "effect";
 import { ReviewRepository, type ReviewStorageError } from "./review-repository.js";
 import {
@@ -22,9 +23,8 @@ export class ReviewVisibilityPolicyError extends Schema.TaggedError<ReviewVisibi
 			"policy_not_found",
 			"view_not_found"
 		]),
-		message: Schema.String,
+		...ErrorGuidanceFields,
 		policyId: Schema.optional(Schema.String),
-		recovery: Schema.String,
 		viewIds: Schema.Array(Schema.String)
 	}
 ) {}
@@ -72,6 +72,8 @@ function invalidAssignment(
 		policyId,
 		recovery:
 			"Choose a policy and per-View overrides that satisfy the Review Set contract, then retry.",
+		retrySafe: true,
+		nextStep: "fix_input",
 		viewIds: [...viewIds]
 	});
 }
@@ -89,6 +91,8 @@ export function replaceViewVisibilityPolicy(args: {
 				code: "view_not_found",
 				message: `Review View ${args.viewId} was not found.`,
 				recovery: "List the Review Set Views and choose an existing View ID.",
+				retrySafe: true,
+				nextStep: "fix_input",
 				viewIds: [args.viewId]
 			})
 		);
@@ -100,6 +104,8 @@ export function replaceViewVisibilityPolicy(args: {
 				message: `Visibility Policy ${args.policy.id} already exists.`,
 				policyId: args.policy.id,
 				recovery: "Use a new policy ID so the existing immutable preset remains unchanged.",
+				retrySafe: true,
+				nextStep: "fix_input",
 				viewIds: [args.viewId]
 			})
 		);
@@ -134,6 +140,8 @@ export function applyVisibilityPolicyToViews(args: {
 				message: "Applying a Visibility Policy requires at least one selected View.",
 				policyId: args.policyId,
 				recovery: "Select one or more Views explicitly, then retry.",
+				retrySafe: true,
+				nextStep: "fix_input",
 				viewIds: []
 			})
 		);
@@ -146,6 +154,8 @@ export function applyVisibilityPolicyToViews(args: {
 				message: "The selected View list contains duplicate IDs.",
 				policyId: args.policyId,
 				recovery: "Provide each selected View ID exactly once.",
+				retrySafe: true,
+				nextStep: "fix_input",
 				viewIds: [...args.viewIds]
 			})
 		);
@@ -157,6 +167,8 @@ export function applyVisibilityPolicyToViews(args: {
 				message: `Visibility Policy ${args.policyId} was not found.`,
 				policyId: args.policyId,
 				recovery: "List the Review Set policies and choose an existing policy ID.",
+				retrySafe: true,
+				nextStep: "fix_input",
 				viewIds: [...args.viewIds]
 			})
 		);
@@ -171,6 +183,8 @@ export function applyVisibilityPolicyToViews(args: {
 				message: `Review View ${missing[0]} was not found.`,
 				policyId: args.policyId,
 				recovery: "List the Review Set Views and choose existing View IDs.",
+				retrySafe: true,
+				nextStep: "fix_input",
 				viewIds: missing
 			})
 		);

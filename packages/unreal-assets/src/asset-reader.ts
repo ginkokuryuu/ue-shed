@@ -1,4 +1,5 @@
 import {
+	ErrorGuidanceFields,
 	BlueprintGraphRead,
 	LevelSequenceRead,
 	isHeaderScanEntry,
@@ -146,11 +147,52 @@ export class AssetReaderError extends Schema.TaggedError<AssetReaderError>()("As
 		"scan",
 		"saved_world"
 	]),
-	message: Schema.String,
-	retrySafe: Schema.Boolean,
 	path: Schema.optional(Schema.String),
-	exitCode: Schema.optional(Schema.Number)
+	exitCode: Schema.optional(Schema.Number),
+	...ErrorGuidanceFields
 }) {}
+
+/**
+ * @internal Recovery and next step for a reader failure of one kind. Only `retrySafe` failures
+ * suggest `retry`.
+ */
+export function assetReaderGuidance(
+	kind: AssetReaderError["kind"],
+	retrySafe: boolean
+): Pick<AssetReaderError, "nextStep" | "recovery"> {
+	switch (kind) {
+		case "timeout":
+			return {
+				recovery:
+					"The saved-asset reader timed out. Retry, or raise the reader timeout for large packages.",
+				nextStep: retrySafe ? "retry" : "escalate"
+			};
+		case "process":
+			return {
+				recovery:
+					"The saved-asset reader process failed. Check that the configured uasset executable starts, then retry.",
+				nextStep: retrySafe ? "retry" : "escalate"
+			};
+		case "contract":
+			return {
+				recovery:
+					"The saved-asset reader answered outside its protocol. Install the reader version paired with this host.",
+				nextStep: "escalate"
+			};
+		case "discovery":
+			return {
+				recovery:
+					"Check that the project root or asset path exists, is readable and is inside an Unreal project.",
+				nextStep: retrySafe ? "retry" : "fix_input"
+			};
+		case "resource_limit":
+			return {
+				recovery:
+					"Narrow the request to fewer packages, or raise the configured reader limit.",
+				nextStep: "fix_input"
+			};
+	}
+}
 
 export interface AssetReaderOptions {
 	readonly assetPath: string;
@@ -843,7 +885,9 @@ export function makeAssetReaderTestLayer(service: AssetReaderTestApi): Layer.Lay
 							operation: "extract_text",
 							message: "This test asset reader does not stub extractProjectText.",
 							path: options.projectRoot,
-							retrySafe: false
+							retrySafe: false,
+							recovery: "Pass this operation to makeAssetReaderTestLayer.",
+							nextStep: "escalate"
 						})
 					)),
 			extractProjectTextPackages:
@@ -856,7 +900,9 @@ export function makeAssetReaderTestLayer(service: AssetReaderTestApi): Layer.Lay
 							message:
 								"This test asset reader does not stub extractProjectTextPackages.",
 							path: options.projectRoot,
-							retrySafe: false
+							retrySafe: false,
+							recovery: "Pass this operation to makeAssetReaderTestLayer.",
+							nextStep: "escalate"
 						})
 					)),
 			extractProjectTextures:
@@ -868,7 +914,9 @@ export function makeAssetReaderTestLayer(service: AssetReaderTestApi): Layer.Lay
 							operation: "extract_texture",
 							message: "This test asset reader does not stub extractProjectTextures.",
 							path: options.projectRoot,
-							retrySafe: false
+							retrySafe: false,
+							recovery: "Pass this operation to makeAssetReaderTestLayer.",
+							nextStep: "escalate"
 						})
 					)),
 			readBlueprint:
@@ -880,7 +928,9 @@ export function makeAssetReaderTestLayer(service: AssetReaderTestApi): Layer.Lay
 							operation: "blueprint",
 							message: "This test asset reader does not stub readBlueprint.",
 							path: assetPath,
-							retrySafe: false
+							retrySafe: false,
+							recovery: "Pass this operation to makeAssetReaderTestLayer.",
+							nextStep: "escalate"
 						})
 					)),
 			readLevelSequence:
@@ -892,7 +942,9 @@ export function makeAssetReaderTestLayer(service: AssetReaderTestApi): Layer.Lay
 							operation: "level_sequence",
 							message: "This test asset reader does not stub readLevelSequence.",
 							path: assetPath,
-							retrySafe: false
+							retrySafe: false,
+							recovery: "Pass this operation to makeAssetReaderTestLayer.",
+							nextStep: "escalate"
 						})
 					)),
 			savedWorldProgress:
@@ -906,7 +958,9 @@ export function makeAssetReaderTestLayer(service: AssetReaderTestApi): Layer.Lay
 						operation: "saved_world",
 						message: "This test asset reader does not stub readSavedWorld.",
 						path: options.mapPath,
-						retrySafe: false
+						retrySafe: false,
+						recovery: "Pass this operation to makeAssetReaderTestLayer.",
+						nextStep: "escalate"
 					})),
 			scanProject:
 				service.scanProject ??
@@ -916,7 +970,9 @@ export function makeAssetReaderTestLayer(service: AssetReaderTestApi): Layer.Lay
 						operation: "scan",
 						message: "This test asset reader does not stub scanProject.",
 						path: options.projectRoot,
-						retrySafe: false
+						retrySafe: false,
+						recovery: "Pass this operation to makeAssetReaderTestLayer.",
+						nextStep: "escalate"
 					})),
 			...service
 		})
@@ -986,7 +1042,10 @@ export function extractProjectTextPackages(
 						operation: "extract_text_packages",
 						message: "This AssetReader does not provide the package-text capability.",
 						path: options.projectRoot,
-						retrySafe: false
+						retrySafe: false,
+						recovery:
+							"Use an asset reader with the uasset-io package-text capability (v1.8 or later).",
+						nextStep: "fix_input"
 					})
 				)
 		)

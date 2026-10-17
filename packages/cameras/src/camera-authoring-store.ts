@@ -152,7 +152,9 @@ function locked(path: string) {
 		code: "busy",
 		message: `Authoring writer lock: ${path}`,
 		recovery:
-			"Retry after the writer exits. Dead local owners recover automatically; foreign, legacy or unreadable locks require ownership inspection."
+			"Retry after the writer exits. Dead local owners recover automatically; foreign, legacy or unreadable locks require ownership inspection.",
+		retrySafe: true,
+		nextStep: "retry"
 	});
 }
 async function removeEmptyLock(path: string) {
@@ -263,7 +265,9 @@ function storageError(cause: unknown) {
 				code: "storage",
 				message: String(cause),
 				recovery:
-					"Check the authoring document and directory permissions. Retry the same operation ID to recover a committed result."
+					"Check the authoring document and directory permissions. Retry the same operation ID to recover a committed result.",
+				retrySafe: true,
+				nextStep: "retry"
 			});
 }
 

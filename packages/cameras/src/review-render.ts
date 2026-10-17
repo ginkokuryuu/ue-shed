@@ -227,6 +227,8 @@ export const captureRenderedReviewView = Effect.fn("ReviewRenderer.capture")(fun
 		operation: "capture",
 		sessionId: request.operationId,
 		message: Cause.pretty(outcome.cause),
-		recovery: "Inspect rendering and restoration errors before retrying this Review View."
+		recovery: "Inspect rendering and restoration errors before retrying this Review View.",
+		retrySafe: false,
+		nextStep: "escalate"
 	});
 });

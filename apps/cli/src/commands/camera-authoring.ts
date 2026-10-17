@@ -173,7 +173,9 @@ const attach = Command.make(
 								message:
 									"The installed authoring bridge lacks arrangement panel support.",
 								recovery:
-									"Install a matching CameraAuthoringBridge plugin before attaching this arrangement."
+									"Install a matching CameraAuthoringBridge plugin before attaching this arrangement.",
+								retrySafe: true,
+								nextStep: "fix_input"
 							})
 						);
 					const attachment = yield* cameras.attachArrangementCamera(

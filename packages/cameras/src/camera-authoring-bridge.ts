@@ -1,6 +1,6 @@
 import { Effect, Schema } from "effect";
 import { CameraSetupRequest, CameraSetupState } from "./camera-setup-schema.js";
-import { decodeCompanionCapabilityManifest } from "@ue-shed/protocol";
+import { decodeCompanionCapabilityManifest, ErrorGuidanceFields } from "@ue-shed/protocol";
 import type { RemoteControlClientApi } from "@ue-shed/unreal-connection";
 import { ApprovedPose } from "./review-schema.js";
 import {
@@ -200,8 +200,7 @@ export class CameraBridgeError extends Schema.TaggedError<CameraBridgeError>()(
 			"unavailable",
 			"invalid"
 		]),
-		message: Schema.String,
-		recovery: Schema.String
+		...ErrorGuidanceFields
 	}
 ) {}
 export interface CameraAuthoringBridge {
@@ -224,7 +223,9 @@ export function makeCameraAuthoringBridge(
 						new CameraBridgeError({
 							code: "protocol",
 							message: String(cause),
-							recovery: "Use the camera-authoring v1 request contract."
+							recovery: "Use the camera-authoring v1 request contract.",
+							retrySafe: true,
+							nextStep: "fix_input"
 						})
 				)
 			);
@@ -244,7 +245,9 @@ export function makeCameraAuthoringBridge(
 									code: cause.status === 404 ? "missing_plugin" : "disconnected",
 									message: cause.message,
 									recovery:
-										"Reconnect to an editor with Core and the optional camera authoring bridge enabled."
+										"Reconnect to an editor with Core and the optional camera authoring bridge enabled.",
+									retrySafe: cause.retrySafe,
+									nextStep: cause.status === 404 ? "fix_input" : cause.nextStep
 								})
 						),
 						Effect.flatMap((value) =>
@@ -254,7 +257,9 @@ export function makeCameraAuthoringBridge(
 										new CameraBridgeError({
 											code: "protocol",
 											message: String(cause),
-											recovery: "Update the companion capability contract."
+											recovery: "Update the companion capability contract.",
+											retrySafe: true,
+											nextStep: "escalate"
 										})
 								)
 							)
@@ -266,7 +271,9 @@ export function makeCameraAuthoringBridge(
 							code: "missing_plugin",
 							message: "This editor does not advertise cameras.authoring.v1.",
 							recovery:
-								"Enable UEShedCameraAuthoringBridge. The reference menu is independently optional."
+								"Enable UEShedCameraAuthoringBridge. The reference menu is independently optional.",
+							retrySafe: true,
+							nextStep: "fix_input"
 						})
 					);
 			}
@@ -286,7 +293,9 @@ export function makeCameraAuthoringBridge(
 								code: cause.status === 404 ? "missing_plugin" : "disconnected",
 								message: cause.message,
 								recovery:
-									"Enable UEShedCameraAuthoringBridge in this editor and reconnect to Unreal Remote Control. Pending draft changes remain on disk."
+									"Enable UEShedCameraAuthoringBridge in this editor and reconnect to Unreal Remote Control. Pending draft changes remain on disk.",
+								retrySafe: cause.retrySafe,
+								nextStep: cause.status === 404 ? "fix_input" : cause.nextStep
 							})
 					)
 				);
@@ -299,28 +308,43 @@ export function makeCameraAuthoringBridge(
 							code: "protocol",
 							message: String(cause),
 							recovery:
-								"Use matching camera-authoring v1 bridge and package versions."
+								"Use matching camera-authoring v1 bridge and package versions.",
+							retrySafe: false,
+							nextStep: "escalate"
 						})
 				)
 			);
 		})
 	};
 }
+/** The bridge rejected the request without applying it, so repeating it is always safe. */
+function rejectedBridgeNextStep(code: "busy" | "stale" | "invalid" | "unavailable") {
+	switch (code) {
+		case "busy":
+			return "retry" as const;
+		case "invalid":
+			return "fix_input" as const;
+		case "stale":
+		case "unavailable":
+			return "reconcile" as const;
+	}
+}
 export function readyCameraBridge(
 	response: CameraBridgeResponse
 ): Effect.Effect<CameraBridgeSnapshot, CameraBridgeError> {
 	if (response.status === "ready") return Effect.succeed(response);
+	const code =
+		response.status === "busy" || response.status === "stale" || response.status === "invalid"
+			? response.status
+			: "unavailable";
 	return Effect.fail(
 		new CameraBridgeError({
-			code:
-				response.status === "busy" ||
-				response.status === "stale" ||
-				response.status === "invalid"
-					? response.status
-					: "unavailable",
+			code,
 			message: response.message,
 			recovery:
-				"Inspect the camera session. Resolve ownership or revision conflicts before retrying."
+				"Inspect the camera session. Resolve ownership or revision conflicts before retrying.",
+			retrySafe: true,
+			nextStep: rejectedBridgeNextStep(code)
 		})
 	);
 }

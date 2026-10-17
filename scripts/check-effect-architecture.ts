@@ -827,6 +827,95 @@ export async function checkLocalizationBoundaries(root: string = repositoryRoot)
 	return failures;
 }
 
+/**
+ * Packages whose tagged errors all carry the shared guidance fields (Plan 058 D4). A package joins
+ * this list once every one of its `Schema.TaggedError` classes is migrated; it never leaves it.
+ */
+const errorGuidancePackages = [
+	"packages/cameras",
+	"packages/unreal-assets",
+	"packages/unreal-connection"
+];
+const errorGuidanceFieldNames = ["message", "recovery", "retrySafe", "nextStep"];
+
+/** Property names of an object literal, following `...Identifier` spreads declared in the file. */
+function objectFieldNames(
+	node: ts.Expression,
+	locals: ReadonlyMap<string, ts.Expression>,
+	seen = new Set<string>()
+): Set<string> | undefined {
+	if (ts.isIdentifier(node)) {
+		if (node.text === "ErrorGuidanceFields") return new Set(errorGuidanceFieldNames);
+		const local = locals.get(node.text);
+		if (local === undefined || seen.has(node.text)) return undefined;
+		seen.add(node.text);
+		return objectFieldNames(local, locals, seen);
+	}
+	if (!ts.isObjectLiteralExpression(node)) return undefined;
+	const names = new Set<string>();
+	for (const property of node.properties) {
+		if (ts.isSpreadAssignment(property)) {
+			const spread = objectFieldNames(property.expression, locals, seen);
+			if (spread === undefined) return undefined;
+			for (const name of spread) names.add(name);
+		} else if (property.name !== undefined && ts.isIdentifier(property.name)) {
+			names.add(property.name.text);
+		}
+	}
+	return names;
+}
+
+/**
+ * Every `Schema.TaggedError` in a migrated package has `message`, `recovery`, `retrySafe` and
+ * `nextStep`, so hosts can decide what to do without parsing prose.
+ */
+export async function checkErrorGuidance(root: string = repositoryRoot) {
+	const failures: string[] = [];
+	for (const directory of errorGuidancePackages) {
+		let files: readonly string[];
+		try {
+			files = await filesUnder(root, join(directory, "src"));
+		} catch {
+			continue;
+		}
+		for (const path of files) {
+			if (!/\.tsx?$/u.test(path) || testSourcePattern.test(path)) continue;
+			const text = await readFile(path, "utf8");
+			if (!text.includes("TaggedError")) continue;
+			const label = relative(root, path).replaceAll("\\", "/");
+			const source = ts.createSourceFile(path, text, ts.ScriptTarget.Latest, true);
+			const locals = new Map<string, ts.Expression>();
+			for (const statement of source.statements)
+				if (ts.isVariableStatement(statement))
+					for (const declaration of statement.declarationList.declarations)
+						if (ts.isIdentifier(declaration.name) && declaration.initializer)
+							locals.set(declaration.name.text, declaration.initializer);
+			for (const statement of source.statements) {
+				if (!ts.isClassDeclaration(statement) || statement.name === undefined) continue;
+				const heritage = statement.heritageClauses?.[0]?.types[0]?.expression;
+				// Schema.TaggedError<Self>()("Tag", fields)
+				if (
+					heritage === undefined ||
+					!ts.isCallExpression(heritage) ||
+					!heritage.expression.getText(source).startsWith("Schema.TaggedError")
+				)
+					continue;
+				const fields = heritage.arguments[1];
+				const names = fields === undefined ? undefined : objectFieldNames(fields, locals);
+				const missing =
+					names === undefined
+						? ["(fields not statically known)"]
+						: errorGuidanceFieldNames.filter((name) => !names.has(name));
+				if (missing.length > 0)
+					failures.push(
+						`${label}: ${statement.name.text} must carry ${missing.join(", ")} (spread ErrorGuidanceFields from @ue-shed/protocol)`
+					);
+			}
+		}
+	}
+	return failures;
+}
+
 export async function checkArchitecture(root: string = repositoryRoot) {
 	return [
 		...(await checkCatalogUsage(root)),
@@ -834,6 +923,7 @@ export async function checkArchitecture(root: string = repositoryRoot) {
 		...(await checkServiceStrategies(root)),
 		...(await checkDomainServices(root)),
 		...(await checkLocalizationBoundaries(root)),
+		...(await checkErrorGuidance(root)),
 		...(await checkWorkbenchBoundaries(root))
 	];
 }

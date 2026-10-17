@@ -84,7 +84,10 @@ export function readScaleCorpus(root: string) {
 						operation: "scan",
 						code: "reader_output_invalid",
 						message: String(cause),
-						retrySafe: false
+						retrySafe: false,
+						recovery:
+							"Regenerate the replayed reader output, then rerun the measurement.",
+						nextStep: "escalate"
 					})
 			)
 	});

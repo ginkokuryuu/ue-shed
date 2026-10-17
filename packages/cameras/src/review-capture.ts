@@ -6,6 +6,7 @@ import {
 	RemoteControlClient,
 	type RemoteControlClientApi
 } from "@ue-shed/unreal-connection";
+import { ErrorGuidanceFields } from "@ue-shed/protocol";
 import { Clock, Context, Effect, Layer, Schema } from "effect";
 import { captureReviewView } from "./review-live.js";
 import {
@@ -37,9 +38,8 @@ import {
 export class ReviewCaptureRunError extends Schema.TaggedError<ReviewCaptureRunError>()(
 	"ReviewCaptureRunError",
 	{
-		message: Schema.String,
+		...ErrorGuidanceFields,
 		operation: Schema.Literals(["prepare", "capture", "finalize"]),
-		recovery: Schema.String,
 		runId: Schema.String
 	}
 ) {}
@@ -519,7 +519,9 @@ function captureReviewSetWith(args: {
 									message: String(cause),
 									operation: "prepare",
 									runId,
-									recovery: "Choose a supported camera renderer and retry."
+									recovery: "Choose a supported camera renderer and retry.",
+									retrySafe: true,
+									nextStep: "fix_input"
 								})
 						)
 					);
@@ -538,6 +540,8 @@ function captureReviewSetWith(args: {
 					message: "The Capture Invocation belongs to a different Review Set.",
 					operation: "prepare",
 					recovery: "Create an invocation for the Review Set being captured.",
+					retrySafe: true,
+					nextStep: "fix_input",
 					runId
 				})
 			);
@@ -553,6 +557,8 @@ function captureReviewSetWith(args: {
 						"The requested capture plan contains missing or duplicate Review View IDs.",
 					operation: "prepare",
 					recovery: "Reload the Review Set, review the capture plan, and retry.",
+					retrySafe: true,
+					nextStep: "reconcile",
 					runId
 				})
 			);
@@ -622,6 +628,8 @@ function captureReviewSetWith(args: {
 									message: String(cause),
 									operation: "finalize",
 									recovery: "Inspect the generated Capture Run values and retry.",
+									retrySafe: false,
+									nextStep: "escalate",
 									runId
 								})
 						)

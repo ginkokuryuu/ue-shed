@@ -1,3 +1,4 @@
+import { ErrorGuidanceFields } from "@ue-shed/protocol";
 import { Result, Schema } from "effect";
 import { AbsoluteCamera, CameraOutputSize } from "./camera-render-schema.js";
 import {
@@ -83,8 +84,7 @@ export class MapTileSourceError extends Schema.TaggedError<MapTileSourceError>()
 	"MapTileSourceError",
 	{
 		code: Schema.Literals(["invalid_grid", "invalid_source", "source_limit_exceeded"]),
-		message: Schema.String,
-		recovery: Schema.String
+		...ErrorGuidanceFields
 	}
 ) {}
 
@@ -102,6 +102,8 @@ function failure(code: MapTileSourceError["code"], message: string) {
 		new MapTileSourceError({
 			code,
 			message,
+			nextStep: "fix_input",
+			retrySafe: true,
 			recovery:
 				"Use a canonical map grid, an in-bounds source block and explicit dimension/memory limits; reduce the block size when necessary."
 		})

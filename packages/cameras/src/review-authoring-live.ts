@@ -6,6 +6,7 @@ import {
 	RemoteControlClientError,
 	type RemoteControlClientApi
 } from "@ue-shed/unreal-connection";
+import { ErrorGuidanceFields } from "@ue-shed/protocol";
 import { Context, Effect, Layer, Schema } from "effect";
 import { captureReviewView } from "./review-live.js";
 import {
@@ -38,11 +39,9 @@ function pureStagingPath(
 export class ReviewAuthoringConnectionError extends Schema.TaggedError<ReviewAuthoringConnectionError>()(
 	"ReviewAuthoringConnectionError",
 	{
+		...ErrorGuidanceFields,
 		endpoint: Schema.String,
-		message: Schema.String,
-		operation: Schema.Literals(["inspect_selection", "inspect_subject", "preview_candidate"]),
-		recovery: Schema.String,
-		retrySafe: Schema.Boolean
+		operation: Schema.Literals(["inspect_selection", "inspect_subject", "preview_candidate"])
 	}
 ) {}
 
@@ -51,12 +50,23 @@ function reviewConnectionError(
 	operation: "inspect_selection" | "inspect_subject" | "preview_candidate",
 	cause: RemoteControlClientError | unknown
 ): ReviewAuthoringConnectionError {
+	if (cause instanceof RemoteControlClientError) {
+		return new ReviewAuthoringConnectionError({
+			endpoint,
+			message: cause.message,
+			nextStep: cause.nextStep,
+			operation,
+			recovery: cause.recovery,
+			retrySafe: cause.retrySafe
+		});
+	}
 	return new ReviewAuthoringConnectionError({
 		endpoint,
-		message: cause instanceof RemoteControlClientError ? cause.message : String(cause),
+		message: String(cause),
+		nextStep: "escalate",
 		operation,
 		recovery: "Verify the Map Review editor capability and retry the operation.",
-		retrySafe: cause instanceof RemoteControlClientError ? cause.retrySafe : false
+		retrySafe: false
 	});
 }
 
@@ -140,7 +150,8 @@ export const ReviewAuthoringLive = Layer.effect(
 							message: String(cause),
 							operation: "inspect_selection",
 							recovery: "Verify the Map Review editor capability contract.",
-							retrySafe: false
+							retrySafe: true,
+							nextStep: "escalate"
 						})
 				),
 				Effect.withSpan("camera.review.authoring.selection.inspect")
@@ -160,7 +171,8 @@ export const ReviewAuthoringLive = Layer.effect(
 							operation: "inspect_subject",
 							recovery:
 								"Discard the malformed authoring session and create a new one.",
-							retrySafe: false
+							retrySafe: true,
+							nextStep: "fix_input"
 						})
 				)
 			);
@@ -185,7 +197,8 @@ export const ReviewAuthoringLive = Layer.effect(
 							operation: "inspect_subject",
 							recovery:
 								"Verify the persisted subject and Map Review editor capability.",
-							retrySafe: false
+							retrySafe: true,
+							nextStep: "escalate"
 						})
 				),
 				Effect.withSpan("camera.review.authoring.subject.inspect")
@@ -229,7 +242,8 @@ export const ReviewAuthoringLive = Layer.effect(
 							operation: "preview_candidate",
 							recovery:
 								"Verify the Map Review editor capability and retry the preview.",
-							retrySafe: cause.retrySafe
+							retrySafe: cause.retrySafe,
+							nextStep: cause.nextStep
 						})
 				)
 			);
@@ -239,7 +253,8 @@ export const ReviewAuthoringLive = Layer.effect(
 					message: response.message,
 					operation: "preview_candidate",
 					recovery: response.recovery,
-					retrySafe: response.retrySafe
+					retrySafe: response.retrySafe,
+					nextStep: response.retrySafe ? "retry" : "reconcile"
 				});
 			}
 			if (!response.subjectProjection) {
@@ -250,7 +265,8 @@ export const ReviewAuthoringLive = Layer.effect(
 					operation: "preview_candidate",
 					recovery:
 						"Load the subject to assess authoring framing, or capture its independent approved camera without actor assessment.",
-					retrySafe: false
+					retrySafe: false,
+					nextStep: "fix_input"
 				});
 			}
 			const projection = response.subjectProjection;
@@ -278,7 +294,8 @@ export const ReviewAuthoringLive = Layer.effect(
 						message: String(cause),
 						operation: "preview_candidate",
 						recovery: "Check the Unreal staging directory and retry the preview.",
-						retrySafe: true
+						retrySafe: true,
+						nextStep: "retry"
 					})
 			}).pipe(
 				Effect.withSpan("camera.review.authoring.candidate.preview", {

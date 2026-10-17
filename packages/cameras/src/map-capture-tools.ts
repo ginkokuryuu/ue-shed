@@ -1,19 +1,29 @@
 import { Effect, Schema } from "effect";
-import { decodeCompanionCapabilityManifest } from "@ue-shed/protocol";
-import { RemoteControlClient } from "@ue-shed/unreal-connection";
+import { decodeCompanionCapabilityManifest, ErrorGuidanceFields } from "@ue-shed/protocol";
+import { RemoteControlClient, RemoteControlClientError } from "@ue-shed/unreal-connection";
 import { MapCaptureSelection, MapCaptureReadiness } from "./map-capture-tools-schema.js";
 export * from "./map-capture-tools-schema.js";
 export class MapCaptureInspectionError extends Schema.TaggedError<MapCaptureInspectionError>()(
 	"MapCaptureInspectionError",
-	{ message: Schema.String, recovery: Schema.String }
+	ErrorGuidanceFields
 ) {}
 const failure = (cause: unknown) =>
 	cause instanceof MapCaptureInspectionError
 		? cause
-		: new MapCaptureInspectionError({
-				message: String(cause),
-				recovery: "Check the editor endpoint and update Core and Cameras plugins together."
-			});
+		: cause instanceof RemoteControlClientError
+			? new MapCaptureInspectionError({
+					message: cause.message,
+					nextStep: cause.nextStep,
+					recovery: cause.recovery,
+					retrySafe: cause.retrySafe
+				})
+			: new MapCaptureInspectionError({
+					message: String(cause),
+					nextStep: "escalate",
+					recovery:
+						"Check the editor endpoint and update Core and Cameras plugins together.",
+					retrySafe: true
+				});
 const negotiate = Effect.fn("MapCapture.inspect.negotiate")(function* (
 	endpoint: string,
 	capability: string
@@ -32,7 +42,9 @@ const negotiate = Effect.fn("MapCapture.inspect.negotiate")(function* (
 		return yield* Effect.fail(
 			new MapCaptureInspectionError({
 				message: `Editor does not advertise ${capability}.`,
-				recovery: "Update Core and Cameras plugins and restart the editor."
+				nextStep: "fix_input",
+				recovery: "Update Core and Cameras plugins and restart the editor.",
+				retrySafe: true
 			})
 		);
 	return client;
@@ -60,7 +72,9 @@ export const inspectMapCaptureReadiness = Effect.fn("MapCapture.inspect.readines
 		return yield* Effect.fail(
 			new MapCaptureInspectionError({
 				message: "Expected a /Game/ map package path.",
-				recovery: "Use the map package path from the capture plan."
+				nextStep: "fix_input",
+				recovery: "Use the map package path from the capture plan.",
+				retrySafe: true
 			})
 		);
 	return yield* client

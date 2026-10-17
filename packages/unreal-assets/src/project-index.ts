@@ -1,5 +1,5 @@
 import { Config, Context, Effect, Layer, Option, Schema, Stream } from "effect";
-import { PackageHeaderData } from "@ue-shed/protocol";
+import { ErrorGuidanceFields, PackageHeaderData } from "@ue-shed/protocol";
 import { findValidatedPage, retainValidatedPage } from "./project-index-page-validation.js";
 
 export const PROJECT_INDEX_MAX_PAGE_SIZE = 1024;
@@ -161,9 +161,9 @@ export const ProjectIndexPage = Schema.Struct({
 export interface ProjectIndexPage extends Schema.Schema.Type<typeof ProjectIndexPage> {}
 
 const ErrorFields = {
+	...ErrorGuidanceFields,
 	message: BoundedMessage,
-	recovery: BoundedMessage,
-	retrySafe: Schema.Boolean
+	recovery: BoundedMessage
 };
 
 export class ProjectIndexUnavailable extends Schema.TaggedError<ProjectIndexUnavailable>()(
@@ -262,7 +262,8 @@ const invalidRequest = (message: string): ProjectIndexInvalidRequest =>
 	new ProjectIndexInvalidRequest({
 		message,
 		recovery: "Correct the Project Index request and retry.",
-		retrySafe: false
+		retrySafe: false,
+		nextStep: "fix_input"
 	});
 
 export const decodeProjectIndexCount = <Input>(input: Input) =>
@@ -290,7 +291,8 @@ export const countProjectIndex = Effect.fn("ProjectIndex.count")(function* (
 				new ProjectIndexUnavailable({
 					message: "Project Index returned an invalid count result.",
 					recovery: "Refresh the Catalog, then retry the count.",
-					retrySafe: true
+					retrySafe: true,
+					nextStep: "retry"
 				})
 		)
 	);
@@ -367,7 +369,8 @@ export const decodeProjectIndexPage = Effect.fn("ProjectIndex.decodePage")(<Inpu
 					new ProjectIndexUnavailable({
 						message: "The Project Index adapter returned an unbounded or invalid page.",
 						recovery: "Rebuild the Catalog, then retry with a bounded query.",
-						retrySafe: true
+						retrySafe: true,
+						nextStep: "retry"
 					})
 			)
 		);
@@ -386,7 +389,8 @@ export function foldProjectIndexRefresh(
 			new ProjectIndexRefreshFailed({
 				message: "Project Index refresh ended without a completed summary.",
 				recovery: "Retry the refresh. If it keeps failing, rebuild the Catalog.",
-				retrySafe: true
+				retrySafe: true,
+				nextStep: "retry"
 			})
 		);
 	}

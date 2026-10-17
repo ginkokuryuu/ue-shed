@@ -938,7 +938,9 @@ export const WorkbenchGameTextLive = Layer.effect(
 					return yield* Effect.fail(
 						new InvestigationError({
 							message: "No current scan is available.",
-							recovery: "Refresh this workspace before saving or exporting."
+							recovery: "Refresh this workspace before saving or exporting.",
+							retrySafe: true,
+							nextStep: "fix_input"
 						})
 					);
 				const preset: GameTextInvestigationPreset = {

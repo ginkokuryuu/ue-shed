@@ -1,4 +1,5 @@
 import { Effect, Schema } from "effect";
+import { ErrorGuidanceFields } from "@ue-shed/protocol";
 import { recordReviewAssessment } from "@ue-shed/observability";
 import { RemoteControlClient, RemoteControlClientError } from "@ue-shed/unreal-connection";
 import { captureRenderedReviewView } from "./review-render.js";
@@ -15,17 +16,29 @@ const reviewLibraryPath = "/Script/UEShedCamerasEditor.Default__UEShedCameraRevi
 
 export class ReviewCaptureConnectionError extends Schema.TaggedError<ReviewCaptureConnectionError>()(
 	"ReviewCaptureConnectionError",
-	{ endpoint: Schema.String, message: Schema.String, retrySafe: Schema.Boolean }
+	{ ...ErrorGuidanceFields, endpoint: Schema.String }
 ) {}
 
 function connectionError(
 	endpoint: string,
 	cause: RemoteControlClientError | unknown
 ): ReviewCaptureConnectionError {
+	if (cause instanceof RemoteControlClientError) {
+		return new ReviewCaptureConnectionError({
+			endpoint,
+			message: cause.message,
+			nextStep: cause.nextStep,
+			recovery: cause.recovery,
+			retrySafe: cause.retrySafe
+		});
+	}
 	return new ReviewCaptureConnectionError({
 		endpoint,
-		message: cause instanceof RemoteControlClientError ? cause.message : String(cause),
-		retrySafe: cause instanceof RemoteControlClientError ? cause.retrySafe : false
+		message: String(cause),
+		nextStep: "escalate",
+		recovery:
+			"Update the Core and Cameras plugins together so the capture response matches this UE Shed version.",
+		retrySafe: false
 	});
 }
 

@@ -93,7 +93,9 @@ const connectionLost = new RemoteControlClientError({
 	functionName: "ExecuteWorldPreparation",
 	operation: "world",
 	retrySafe: false,
-	message: "Response lost after dispatch"
+	message: "Response lost after dispatch",
+	recovery: "Test double: retry the Remote Control call.",
+	nextStep: "escalate"
 });
 
 it.effect("reports failed restoration even when the work succeeds", () =>

@@ -1,22 +1,22 @@
 import { randomUUID } from "node:crypto";
 import { lstat, mkdir, open, readFile, realpath, rename, rm, unlink } from "node:fs/promises";
 import { basename, dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
+import { ErrorGuidanceFields } from "@ue-shed/protocol";
 import { Effect, Schema } from "effect";
 
 export class CaptureFilesystemError extends Schema.TaggedError<CaptureFilesystemError>()(
 	"CaptureFilesystemError",
 	{
-		message: Schema.String,
+		...ErrorGuidanceFields,
 		operation: Schema.Literals(["discard", "prepare", "promote", "store", "write"]),
-		path: Schema.String,
-		recovery: Schema.String
+		path: Schema.String
 	}
 ) {}
 
 export class CaptureArtifactSourceRejected extends Schema.TaggedError<CaptureArtifactSourceRejected>()(
 	"CaptureArtifactSourceRejected",
 	{
-		message: Schema.String,
+		...ErrorGuidanceFields,
 		path: Schema.String,
 		root: Schema.String
 	}
@@ -107,12 +107,16 @@ function filesystemError(args: {
 	readonly operation: CaptureFilesystemError["operation"];
 	readonly path: string;
 	readonly recovery: string;
+	readonly retrySafe: boolean;
+	readonly nextStep: CaptureFilesystemError["nextStep"];
 }): CaptureFilesystemError {
 	return new CaptureFilesystemError({
 		message: String(args.cause),
+		nextStep: args.nextStep,
 		operation: args.operation,
 		path: args.path,
-		recovery: args.recovery
+		recovery: args.recovery,
+		retrySafe: args.retrySafe
 	});
 }
 
@@ -236,7 +240,9 @@ export function makeFilesystemCaptureDestination(
 					cause,
 					operation: "prepare",
 					path: options.destinationRoot,
-					recovery: options.recovery
+					recovery: options.recovery,
+					retrySafe: true,
+					nextStep: "fix_input"
 				})
 		});
 		const stagingRoot = yield* Effect.tryPromise({
@@ -265,7 +271,9 @@ export function makeFilesystemCaptureDestination(
 					operation: "prepare",
 					path: destinationRoot,
 					recovery:
-						"Choose a new capture identity or inspect the existing run and attempt."
+						"Choose a new capture identity or inspect the existing run and attempt.",
+					retrySafe: false,
+					nextStep: "reconcile"
 				})
 		});
 
@@ -277,7 +285,9 @@ export function makeFilesystemCaptureDestination(
 						cause,
 						operation: "discard",
 						path: stagingRoot,
-						recovery: "Remove the owned staging attempt manually if it remains."
+						recovery: "Remove the owned staging attempt manually if it remains.",
+						retrySafe: true,
+						nextStep: "retry"
 					})
 			});
 		});
@@ -297,7 +307,10 @@ export function makeFilesystemCaptureDestination(
 							cause,
 							operation: "write",
 							path: stagingRoot,
-							recovery: "Check capture destination permissions and retry the attempt."
+							recovery:
+								"Check capture destination permissions and retry the attempt.",
+							retrySafe: true,
+							nextStep: "retry"
 						})
 				});
 			}
@@ -316,7 +329,9 @@ export function makeFilesystemCaptureDestination(
 							cause,
 							operation: "store",
 							path: input.sourcePath,
-							recovery: "Inspect Unreal staging and retry the capture."
+							recovery: "Inspect Unreal staging and retry the capture.",
+							retrySafe: true,
+							nextStep: "retry"
 						})
 				});
 				if (sourcePath === undefined) {
@@ -324,7 +339,11 @@ export function makeFilesystemCaptureDestination(
 						new CaptureArtifactSourceRejected({
 							message:
 								"Unreal returned an artifact outside its authorized staging root.",
+							nextStep: "escalate",
 							path: input.sourcePath,
+							recovery:
+								"Do not trust this capture; update the Core and Cameras plugins together and report the artifact path if it recurs.",
+							retrySafe: false,
 							root: input.sourceRoot
 						})
 					);
@@ -354,7 +373,9 @@ export function makeFilesystemCaptureDestination(
 							cause,
 							operation: "store",
 							path: stagingRoot,
-							recovery: "Check Unreal staging and capture destination permissions."
+							recovery: "Check Unreal staging and capture destination permissions.",
+							retrySafe: false,
+							nextStep: "reconcile"
 						})
 				});
 			}
@@ -390,7 +411,9 @@ export function makeFilesystemCaptureDestination(
 						cause,
 						operation: "promote",
 						path: stagingRoot,
-						recovery: "Inspect the staged capture and retry atomic promotion safely."
+						recovery: "Inspect the staged capture and retry atomic promotion safely.",
+						retrySafe: false,
+						nextStep: "reconcile"
 					})
 			});
 		});

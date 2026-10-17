@@ -1,5 +1,6 @@
 import { CameraVisibilityList } from "./camera-visibility.js";
 import { RemoteControlClient, RemoteControlClientError } from "@ue-shed/unreal-connection";
+import { ErrorGuidanceFields } from "@ue-shed/protocol";
 import { Clock, Duration, Effect, Schema } from "effect";
 import {
 	FramingCandidateId,
@@ -17,10 +18,8 @@ const positiveHeight = Schema.Int.check(Schema.isBetween({ minimum: 64, maximum:
 export class ProvisionedCameraError extends Schema.TaggedError<ProvisionedCameraError>()(
 	"ProvisionedCameraError",
 	{
-		message: Schema.String,
+		...ErrorGuidanceFields,
 		operation: Schema.Literals(["ensure_cameras", "clear_cameras", "await_frame", "configure"]),
-		recovery: Schema.String,
-		retrySafe: Schema.Boolean,
 		/** Set when the connected plugin cannot honour a requested option. */
 		code: Schema.optionalKey(Schema.Literal("unsupported_capability"))
 	}
@@ -206,11 +205,21 @@ function provisionedCameraError(
 	cause: RemoteControlClientError | unknown,
 	recovery: string
 ): ProvisionedCameraError {
+	if (cause instanceof RemoteControlClientError) {
+		return new ProvisionedCameraError({
+			message: cause.message,
+			nextStep: cause.nextStep,
+			operation,
+			recovery,
+			retrySafe: cause.retrySafe
+		});
+	}
 	return new ProvisionedCameraError({
-		message: cause instanceof RemoteControlClientError ? cause.message : String(cause),
+		message: String(cause),
+		nextStep: "escalate",
 		operation,
 		recovery,
-		retrySafe: cause instanceof RemoteControlClientError ? cause.retrySafe : false
+		retrySafe: false
 	});
 }
 
@@ -296,7 +305,8 @@ export function ensureProvisionedCameras(
 					message: "The connected plugin cannot show editor previews in live previews.",
 					recovery:
 						"Omit editorPreviews or install a matching UE Shed Cameras plugin that supports provisioning version 5.",
-					retrySafe: false
+					retrySafe: false,
+					nextStep: "fix_input"
 				})
 			);
 		if (request.schemaVersion === 4 && status.schemaVersion !== 4)
@@ -307,7 +317,8 @@ export function ensureProvisionedCameras(
 					message: "The connected plugin cannot confirm authored preview visibility.",
 					recovery:
 						"Install a matching Cameras plugin before previewing authored output.",
-					retrySafe: false
+					retrySafe: false,
+					nextStep: "fix_input"
 				})
 			);
 		if (status.editorPreviews !== undefined)
@@ -322,7 +333,8 @@ export function ensureProvisionedCameras(
 					message: status.error ?? "No provisioned cameras were registered.",
 					operation: "ensure_cameras",
 					recovery: "Open the expected map with UEShedCameras enabled, then retry.",
-					retrySafe: true
+					retrySafe: true,
+					nextStep: "fix_input"
 				})
 			);
 		}
@@ -339,7 +351,8 @@ export function ensureProvisionedCameras(
 						operation: "ensure_cameras",
 						recovery:
 							"Update UEShedCameras before relying on provisioned camera status.",
-						retrySafe: false
+						retrySafe: false,
+						nextStep: "escalate"
 					})
 				);
 			}
@@ -410,7 +423,8 @@ export function awaitProvisionedCameraFrame(args: {
 				operation: "await_frame",
 				recovery:
 					"Confirm Workbench is listening on the camera pipe and the Unreal world is available.",
-				retrySafe: true
+				retrySafe: true,
+				nextStep: "retry"
 			})
 		);
 	}).pipe(Effect.withSpan("camera.provisioned.await_frame"));
