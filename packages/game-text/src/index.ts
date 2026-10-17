@@ -65,6 +65,8 @@ export * from "./localization-review.js";
 export * from "./localization-workspace.js";
 export * from "./localization-check-ids.js";
 export * from "./localization-check-catalogue.js";
+export * from "./localization-check-scope.js";
+export * from "./localization-custom-checks.js";
 export * from "./localization-quality-schema.js";
 export * from "./localization-checks.js";
 export * from "./unreal-text-syntax.js";

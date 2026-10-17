@@ -28,6 +28,7 @@ import {
 	LocalizationQualityReport,
 	type LocalizationQualityFinding,
 	type LocalizationPolicyFinding,
+	type LocalizationCustomFinding,
 	type LocalizationCheckOptions,
 	type LocalizationCheckDiagnostic
 } from "./localization-quality-schema.js";
@@ -36,7 +37,6 @@ import type { TextQualityAffectedOccurrence } from "./quality-schema.js";
 import {
 	resolveLocalizationChecks,
 	type GameTextRuleDocument,
-	type LocalizationCheckScope,
 	type ResolvedLocalizationChecks
 } from "./game-text-rules.js";
 import { matchesTextRole, prepareTextQualityRules, termMatches } from "./quality.js";
@@ -44,6 +44,11 @@ import type { TextRole } from "./quality-schema.js";
 import { evaluateLocalizationPolicy } from "./localization-policy.js";
 import { localizationShippedTranslation } from "./localization-shipped-translation.js";
 import { withoutAcceptedFindings } from "./localization-review.js";
+import { localizationCheckInScope } from "./localization-check-scope.js";
+import {
+	customLocalizationChecks,
+	localizationLineCustomFindings
+} from "./localization-custom-checks.js";
 export {
 	localizationShippedTranslation,
 	LocalizationShippedTranslation
@@ -451,34 +456,6 @@ function unreportedPlaceholders(
 		.map(({ match }) => match);
 }
 
-/**
- * Whether a check's scope holds for a finding in `culture` with these saved places: its culture is
- * listed, and one saved place is at a place of a listed role and under a listed path prefix. A
- * finding without saved places is outside any role or path scope. No scope holds everywhere.
- */
-export function localizationCheckInScope(
-	scope: LocalizationCheckScope | undefined,
-	culture: CultureCode,
-	occurrences: () => ReadonlyArray<Pick<TextOccurrence, "location">>,
-	roles: ReadonlyMap<string, TextRole>
-): boolean {
-	if (!scope) return true;
-	if (scope.cultures && !scope.cultures.includes(culture)) return false;
-	if (!scope.roles && !scope.pathPrefixes) return true;
-	const scopeRoles = scope.roles?.flatMap((id) => {
-		const role = roles.get(id);
-		return role ? [role] : [];
-	});
-	return occurrences().some(
-		(occurrence) =>
-			(!scopeRoles || scopeRoles.some((role) => matchesTextRole(occurrence, role))) &&
-			(!scope.pathPrefixes ||
-				scope.pathPrefixes.some((prefix) =>
-					occurrence.location.objectPath.startsWith(prefix)
-				))
-	);
-}
-
 /** Rejects a selection outside the target and lists the built-in checks that run. */
 export function enabledLocalizationChecks(
 	join: Pick<LocalizationJoin, "target" | "cultures">,
@@ -742,8 +719,8 @@ export function compareLocalizationFindings(
 
 /** Report order once policy findings join the built-ins. */
 export function compareReportedLocalizationFindings(
-	a: LocalizationQualityFinding | LocalizationPolicyFinding,
-	b: LocalizationQualityFinding | LocalizationPolicyFinding
+	a: LocalizationQualityFinding | LocalizationPolicyFinding | LocalizationCustomFinding,
+	b: LocalizationQualityFinding | LocalizationPolicyFinding | LocalizationCustomFinding
 ) {
 	return (
 		a.lineId.localeCompare(b.lineId) ||
@@ -1524,9 +1501,30 @@ export function checkLocalizationTarget(
 		ruleDocument !== undefined && ruleDocument.schemaVersion !== 1
 			? evaluateLocalizationPolicy(corpus, join, ruleDocument, options)
 			: { findings: [], diagnostics: [] };
+	const customChecks = customLocalizationChecks(ruleDocument);
+	const custom: LocalizationCustomFinding[] = [];
+	if (customChecks.length) {
+		const customContext = {
+			target: join.target,
+			nativeCulture: join.nativeCulture,
+			options,
+			roles: context.roles
+		};
+		const lines = [...join.lines].sort((a, b) => a.id.localeCompare(b.id));
+		for (const check of customChecks)
+			for (const line of lines)
+				localizationLineCustomFindings(
+					line,
+					() => localizationLineUnits(line, byUnit),
+					check,
+					localizationSourceCulture(line, join.nativeCulture),
+					customContext,
+					custom
+				);
+	}
 	const visible = withoutAcceptedFindings(
 		join,
-		[...findings, ...policy.findings],
+		[...findings, ...policy.findings, ...custom],
 		options.review
 	);
 	const combined = [...visible.findings].sort(compareReportedLocalizationFindings);
@@ -1553,6 +1551,11 @@ export function checkLocalizationTarget(
 			...enabled.map((id) => ({
 				ruleId: ruleIdOf(id),
 				findingCount: visible.findings.filter((finding) => finding.kind === id).length
+			})),
+			...customChecks.map((check) => ({
+				ruleId: check.id,
+				findingCount: visible.findings.filter((finding) => finding.ruleId === check.id)
+					.length
 			}))
 		],
 		changes: {
@@ -1567,5 +1570,9 @@ export function checkLocalizationTarget(
 	if (ruleDocument !== undefined && ruleDocument.schemaVersion !== 1)
 		Object.assign(report, { ruleDiagnostics: policy.diagnostics });
 	if (options.review) Object.assign(report, { acceptedFindings: visible.accepted });
+	if (customChecks.length)
+		Object.assign(report, {
+			customChecks: customChecks.map(({ id, label }) => ({ ruleId: id, label }))
+		});
 	return report;
 }

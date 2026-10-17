@@ -43,7 +43,7 @@
 | B3   | Parameterised, scoped checks                   | B    | DONE — #111        |
 | B4   | Severity stored per finding                    | B    | DONE — #113        |
 | B5   | Host-supplied policies                         | B    | TODO               |
-| B6   | Studio-defined checks                          | B    | TODO               |
+| B6   | Studio-defined checks                          | B    | IN PROGRESS — #117 |
 | B7   | Intended marks                                 | B    | TODO               |
 | B8   | Scans keyed on the resolved rules              | B    | TODO               |
 | C1   | Stage breakdown on real projects               | C    | IN PROGRESS — #114 |

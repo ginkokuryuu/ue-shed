@@ -1,6 +1,7 @@
 import { Effect, Schema, Struct } from "effect";
 import { CultureCode } from "@ue-shed/localization/browser";
 import { BuiltInCheckId, CheckSeverity } from "./localization-check-ids.js";
+import { LocalizationCheckScope } from "./localization-check-scope.js";
 import {
 	localizationCheckCatalogue,
 	localizationCheckDefaults,
@@ -9,10 +10,10 @@ import {
 } from "./localization-check-catalogue.js";
 import {
 	TextQualityRule,
+	TextQualityRuleId,
 	TextQualityRuleDocument,
 	TextQualityReport,
 	TextRole,
-	TextRoleId,
 	decodeTextQualityRuleDocument
 } from "./quality-schema.js";
 import type { TextCorpus } from "./schema.js";
@@ -48,28 +49,6 @@ export const TextQualityRuleDocumentV2 = TextQualityRuleDocument.mapFields((fiel
 	)
 }));
 export type TextQualityRuleDocumentV2 = typeof TextQualityRuleDocumentV2.Type;
-/**
- * Where a check applies. Each listed dimension must match: a finding's culture is one of
- * `cultures`, and one of its saved places is at a place of one of `roles` and under one of
- * `pathPrefixes` (object paths, compared as written). A finding with no saved place, such as
- * gathered-only text, matches no `roles` or `pathPrefixes` scope.
- */
-export const LocalizationCheckScope = Schema.Struct({
-	roles: Schema.optionalKey(
-		Schema.Array(TextRoleId).check(Schema.isMinLength(1), Schema.isMaxLength(64))
-	),
-	cultures: Schema.optionalKey(
-		Schema.Array(CultureCode).check(Schema.isMinLength(1), Schema.isMaxLength(256))
-	),
-	pathPrefixes: Schema.optionalKey(
-		Schema.Array(Schema.Trim.check(Schema.isNonEmpty(), Schema.isMaxLength(1024))).check(
-			Schema.isMinLength(1),
-			Schema.isMaxLength(64)
-		)
-	)
-});
-export type LocalizationCheckScope = typeof LocalizationCheckScope.Type;
-
 function checkSetting<Params extends Schema.Top>(params: Params) {
 	return Schema.Struct({
 		/** Whether the check runs; absent, the preset decides. */
@@ -107,6 +86,77 @@ export type LocalizationCheckSettings = typeof LocalizationCheckSettings.Type;
 export const LocalizationCheckPreset = Schema.Literals(["default", "none"]);
 export type LocalizationCheckPreset = typeof LocalizationCheckPreset.Type;
 
+const CustomCheckBase = {
+	/** The rule ID its findings and review marks record; unique among the file's rules. */
+	id: TextQualityRuleId,
+	/** A short name for lists and filters. */
+	label: Schema.Trim.check(Schema.isNonEmpty(), Schema.isMaxLength(128)),
+	/** The severity of its findings; absent, `normal`. */
+	severity: Schema.optionalKey(CheckSeverity),
+	scope: Schema.optionalKey(LocalizationCheckScope),
+	/**
+	 * `source` checks a keyed line's source once, under its source culture; `translation` checks
+	 * each culture's shipped translation, the native culture aside.
+	 */
+	subject: Schema.Literals(["source", "translation"]),
+	recovery: Schema.Trim.check(Schema.isNonEmpty(), Schema.isMaxLength(2048))
+};
+const CustomTerm = Schema.Trim.check(Schema.isNonEmpty(), Schema.isMaxLength(1024));
+
+/**
+ * A check the project defines. `pattern` reports text a JavaScript regular expression (Unicode
+ * mode) matches, or with `report: "no_match"` text it does not match; `length` reports text
+ * shorter than `minimum` or longer than `maximum`, in `visible` characters (rich text, modifiers
+ * and arguments removed, wide characters counted twice, as `length_outlier` measures) or code
+ * point `characters`; `forbidden_term` reports text that uses one of `terms`, matched as the
+ * terminology rules match them. Each is scoped by culture, role and object path like the
+ * built-in checks.
+ */
+export const CustomLocalizationCheck = Schema.Union([
+	Schema.Struct({
+		...CustomCheckBase,
+		kind: Schema.Literal("pattern"),
+		pattern: Schema.String.check(Schema.isNonEmpty(), Schema.isMaxLength(1024)),
+		caseSensitive: Schema.optionalKey(Schema.Boolean),
+		report: Schema.optionalKey(Schema.Literals(["match", "no_match"]))
+	}),
+	Schema.Struct({
+		...CustomCheckBase,
+		kind: Schema.Literal("length"),
+		measure: Schema.Literals(["visible", "characters"]),
+		minimum: Schema.optionalKey(Schema.Int.check(Schema.isGreaterThan(0))),
+		maximum: Schema.optionalKey(Schema.Int.check(Schema.isGreaterThan(0)))
+	}),
+	Schema.Struct({
+		...CustomCheckBase,
+		kind: Schema.Literal("forbidden_term"),
+		terms: Schema.Array(CustomTerm).check(Schema.isMinLength(1), Schema.isMaxLength(256)),
+		caseSensitive: Schema.Boolean
+	})
+]);
+export type CustomLocalizationCheck = typeof CustomLocalizationCheck.Type;
+
+/** Whether a custom check is usable: a compiling pattern, a length with a bound in order. */
+function validCustomCheck(check: CustomLocalizationCheck): boolean {
+	if (check.id.startsWith("localization.")) return false;
+	switch (check.kind) {
+		case "pattern":
+			try {
+				new RegExp(check.pattern, "u");
+				return true;
+			} catch {
+				return false;
+			}
+		case "length":
+			return (
+				(check.minimum !== undefined || check.maximum !== undefined) &&
+				(check.minimum ?? 0) <= (check.maximum ?? Number.MAX_SAFE_INTEGER)
+			);
+		case "forbidden_term":
+			return true;
+	}
+}
+
 /**
  * V3 keeps v2's roles, source rules and localization rules and moves every built-in check's
  * policy into `checks`: whether it runs, its severity, its scope and its parameters. The v1 and
@@ -128,7 +178,11 @@ export const TextQualityRuleDocumentV3 = TextQualityRuleDocumentV2.mapFields(
 	localizationRules: Schema.optionalKey(
 		Schema.Array(LocalizationProjectRule).check(Schema.isMaxLength(512))
 	),
-	checks: Schema.optionalKey(LocalizationCheckSettings)
+	checks: Schema.optionalKey(LocalizationCheckSettings),
+	/** Checks the project defines, reported beside the built-in ones. */
+	customChecks: Schema.optionalKey(
+		Schema.Array(CustomLocalizationCheck).check(Schema.isMaxLength(512))
+	)
 }));
 export type TextQualityRuleDocumentV3 = typeof TextQualityRuleDocumentV3.Type;
 
@@ -224,17 +278,21 @@ export function decodeGameTextRuleDocumentJson(
 				Effect.mapError((error) => invalid(error.code))
 			);
 		if (duplicateCultureKey(input)) return yield* Effect.fail(invalid("duplicate_culture_key"));
+		const custom = document.schemaVersion === 3 ? (document.customChecks ?? []) : [];
+		if (!custom.every(validCustomCheck))
+			return yield* Effect.fail(invalid("invalid_structure"));
 		const rules = [...document.rules, ...(document.localizationRules ?? [])];
 		if (rules.length === 0 && document.schemaVersion === 2)
 			return yield* Effect.fail(invalid("invalid_structure"));
 		const roles = new Set(document.roles.map((role) => role.id));
 		if (roles.size !== document.roles.length)
 			return yield* Effect.fail(invalid("duplicate_role_id"));
-		if (new Set(rules.map((rule) => rule.id)).size !== rules.length)
+		const ids = [...rules, ...custom].map((rule) => rule.id);
+		if (new Set(ids).size !== ids.length)
 			return yield* Effect.fail(invalid("duplicate_rule_id"));
 		const scopeRoles =
 			document.schemaVersion === 3
-				? Object.values(document.checks ?? {}).flatMap(
+				? [...Object.values(document.checks ?? {}), ...custom].flatMap(
 						(setting) => setting?.scope?.roles ?? []
 					)
 				: [];

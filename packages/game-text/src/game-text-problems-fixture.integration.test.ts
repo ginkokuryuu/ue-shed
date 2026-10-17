@@ -17,7 +17,7 @@ import { applyLocalizationKeyChanges, localizationKeyChanges } from "./localizat
 import type { LocalizationQualityReport } from "./localization-quality-schema.js";
 import type { LocalizationJoin } from "./localization-schema.js";
 import {
-	WorkspaceQualityFilter,
+	BuiltInQualityFilter,
 	localizationQualityWorkspace,
 	localizationQualityWorkspaceOf
 } from "./localization-workspace.js";
@@ -350,7 +350,7 @@ describe.skipIf(!executable)("Game Text problem cases in the saved fixture", () 
 								yield* result.localizationQuality!({}, ruleDocument)
 							);
 							for (const culture of [undefined, ...result.localizationJoin.cultures])
-								for (const filter of WorkspaceQualityFilter.literals) {
+								for (const filter of BuiltInQualityFilter.literals) {
 									const request = {
 										target: result.localizationJoin.target,
 										filter,

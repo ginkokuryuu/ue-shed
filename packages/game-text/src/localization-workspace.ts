@@ -46,7 +46,8 @@ import { localizationCheckCatalogue, projectRuleKinds } from "./localization-che
 const Count = Schema.Int.check(Schema.isGreaterThanOrEqualTo(0));
 const Offset = Schema.optionalKey(Count);
 const Excerpt = Schema.String.check(Schema.isMaxLength(4096));
-export const WorkspaceQualityFilter = Schema.Literals([
+/** The built-in filters: every finding, the project rule kinds and each built-in check. */
+export const BuiltInQualityFilter = Schema.Literals([
 	"all",
 	"character_budget",
 	"terminology",
@@ -76,9 +77,28 @@ export const WorkspaceQualityFilter = Schema.Literals([
 	"source_line_endings_changed",
 	"placeholder_translation"
 ]);
+export type BuiltInQualityFilter = typeof BuiltInQualityFilter.Type;
+/** A custom check's filter: `custom.` and the check's rule ID. */
+export const CustomQualityFilter = Schema.TemplateLiteral(["custom.", Schema.String]);
+export type CustomQualityFilter = typeof CustomQualityFilter.Type;
+/** A built-in filter, or a custom check's: the filter list is the rule file's, not fixed. */
+export const WorkspaceQualityFilter = Schema.Union([BuiltInQualityFilter, CustomQualityFilter]);
 export type WorkspaceQualityFilter = typeof WorkspaceQualityFilter.Type;
-/** A filter's name in lists: the check's catalogue label, or the project rule kind's. */
-export function workspaceQualityLabel(filter: WorkspaceQualityFilter): string {
+const isBuiltInFilter = Schema.is(BuiltInQualityFilter);
+/** The filter of a custom check's findings. */
+export function customQualityFilter(ruleId: string): CustomQualityFilter {
+	return `custom.${ruleId}`;
+}
+/**
+ * A filter's name in lists: the check's catalogue label, the project rule kind's, or a custom
+ * check's label from `customLabels` (by filter), falling back to its rule ID.
+ */
+export function workspaceQualityLabel(
+	filter: WorkspaceQualityFilter,
+	customLabels?: ReadonlyMap<string, string>
+): string {
+	if (!isBuiltInFilter(filter))
+		return customLabels?.get(filter) ?? filter.slice("custom.".length);
 	if (filter === "all") return "All findings";
 	if (filter === "character_budget" || filter === "terminology")
 		return projectRuleKinds[filter].label;
@@ -88,6 +108,7 @@ export function workspaceQualityLabel(filter: WorkspaceQualityFilter): string {
 export function workspaceQualitySeverity(
 	filter: Exclude<WorkspaceQualityFilter, "all">
 ): CheckSeverity {
+	if (!isBuiltInFilter(filter)) return "normal";
 	if (filter === "character_budget" || filter === "terminology")
 		return projectRuleKinds[filter].severity;
 	return localizationCheckCatalogue[filter].severity;
@@ -130,6 +151,10 @@ export const WorkspaceQualityPage = Schema.Struct({
 	findings: Schema.Array(WorkspaceFinding).check(Schema.isMaxLength(50)),
 	total: Count,
 	counts: Schema.Record(WorkspaceQualityFilter, Count),
+	/** The rule file's custom checks: their filters and labels, in the file's order. */
+	customFilters: Schema.Array(
+		Schema.Struct({ filter: CustomQualityFilter, label: Schema.String })
+	).check(Schema.isMaxLength(512)),
 	/** Findings by severity in the culture selection, as `counts.all` counts them. */
 	severityCounts: Schema.Record(CheckSeverity, Count),
 	nextOffset: Offset,
@@ -249,6 +274,7 @@ export function workspaceQualityFilterOf(
 ): Exclude<WorkspaceQualityFilter, "all"> {
 	if (finding.kind === "localization_character_budget") return "character_budget";
 	if (finding.kind === "localization_terminology") return "terminology";
+	if (finding.kind === "custom") return customQualityFilter(finding.ruleId);
 	return finding.kind;
 }
 const braced = (names: readonly string[]) => names.map((name) => "{" + name + "}").join(", ");
@@ -391,7 +417,24 @@ function problem(finding: Finding): string {
 						"” · uses “" +
 						finding.actual.term +
 						"”";
+		case "custom":
+			return finding.label + " · " + customProblem(finding);
 	}
+}
+function customProblem(finding: Extract<Finding, { kind: "custom" }>): string {
+	const { actual, expectation } = finding;
+	if (finding.check === "length")
+		return (
+			textCountLabel(actual.length ?? 0, "character") +
+			(expectation.minimum !== undefined ? " · minimum " + expectation.minimum : "") +
+			(expectation.maximum !== undefined ? " · maximum " + expectation.maximum : "")
+		);
+	const matches = actual.matches ?? [];
+	if (finding.check === "forbidden_term")
+		return "Uses " + matches.map((match) => quoted(match.match)).join(", ");
+	return expectation.report === "no_match"
+		? "Does not match the pattern"
+		: "Matches " + matches.map((match) => quoted(match.match)).join(", ");
 }
 /** What tells localization findings apart. */
 interface HashedLocalizationFinding {
@@ -493,7 +536,9 @@ export function workspaceQualityItem(
 				line?.identity?.key ??
 				(location?.kind === "string_table_entry" ? location.entryKey : finding.ruleId))) +
 		" · " +
-		workspaceQualityLabel(workspaceQualityFilterOf(finding)) +
+		(finding.kind === "custom"
+			? finding.label
+			: workspaceQualityLabel(workspaceQualityFilterOf(finding))) +
 		" · " +
 		textCountLabel(finding.affectedOccurrences.length, "location");
 	const filter = workspaceQualityFilterOf(finding);
@@ -550,6 +595,10 @@ function ranges(text: string, finding: Finding, side: "source" | "translation") 
 			break;
 		case "localization_terminology":
 			if (side === "translation") add(finding.actual.start, finding.actual.end);
+			break;
+		case "custom":
+			if (side === finding.subject)
+				for (const match of finding.actual.matches ?? []) add(match.start, match.end);
 			break;
 		case "rich_text":
 		case "rich_text_tags":
@@ -625,6 +674,8 @@ export interface LocalizationFindingList {
 export interface LocalizationQualityMetadata {
 	readonly join: Pick<LocalizationJoin, "target" | "nativeCulture" | "cultures">;
 	readonly rules: readonly RuleId[];
+	/** The rule file's custom checks, with their labels, in the file's order. */
+	readonly customChecks?: ReadonlyArray<{ readonly ruleId: RuleId; readonly label: string }>;
 	readonly unsupportedRuleCultures: number;
 	readonly status: TextCorpus["status"];
 	readonly coverage: TextCorpus["coverage"];
@@ -717,6 +768,7 @@ export function localizationQuality(
 		metadata: {
 			join,
 			rules: report.rules.map((rule) => rule.ruleId),
+			...(report.customChecks ? { customChecks: report.customChecks } : undefined),
 			unsupportedRuleCultures: report.ruleDiagnostics?.length ?? 0,
 			status: report.status,
 			coverage: report.coverage,
@@ -756,6 +808,10 @@ export function localizationQualityWorkspaceOf(
 	{ findings: list, metadata }: LocalizationQuality
 ) {
 	const sourceFindings = source?.findings ?? [];
+	const customFilters = (metadata.customChecks ?? []).map(({ ruleId, label }) => ({
+		filter: customQualityFilter(ruleId),
+		label
+	}));
 	// The last page's source IDs also serve focus without hashing every preceding finding.
 	const pageSources = new Map<TextQualityFindingId, SourceFinding>();
 	const sourceItem = (finding: SourceFinding) => {
@@ -945,18 +1001,20 @@ export function localizationQualityWorkspaceOf(
 				});
 		}
 		const counts = Schema.decodeUnknownSync(WorkspaceQualityPage.fields.counts)(
-			Object.fromEntries(
-				WorkspaceQualityFilter.literals.map((filter) => [
+			Object.fromEntries([
+				...BuiltInQualityFilter.literals.map((filter) => [
 					filter,
 					filter === "all" ? cultureCount : (typeCounts.get(filter) ?? 0)
-				])
-			)
+				]),
+				...customFilters.map(({ filter }) => [filter, typeCounts.get(filter) ?? 0])
+			])
 		);
 		return {
 			culture: request.culture,
 			filter: request.filter,
 			positions: CheckSeverity.literals.map((severity) => runs[severity]),
 			counts,
+			customFilters,
 			severityCounts,
 			limits: [...list.limits(request.culture)],
 			unsupportedRuleCultures: metadata.unsupportedRuleCultures,
@@ -1360,6 +1418,7 @@ export function localizationReportCsv(
 
 /** A spreadsheet of the same finding summaries the quality list displays. */
 export function workspaceQualityCsv(report: WorkspaceQualityReport): string {
+	const customLabels = new Map(report.customFilters.map(({ filter, label }) => [filter, label]));
 	return spreadsheetCsv([
 		[
 			"Target",
@@ -1376,7 +1435,7 @@ export function workspaceQualityCsv(report: WorkspaceQualityReport): string {
 			report.target,
 			finding.culture ?? "Source",
 			finding.severity,
-			workspaceQualityLabel(finding.filter),
+			workspaceQualityLabel(finding.filter, customLabels),
 			finding.source,
 			finding.problem,
 			finding.context,
