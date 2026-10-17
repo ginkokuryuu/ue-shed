@@ -10,6 +10,20 @@ subsections below describe earlier revisions; they do not supersede the latest
 Cold/refresh results use **TypeScript builder; native builder pending**. Earlier Phase 6 cold
 discovery measurements with explicit worker heap limits are superseded by default-worker runs.
 
+## Stage breakdown (Plan 058 C1): instrumentation ready, numbers pending
+
+The build and Quality scan now report their stages: `PackageText.refresh`,
+`JoinedTarget.refresh` and `GameText.localizationQuality` carry `*.stage_ms.*` span attributes,
+and `benchmark-game-text-scale.ts --stages` records them with every span's wall time (see
+[the scale harness](../../scripts/game-text-scale.md)). Any OpenTelemetry tracer a host installs
+receives the same attributes.
+
+**No stage numbers are recorded yet.** The large UE 4.27 project and the large UE 5 World
+Partition project were not available on the machine that added the instrumentation, and other
+builds and tests ran on it at the same time. Record the breakdown for both projects here,
+without naming them, on a quiet machine with alternating fresh processes, as ADR 0010 requires.
+Say which builder each number is for (TypeScript, or the native builder once PR #101 merges).
+
 ## Project-wide extraction: actual desktop comparison (2026-10-12)
 
 Two sequential local runs used the owner's saved project, the same native reader, Node 26.11.1,

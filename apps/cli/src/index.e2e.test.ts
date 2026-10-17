@@ -2,7 +2,7 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { decodeAuthoringTableSnapshot as decodeAuthoringTableSnapshotEffect } from "@ue-shed/protocol";
-import { decodeTextQualityReport as decodeTextQualityReportEffect } from "@ue-shed/game-text";
+import { parseTextQualityReport } from "@ue-shed/game-text";
 import { Effect } from "effect";
 import { describe, expect, it } from "vitest";
 import { useSavedFixtureProject } from "../../../fixtures/unreal-project/saved-project.test-support.js";
@@ -17,8 +17,8 @@ import {
 const decodeAuthoringTableSnapshot = <Input>(input: Input) =>
 	Effect.runSync(decodeAuthoringTableSnapshotEffect(input));
 
-const decodeTextQualityReport = <Input>(input: Input) =>
-	Effect.runSync(decodeTextQualityReportEffect(input));
+const decodeTextQualityReport = (input: Parameters<typeof parseTextQualityReport>[0]) =>
+	Effect.runSync(parseTextQualityReport(input));
 
 const uassetTestsEnabled = process.env.UE_SHED_UASSET_AUTO_BUILD !== "0";
 // Native-reader scenarios belong to the conditional UAsset lane.

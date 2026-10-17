@@ -7,7 +7,7 @@ import {
 	CustodianReport,
 	CustodianTargetId
 } from "@ue-shed/project-custodian/browser";
-import { type Effect, Schema } from "effect";
+import { Effect, Schema } from "effect";
 
 export const CustodianPublicError = Schema.Struct({
 	code: Schema.Literals(["scan_failed", "dialog_failed", "prepare_failed", "execution_failed"]),
@@ -25,7 +25,53 @@ export const CustodianRunResult = Schema.Union([
 ]);
 export type CustodianRunResult = typeof CustodianRunResult.Type;
 
-export const decodeCustodianRunResult = Schema.decodeUnknownEffect(CustodianRunResult);
+/**
+ * A value that does not match the Project Custodian client contract: the two sides disagree about the contract, so
+ * repeating the same call returns the same mismatch.
+ */
+export class CustodianClientContractError extends Schema.TaggedError<CustodianClientContractError>()(
+	"CustodianClientContractError",
+	{
+		code: Schema.Literal("invalid_contract"),
+		message: Schema.String,
+		recovery: Schema.String,
+		retrySafe: Schema.Boolean,
+		cause: Schema.optionalKey(Schema.Defect())
+	}
+) {}
+
+/**
+ * A unary parser for one Project Custodian client contract value: it decodes the encoded value and fails with
+ * `CustodianClientContractError` naming `subject`, keeping the schema issue as its cause.
+ */
+function custodianClientContractParser<S extends Schema.Codec<unknown, unknown>>(
+	schema: S,
+	subject: string
+) {
+	const decode = Schema.decodeUnknownEffect(schema);
+	return (
+		// oxlint-disable-next-line anti-slop/no-unknown-parameters -- This parser is the boundary: it decodes its input here.
+		encoded: unknown
+	): Effect.Effect<S["Type"], CustodianClientContractError> =>
+		decode(encoded).pipe(
+			Effect.mapError(
+				(cause) =>
+					new CustodianClientContractError({
+						code: "invalid_contract",
+						message: `The ${subject} does not match the Project Custodian client contract.`,
+						recovery:
+							"Run Workbench and its extensions from the same UE Shed version, then retry.",
+						retrySafe: false,
+						cause
+					})
+			)
+		);
+}
+
+export const parseCustodianRunResult = custodianClientContractParser(
+	CustodianRunResult,
+	"custodian run result"
+);
 
 export const CustodianPrepareIntent = Schema.Struct({
 	root: Schema.NonEmptyString,
@@ -53,19 +99,28 @@ export const CustodianExecutionRunResult = Schema.Union([
 ]);
 export type CustodianExecutionRunResult = typeof CustodianExecutionRunResult.Type;
 
-export const decodeCustodianPrepareRunResult =
-	Schema.decodeUnknownEffect(CustodianPrepareRunResult);
-export const decodeCustodianExecutionRunResult = Schema.decodeUnknownEffect(
-	CustodianExecutionRunResult
+export const parseCustodianPrepareRunResult = custodianClientContractParser(
+	CustodianPrepareRunResult,
+	"custodian prepare run result"
 );
-export const decodeCustodianCancelResult = Schema.decodeUnknownEffect(CustodianCancelResult);
+export const parseCustodianExecutionRunResult = custodianClientContractParser(
+	CustodianExecutionRunResult,
+	"custodian execution run result"
+);
+export const parseCustodianCancelResult = custodianClientContractParser(
+	CustodianCancelResult,
+	"custodian cancel result"
+);
 
 export const CustodianCancelRunResult = Schema.Union([
 	Schema.Struct({ status: Schema.Literal("failed"), error: CustodianPublicError }),
 	Schema.Struct({ status: Schema.Literal("completed"), result: CustodianCancelResult })
 ]);
 export type CustodianCancelRunResult = typeof CustodianCancelRunResult.Type;
-export const decodeCustodianCancelRunResult = Schema.decodeUnknownEffect(CustodianCancelRunResult);
+export const parseCustodianCancelRunResult = custodianClientContractParser(
+	CustodianCancelRunResult,
+	"custodian cancel run result"
+);
 
 export class CustodianClientError extends Schema.TaggedError<CustodianClientError>()(
 	"ProjectCustodian.ClientError",
