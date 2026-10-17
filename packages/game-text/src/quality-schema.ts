@@ -2,6 +2,7 @@ import { TextCorpusDiagnosticSummary } from "./corpus-summary.js";
 import { Effect, Schema } from "effect";
 import { BuiltInCheckId } from "./localization-check-ids.js";
 import { TextCorpus, TextLocation, TextOccurrenceId, TextUnitId } from "./schema.js";
+import { gameTextResponseParser } from "./response-parser.js";
 
 const SafeIdentifier = Schema.Trim.check(Schema.isPattern(/^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/));
 const EvidenceValue = Schema.Trim.check(Schema.isNonEmpty(), Schema.isMaxLength(1024));
@@ -305,4 +306,4 @@ export const TextQualityReport = Schema.Struct({
 });
 export type TextQualityReport = Schema.Schema.Type<typeof TextQualityReport>;
 
-export const decodeTextQualityReport = Schema.decodeUnknownEffect(TextQualityReport);
+export const parseTextQualityReport = gameTextResponseParser(TextQualityReport, "quality report");

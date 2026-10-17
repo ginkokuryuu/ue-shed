@@ -59,7 +59,7 @@
 | D4   | One error shape                                | D    | TODO                 |
 | D5   | Classified causes instead of prose             | D    | TODO                 |
 | D6   | Deliberate error translation                   | D    | TODO                 |
-| D7   | Domain parsers instead of raw decoders         | D    | TODO                 |
+| D7   | Domain parsers instead of raw decoders         | D    | IN PROGRESS — #127   |
 | D8   | Layers and test layers                         | D    | TODO                 |
 | D9   | One progress mechanism, one completeness shape | D    | TODO                 |
 | D10  | Workspace orchestration as a package           | D    | TODO                 |

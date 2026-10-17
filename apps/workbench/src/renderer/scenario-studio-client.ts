@@ -3,8 +3,8 @@ import {
 	type ScenarioStudioClient
 } from "@ue-shed/extension-scenarios/client";
 import {
-	decodeScenarioRun,
-	decodeScenarioStatusResponse,
+	parseScenarioRun,
+	parseScenarioStatusResponse,
 	ScenarioRunHandle,
 	ScenarioDocumentFileResult,
 	type ScenarioDocument,
@@ -35,7 +35,7 @@ const status = (handle: ScenarioRunHandle) =>
 					recovery: "Confirm the same Unreal Editor and PIE session are still running."
 				})
 		});
-		const response = yield* decodeScenarioStatusResponse(value).pipe(
+		const response = yield* parseScenarioStatusResponse(value).pipe(
 			Effect.mapError((cause) =>
 				clientError({
 					cause,
@@ -96,7 +96,7 @@ export const scenarioStudioClient: ScenarioStudioClient = {
 				})
 		}).pipe(
 			Effect.flatMap((value) =>
-				decodeScenarioRun(value).pipe(
+				parseScenarioRun(value).pipe(
 					Effect.mapError((cause) =>
 						clientError({
 							cause,
