@@ -25,8 +25,10 @@ pub fn u32_bytes(values: &[u32]) -> Vec<u8> {
 pub fn integers(bytes: &[u8]) -> Result<Vec<u32>> {
     require(bytes.len().is_multiple_of(4), "unaligned integer column")?;
     Ok(bytes
-        .chunks_exact(4)
-        .map(|b| u32::from_le_bytes(b.try_into().unwrap()))
+        .as_chunks::<4>()
+        .0
+        .iter()
+        .map(|b| u32::from_le_bytes(*b))
         .collect())
 }
 pub fn string_block(values: &[String]) -> Result<Vec<u8>> {
@@ -273,7 +275,7 @@ impl Reader {
         let mut seen = std::collections::HashSet::new();
         let mut domain_counts = std::collections::HashMap::new();
         let mut offset = 48 + n as u64 * 96;
-        for d in b.chunks_exact(96) {
+        for d in b.as_chunks::<96>().0 {
             let domain = name(&d[64..88])?;
             let name = name(&d[..32])?;
             let e = Entry {

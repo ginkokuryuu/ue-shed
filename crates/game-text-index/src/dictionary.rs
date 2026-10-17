@@ -175,7 +175,7 @@ pub fn a64(keys: &[Vec<u8>]) -> Result<Vec<u8>> {
                 }
             }
             out.push(if mask == 0 { 1 } else { 2 });
-            for pair in key.chunks_exact(2) {
+            for pair in key.as_chunks::<2>().0 {
                 out.push((nibble(pair[0]).unwrap() << 4) | nibble(pair[1]).unwrap());
             }
             if mask != 0 {
