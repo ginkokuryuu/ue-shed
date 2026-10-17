@@ -51,6 +51,7 @@ export * from "./text-copies.js";
 export * from "./text-problems.js";
 export * from "./text-groups.js";
 export * from "./localization-key-changes.js";
+export * from "./text-actions.js";
 export * from "./localization-export.js";
 export * from "./localization-gate.js";
 export * from "./schema.js";

@@ -1138,6 +1138,32 @@ disk now, so a problem already in a touched file counts too.
 - Fixes are made in Unreal (ADR 0009 addendum); the way forward names the step, such as carrying
   translations with `loc run prepare --carry`.
 
+### Fixing keys in assets
+
+Key fixes run in Unreal through the separately enabled `UEShedGameText` editor plugin
+([ADR 0011](../decisions/0011-game-text-actions.md)), over Remote Control or its commandlet. A
+host sends `runGameTextActions` a `ue-shed-game-text-actions` request; each action names a place
+(scanned package file, object path and the reader's property chain), the namespace, key and source the host reviewed, and
+one edit:
+
+- `change_key` gives the text a namespace and key; `regenerate_key` gives it a new random key;
+- `adopt_key` makes it the same text as another id (namespace, key and source), for example to merge
+  a Content Browser duplicate back into the original's id;
+- `change_source` retypes the source; Unreal keeps the key only if no other text in the package
+  uses it.
+
+`gameTextActionForOccurrence` builds an action from a text the reader found. Edits use the editor's
+own id rules, so a requested key Unreal would not keep fails as `key_conflict` instead of being
+replaced silently. Run a dry run first: it reports each outcome and the packages an apply would
+write, so the host can check them out (UE Shed never does). An apply compiles each owning
+Blueprint without implicit Save on Compile, reads each place back and saves only when asked. A
+compile/readback failure verifies restoration before reporting rollback. A partial save failure
+retains applied outcomes and generated keys, with separate package persistence states; inspect and
+reconcile those results before explicitly saving outstanding state through Unreal. Never replay the
+edits as save recovery. After saving, `verifyGameTextActions` compares the reader's re-read with the
+editor's result, binding even serialized original paths to their actual package files.
+DataTable cells keep using Authoring Apply 1.2; graph pins are not action places yet.
+
 ### Comparing two copies of a package
 
 `diffPackageText(before, after)` compares the text records the reader produced for two copies of
