@@ -616,9 +616,9 @@ public:
 				const FOutcome& Outcome = Outcomes[Index];
 				const TSharedRef<FJsonObject> Item = MakeShared<FJsonObject>();
 				Item->SetStringField(TEXT("id"), Actions[Index].Id);
-				Item->SetStringField(TEXT("status"), !Outcome.bChanged ? TEXT("unchanged")
-					: Mode == TEXT("dry_run") ? TEXT("planned")
-					: bRolledBack ? TEXT("rolled_back") : bRollbackFailed ? TEXT("unknown") : TEXT("applied"));
+				Item->SetStringField(TEXT("status"), bRollbackFailed ? TEXT("unknown")
+					: !Outcome.bChanged ? TEXT("unchanged") : Mode == TEXT("dry_run") ? TEXT("planned")
+					: bRolledBack ? TEXT("rolled_back") : TEXT("applied"));
 				const TSharedRef<FJsonObject> Place = MakeShared<FJsonObject>();
 				Place->SetStringField(TEXT("packageFile"), Actions[Index].PackageFile);
 				Place->SetStringField(TEXT("objectPath"), Actions[Index].ObjectPath);

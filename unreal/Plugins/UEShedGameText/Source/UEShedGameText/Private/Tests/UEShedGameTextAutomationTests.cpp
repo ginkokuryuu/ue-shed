@@ -358,10 +358,11 @@ bool FUEShedGameTextBlueprintTest::RunTest(const FString& Parameters)
 	const TArray<uint8> RollbackBytes = PackageBytes(Package);
 	const FId BeforeFailure = DefaultGreeting();
 	int32 Compiles = 0;
-	const FDelegateHandle Handle = Sign->OnCompiled().AddLambda([&Compiles](UBlueprint* Blueprint)
+	bool bPreventRestoration = false;
+	const FDelegateHandle Handle = Sign->OnCompiled().AddLambda([&Compiles, &bPreventRestoration](UBlueprint* Blueprint)
 	{
 		// An editor observer changes a value before readback, forcing the post-compile rejection path.
-		if (++Compiles != 1) return;
+		if (++Compiles != 1 && !bPreventRestoration) return;
 		FTextProperty* Property = CastFieldChecked<FTextProperty>(Blueprint->GeneratedClass->FindPropertyByName(TEXT("Greeting")));
 		Type(Blueprint->GetPackage(), *Property->ContainerPtrToValuePtr<FText>(Blueprint->GeneratedClass->GetDefaultObject()), TEXT("Changed during compile"));
 	});
@@ -373,6 +374,21 @@ bool FUEShedGameTextBlueprintTest::RunTest(const FString& Parameters)
 	TestTrue(TEXT("Normal and rollback compiles ran"), Compiles >= 2);
 	TestTrue(TEXT("Rollback verified restored text"), Failed->GetBoolField(TEXT("rolledBack")) && Same(DefaultGreeting(), BeforeFailure));
 	TestTrue(TEXT("Rollback compile leaves saved bytes unchanged"), PackageBytes(Package) == RollbackBytes);
+
+	// Even an initially unchanged action becomes unknown if compile observers prevent restoration.
+	Compiles = 0;
+	bPreventRestoration = true;
+	const TSharedPtr<FJsonObject> Unrestored = Run(TEXT("apply"), {
+		Action(TEXT("unchanged"), DefaultsPath, TEXT("Greeting"), BeforeFailure,
+			EditJson(TEXT("change_source"), FString(), FString(), BeforeFailure.Source)) });
+	TestEqual(TEXT("Failed restoration is a failure"), Status(Unrestored), FString(TEXT("failed")));
+	TestFalse(TEXT("Failed restoration is not rolled back"), Unrestored->GetBoolField(TEXT("rolledBack")));
+	TestEqual(TEXT("An unverified value is unknown, not unchanged"),
+		Unrestored->GetArrayField(TEXT("actions"))[0]->AsObject()->GetStringField(TEXT("status")), FString(TEXT("unknown")));
+	TestTrue(TEXT("Failed restoration carries a recovery error"), Unrestored->GetArrayField(TEXT("errors")).ContainsByPredicate(
+		[](const TSharedPtr<FJsonValue>& Error) { return Error->AsObject()->GetStringField(TEXT("code")) == TEXT("rollback_failed")
+			&& Error->AsObject()->GetStringField(TEXT("nextStep")) == TEXT("reconcile"); }));
+	TestTrue(TEXT("Failed restoration also leaves disk bytes unchanged"), PackageBytes(Package) == RollbackBytes);
 
 	Package->SetDirtyFlag(false);
 	return true;
