@@ -46,7 +46,7 @@
 | B6   | Studio-defined checks                          | B    | TODO                 |
 | B7   | Intended marks                                 | B    | BLOCKED — waits #101 |
 | B8   | Scans keyed on the resolved rules              | B    | BLOCKED — waits #101 |
-| C1   | Stage breakdown on real projects               | C    | TODO                 |
+| C1   | Stage breakdown on real projects               | C    | IN PROGRESS — #114   |
 | C2   | Prepare the query once, off the main thread    | C    | TODO                 |
 | C3   | Quality scan in a worker                       | C    | TODO                 |
 | C4   | Column cache per reader                        | C    | DONE — #116          |
