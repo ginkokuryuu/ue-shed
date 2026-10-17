@@ -128,7 +128,3 @@ export const CameraControlFailure = Schema.Struct({
 	message: Schema.optionalKey(Schema.String)
 }).annotate({ identifier: "CameraControlFailure" });
 export type CameraControlFailure = Schema.Schema.Type<typeof CameraControlFailure>;
-/** Decode a camera status or typed native refusal, accepting failures from older plugins. */
-export const decodeCameraControlResponse = Schema.decodeUnknownEffect(
-	Schema.Union([CameraStatus, CameraControlFailure])
-);

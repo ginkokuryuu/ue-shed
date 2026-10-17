@@ -108,4 +108,20 @@ describe("coded camera control failures", () => {
 			nextStep: "escalate"
 		});
 	});
+
+	it("reports a malformed plugin reply through the camera domain error", async () => {
+		const error = await Effect.runPromise(
+			getCameraStatus("http://localhost:30117").pipe(
+				respond({ schemaVersion: 99, error: "no-renderable-world" }),
+				Effect.flip
+			)
+		);
+		expect(error).toMatchObject({
+			_tag: "CameraControlError",
+			operation: "status",
+			retrySafe: false,
+			nextStep: "escalate"
+		});
+		expect(error.code).toBeUndefined();
+	});
 });

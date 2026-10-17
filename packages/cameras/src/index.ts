@@ -1,10 +1,10 @@
 import {
 	decodeCameraScheduleConfig,
-	decodeCameraControlResponse,
+	CameraControlFailure,
+	CameraStatus,
 	ErrorCauseFields,
 	ErrorGuidanceFields,
-	type CameraScheduleConfig,
-	type CameraStatus
+	type CameraScheduleConfig
 } from "@ue-shed/protocol";
 import { RemoteControlClient, RemoteControlClientError } from "@ue-shed/unreal-connection";
 import { Context, Effect, Layer, PubSub, Schema, Scope, Stream } from "effect";
@@ -449,6 +449,9 @@ export class CameraControlError extends Schema.TaggedError<CameraControlError>()
 
 const isRemoteControlClientError = Schema.is(RemoteControlClientError);
 const isCameraControlError = Schema.is(CameraControlError);
+const decodeCameraControlResponse = Schema.decodeUnknownEffect(
+	Schema.Union([CameraStatus, CameraControlFailure])
+);
 
 function cameraStatusOrFailure(endpoint: string, operation: "configure" | "status") {
 	return (value: Schema.Json) =>
