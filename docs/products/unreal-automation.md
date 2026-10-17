@@ -15,6 +15,7 @@ contracts live in `@ue-shed/protocol`. Workbench is not required. See the
 | `automation.players.v1`                                                     | `UEShedAutomation` | Local controllers in an explicitly selected game or PIE world                                 |
 | `automation.input.v1`                                                       | `UEShedAutomation` | One-shot Enhanced Input injection for an explicitly selected local controller and InputAction |
 | `automation.csv.v1`                                                         | `UEShedAutomation` | Process-wide CSV profiler state and owned captures                                            |
+| `game-text.actions.v1`                                                      | `UEShedGameText`   | Text key and source edits in editor assets, compile, read-back and explicit Save (ADR 0011)   |
 
 `UEShedCore` advertises the loaded providers and their public endpoints. `UEShedAutomation` is an
 optional runtime plugin, disabled by default; enabling Authoring does not enable Automation.

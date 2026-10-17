@@ -96,9 +96,9 @@ const failureMessages = {
 function failure(error: LocalizationOperationError): GameTextOperationFailure {
 	const recovery =
 		error.code === "engine_not_found" || error.code === "engine_ambiguous"
-			? "Install the engine associated with this project, or set UE_SHED_UNREAL_ENGINE_ROOT before starting Workbench."
+			? "Install the engine associated with this project, or set UE_SHED_UNREAL_ENGINE_ROOT before starting the host."
 			: error.code === "termination_failed"
-				? "Stop the remaining Unreal process and restart Workbench before retrying. Check the project files first."
+				? "Stop the remaining Unreal process and restart the host before retrying. Check the project files first."
 				: error.recovery;
 	return {
 		status: "failed",

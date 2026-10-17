@@ -8,8 +8,11 @@ import {
 	gameTextQualityCsv,
 	type LocalizationLinesFileResult
 } from "./entry-corpus.js";
-import { createStarterTextRules } from "./entry-index.js";
-import { GAME_TEXT_RULES_RELATIVE_PATH, projectRelativeTextFiles } from "./entry-rules.js";
+import {
+	GAME_TEXT_RULES_RELATIVE_PATH,
+	STARTER_GAME_TEXT_RULES,
+	projectRelativeTextFiles
+} from "./entry-rules.js";
 import { resolve } from "node:path";
 import {
 	InvestigationError,
@@ -23,7 +26,6 @@ import {
 	investigationFailure
 } from "./workspace-investigation.js";
 import {
-	textQualityQuery,
 	type WorkspaceQualityRequest,
 	type WorkspaceQualityResult,
 	type WorkspaceQualityFocusRequest,
@@ -56,11 +58,7 @@ import {
 	type GameTextIndexProgress,
 	type RetainedGameTextIndexResult
 } from "./entry-index.js";
-import {
-	decodeGameTextRuleDocumentJson,
-	evaluateGameTextSourceQuality,
-	type GameTextRuleDocument
-} from "./entry-rules.js";
+import { decodeGameTextRuleDocumentJson, type GameTextRuleDocument } from "./entry-rules.js";
 import {
 	type TextCorpus,
 	type LocalizationJoin,
@@ -75,7 +73,11 @@ import { makeGameTextWorkspaceLocalization } from "./workspace-localization.js";
 import type { LocalizationTarget } from "@ue-shed/localization";
 import { LocalizationFileAccessLive } from "@ue-shed/localization";
 import { Cache, Data, Deferred, Duration, Effect, Ref, Semaphore, type Scope } from "effect";
-import type { GameTextWorkspaceHost, GameTextWorkspaceProgress } from "./workspace-host.js";
+import type {
+	GameTextWorkspaceHost,
+	GameTextWorkspaceProgress,
+	GameTextWorkspaceProjectState
+} from "./workspace-host.js";
 
 /** Reader pins cover the complete host operation, including asynchronous file and worker work. */
 const scoped =
@@ -248,13 +250,9 @@ export const makeGameTextWorkspace = Effect.fn("GameText.workspace.make")(functi
 			})
 		);
 	const retainedCorpus = (index: RetainedGameTextIndexResult) => index.corpus;
-	/** Source rules over the index page by page, or over the corpus where there is no index. */
+	/** Source rules over the index, page by page. */
 	const sourceQualityModel = (index: RetainedGameTextIndexResult, rules: GameTextRuleDocument) =>
-		index.sourceQuality
-			? index.sourceQuality(rules)
-			: Effect.sync(() =>
-					textQualityQuery(evaluateGameTextSourceQuality(index.corpus, rules))
-				);
+		index.sourceQuality(rules);
 	const queryModel = (index: RetainedGameTextIndexResult) => index.query;
 	const querySearch = (index: RetainedGameTextIndexResult) => index.search;
 	const qualityModel = yield* Ref.make<TextQualityQuery | undefined>(undefined);
@@ -274,7 +272,10 @@ export const makeGameTextWorkspace = Effect.fn("GameText.workspace.make")(functi
 				localization: "Reading localization files",
 				packages: "Checking saved packages for text",
 				joining: "Building text index",
-				opening: "Opening text index"
+				opening: "Opening text index",
+				corpus: "Reading saved packages",
+				localization_quality: "Checking localization quality",
+				source_quality: "Checking source text"
 			};
 			return {
 				completed: current.completed,
@@ -486,8 +487,10 @@ export const makeGameTextWorkspace = Effect.fn("GameText.workspace.make")(functi
 			);
 		});
 
-	const configuredScan = Effect.fn("GameText.workspace.configuredScan")(function* () {
-		const current = yield* project.refresh();
+	const configuredScan = Effect.fn("GameText.workspace.configuredScan")(function* (
+		refreshProject: typeof project.refresh = project.refresh
+	) {
+		const current = yield* refreshProject();
 		if (current.status === "not_configured" || current.status === "cancelled") {
 			return { status: "not_configured" as const };
 		}
@@ -528,9 +531,10 @@ export const makeGameTextWorkspace = Effect.fn("GameText.workspace.make")(functi
 		{ capacity: 2, timeToLive: () => Duration.zero }
 	);
 	const configuredRefresh = Effect.fn("GameText.workspace.configuredRefresh")(function* (
-		refresh = true
+		refresh = true,
+		refreshProject: typeof project.refresh = project.refresh
 	) {
-		const current = yield* refresh ? project.refresh() : project.current();
+		const current = yield* refresh ? refreshProject() : project.current();
 		if (current.status === "not_configured" || current.status === "cancelled") {
 			return { status: "not_configured" as const };
 		}
@@ -677,49 +681,50 @@ export const makeGameTextWorkspace = Effect.fn("GameText.workspace.make")(functi
 		const root = current.project.projectRoot;
 		const path = resolve(root, rulesRelativePath);
 		if (!loadExisting) {
-			const created = yield* createStarterTextRules(root, rulesRelativePath).pipe(
-				Effect.match({
-					onSuccess: () => ({ status: "ready" as const }),
-					onFailure: (error) => ({
-						status: "failed" as const,
-						error: {
-							code:
-								error.code === "already_exists"
-									? ("already_exists" as const)
-									: ("write_failed" as const),
-							message: error.message,
-							recovery:
-								error.code === "already_exists"
-									? "Load the existing rules file to use its writing checks."
-									: error.code === "invalid_project"
-										? "Select an existing project folder and scan it before creating rules."
-										: "Check the project folder's write permissions and try again.",
-							retrySafe: true
-						}
-					})
-				})
+			const bytes = new TextEncoder().encode(
+				`${JSON.stringify(STARTER_GAME_TEXT_RULES, null, "\t")}\n`
 			);
+			const created = yield* files
+				.writeFile(path, bytes, { maxBytes: 1_048_576, exclusive: true })
+				.pipe(
+					Effect.match({
+						onSuccess: () => ({ status: "ready" as const }),
+						onFailure: (error) => ({
+							status: "failed" as const,
+							error: {
+								code:
+									error.code === "already_exists"
+										? ("already_exists" as const)
+										: ("write_failed" as const),
+								message: error.message,
+								recovery:
+									error.code === "already_exists"
+										? "Load the existing rules file to use its writing checks."
+										: error.recovery,
+								retrySafe: true
+							}
+						})
+					})
+				);
 			if (created.status === "failed") return created;
 		}
-		return yield* files.readFileWithin(root, rulesRelativePath, { maxBytes: 1_048_576 }).pipe(
-			Effect.flatMap((bytes) =>
-				decodeGameTextRuleDocumentJson(new TextDecoder().decode(bytes))
-			),
-			Effect.flatMap((document) => prepareQualityRules(document)),
-			Effect.flatMap((prepared) =>
-				Effect.gen(function* () {
-					const latest = yield* project.current();
-					if (
-						latest.status !== "ready" ||
-						latest.project.projectRoot !== root ||
-						(latest.project.generation ?? 0) !== (current.project.generation ?? 0)
-					)
-						return { status: "not_ready" as const };
-					if (prepared.status !== "ready") return prepared;
-					yield* Ref.set(qualityRulePath, { path, projectRoot: root });
-					return yield* publishQualityRules(prepared);
-				})
-			),
+		return yield* Effect.gen(function* () {
+			const bytes = yield* files.readFileWithin(root, rulesRelativePath, {
+				maxBytes: 1_048_576
+			});
+			const document = yield* decodeGameTextRuleDocumentJson(new TextDecoder().decode(bytes));
+			const prepared = yield* prepareQualityRules(document);
+			const latest = yield* project.current();
+			if (
+				latest.status !== "ready" ||
+				latest.project.projectRoot !== root ||
+				(latest.project.generation ?? 0) !== (current.project.generation ?? 0)
+			)
+				return { status: "not_ready" as const };
+			if (prepared.status !== "ready") return prepared;
+			yield* Ref.set(qualityRulePath, { path, projectRoot: root });
+			return yield* publishQualityRules(prepared);
+		}).pipe(
 			Effect.catch((error) =>
 				Effect.succeed({
 					status: "failed" as const,
@@ -813,17 +818,13 @@ export const makeGameTextWorkspace = Effect.fn("GameText.workspace.make")(functi
 		if (!path) {
 			return yield* chooseQualityRules();
 		}
-		return yield* files.readFile(path, { maxBytes: 1_048_576 }).pipe(
-			Effect.flatMap((bytes) =>
-				decodeGameTextRuleDocumentJson(new TextDecoder().decode(bytes))
-			),
-			Effect.flatMap((document) =>
-				Effect.gen(function* () {
-					if ((yield* currentModel(retainedCorpus)) !== corpus)
-						return { status: "not_ready" as const };
-					return yield* previewQualityRules(document);
-				})
-			),
+		return yield* Effect.gen(function* () {
+			const bytes = yield* files.readFile(path, { maxBytes: 1_048_576 });
+			const document = yield* decodeGameTextRuleDocumentJson(new TextDecoder().decode(bytes));
+			if ((yield* currentModel(retainedCorpus)) !== corpus)
+				return { status: "not_ready" as const };
+			return yield* previewQualityRules(document);
+		}).pipe(
 			Effect.catch((error) =>
 				Effect.succeed({
 					status: "failed" as const,
@@ -884,18 +885,13 @@ export const makeGameTextWorkspace = Effect.fn("GameText.workspace.make")(functi
 			`${JSON.stringify(prepared.document, null, "\t")}\n`
 		);
 		const recovery = host.recoveryCopy;
-		const write = yield* (
-			recovery
-				? files.readFile(path, { maxBytes: 1_048_576 }).pipe(
-						Effect.matchEffect({
-							// Nothing to keep when the file is not there yet.
-							onFailure: () => Effect.void,
-							onSuccess: (previous) => recovery(path, previous)
-						}),
-						Effect.andThen(files.writeFile(path, bytes, { maxBytes: 1_048_576 }))
-					)
-				: files.writeFile(path, bytes, { maxBytes: 1_048_576 })
-		).pipe(
+		const write = yield* Effect.gen(function* () {
+			if (recovery) {
+				const previous = yield* files.readFile(path, { maxBytes: 1_048_576 });
+				yield* recovery(path, previous);
+			}
+			yield* files.writeFile(path, bytes, { maxBytes: 1_048_576 });
+		}).pipe(
 			Effect.match({
 				onFailure: (error) => ({
 					error: {
@@ -1061,23 +1057,39 @@ export const makeGameTextWorkspace = Effect.fn("GameText.workspace.make")(functi
 		}).pipe(Effect.catch((error) => Effect.succeed(investigationFailure(error))))
 	);
 
-	// One scan per project generation at a time, owned by the workspace's scope, so a request that
-	// leaves does not stop it and the next request joins it instead of starting another.
+	// A scan owns both host refresh and text preparation. Admission and the generation handoff
+	// share a lock: reconnects observe the refreshed generation and join its existing producer.
+	// The key changes during refresh, so a fixed-key Cache cannot represent this handoff.
+	const scanKey = (state: GameTextWorkspaceProjectState) =>
+		state.status === "ready"
+			? JSON.stringify([state.project.projectRoot, state.project.generation ?? 0])
+			: state.status;
 	const sharedScans = <A>() =>
 		Effect.gen(function* () {
 			const running = yield* Ref.make<
 				{ readonly key: string; readonly done: Deferred.Deferred<A> } | undefined
 			>(undefined);
 			const start = yield* Semaphore.make(1);
-			return (key: string, scan: Effect.Effect<A>) =>
+			return (scan: (refreshProject: typeof project.refresh) => Effect.Effect<A>) =>
 				Effect.gen(function* () {
 					const done = yield* start.withPermit(
 						Effect.gen(function* () {
+							const key = scanKey(yield* project.current());
 							const current = yield* Ref.get(running);
 							if (current?.key === key) return current.done;
 							const next = yield* Deferred.make<A>();
 							yield* Ref.set(running, { key, done: next });
-							yield* scan.pipe(
+							const refreshProject = () =>
+								Effect.gen(function* () {
+									const state = yield* project.refresh();
+									yield* Ref.update(running, (value) =>
+										value?.done === next
+											? { key: scanKey(state), done: next }
+											: value
+									);
+									return state;
+								}).pipe(start.withPermit);
+							yield* scan(refreshProject).pipe(
 								Effect.exit,
 								Effect.flatMap((exit) =>
 									Ref.update(running, (value) =>
@@ -1087,22 +1099,22 @@ export const makeGameTextWorkspace = Effect.fn("GameText.workspace.make")(functi
 								Effect.forkIn(workspaceScope)
 							);
 							return next;
-						})
+						}).pipe(Effect.uninterruptible)
 					);
 					return yield* Deferred.await(done);
 				});
 		});
-	const refreshScan = () =>
+	const refreshScan = (refreshProject: typeof project.refresh) =>
 		Effect.scoped(
-			guardScan(configuredRefresh(true), () =>
+			guardScan(configuredRefresh(true, refreshProject), () =>
 				unavailableQueryProject(
 					"An Unreal localization step is running.",
 					"Cancel it or wait before scanning."
 				)
 			)
 		);
-	const fullScan = () =>
-		guardScan(configuredScan(), () =>
+	const fullScan = (refreshProject: typeof project.refresh) =>
+		guardScan(configuredScan(refreshProject), () =>
 			unavailableProject(
 				"An Unreal localization step is running.",
 				"Cancel it or wait before scanning."
@@ -1110,16 +1122,6 @@ export const makeGameTextWorkspace = Effect.fn("GameText.workspace.make")(functi
 		);
 	const sharedRefresh = yield* sharedScans<Effect.Success<ReturnType<typeof refreshScan>>>();
 	const sharedScan = yield* sharedScans<Effect.Success<ReturnType<typeof fullScan>>>();
-	const scanKey = (kind: string) =>
-		project
-			.current()
-			.pipe(
-				Effect.map((state) =>
-					state.status === "ready"
-						? `${kind}\n${state.project.projectRoot}\n${state.project.generation ?? 0}`
-						: kind
-				)
-			);
 
 	return {
 		operationTarget: scoped(localization.operationTarget),
@@ -1161,13 +1163,8 @@ export const makeGameTextWorkspace = Effect.fn("GameText.workspace.make")(functi
 		investigationSave: scoped(investigationSave),
 		investigationOpen: scoped(investigationOpen),
 		configuredRefresh: (refresh = true) =>
-			refresh
-				? scanKey("refresh").pipe(
-						Effect.flatMap((key) => sharedRefresh(key, refreshScan()))
-					)
-				: Effect.scoped(configuredRefresh(false)),
-		configuredScan: () =>
-			scanKey("scan").pipe(Effect.flatMap((key) => sharedScan(key, fullScan()))),
+			refresh ? sharedRefresh(refreshScan) : Effect.scoped(configuredRefresh(false)),
+		configuredScan: () => sharedScan(fullScan),
 		focus: scoped(focus),
 		progress,
 		search: scoped(search),

@@ -8,7 +8,7 @@ import {
 	ProjectRelativeMapPath
 } from "@ue-shed/map-history/contract";
 import { SavedWorld, SavedWorldProgress, decodeSavedWorld } from "@ue-shed/protocol";
-import { Context, type Effect, Schema } from "effect";
+import { Context, Effect, Schema } from "effect";
 
 const historyRequestFields = {
 	limits: MapHistoryLimits,
@@ -104,7 +104,53 @@ export const ContentObservatoryState = Schema.Union([
 ]);
 export type ContentObservatoryState = Schema.Schema.Type<typeof ContentObservatoryState>;
 
-export const decodeContentObservatoryState = Schema.decodeUnknownEffect(ContentObservatoryState);
+/**
+ * A value that does not match the Content Observatory contract: the two sides disagree about the contract, so
+ * repeating the same call returns the same mismatch.
+ */
+export class ContentObservatoryContractError extends Schema.TaggedError<ContentObservatoryContractError>()(
+	"ContentObservatoryContractError",
+	{
+		code: Schema.Literal("invalid_contract"),
+		message: Schema.String,
+		recovery: Schema.String,
+		retrySafe: Schema.Boolean,
+		cause: Schema.optionalKey(Schema.Defect())
+	}
+) {}
+
+/**
+ * A unary parser for one Content Observatory contract value: it decodes the encoded value and fails with
+ * `ContentObservatoryContractError` naming `subject`, keeping the schema issue as its cause.
+ */
+function contentObservatoryContractParser<S extends Schema.Codec<unknown, unknown>>(
+	schema: S,
+	subject: string
+) {
+	const decode = Schema.decodeUnknownEffect(schema);
+	return (
+		// oxlint-disable-next-line anti-slop/no-unknown-parameters -- This parser is the boundary: it decodes its input here.
+		encoded: unknown
+	): Effect.Effect<S["Type"], ContentObservatoryContractError> =>
+		decode(encoded).pipe(
+			Effect.mapError(
+				(cause) =>
+					new ContentObservatoryContractError({
+						code: "invalid_contract",
+						message: `The ${subject} does not match the Content Observatory contract.`,
+						recovery:
+							"Run Workbench and its extensions from the same UE Shed version, then retry.",
+						retrySafe: false,
+						cause
+					})
+			)
+		);
+}
+
+export const parseContentObservatoryState = contentObservatoryContractParser(
+	ContentObservatoryState,
+	"content observatory state"
+);
 
 export class ContentObservatoryClientError extends Schema.TaggedError<ContentObservatoryClientError>()(
 	"ContentObservatoryClientError",

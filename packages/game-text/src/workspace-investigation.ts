@@ -1,8 +1,7 @@
 import { Effect, Schema } from "effect";
 import {
 	InvestigationError,
-	investigationReplayCommand,
-	type InvestigationFileResult
+	investigationReplayCommand
 } from "@ue-shed/unreal-assets/investigation";
 import type { GameTextWorkspaceFileHooks } from "./workspace-host.js";
 
@@ -28,44 +27,36 @@ export const saveWorkspaceInvestigation = Effect.fn("GameText.workspace.investig
 			readonly rowCount: number;
 			readonly projectRoot?: string;
 		}
-	): Effect.fn.Return<InvestigationFileResult> {
-		return yield* Effect.gen(function* () {
-			const bytes = new TextEncoder().encode(options.contents);
-			if (options.projectRoot && bytes.byteLength > PRESET_LIMIT)
-				return yield* Effect.fail(
-					new InvestigationError({
-						message: "The preset exceeds 4 MiB.",
-						recovery: "Reduce the rule document before saving this preset."
-					})
-				);
-			const choice = yield* files.chooseSaveFile({
-				title: options.projectRoot
-					? "Save investigation preset"
-					: "Export matching results",
-				defaultPath: options.projectRoot
-					? "investigation.preset.json"
-					: `investigation.${options.extension}`,
-				filters: [
-					{ name: options.extension.toUpperCase(), extensions: [options.extension] }
-				]
-			});
-			if (choice.status === "cancelled") return choice;
-			yield* files.writeFile(choice.path, bytes, { maxBytes: EXPORT_LIMIT });
-			return {
-				status: "saved" as const,
-				path: choice.path,
-				rowCount: options.rowCount,
-				...(options.projectRoot
-					? {
-							replayCommand: investigationReplayCommand(
-								options.projectRoot,
-								choice.path
-							)
-						}
-					: undefined)
-			};
-		}).pipe(Effect.catch((error) => Effect.succeed(investigationFailure(error))));
-	}
+	) {
+		const bytes = new TextEncoder().encode(options.contents);
+		if (options.projectRoot && bytes.byteLength > PRESET_LIMIT)
+			return yield* Effect.fail(
+				new InvestigationError({
+					message: "The preset exceeds 4 MiB.",
+					recovery: "Reduce the rule document before saving this preset."
+				})
+			);
+		const choice = yield* files.chooseSaveFile({
+			title: options.projectRoot ? "Save investigation preset" : "Export matching results",
+			defaultPath: options.projectRoot
+				? "investigation.preset.json"
+				: `investigation.${options.extension}`,
+			filters: [{ name: options.extension.toUpperCase(), extensions: [options.extension] }]
+		});
+		if (choice.status === "cancelled") return choice;
+		yield* files.writeFile(choice.path, bytes, { maxBytes: EXPORT_LIMIT });
+		return {
+			status: "saved" as const,
+			path: choice.path,
+			rowCount: options.rowCount,
+			...(options.projectRoot
+				? {
+						replayCommand: investigationReplayCommand(options.projectRoot, choice.path)
+					}
+				: undefined)
+		};
+	},
+	Effect.catch((error) => Effect.succeed(investigationFailure(error)))
 );
 
 /** Asks the host for a preset file, then reads and decodes it. */

@@ -10,7 +10,7 @@
 
 ## Status
 
-- **State**: IN PROGRESS. Phases 1–3 are done; the plan closes when PR #58 merges.
+- **State**: DONE. Phases 1–3 are done; PR #58 merged on 2026-10-09.
 - **Priority**: P1
 - **Effort**: M
 - **Risk**: LOW. The command only reads. Its risk is a check that fails good work or passes bad

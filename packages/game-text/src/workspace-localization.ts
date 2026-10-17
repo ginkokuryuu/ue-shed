@@ -1,6 +1,4 @@
-import { checkLocalizationTarget } from "./entry-checks.js";
 import {
-	localizationQuality,
 	localizationQualityWorkspaceOf,
 	localizationProgressReport,
 	localizationReportPage,
@@ -46,7 +44,7 @@ import {
 	type GameTextIndexRefreshResult,
 	type RetainedGameTextIndexResult
 } from "./entry-index.js";
-import { evaluateGameTextSourceQuality, type GameTextRuleDocument } from "./entry-rules.js";
+import { type GameTextRuleDocument } from "./entry-rules.js";
 import {
 	MAX_LOCALIZATION_CULTURES,
 	type LocalizationJoin,
@@ -462,24 +460,11 @@ export const makeGameTextWorkspaceLocalization = Effect.fn("GameText.workspace.l
 							// Indexed source rules read only the units their findings name.
 							const source = !document
 								? undefined
-								: retained.sourceQuality
-									? (yield* retained.sourceQuality(document)).export("all")
-									: evaluateGameTextSourceQuality(retained.corpus, document);
+								: (yield* retained.sourceQuality(document)).export("all");
 							// Indexed targets check page by page, yielding between pages.
 							return localizationQualityWorkspaceOf(
 								source,
-								retained.quality
-									? yield* retained.quality(options, document)
-									: localizationQuality(
-											checkLocalizationTarget(
-												retained.corpus,
-												retained.join,
-												retained.evidence,
-												options,
-												document
-											),
-											retained.join
-										)
+								yield* retained.quality(document, options)
 							);
 						})
 					).pipe(Effect.forkIn(serviceScope));

@@ -1,4 +1,4 @@
-import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { it } from "@effect/vitest";
@@ -7,14 +7,12 @@ import {
 	type GameTextWorkspaceFileHooks,
 	type GameTextWorkspaceProject
 } from "@ue-shed/game-text/workspace";
-import { STARTER_GAME_TEXT_RULES } from "@ue-shed/game-text/rules";
+import { GAME_TEXT_RULES_RELATIVE_PATH, STARTER_GAME_TEXT_RULES } from "@ue-shed/game-text/rules";
 import { makeLocalizationEvidenceTestLayer } from "@ue-shed/localization";
 import type { TextCorpus } from "@ue-shed/game-text/schema";
 import { Deferred, Effect, Fiber, Ref } from "effect";
 import { expect } from "vitest";
 import { oracleGameTextIndexLayer } from "./game-text-index.test-support.js";
-
-// The library workspace with host hooks a non-Workbench host would supply (Plan 058 D10).
 
 const emptyCorpus: TextCorpus = {
 	coverage: {
@@ -33,113 +31,271 @@ const emptyCorpus: TextCorpus = {
 	status: "complete",
 	units: []
 };
-
 const noLocalization = makeLocalizationEvidenceTestLayer({
 	discover: () => Effect.succeed({ schemaVersion: 1, targets: [], diagnostics: [] }),
 	read: () => Effect.die("No targets"),
 	targets: () => Effect.die("Not used")
 });
-
+const ready = (projectRoot: string, generation: number) => ({
+	status: "ready" as const,
+	project: { projectRoot, generation }
+});
 function selected(projectRoot: string): GameTextWorkspaceProject {
-	const ready = { status: "ready" as const, project: { projectRoot, generation: 3 } };
 	return {
-		current: () => Effect.succeed(ready),
-		refresh: () => Effect.succeed(ready),
+		current: () => Effect.succeed(ready(projectRoot, 3)),
+		refresh: () => Effect.succeed(ready(projectRoot, 3)),
 		candidates: () => Effect.succeed({ generation: 3, summary: { projectRoot } }),
 		progress: () => Effect.succeed({ completed: 0, total: 0, phase: "idle", stage: "host" })
 	};
 }
-
-/** Disk-backed hooks that record every write, as a host's writable-file hook would see them. */
-function diskFiles(writes: string[]): GameTextWorkspaceFileHooks {
-	const failure = (cause: unknown) => ({ message: String(cause), recovery: "Retry." });
-	return {
+function memoryFiles() {
+	const contents = new Map<string, Uint8Array>();
+	const writes: string[] = [];
+	const read = (path: string) =>
+		Effect.suspend(() => {
+			const bytes = contents.get(path);
+			return bytes === undefined
+				? Effect.fail({ message: "Missing file.", recovery: "Create it." })
+				: Effect.succeed(bytes);
+		});
+	const files: GameTextWorkspaceFileHooks = {
 		chooseFile: () => Effect.succeed({ status: "cancelled" }),
 		chooseSaveFile: () => Effect.succeed({ status: "cancelled" }),
-		readFile: (path) =>
-			Effect.tryPromise({ try: () => readFile(path), catch: failure }).pipe(
-				Effect.map((bytes) => new Uint8Array(bytes))
-			),
-		readFileWithin: (directory, relativePath) =>
-			Effect.tryPromise({
-				try: () => readFile(resolve(directory, relativePath)),
-				catch: failure
-			}).pipe(Effect.map((bytes) => new Uint8Array(bytes))),
-		writeFile: (path, bytes) =>
-			Effect.sync(() => writes.push(path)).pipe(
-				Effect.andThen(
-					Effect.tryPromise({ try: () => writeFile(path, bytes), catch: failure })
-				)
-			)
+		readFile: read,
+		readFileWithin: (root, path) => read(resolve(root, path)),
+		writeFile: (path, bytes, options) =>
+			Effect.gen(function* () {
+				if (options?.exclusive && contents.has(path))
+					return yield* Effect.fail({
+						code: "already_exists" as const,
+						message: "Exists.",
+						recovery: "Load it."
+					});
+				writes.push(path);
+				contents.set(path, bytes);
+			})
 	};
+	return { contents, writes, files };
+}
+const provideWorkspace = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
+	effect.pipe(
+		Effect.scoped,
+		Effect.provide(oracleGameTextIndexLayer(() => Effect.succeed(emptyCorpus))),
+		Effect.provide(noLocalization)
+	);
+
+for (const full of [false, true]) {
+	for (const disconnectDuringRefresh of [false, true]) {
+		it.effect(
+			`rejoins ${full ? "full scan" : "refresh"} after disconnect during ${disconnectDuringRefresh ? "host refresh" : "text preparation"}`,
+			() =>
+				Effect.gen(function* () {
+					const started = yield* Deferred.make<void>();
+					const finish = yield* Deferred.make<void>();
+					const hostStarted = yield* Deferred.make<void>();
+					const hostFinish = yield* Deferred.make<void>();
+					const rejoining = yield* Deferred.make<void>();
+					const scans = yield* Ref.make(0);
+					const generation = yield* Ref.make(3);
+					let reconnecting = false;
+					const root = "C:/Project";
+					const scan = Effect.gen(function* () {
+						yield* Ref.update(scans, (n) => n + 1);
+						yield* Deferred.succeed(started, undefined);
+						yield* Deferred.await(finish);
+						return emptyCorpus;
+					});
+					const project: GameTextWorkspaceProject = {
+						...selected(root),
+						current: () =>
+							Effect.gen(function* () {
+								const value = yield* Ref.get(generation);
+								if (reconnecting) yield* Deferred.succeed(rejoining, undefined);
+								return ready(root, value);
+							}),
+						refresh: () =>
+							Effect.gen(function* () {
+								yield* Deferred.succeed(hostStarted, undefined);
+								if (disconnectDuringRefresh) yield* Deferred.await(hostFinish);
+								return ready(
+									root,
+									yield* Ref.updateAndGet(generation, (n) => n + 1)
+								);
+							}),
+						candidates: () =>
+							Ref.get(generation).pipe(
+								Effect.map((generation) => ({
+									generation,
+									summary: { projectRoot: root }
+								}))
+							)
+					};
+					yield* Effect.gen(function* () {
+						const workspace = yield* makeGameTextWorkspace({
+							project,
+							files: memoryFiles().files
+						});
+						const run = () =>
+							full ? workspace.configuredScan() : workspace.configuredRefresh(true);
+						const first = yield* run().pipe(Effect.forkChild);
+						yield* Deferred.await(disconnectDuringRefresh ? hostStarted : started);
+						yield* Fiber.interrupt(first);
+						if (disconnectDuringRefresh) {
+							yield* Deferred.succeed(hostFinish, undefined);
+							yield* Deferred.await(started);
+						}
+						expect(yield* Ref.get(generation)).toBe(4);
+						reconnecting = true;
+						const second = yield* run().pipe(Effect.forkChild);
+						yield* Deferred.await(rejoining);
+						yield* Effect.yieldNow;
+						yield* Deferred.succeed(finish, undefined);
+						expect((yield* Fiber.join(second)).status).toBe("completed");
+						expect(yield* Ref.get(generation)).toBe(4);
+						expect(yield* Ref.get(scans)).toBe(1);
+					}).pipe(
+						Effect.scoped,
+						Effect.provide(oracleGameTextIndexLayer(() => scan)),
+						Effect.provide(noLocalization)
+					);
+				})
+		);
+	}
 }
 
-it.effect("keeps a scan running when the request that started it is interrupted", () =>
+it.effect("creates starter rules exclusively in a non-disk host store", () =>
 	Effect.gen(function* () {
-		const started = yield* Deferred.make<void>();
-		const finish = yield* Deferred.make<void>();
-		const scans = yield* Ref.make(0);
-		const scan = Ref.update(scans, (count) => count + 1).pipe(
-			Effect.andThen(Deferred.succeed(started, undefined)),
-			Effect.andThen(Deferred.await(finish)),
-			Effect.as(emptyCorpus)
-		);
-		yield* Effect.gen(function* () {
-			const workspace = yield* makeGameTextWorkspace({
-				project: selected("C:/Project"),
-				files: diskFiles([])
-			});
-			const first = yield* workspace.configuredRefresh(true).pipe(Effect.forkChild);
-			yield* Deferred.await(started);
-			// The window that asked closes; the scan it started does not stop.
-			yield* Fiber.interrupt(first);
-			// Let the scan finish only after the second request has asked for it.
-			yield* Effect.repeat(Effect.yieldNow, { times: 20 }).pipe(
-				Effect.andThen(Deferred.succeed(finish, undefined)),
-				Effect.forkChild
-			);
-			expect((yield* workspace.configuredRefresh(true)).status).toBe("completed");
-			// The second request joined the running scan instead of starting another.
-			expect(yield* Ref.get(scans)).toBe(1);
-			expect((yield* workspace.configuredRefresh(false)).status).toBe("completed");
-		}).pipe(
-			Effect.scoped,
-			Effect.provide(oracleGameTextIndexLayer(() => scan)),
-			Effect.provide(noLocalization)
-		);
-	})
+		const store = memoryFiles();
+		const root = resolve("in-memory-project");
+		const path = resolve(root, "Config/Custom/text-rules.json");
+		const workspace = yield* makeGameTextWorkspace({
+			project: selected(root),
+			files: store.files,
+			rulesRelativePath: "Config/Custom/text-rules.json"
+		});
+		expect((yield* workspace.configuredRefresh()).status).toBe("completed");
+		expect((yield* workspace.createStarterRules(false)).status).toBe("completed");
+		const previous = store.contents.get(path);
+		expect(previous).toBeDefined();
+		expect(store.writes).toEqual([path]);
+		expect(yield* workspace.createStarterRules(false)).toMatchObject({
+			status: "failed",
+			error: { code: "already_exists" }
+		});
+		expect(store.contents.get(path)).toBe(previous);
+		expect(store.writes).toEqual([path]);
+		expect((yield* workspace.createStarterRules(true)).status).toBe("completed");
+	}).pipe(provideWorkspace)
 );
 
-it.effect("writes starter rules to the host's rules location and keeps a recovery copy", () =>
+it.effect("never falls back to disk when the host refuses starter creation", () =>
 	Effect.gen(function* () {
-		const root = yield* Effect.promise(() => mkdtemp(join(tmpdir(), "ue-shed-workspace-")));
-		const writes: string[] = [];
-		const copies: Array<{ readonly path: string; readonly previous: string }> = [];
-		yield* Effect.gen(function* () {
+		const root = yield* Effect.acquireRelease(
+			Effect.promise(() => mkdtemp(join(tmpdir(), "ue-shed-workspace-refusal-"))),
+			(root) => Effect.promise(() => rm(root, { recursive: true, force: true }))
+		);
+		const store = memoryFiles();
+		const workspace = yield* makeGameTextWorkspace({
+			project: selected(root),
+			files: {
+				...store.files,
+				writeFile: () =>
+					Effect.fail({
+						message: "Host denied write.",
+						recovery: "Request writable access."
+					})
+			}
+		});
+		expect((yield* workspace.configuredRefresh()).status).toBe("completed");
+		expect(yield* workspace.createStarterRules(false)).toMatchObject({
+			status: "failed",
+			error: { code: "write_failed", message: "Host denied write." }
+		});
+		expect(store.writes).toEqual([]);
+		const disk = yield* Effect.tryPromise(() =>
+			readFile(resolve(root, GAME_TEXT_RULES_RELATIVE_PATH))
+		).pipe(Effect.result);
+		expect(disk._tag).toBe("Failure");
+	}).pipe(provideWorkspace)
+);
+
+for (const failedHook of ["read", "recovery"] as const) {
+	it.effect(`preserves attached rules when the ${failedHook} hook fails`, () =>
+		Effect.gen(function* () {
+			const store = memoryFiles();
+			const root = resolve("in-memory-project");
+			const path = resolve(root, "Config/Custom/text-rules.json");
+			const original = new TextEncoder().encode(JSON.stringify(STARTER_GAME_TEXT_RULES));
+			store.contents.set(path, original);
+			let copies = 0;
 			const workspace = yield* makeGameTextWorkspace({
 				project: selected(root),
-				files: diskFiles(writes),
-				rulesRelativePath: "Config/Studio/text-rules.json",
-				recoveryCopy: (path, previous) =>
-					Effect.sync(() =>
-						copies.push({ path, previous: new TextDecoder().decode(previous) })
-					)
+				rulesRelativePath: "Config/Custom/text-rules.json",
+				files: {
+					...store.files,
+					readFile: () =>
+						failedHook === "read"
+							? Effect.fail({
+									message: "Read refused.",
+									recovery: "Restore readable access."
+								})
+							: store.files.readFile(path)
+				},
+				recoveryCopy: () =>
+					Effect.gen(function* () {
+						copies += 1;
+						return yield* Effect.fail({
+							message: "Recovery refused.",
+							recovery: "Restore backup access."
+						});
+					})
 			});
-			expect((yield* workspace.configuredRefresh(true)).status).toBe("completed");
-			expect((yield* workspace.createStarterRules(false)).status).toBe("completed");
-			const path = resolve(root, "Config/Studio/text-rules.json");
-			const starter = yield* Effect.promise(() => readFile(path, "utf8"));
-			expect((yield* workspace.saveQualityRules(STARTER_GAME_TEXT_RULES)).status).toBe(
-				"completed"
-			);
-			// The previous file went to the recovery hook before the writable-file hook replaced it.
-			expect(copies).toEqual([{ path, previous: starter }]);
-			expect(writes).toEqual([path]);
-		}).pipe(
-			Effect.scoped,
-			Effect.provide(oracleGameTextIndexLayer(() => Effect.succeed(emptyCorpus))),
-			Effect.provide(noLocalization),
-			Effect.ensuring(Effect.promise(() => rm(root, { recursive: true, force: true })))
+			expect((yield* workspace.configuredRefresh()).status).toBe("completed");
+			expect((yield* workspace.createStarterRules(true)).status).toBe("completed");
+			expect(yield* workspace.saveQualityRules(STARTER_GAME_TEXT_RULES)).toMatchObject({
+				status: "failed",
+				error: { code: "write_failed" }
+			});
+			expect(store.writes).toEqual([]);
+			expect(store.contents.get(path)).toBe(original);
+			expect(copies).toBe(failedHook === "read" ? 0 : 1);
+		}).pipe(provideWorkspace)
+	);
+}
+
+it.effect("copies previous rule bytes before the host replaces them", () =>
+	Effect.gen(function* () {
+		const store = memoryFiles();
+		const root = resolve("in-memory-project");
+		const path = resolve(root, "Config/Custom/text-rules.json");
+		const original = new TextEncoder().encode(JSON.stringify(STARTER_GAME_TEXT_RULES));
+		store.contents.set(path, original);
+		const events: string[] = [];
+		const workspace = yield* makeGameTextWorkspace({
+			project: selected(root),
+			rulesRelativePath: "Config/Custom/text-rules.json",
+			files: {
+				...store.files,
+				writeFile: (path, bytes, options) =>
+					Effect.gen(function* () {
+						events.push("write");
+						yield* store.files.writeFile(path, bytes, options);
+					})
+			},
+			recoveryCopy: (copiedPath, bytes) =>
+				Effect.sync(() => {
+					expect(copiedPath).toBe(path);
+					expect(bytes).toBe(original);
+					expect(store.contents.get(path)).toBe(original);
+					events.push("copy");
+				})
+		});
+		expect((yield* workspace.configuredRefresh()).status).toBe("completed");
+		expect((yield* workspace.createStarterRules(true)).status).toBe("completed");
+		expect((yield* workspace.saveQualityRules(STARTER_GAME_TEXT_RULES)).status).toBe(
+			"completed"
 		);
-	})
+		expect(events).toEqual(["copy", "write"]);
+		expect(store.writes).toEqual([path]);
+	}).pipe(provideWorkspace)
 );

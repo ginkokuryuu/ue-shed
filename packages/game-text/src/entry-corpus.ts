@@ -9,6 +9,7 @@ export {
 	textCorpusReport,
 	textPackageCoverageSummary
 } from "./corpus-summary.js";
+
 export {
 	gameTextCsv,
 	gameTextQualityCsv,
@@ -16,6 +17,7 @@ export {
 	textAssetName,
 	textQualityProblem
 } from "./csv.js";
+
 export {
 	GameTextInvestigationExport,
 	GameTextInvestigationPreset,
@@ -24,6 +26,7 @@ export {
 	exportGameTextInvestigation,
 	gameTextInvestigationCsv
 } from "./investigation.js";
+
 export {
 	LocalizationEdit,
 	LocalizationEditOutcome,
@@ -33,20 +36,23 @@ export {
 	localizationEditChangeSet,
 	localizationEditOutcomes
 } from "./localization-edits.js";
+
 export {
 	LocalizationLinesFileResult,
 	localizationLinesCsv,
 	pickedLocalizationCultures
 } from "./localization-export.js";
+
 export {
 	LocalizationKeyChangePair,
+	type LocalizationKeyChanges,
 	applyLocalizationKeyChanges,
 	localizationKeyChanges,
 	localizationKeyChangesAcross,
 	manifestPlace,
-	mergeLocalizationKeyChanges,
-	type LocalizationKeyChanges
+	mergeLocalizationKeyChanges
 } from "./localization-key-changes.js";
+
 export {
 	localizationCounts,
 	localizationLinePreview,
@@ -55,6 +61,7 @@ export {
 	scopedLocalizationMarks,
 	validateLocalizationSelection
 } from "./localization-query.js";
+
 export {
 	LocalizationBaseline,
 	LocalizationBaselineDelta,
@@ -68,6 +75,7 @@ export {
 	diffLocalizationBaselines,
 	localizationProgressReport
 } from "./localization-reports.js";
+
 export {
 	LocalizationReviewChange,
 	LocalizationReviewRequest,
@@ -78,19 +86,21 @@ export {
 	matchesLocalizationReview,
 	withoutAcceptedFindings
 } from "./localization-review.js";
+
 export {
+	type LocalizationFileExplanation,
 	LocalizationFileProblem,
 	LocalizationFileStatus,
 	LocalizationStatusReport,
+	type LocalizationTargetFiles,
 	explainLocalizationFile,
 	localizationEvidenceFileStatuses,
 	localizationEvidenceFolder,
 	localizationFileProblems,
 	localizationStatusReport,
-	localizationTargetFiles,
-	type LocalizationFileExplanation,
-	type LocalizationTargetFiles
+	localizationTargetFiles
 } from "./localization-status.js";
+
 export {
 	LocalizationFocus,
 	LocalizationFocusRequest,
@@ -101,13 +111,21 @@ export {
 	LocalizationTranslation,
 	localizationFocusPage
 } from "./localization-view.js";
+
 export {
+	BuiltInQualityFilter,
+	CustomQualityFilter,
+	type LocalizationFindingGroup,
+	type LocalizationFindingList,
+	type LocalizationQuality,
+	type LocalizationQualityMetadata,
 	WorkspaceChangesResult,
 	WorkspaceFinding,
 	WorkspaceLocalizationFindingFocus,
 	WorkspaceQualityFilter,
 	WorkspaceQualityFocusRequest,
 	WorkspaceQualityFocusResult,
+	type WorkspaceQualityItem,
 	WorkspaceQualityPage,
 	WorkspaceQualityReport,
 	WorkspaceQualityRequest,
@@ -118,6 +136,7 @@ export {
 	WorkspaceReportRequest,
 	WorkspaceReportResult,
 	WorkspaceReportRow,
+	customQualityFilter,
 	eligibleLocalizationChange,
 	localizationFindingHash,
 	localizationFindingId,
@@ -129,13 +148,10 @@ export {
 	workspaceQualityCsv,
 	workspaceQualityFilterOf,
 	workspaceQualityItem,
-	workspaceQualitySeverity,
-	type LocalizationFindingGroup,
-	type LocalizationFindingList,
-	type LocalizationQuality,
-	type LocalizationQualityMetadata,
-	type WorkspaceQualityItem
+	workspaceQualityLabel,
+	workspaceQualitySeverity
 } from "./localization-workspace.js";
+
 export {
 	LocalizationGatherCoverage,
 	gatheredTextIdentity,
@@ -148,14 +164,17 @@ export {
 	matchesUnrealWildcard,
 	textGatherScope
 } from "./localization.js";
+
 export {
 	TextQualityFilter,
 	TextQualityFindingId,
 	TextQualityFindingKind,
+	type TextQualityFindingList,
 	TextQualityFindingSummary,
 	TextQualityFocus,
 	TextQualityFocusRequest,
 	TextQualityFocusResult,
+	type TextQualityQuery,
 	TextQualityQueryRunResult,
 	TextQualityQuerySummary,
 	TextQualityRuleFile,
@@ -163,24 +182,26 @@ export {
 	TextQualitySearchPage,
 	TextQualitySearchRequest,
 	TextQualitySearchResult,
-	decodeTextQualityFocusResult,
-	decodeTextQualityQueryRunResult,
-	decodeTextQualityRuleUpdateResult,
-	decodeTextQualitySearchResult,
 	makeTextQualityFindingId,
+	parseTextQualityFocusResult,
+	parseTextQualityQueryRunResult,
+	parseTextQualityRuleUpdateResult,
+	parseTextQualitySearchResult,
 	textQualityEvidenceHash,
 	textQualityFindingHash,
 	textQualityFindingId,
 	textQualityFindingIdHash,
 	textQualityFindingIdOf,
 	textQualityQuery,
-	textQualityQueryOf,
-	type TextQualityFindingList,
-	type TextQualityQuery
+	textQualityQueryOf
 } from "./quality-query.js";
-export { textCorpusQuery, type TextCorpusQuery } from "./query.js";
+
+export { type TextCorpusQuery, textCorpusQuery } from "./query.js";
+
 export { hasSearchableSource, searchTextCorpus, searchableSourceText } from "./search.js";
+
 export { RUNTIME_COPY_KINDS, hasDifferingCopy, staleRuntimeCopy } from "./text-copies.js";
+
 export {
 	textAssetFacet,
 	textAudienceFacet,
@@ -190,3 +211,11 @@ export {
 	textGroups,
 	textOriginFacet
 } from "./text-groups.js";
+
+export {
+	PackageTextChange,
+	PackageTextDiff,
+	PackageTextPlace,
+	diffPackageText,
+	packageTextPlace
+} from "./package-text-diff.js";

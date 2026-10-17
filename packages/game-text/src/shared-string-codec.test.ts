@@ -11,7 +11,20 @@ import {
 	sortPackedStringsByLocaleSteps,
 	validatePackedStrings
 } from "./shared-string-codec.js";
+import { StringArena } from "./shared-string-codec.js";
 import { HostSliceClock, runHostStepsSync } from "./host-slices.js";
+
+it("gives cached decode arenas their own backing buffer through growth", () => {
+	const arena = new StringArena(1024, 64, true);
+	arena.add(Uint8Array.of(65));
+	const first = arena.finish();
+	expect(first.bytes.buffer.byteLength).toBe(1024);
+	arena.add(new Uint8Array(1500).fill(66));
+	const grown = arena.finish();
+	expect(grown.bytes.buffer.byteLength).toBe(2048);
+	expect(grown.bytes[0]).toBe(65);
+	expect(grown.offsets[2]).toBe(1501);
+});
 
 it("orders locale ties the same for every run size and slice budget", () => {
 	const words = ["á", "á", "A", "a", "b", "B", "é", "é", ""];

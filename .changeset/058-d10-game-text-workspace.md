@@ -17,4 +17,4 @@ A scan now belongs to the workspace's scope, so it keeps running when the reques
 
 The `WorkbenchOperation*` schemas and types are renamed `GameTextOperation*`. The old names remain as deprecated aliases in `/schema` and the deprecated root and `/browser` aggregates.
 
-Migration: hosts that copied Workbench's Game Text services can replace them with `makeGameTextWorkspace`, and should switch `WorkbenchOperation*` imports to `GameTextOperation*`. Progress still uses today's polled `progress()` shape.
+Migration: hosts that copied Workbench's Game Text services can replace them with `makeGameTextWorkspace`, and should switch `WorkbenchOperation*` imports to `GameTextOperation*`. The workspace exposes the latest presentation state through `progress()`; pipeline operations use `GameTextIndexProgressReporter`. Starter writes honor host-exclusive creation, and recovery reads/copies fail closed before replacing attached rules.

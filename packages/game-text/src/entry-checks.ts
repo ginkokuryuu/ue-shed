@@ -1,6 +1,10 @@
 // Named exports only. Modules not listed in an entry point are private to the package.
 
 export {
+	type LocalizationCheckLists,
+	type LocalizationLineCheckContext,
+	type LocalizationLineCheckOutput,
+	type LocalizationTranslationVariants,
 	checkLocalizationLine,
 	checkLocalizationTarget,
 	compareLocalizationFindings,
@@ -19,11 +23,9 @@ export {
 	localizationSourceCulture,
 	localizationStringTables,
 	localizationTranslationVariants,
-	reportableInvariantText,
-	type LocalizationLineCheckContext,
-	type LocalizationLineCheckOutput,
-	type LocalizationTranslationVariants
+	reportableInvariantText
 } from "./localization-checks.js";
+
 export {
 	DEFAULT_GATE_FAILURES,
 	LocalizationGateCheck,
@@ -37,26 +39,30 @@ export {
 	localizationGateUnreadEvidence,
 	localizationGateUnreadPackages
 } from "./localization-gate.js";
+
 export {
+	type PreparedTextQualityRule,
+	type TextQualityOccurrence,
 	evaluateTextQuality,
 	matchesTextRole,
 	matchesTextRoleMatcher,
 	prepareTextQualityRules,
 	termMatches,
-	textQualityUnitFindings,
-	type PreparedTextQualityRule,
-	type TextQualityOccurrence
+	textQualityUnitFindings
 } from "./quality.js";
+
 export {
+	type TextFacts,
 	matchesTextFilter,
 	needsWork,
 	textFindings,
 	textProblemCounts,
 	textProblems,
-	translationStates,
-	type TextFacts
+	translationStates
 } from "./text-problems.js";
+
 export { unrealPluralForms } from "./unreal-plural-forms.js";
+
 export {
 	UnrealArgument,
 	UnrealFormatIssue,
@@ -72,3 +78,32 @@ export {
 	unrealUnsafeWhitespace,
 	unrealWhitespace
 } from "./unreal-text-syntax.js";
+
+export {
+	CheckBasis,
+	InconsistentTranslationParams,
+	LengthOutlierParams,
+	type LocalizationCheckCatalogue,
+	type LocalizationCheckDescriptor,
+	type LocalizationCheckParams,
+	NoCheckParams,
+	OptionalArgumentParams,
+	PlaceholderTextParams,
+	PlaceholderTranslationParams,
+	RichTextTagParams,
+	SegmentSeparatorParams,
+	localizationCheckCatalogue,
+	localizationCheckDefaults,
+	localizationRuleId,
+	parseLocalizationRuleId,
+	projectRuleKinds
+} from "./localization-check-catalogue.js";
+
+export { LocalizationCheckScope, localizationCheckInScope } from "./localization-check-scope.js";
+
+export {
+	type CustomCheckContext,
+	customLocalizationChecks,
+	detectCustomCheck,
+	localizationLineCustomFindings
+} from "./localization-custom-checks.js";

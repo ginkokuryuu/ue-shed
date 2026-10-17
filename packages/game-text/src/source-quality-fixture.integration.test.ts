@@ -15,7 +15,7 @@ import {
 	GameTextRuleDocument,
 	decodeGameTextRuleDocumentJson,
 	evaluateGameTextSourceQuality
-} from "./quality-rules-v2.js";
+} from "./game-text-rules.js";
 import type { TextCorpus } from "./schema.js";
 import { expectSameSourceQuality } from "./source-quality-index.test-support.js";
 

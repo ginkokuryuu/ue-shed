@@ -17,7 +17,7 @@ export type GameTextWorkspaceProjectState =
 			readonly project: { readonly projectRoot: string; readonly generation?: number };
 	  };
 
-/** How far a workspace scan has come. Today's progress mechanism; Plan 058 D9 may replace it. */
+/** Latest operation-scoped progress reported by the host or Game Text pipeline. */
 export interface GameTextWorkspaceProgress {
 	readonly completed: number;
 	readonly total: number;
@@ -28,6 +28,8 @@ export interface GameTextWorkspaceProgress {
 
 /** A failure a host reports from one of its hooks, in words a user can act on. */
 export interface GameTextWorkspaceHostFailure {
+	/** Use `already_exists` when an exclusive create refuses to replace existing bytes. */
+	readonly code?: string;
 	readonly message: string;
 	readonly recovery: string;
 }
@@ -82,6 +84,8 @@ export interface GameTextWorkspaceFileHooks {
 	/**
 	 * The writable-file hook: every rules file, report, line export and investigation file the
 	 * workspace writes goes through it, so a host can check a file out, refuse it or redirect it.
+	 * The host creates parent directories
+	 * when its storage needs them, and must honor exclusive creation without replacing existing bytes.
 	 */
 	readonly writeFile: (
 		path: string,
@@ -102,7 +106,8 @@ export interface GameTextWorkspaceHost {
 	readonly rulesRelativePath?: string;
 	/**
 	 * Recovery copy: called with a file's previous bytes before the workspace overwrites it (a
-	 * saved rules file), so a host can keep a copy to restore. A failure stops the write.
+	 * saved rules file), so a host can keep a copy to restore. A read failure or recovery-copy
+	 * failure stops the write; absence is never inferred from a failure.
 	 */
 	readonly recoveryCopy?: (
 		path: string,
