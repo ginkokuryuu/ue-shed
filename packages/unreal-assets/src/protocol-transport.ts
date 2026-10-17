@@ -24,6 +24,7 @@ import type {
 	SavedWorldProgressStore,
 	ScanProgressStore
 } from "./asset-reader.js";
+import { MAX_PROTOCOL_REQUEST_BYTES } from "./protocol-request-limit.js";
 import {
 	AssetReaderError,
 	MAX_CAPTURED_STDERR_BYTES,
@@ -53,9 +54,6 @@ export interface ProtocolSingleEvidence<A> {
 const TYPE_SIDE_VALIDATION_MIN_FRAME_CHARACTERS = 8 * 1024 * 1024;
 const PROJECT_INDEX_TYPE_SIDE_MIN_FRAME_CHARACTERS = 128 * 1024;
 const MAX_PROTOCOL_TERMINATION_WAIT_MS = 1_000;
-// Mirrors `MAX_REQUEST_BYTES` in crates/uasset-io/src/protocol_adapter.rs. The one-shot
-// `protocol` command bounds the raw stdin frame, trailing newline included.
-const MAX_PROTOCOL_REQUEST_BYTES = 4 * 1024 * 1024;
 const exactProtocolParseOptions = { onExcessProperty: "error" } as const;
 const validateProtocolEventType = Schema.decodeUnknownExit(
 	Schema.toType(UAssetIoEvent),
@@ -1097,7 +1095,7 @@ async function* protocolEvents(options: {
 	if (Buffer.byteLength(requestFrame, "utf8") > MAX_PROTOCOL_REQUEST_BYTES) {
 		throw new ProtocolStreamFailure(
 			"contract",
-			"Native reader request exceeds 4 MiB; split package paths into batches"
+			"Native reader request exceeds 4 MiB; split package paths with batchProtocolPaths"
 		);
 	}
 	const child = (options.processFactory ?? spawnProtocolProcess)(
