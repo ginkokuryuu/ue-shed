@@ -209,11 +209,12 @@ it.effect(
 							makeTextCorpusServiceTestLayer({
 								scan: () => Effect.die("unused"),
 								scanFromProjectIndex: () =>
-									Ref.update(scans, (count) => count + 1).pipe(
-										Effect.andThen(Deferred.succeed(started, undefined)),
-										Effect.andThen(Deferred.await(finish)),
-										Effect.as(emptyCorpus)
-									)
+									Effect.gen(function* () {
+										yield* Ref.update(scans, (count) => count + 1);
+										yield* Deferred.succeed(started, undefined);
+										yield* Deferred.await(finish);
+										return emptyCorpus;
+									})
 							})
 						)
 					)
@@ -905,7 +906,7 @@ it.effect(
 					code: "invalid_rules",
 					message: "The Game Text quality rule file is not valid JSON.",
 					recovery:
-						"Correct the JSON syntax and retry with a version-1 or version-2 rule document.",
+						"Correct the JSON syntax and retry with a version-1, version-2 or version-3 rule document.",
 					retrySafe: true
 				},
 				status: "failed"

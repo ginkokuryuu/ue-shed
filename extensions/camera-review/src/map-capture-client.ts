@@ -6,7 +6,7 @@ import {
 	type MapCapturePlan as MapCapturePlanValue
 } from "@ue-shed/cameras/map-tiles";
 import { EditorWorldOpenResponse, SavedWorld, SavedWorldMap } from "@ue-shed/protocol";
-import { type Effect, Schema, type Stream } from "effect";
+import { Effect, Schema, type Stream } from "effect";
 
 const MapCaptureUiOperationId = Schema.String.check(Schema.isMinLength(1), Schema.isMaxLength(128));
 
@@ -180,15 +180,74 @@ export interface MapCaptureClientApi {
 	) => Effect.Effect<MapCaptureTileResult, MapCaptureClientError>;
 }
 
-export const decodeMapCaptureExecuteResult = Schema.decodeUnknownEffect(MapCaptureExecuteResult);
-export const decodeMapCaptureActorCatalogResult = Schema.decodeUnknownEffect(
-	MapCaptureActorCatalogResult
+/**
+ * A value that does not match the Map Capture contract: the two sides disagree about the contract, so
+ * repeating the same call returns the same mismatch.
+ */
+export class MapCaptureContractError extends Schema.TaggedError<MapCaptureContractError>()(
+	"MapCaptureContractError",
+	{
+		code: Schema.Literal("invalid_contract"),
+		message: Schema.String,
+		recovery: Schema.String,
+		retrySafe: Schema.Boolean,
+		cause: Schema.optionalKey(Schema.Defect())
+	}
+) {}
+
+/**
+ * A unary parser for one Map Capture contract value: it decodes the encoded value and fails with
+ * `MapCaptureContractError` naming `subject`, keeping the schema issue as its cause.
+ */
+function mapCaptureContractParser<S extends Schema.Codec<unknown, unknown>>(
+	schema: S,
+	subject: string
+) {
+	const decode = Schema.decodeUnknownEffect(schema);
+	return (
+		// oxlint-disable-next-line anti-slop/no-unknown-parameters -- This parser is the boundary: it decodes its input here.
+		encoded: unknown
+	): Effect.Effect<S["Type"], MapCaptureContractError> =>
+		decode(encoded).pipe(
+			Effect.mapError(
+				(cause) =>
+					new MapCaptureContractError({
+						code: "invalid_contract",
+						message: `The ${subject} does not match the Map Capture contract.`,
+						recovery:
+							"Run Workbench and its extensions from the same UE Shed version, then retry.",
+						retrySafe: false,
+						cause
+					})
+			)
+		);
+}
+
+export const parseMapCaptureExecuteResult = mapCaptureContractParser(
+	MapCaptureExecuteResult,
+	"map capture execute result"
 );
-export const decodeMapCaptureOpenResult = Schema.decodeUnknownEffect(MapCaptureOpenResult);
-export const decodeMapCaptureLivePreviewResult = Schema.decodeUnknownEffect(
-	MapCaptureLivePreviewResult
+export const parseMapCaptureActorCatalogResult = mapCaptureContractParser(
+	MapCaptureActorCatalogResult,
+	"map capture actor catalog result"
 );
-export const decodeMapCaptureSaveResult = Schema.decodeUnknownEffect(MapCaptureSaveResult);
-export const decodeMapCaptureSelectionResult =
-	Schema.decodeUnknownEffect(MapCaptureSelectionResult);
-export const decodeMapCaptureTileResult = Schema.decodeUnknownEffect(MapCaptureTileResult);
+export const parseMapCaptureOpenResult = mapCaptureContractParser(
+	MapCaptureOpenResult,
+	"map capture open result"
+);
+export const parseMapCaptureLivePreviewResult = mapCaptureContractParser(
+	MapCaptureLivePreviewResult,
+	"map capture live preview result"
+);
+export const parseMapCaptureSaveResult = mapCaptureContractParser(
+	MapCaptureSaveResult,
+	"map capture save result"
+);
+export const parseMapCaptureSelectionResult = mapCaptureContractParser(
+	MapCaptureSelectionResult,
+	"map capture selection result"
+);
+export const parseMapCaptureTileResult = mapCaptureContractParser(
+	MapCaptureTileResult,
+	"map capture tile result"
+);

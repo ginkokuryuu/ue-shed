@@ -35,7 +35,9 @@ type Pending = {
 	readonly resolve: (page: TextCorpusSearchPage) => void;
 	readonly reject: (cause: Failure) => void;
 };
-type Calls = SyncCallChannel;
+interface Calls extends SyncCallChannel {
+	readonly timeoutMs: number;
+}
 function launch(input: SearchWorkerInput, calls: MessagePort, signal: SharedArrayBuffer) {
 	const options = { workerData: { input, calls, signal }, transferList: [calls] };
 	const compiled = new URL("./search-worker.js", import.meta.url);
@@ -47,7 +49,6 @@ function launch(input: SearchWorkerInput, calls: MessagePort, signal: SharedArra
 	);
 }
 
-const callTimeoutMs = 30_000;
 const callFailure = (message: string) =>
 	new SnapshotStoreError({
 		operation: "search.worker.call",
@@ -75,7 +76,7 @@ function callSync<S extends Schema.ConstraintDecoder<unknown>>(
 		SearchWorkerCallReply,
 		(reply) => reply.id,
 		call.id,
-		callTimeoutMs,
+		calls.timeoutMs,
 		() => callFailure("The Game Text query worker did not answer.")
 	);
 	if (reply.kind === "failed") throw reply.error;
@@ -86,39 +87,43 @@ function callSync<S extends Schema.ConstraintDecoder<unknown>>(
 function workerQuery(
 	calls: Calls,
 	summary: TextCorpusQuerySummary,
-	failed: () => Failure | undefined
+	failed: () => Failure | undefined,
+	unavailable: (cause: Failure) => void
 ): ColumnarTextCorpusQuery {
 	let sequence = 0;
 	const values = searchWorkerCallValues;
+	const execute = <S extends Schema.ConstraintDecoder<unknown>>(
+		call: SearchWorkerCall,
+		value: S
+	): S["Type"] => {
+		try {
+			return callSync(calls, failed, call, value);
+		} catch (cause) {
+			if (cause instanceof SnapshotStoreError && cause.operation === "search.worker.call")
+				unavailable(cause);
+			throw cause;
+		}
+	};
 	return {
 		summary: () => summary,
-		search: (request) =>
-			callSync(calls, failed, { id: ++sequence, method: "search", request }, values.search),
-		focus: (request) =>
-			callSync(calls, failed, { id: ++sequence, method: "focus", request }, values.focus),
+		search: (request) => execute({ id: ++sequence, method: "search", request }, values.search),
+		focus: (request) => execute({ id: ++sequence, method: "focus", request }, values.focus),
 		localizationFocus: (lineId) =>
-			callSync(
-				calls,
-				failed,
+			execute(
 				{ id: ++sequence, method: "localizationFocus", lineId },
 				values.localizationFocus
 			),
 		localizationLines: (request) =>
-			callSync(
-				calls,
-				failed,
+			execute(
 				{ id: ++sequence, method: "localizationLines", request },
 				values.localizationLines
 			),
 		localizationRows: (request) =>
-			callSync(
-				calls,
-				failed,
+			execute(
 				{ id: ++sequence, method: "localizationRows", request },
 				values.localizationRows
 			),
-		export: (request) =>
-			callSync(calls, failed, { id: ++sequence, method: "export", request }, values.export)
+		export: (request) => execute({ id: ++sequence, method: "export", request }, values.export)
 	};
 }
 
@@ -126,8 +131,15 @@ function workerQuery(
  * running scans through shared memory, without waiting for the worker's event loop. */
 export const makeGameTextSearchWorkerResource = Effect.fn("GameTextIndex.searchWorker")(function* (
 	input: SearchWorkerInput,
-	options: { readonly latestOnly?: boolean } = {}
+	options: { readonly latestOnly?: boolean; readonly syncCallTimeoutMs?: number } = {}
 ) {
+	// Sync callers cannot dispatch Worker exit callbacks while waiting. Treat a missed short
+	// reply deadline as unavailable, so pinned models can fall back without the async 30s wait.
+	const timeoutMs = options.syncCallTimeoutMs ?? 100;
+	if (!Number.isFinite(timeoutMs) || timeoutMs <= 0)
+		return yield* Effect.fail(
+			callFailure("The synchronous query deadline must be positive and finite.")
+		);
 	const boundary = yield* Schema.decodeUnknownEffect(SearchWorkerInput)(input).pipe(
 		Effect.mapError((cause) => searchWorkerFailure("search.worker.input", cause))
 	);
@@ -135,7 +147,8 @@ export const makeGameTextSearchWorkerResource = Effect.fn("GameTextIndex.searchW
 		signal = new SharedArrayBuffer(4);
 	const calls: Calls = {
 		port: channel.port1,
-		signal: new Int32Array(signal)
+		signal: new Int32Array(signal),
+		timeoutMs
 	};
 	const worker = yield* Effect.acquireRelease(
 		Effect.try({
@@ -308,7 +321,15 @@ export const makeGameTextSearchWorkerResource = Effect.fn("GameTextIndex.searchW
 	return {
 		search,
 		/** The worker's prepared query; each call blocks this thread until the worker answers. */
-		query: workerQuery(calls, summary, () => failed),
+		query: workerQuery(
+			calls,
+			summary,
+			() => failed,
+			(cause) => {
+				fail(cause);
+				void worker.terminate().catch(fail);
+			}
+		),
 		healthy: () => failed === undefined
 	};
 });
@@ -316,7 +337,7 @@ export const makeGameTextSearchWorkerResource = Effect.fn("GameTextIndex.searchW
 /** Compatibility search adapter; resource health is owned by the index steps' worker pool. */
 export const makeGameTextSearchWorker = Effect.fn("GameTextIndex.searchWorker.adapter")(function* (
 	input: SearchWorkerInput,
-	options: { readonly latestOnly?: boolean } = {}
+	options: { readonly latestOnly?: boolean; readonly syncCallTimeoutMs?: number } = {}
 ) {
 	return (yield* makeGameTextSearchWorkerResource(input, options)).search;
 });

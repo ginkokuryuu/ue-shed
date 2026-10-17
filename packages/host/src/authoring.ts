@@ -217,23 +217,23 @@ const makeShedAuthoring = Effect.gen(function* () {
 					.pipe(Effect.flatMap((endpoint) => Cache.invalidate(connectionCache, endpoint)))
 			: Effect.void;
 
-	const loadSavedTable = Effect.fn("ShedAuthoring.loadSavedTable")(function* (assetPath: string) {
-		return yield* assetReader.readTable(assetPath).pipe(
-			Effect.flatMap((snapshot) =>
-				Ref.update(snapshots, (current) =>
-					new Map(current).set(snapshot.table.objectPath, snapshot)
-				).pipe(Effect.as({ snapshot, status: "ready" as const }))
-			),
-			Effect.catch((error) =>
-				Effect.succeed(
-					readerFailure(
-						`Could not read the saved DataTable: ${error.message}`,
-						"Choose a DataTable .uasset from a supported Unreal project and verify the saved-asset reader is available."
-					)
+	const loadSavedTable = Effect.fn("ShedAuthoring.loadSavedTable")(
+		function* (assetPath: string) {
+			const snapshot = yield* assetReader.readTable(assetPath);
+			yield* Ref.update(snapshots, (current) =>
+				new Map(current).set(snapshot.table.objectPath, snapshot)
+			);
+			return { snapshot, status: "ready" as const };
+		},
+		Effect.catch((error) =>
+			Effect.succeed(
+				readerFailure(
+					`Could not read the saved DataTable: ${error.message}`,
+					"Choose a DataTable .uasset from a supported Unreal project and verify the saved-asset reader is available."
 				)
 			)
-		);
-	});
+		)
+	);
 
 	const loadLiveTable = Effect.fn("ShedAuthoring.loadLiveTable")(function* (objectPath: string) {
 		const connectionResult = yield* getConnectionResult();

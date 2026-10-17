@@ -14,7 +14,7 @@ import {
 } from "./localization.test-support.js";
 import { joinLocalizationTarget } from "./localization.js";
 import { checkLocalizationTarget } from "./localization-checks.js";
-import { checkSeverity } from "./localization-check-ids.js";
+import { localizationCheckCatalogue } from "./localization-check-catalogue.js";
 import {
 	type LocalizationCheckOptions,
 	type LocalizationQualityFinding,
@@ -41,7 +41,7 @@ import {
 	workspaceQualityCsv
 } from "./localization-workspace.js";
 import { STARTER_GAME_TEXT_RULES } from "./starter-rules.js";
-import { evaluateGameTextSourceQuality } from "./quality-rules-v2.js";
+import { GameTextRuleDocument, evaluateGameTextSourceQuality } from "./game-text-rules.js";
 import { TextQualityRuleDocument } from "./quality-schema.js";
 import { TextUnit, type TextCorpus } from "./schema.js";
 
@@ -57,7 +57,7 @@ function report(
 	text: TextCorpus,
 	files: ReturnType<typeof evidence>,
 	options: LocalizationCheckOptions = {},
-	rules?: TextQualityRuleDocument
+	rules?: GameTextRuleDocument
 ) {
 	const joined = joinLocalizationTarget(text, files, files.target);
 	return {
@@ -71,7 +71,7 @@ function line(
 	source: string,
 	translation: string,
 	options: LocalizationCheckOptions = {},
-	rules?: TextQualityRuleDocument
+	rules?: GameTextRuleDocument
 ) {
 	const text = corpus([unit("K", source)]);
 	return report(
@@ -151,14 +151,11 @@ describe("text shape helpers", () => {
 		});
 		expect(lengthOutlier("Short source", "Eine sehr viel längere Übersetzung")).toBeUndefined();
 		// Chinese, Japanese, Korean and Thai may run down to a quarter of the source.
-		expect(["zh-CN", "ja", "ko", "th-TH", "de", "id"].map(lengthOutlierMinimumRatio)).toEqual([
-			0.25,
-			0.25,
-			0.25,
-			0.25,
-			1 / 3,
-			1 / 3
-		]);
+		expect(
+			["zh-CN", "ja", "ko", "th-TH", "de", "id"].map((culture) =>
+				lengthOutlierMinimumRatio(culture)
+			)
+		).toEqual([0.25, 0.25, 0.25, 0.25, 1 / 3, 1 / 3]);
 	});
 	it("recognizes placeholder translations, Slate tag syntax and interior line breaks", () => {
 		const source = "The rows are like a composition.//You left negative space. On purpose?";
@@ -398,6 +395,26 @@ describe("translation shape checks", () => {
 		])
 			expect(kinds(line(harbour, "skip", options))).toContain("length_outlier");
 		expect(kinds(line(harbour, "skip"))).not.toContain("length_outlier");
+		// An out-of-scope check never hides an in-scope one: placeholder_translation runs only for
+		// another culture, so it does not take the German length finding.
+		const scoped = Schema.decodeUnknownSync(GameTextRuleDocument)({
+			schemaVersion: 3,
+			roles: [],
+			rules: [],
+			checks: {
+				placeholder_translation: { scope: { cultures: ["fr"] } },
+				length_outlier: { scope: { cultures: ["de"] } }
+			}
+		});
+		expect(kinds(line(harbour, "skip", {}, scoped))).toEqual(["length_outlier"]);
+		// In scope, the placeholder keeps the finding.
+		const inScope = Schema.decodeUnknownSync(GameTextRuleDocument)({
+			schemaVersion: 3,
+			roles: [],
+			rules: [],
+			checks: { placeholder_translation: { scope: { cultures: ["de"] } } }
+		});
+		expect(kinds(line(harbour, "skip", {}, inScope))).toEqual(["placeholder_translation"]);
 		expect(kinds(line("Your spouse checks the supplies.", "..."))).toContain(
 			"placeholder_translation"
 		);
@@ -950,10 +967,10 @@ describe("built-in source checks", () => {
 
 describe("severity", () => {
 	it("rates every built-in check and lists blocking findings first", () => {
-		expect(checkSeverity.culture_invariant_text).toBe("low");
-		expect(checkSeverity.outdated_translation).toBe("blocking");
-		expect(checkSeverity.source_line_endings_changed).toBe("low");
-		expect(checkSeverity.duplicate_source).toBe("low");
+		expect(localizationCheckCatalogue.culture_invariant_text.severity).toBe("low");
+		expect(localizationCheckCatalogue.outdated_translation.severity).toBe("blocking");
+		expect(localizationCheckCatalogue.source_line_endings_changed.severity).toBe("low");
+		expect(localizationCheckCatalogue.duplicate_source.severity).toBe("low");
 		const text = corpus([unit("A", "Alpha"), unit("Z", "Zulu text")]);
 		const files = evidence(
 			[manifestEntry("A", "Alpha"), manifestEntry("Z", "Zulu text")],
@@ -962,7 +979,7 @@ describe("severity", () => {
 		);
 		const { joined, report: value } = report(text, files);
 		for (const finding of findings(value))
-			expect(finding.severity).toBe(checkSeverity[finding.kind]);
+			expect(finding.severity).toBe(localizationCheckCatalogue[finding.kind].severity);
 		const workspace = localizationQualityWorkspace(undefined, value, joined);
 		const page = workspace.search({ target: joined.target, filter: "all" });
 		expect(Schema.decodeUnknownSync(WorkspaceQualityPage)(page)).toEqual(page);

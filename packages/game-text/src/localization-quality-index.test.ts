@@ -19,7 +19,11 @@ import {
 	type WorkspaceQualityRequest
 } from "./localization-workspace.js";
 import { TextQualityFindingId } from "./quality-query.js";
-import { GameTextRuleDocument, evaluateGameTextSourceQuality } from "./quality-rules-v2.js";
+import {
+	GameTextRuleDocument,
+	evaluateGameTextSourceQuality,
+	migrateGameTextRuleDocument
+} from "./game-text-rules.js";
 
 /**
  * One problem per key pattern; German carries the translation problems. `deSource` is the source
@@ -675,6 +679,62 @@ it.live("a scan across many pages equals the in-memory checks", () =>
 			);
 			expect(reported.findings.limits(undefined)).toEqual(plain.findings.limits(undefined));
 			expect(reported.metadata.rules).toEqual(plain.metadata.rules);
+		}).pipe(Effect.provide(fixture.layer()));
+	}).pipe(Effect.scoped)
+);
+
+it.live("the indexed scan stores each finding's severity as the rule file rates it", () =>
+	Effect.gen(function* () {
+		const fixture = yield* makeIndexRegressionFixture();
+		yield* Effect.promise(() => writeLocalization(fixture.projectRoot, keys));
+		fixture.update(gathered.map(({ key, source }, index) => occurrence(key, source, index)));
+		const migrated = migrateGameTextRuleDocument(document);
+		const rated = Schema.decodeUnknownSync(GameTextRuleDocument)({
+			...migrated,
+			localizationRules: (migrated.localizationRules ?? []).map((rule) =>
+				rule.id === "translation.limit" ? { ...rule, severity: "blocking" } : rule
+			),
+			checks: {
+				...migrated.checks,
+				length_outlier: { severity: "blocking" },
+				outdated_translation: { severity: "low" },
+				// Scoped out of German: missing tags leave added tags to their own check.
+				rich_text_tags: { ...migrated.checks?.rich_text_tags, scope: { cultures: ["fr"] } }
+			}
+		});
+		yield* Effect.gen(function* () {
+			const result = yield* (yield* GameTextIndexRefresh).refresh(fixture.request);
+			const join = result.localizationJoin;
+			const legacy = localizationQualityWorkspace(
+				undefined,
+				checkLocalizationTarget(result.corpus, join, result.evidence, {}, rated),
+				join
+			);
+			const quality = yield* result.localizationQuality!({}, rated);
+			const indexed = localizationQualityWorkspaceOf(undefined, quality);
+			const request = { target: join.target, filter: "all" as const };
+			expect(indexed.export(request)).toEqual(legacy.export(request));
+			const page = indexed.search(request);
+			expect(page).toEqual(legacy.search(request));
+			const severities = (filter: WorkspaceQualityFilter) =>
+				new Set(
+					indexed
+						.search({ ...request, filter })
+						.findings.map((finding) => finding.severity)
+				);
+			expect(severities("length_outlier")).toEqual(new Set(["blocking"]));
+			expect(severities("outdated_translation")).toEqual(new Set(["low"]));
+			expect(severities("character_budget")).toContain("blocking");
+			expect(page.counts.rich_text_tags).toBe(0);
+			expect(page.counts.rich_text_tags_added).toBeGreaterThan(0);
+			// Groups and positions agree on the stored severity.
+			for (const group of quality.findings.groups ?? [])
+				for (const position of group.positions)
+					expect(quality.findings.severity(position)).toBe(group.severity);
+			// Only the two re-rated kinds are blocking now; outdated translations are low.
+			expect(page.severityCounts.blocking).toBe(
+				page.counts.length_outlier + page.counts.character_budget
+			);
 		}).pipe(Effect.provide(fixture.layer()));
 	}).pipe(Effect.scoped)
 );

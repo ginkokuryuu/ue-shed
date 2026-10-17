@@ -25,7 +25,7 @@ import { textCorpusQuery } from "./query.js";
 import {
 	decodeGameTextRuleDocumentJson,
 	evaluateGameTextSourceQuality
-} from "./quality-rules-v2.js";
+} from "./game-text-rules.js";
 import type { TextCorpus, TextCorpusSearchRequest } from "./schema.js";
 import { staleRuntimeCopy } from "./text-copies.js";
 import { TextAudience, TextOutOfScopeReason } from "./text-audience-schema.js";

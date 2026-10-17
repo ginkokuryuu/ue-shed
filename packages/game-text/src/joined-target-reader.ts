@@ -362,6 +362,8 @@ export const hydrateJoinedTarget = Effect.fn("JoinedTarget.page")(function* (
 		);
 		// SAFETY: decodeLocalizationSnapshot builds every entry of a file in that file's format,
 		// which the check above matched.
+		// Verified by: packages/game-text/src/index-refresh.test.ts
+		// ("retains readers across refresh steps updating selected inputs and review")
 		return value as EvidenceEntryOf[F];
 	};
 

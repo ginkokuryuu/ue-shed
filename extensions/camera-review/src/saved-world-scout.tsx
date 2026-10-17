@@ -417,6 +417,8 @@ export function SavedWorldScout(props: {
 									class={stylex.attrs(styles.map).class}
 									onController={(controller) => {
 										// SAFETY: Deck controller matches Canvas controller shape (focusKey/resetView/setZoomFactor).
+										// Verified by: packages/ui/src/point-map-deck.component.test.tsx
+										// ("%s controller focuses, zooms and resets through the shared controller contract")
 										pointMap = controller as PointMapController;
 									}}
 									onSelect={selectPoint}

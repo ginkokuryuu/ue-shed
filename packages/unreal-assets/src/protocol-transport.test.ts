@@ -3,6 +3,7 @@ import { PassThrough, Writable } from "node:stream";
 import { Effect } from "effect";
 import { expect, it } from "vitest";
 import { AssetReaderError } from "./asset-reader.js";
+import { MAX_PROTOCOL_REQUEST_BYTES } from "./protocol-request-limit.js";
 import {
 	invokeProtocolSessionSingle,
 	makeProtocolRequest,
@@ -12,8 +13,6 @@ import {
 	runUassetProtocolEvents,
 	UassetProtocolSession
 } from "./protocol-transport.js";
-
-const MAX_PROTOCOL_REQUEST_BYTES = 4 * 1024 * 1024;
 
 function closedPipeError(): Error {
 	return Object.assign(new Error("write EPIPE"), { code: "EPIPE" });
@@ -42,6 +41,38 @@ class EarlyExitProtocolChild extends EventEmitter {
 			this.stdout.end();
 			this.stderr.end();
 			setImmediate(() => this.emit("close", 1, null));
+		});
+	}
+
+	kill(): boolean {
+		this.killed = true;
+		return true;
+	}
+}
+
+/** A one-shot worker that writes raw stdout bytes, splitting one UTF-8 character in two. */
+class SplitUtf8ProtocolChild extends EventEmitter {
+	readonly pid = 9;
+	readonly stdin = new Writable({
+		write(_chunk, _encoding, callback) {
+			callback();
+		}
+	});
+	readonly stdout = new PassThrough();
+	readonly stderr = new PassThrough();
+	killed = false;
+
+	constructor(output: string, character: string) {
+		super();
+		const bytes = Buffer.from(output, "utf8");
+		const split = bytes.indexOf(Buffer.from(character, "utf8")) + 1;
+		setImmediate(() => {
+			this.stdout.write(bytes.subarray(0, split));
+			setImmediate(() => {
+				this.stdout.end(bytes.subarray(split));
+				this.stderr.end();
+				setImmediate(() => this.emit("close", 0, null));
+			});
 		});
 	}
 
@@ -373,7 +404,7 @@ it("rejects a one-shot request over the native 4 MiB frame limit before spawning
 	expect(spawner.spawns).toBe(0);
 	expect(oversized?.kind).toBe("contract");
 	expect(oversized?.message).toBe(
-		"Native reader request exceeds 4 MiB; split package paths into batches"
+		"Native reader request exceeds 4 MiB; split package paths with batchProtocolPaths"
 	);
 
 	// The native reader accepts a frame of exactly 4 MiB, trailing newline included.
@@ -383,4 +414,38 @@ it("rejects a one-shot request over the native 4 MiB frame limit before spawning
 	);
 	expect(spawner.spawns).toBe(1);
 	expect(atLimit?.kind).toBe("process");
+});
+
+it("decodes worker stdout as UTF-8 text even when a character spans two chunks", async () => {
+	const request = makeProtocolRequest(
+		{ assetPath: "C:/Fixture/BP_Utf8.uasset", kind: "inspect" },
+		{ maximumOutputBytes: 1_024, timeoutMs: 1_000 }
+	);
+	const frame = { contract: request.contract, requestId: request.requestId };
+	const message = "Café graph preserved ✓";
+	const output = [
+		{ ...frame, kind: "accepted", operation: "inspect", sequence: 0 },
+		{
+			...frame,
+			code: "unsupported_format",
+			kind: "diagnostic",
+			message,
+			sequence: 1,
+			severity: "warning"
+		},
+		{ ...frame, kind: "completed", outcome: "partial", sequence: 2 }
+	]
+		.map((event) => `${JSON.stringify(event)}\n`)
+		.join("");
+	const messages: Array<string> = [];
+	for await (const event of runUassetProtocolEvents({
+		configuration: { executable: "split-utf8-reader" },
+		processFactory: () => new SplitUtf8ProtocolChild(output, "✓"),
+		request,
+		signal: undefined,
+		timeoutMs: 1_000
+	}))
+		if (event.kind === "diagnostic") messages.push(event.message);
+
+	expect(messages).toEqual([message]);
 });
