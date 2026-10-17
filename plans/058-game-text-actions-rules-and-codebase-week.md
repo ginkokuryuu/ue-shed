@@ -166,9 +166,10 @@ downstream host, and an audit against an external Effect coding standard and err
 
 ## Working method
 
-- **One lane per worktree and branch** (`feat/058-a1-package-file-names`, …). One PR per item, with
-  a changeset. Stack PRs within a lane when an item depends on an unmerged one; never stack across
-  lanes.
+- **One lane per worktree and branch** (`feat/058-a-game-text-actions`, …). Keep PRs few: a lane
+  adds its items as commits to its open PR, one commit and one changeset per item. Open a separate
+  PR only when an item needs its own review (a breaking API change, an ADR) or the lane PR has
+  grown too large to review. Never stack across lanes.
 - **Only lane A runs Unreal, and only one engine process at a time.** Before any engine task, check
   both editor process families, `tasklist /FI "IMAGENAME eq UnrealEditor*"` and
   `tasklist /FI "IMAGENAME eq UE4Editor*"` (the names `scripts/unreal-plugin-host.ts` selects);
