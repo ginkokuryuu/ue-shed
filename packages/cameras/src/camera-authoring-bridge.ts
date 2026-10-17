@@ -235,6 +235,7 @@ export function makeCameraAuthoringBridge(
 						endpoint,
 						objectPath: "/Script/UEShedCore.Default__UEShedCoreLibrary",
 						functionName: "GetCapabilityManifest",
+						idempotent: true,
 						operation: "camera.authoring.negotiate",
 						parameters: {}
 					})
@@ -293,7 +294,9 @@ export function makeCameraAuthoringBridge(
 								code: cause.status === 404 ? "missing_plugin" : "disconnected",
 								message: cause.message,
 								recovery:
-									"Enable UEShedCameraAuthoringBridge in this editor and reconnect to Unreal Remote Control. Pending draft changes remain on disk.",
+									cause.status === 404
+										? "Enable UEShedCameraAuthoringBridge in this editor and reconnect to Unreal Remote Control. Pending draft changes remain on disk."
+										: cause.recovery,
 								retrySafe: cause.retrySafe,
 								nextStep: cause.status === 404 ? "fix_input" : cause.nextStep
 							})

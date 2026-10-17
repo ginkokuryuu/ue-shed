@@ -1,11 +1,10 @@
 import { cleanup, render, screen, waitFor } from "@solidjs/testing-library";
 import { userEvent } from "@testing-library/user-event";
 import {
-	LocalizationLinePreview,
-	LocalizationSelection,
 	type LocalizationReviewRequest,
 	type LocalizationReviewResult
-} from "@ue-shed/game-text/browser";
+} from "@ue-shed/game-text/corpus";
+import { LocalizationLinePreview, LocalizationSelection } from "@ue-shed/game-text/schema";
 import { EffectRuntimeProvider } from "@ue-shed/ui";
 import { Deferred, Effect, Layer, ManagedRuntime, Schema } from "effect";
 import { afterAll, afterEach, expect, it, vi } from "vitest";

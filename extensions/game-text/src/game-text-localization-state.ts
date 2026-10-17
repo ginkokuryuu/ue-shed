@@ -1,12 +1,14 @@
 import type {
 	LocalizationFocus,
 	LocalizationFocusRequest,
-	LocalizationSelection,
 	LocalizationTargetPreview,
-	LocalizationTargetResult,
+	LocalizationTargetResult
+} from "@ue-shed/game-text/corpus";
+import type {
+	LocalizationSelection,
 	TextCorpusQuerySummary,
 	TextUnitId
-} from "@ue-shed/game-text/browser";
+} from "@ue-shed/game-text/schema";
 type CultureCode = NonNullable<LocalizationSelection["culture"]>;
 import { createEffectAction } from "@ue-shed/ui";
 import { createEffect, createSignal, latest, untrack } from "solid-js";

@@ -4,11 +4,8 @@ import { join } from "node:path";
 import { it } from "@effect/vitest";
 import { Effect, Layer, Ref } from "effect";
 import { expect } from "vitest";
-import {
-	createStarterTextRules,
-	TextRulesFileError,
-	decodeTextQualityRuleDocumentJson
-} from "@ue-shed/game-text";
+import { createStarterTextRules, TextRulesFileError } from "@ue-shed/game-text/index";
+import { decodeTextQualityRuleDocumentJson } from "@ue-shed/game-text/schema";
 import { CliRuntime } from "./cli-runtime.js";
 import { runCli } from "./command.js";
 

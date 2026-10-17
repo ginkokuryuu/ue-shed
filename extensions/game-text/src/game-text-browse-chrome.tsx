@@ -1,5 +1,5 @@
 import * as stylex from "@stylexjs/stylex";
-import type { LocalizationState, TextCorpusSearchPage } from "@ue-shed/game-text/browser";
+import type { LocalizationState, TextCorpusSearchPage } from "@ue-shed/game-text/schema";
 import { tokens } from "@ue-shed/ui-theme/tokens.stylex.js";
 import { For, Show } from "solid-js";
 import { localizationLabels } from "./game-text-localization-view.js";

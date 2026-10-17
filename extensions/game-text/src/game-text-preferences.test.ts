@@ -1,11 +1,11 @@
 // @vitest-environment jsdom
+import { LocalizationEdit } from "@ue-shed/game-text/corpus";
 import {
-	LocalizationEdit,
 	LocalizationSelection,
 	TextQualityRuleDocument,
 	TextQualityRuleId,
 	TextRoleId
-} from "@ue-shed/game-text/browser";
+} from "@ue-shed/game-text/schema";
 import { Schema } from "effect";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {

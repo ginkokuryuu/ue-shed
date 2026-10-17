@@ -39,6 +39,14 @@ named files at foreign-framework boundaries, never count baselines or directory-
 Every `Context.Service` must have live/test layer evidence and named operations. A measured hot-path
 exception also requires a repeatable benchmark, explicit cleanup ownership, and a written rationale.
 
+Layers compose through requirements. A layer factory may take configuration, but never a Layer or a
+service: it requires the service and the composition root provides it, so a host or a test can
+replace it. A `make*` constructor that only its own module uses stays private. Test layers are
+complete, behaviourally honest fakes: they take the whole service, or fill what a test leaves out
+with what that fake's state really answers (an empty feed, an unindexed project). They never fill
+it with `Effect.die("not stubbed")`. The architecture check rejects exported factories that take
+a Layer and exported `make*` functions no other module uses.
+
 ## Composition roots and exits
 
 - The CLI builds `CliLive` once and exits through the single `Effect.runPromiseExit` in

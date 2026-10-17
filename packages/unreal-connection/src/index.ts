@@ -195,7 +195,7 @@ export const findUnrealActorsReferencingRow = Effect.fn(
 	);
 	const client = yield* RemoteControlClient;
 	const manifest = yield* decodeResult(
-		remoteCall(client, endpoint, coreObjectPath, "GetCapabilityManifest", {}),
+		remoteCall(client, endpoint, coreObjectPath, "GetCapabilityManifest", {}, true),
 		endpoint,
 		"capability manifest",
 		decodeCompanionCapabilityManifest
@@ -206,9 +206,16 @@ export const findUnrealActorsReferencingRow = Effect.fn(
 		manifest.authoringObjectPath
 	);
 	const result = yield* decodeResult(
-		remoteCall(client, endpoint, objectPath, "FindActorsReferencingRow", {
-			RequestJson: JSON.stringify(request)
-		}),
+		remoteCall(
+			client,
+			endpoint,
+			objectPath,
+			"FindActorsReferencingRow",
+			{
+				RequestJson: JSON.stringify(request)
+			},
+			true
+		),
 		endpoint,
 		operation,
 		decodeAuthoringActorReferencesResult
@@ -233,7 +240,7 @@ export const connectUnrealAutomation = Effect.fn("UnrealConnection.connectAutoma
 	const endpoint = normalizedEndpoint(configuredEndpoint);
 	const client = yield* RemoteControlClient;
 	const manifest = yield* decodeResult(
-		remoteCall(client, endpoint, coreObjectPath, "GetCapabilityManifest", {}),
+		remoteCall(client, endpoint, coreObjectPath, "GetCapabilityManifest", {}, true),
 		endpoint,
 		"capability manifest",
 		decodeCompanionCapabilityManifest
@@ -248,7 +255,14 @@ export const connectUnrealAutomation = Effect.fn("UnrealConnection.connectAutoma
 		requireCapability(manifest, capability, manifest.automationObjectPath).pipe(
 			Effect.flatMap((objectPath) =>
 				decodeResult(
-					remoteCall(client, endpoint, objectPath, functionName, parameters).pipe(
+					remoteCall(
+						client,
+						endpoint,
+						objectPath,
+						functionName,
+						parameters,
+						!isMutation
+					).pipe(
 						Effect.mapError((cause) =>
 							isMutation
 								? new UnrealConnectionError({
@@ -365,11 +379,12 @@ function remoteCall(
 	endpoint: string,
 	objectPath: string,
 	functionName: string,
-	parameters: Schema.JsonObject
+	parameters: Schema.JsonObject,
+	idempotent = false
 ): Effect.Effect<Schema.Json, UnrealConnectionError> {
 	const operation = `remote_control.${functionName}`;
 	return client
-		.request({ endpoint, functionName, objectPath, operation, parameters })
+		.request({ endpoint, functionName, objectPath, operation, parameters, idempotent })
 		.pipe(Effect.mapError(connectionError));
 }
 
@@ -450,7 +465,7 @@ export function locateUnrealAsset(options: {
 	return Effect.gen(function* () {
 		const client = yield* RemoteControlClient;
 		const manifest = yield* decodeResult(
-			remoteCall(client, endpoint, coreObjectPath, "GetCapabilityManifest", {}),
+			remoteCall(client, endpoint, coreObjectPath, "GetCapabilityManifest", {}, true),
 			endpoint,
 			"capability manifest",
 			decodeCompanionCapabilityManifest
@@ -500,7 +515,7 @@ export function connectUnrealAuthoring(
 	return Effect.gen(function* () {
 		const client = yield* RemoteControlClient;
 		const manifest = yield* decodeResult(
-			remoteCall(client, endpoint, coreObjectPath, "GetCapabilityManifest", {}),
+			remoteCall(client, endpoint, coreObjectPath, "GetCapabilityManifest", {}, true),
 			endpoint,
 			"capability manifest",
 			decodeCompanionCapabilityManifest
@@ -542,21 +557,21 @@ export function connectUnrealAuthoring(
 			);
 		}
 		const authoringObjectPath = manifest.authoringObjectPath;
-		const call = (functionName: string, parameters: Schema.JsonObject) =>
-			remoteCall(client, endpoint, authoringObjectPath, functionName, parameters);
+		const call = (functionName: string, parameters: Schema.JsonObject, idempotent = false) =>
+			remoteCall(client, endpoint, authoringObjectPath, functionName, parameters, idempotent);
 		return {
 			endpoint,
 			manifest,
 			listTableObjectPaths: () =>
 				decodeAuthoringResult(
-					call("ListTableObjectPaths", {}),
+					call("ListTableObjectPaths", {}, true),
 					endpoint,
 					"table list",
 					decodeAuthoringTableList
 				).pipe(Effect.map((result) => result.objectPaths)),
 			getTableSnapshot: (objectPath) =>
 				decodeAuthoringResult(
-					call("GetTableSnapshot", { TableObjectPath: objectPath }),
+					call("GetTableSnapshot", { TableObjectPath: objectPath }, true),
 					endpoint,
 					"table snapshot",
 					decodeAuthoringTableSnapshot
@@ -570,7 +585,7 @@ export function connectUnrealAuthoring(
 				),
 			lookupApplyResult: (operationId) =>
 				decodeAuthoringResult(
-					call("LookupApplyResult", { OperationId: operationId }),
+					call("LookupApplyResult", { OperationId: operationId }, true),
 					endpoint,
 					"Apply lookup",
 					decodeAuthoringApplyResult
@@ -600,6 +615,7 @@ export const inspectUnrealProducer = Effect.fn("UnrealConnection.inspectProducer
 			endpoint,
 			objectPath: coreObjectPath,
 			functionName: "GetCapabilityManifest",
+			idempotent: true,
 			operation: "unreal.producer.inspect",
 			parameters: {}
 		})

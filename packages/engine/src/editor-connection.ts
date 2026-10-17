@@ -72,6 +72,7 @@ export const EditorConnectionLive = Layer.effect(
 				.request({
 					endpoint,
 					functionName: "GetCapabilityManifest",
+					idempotent: true,
 					objectPath: coreObjectPath,
 					operation: "editor.connection.connect",
 					parameters: {}

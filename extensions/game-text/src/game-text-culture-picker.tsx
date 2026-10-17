@@ -1,5 +1,5 @@
 import * as stylex from "@stylexjs/stylex";
-import type { TextCultureFacet } from "@ue-shed/game-text/browser";
+import type { TextCultureFacet } from "@ue-shed/game-text/schema";
 import { AnchoredPopover, Button } from "@ue-shed/ui";
 import { tokens } from "@ue-shed/ui-theme/tokens.stylex.js";
 import { For, Show, createEffect, createSignal, createUniqueId } from "solid-js";

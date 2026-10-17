@@ -268,7 +268,8 @@ describe("Remote Control authoring adapter", () => {
 					})
 				)
 			);
-			expect(error.retrySafe).toBe(true);
+			expect(error.retrySafe).toBe(false);
+			expect(error.nextStep).toBe("reconcile");
 			expect(error.status).toBe(503);
 		}
 
@@ -370,3 +371,35 @@ describe("Remote Control authoring adapter", () => {
 		}
 	});
 });
+
+for (const idempotent of [false, true]) {
+	it(`reports ${idempotent ? "retryable read" : "uncertain mutation"} after the server loses its response`, async () => {
+		let applied = 0;
+		let received = 0;
+		const endpoint = await listen((request, response) => {
+			request.resume();
+			request.on("end", () => {
+				received += 1;
+				if (!idempotent) applied += 1;
+				response.destroy();
+			});
+		});
+		const client = makeRemoteControlClient({ defaultTimeout: "1 second" });
+		const error = await Effect.runPromise(
+			Effect.flip(
+				client.request({
+					endpoint,
+					objectPath: "/Script/Fixture.Library",
+					functionName: idempotent ? "ReadState" : "EnqueueChange",
+					parameters: {},
+					idempotent
+				})
+			)
+		);
+		expect(received).toBe(1);
+		expect(applied).toBe(idempotent ? 0 : 1);
+		expect(error.retrySafe).toBe(idempotent);
+		expect(error.nextStep).toBe(idempotent ? "retry" : "reconcile");
+		if (!idempotent) expect(error.recovery).toContain("may have applied");
+	});
+}

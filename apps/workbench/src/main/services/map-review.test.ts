@@ -336,6 +336,8 @@ for (const editorProjectRoot of [
 							makeWorkbenchConfigurationLayer(notConfigured),
 							makeLocalFilesTestLayer(),
 							makeReviewRepositoryTestLayer({
+								// This test never lists Review Sets.
+								listSets: () => Effect.die("not used"),
 								discardStaging: () => Effect.die("not used"),
 								findSet: () => Effect.die("not used"),
 								finalizeRun: () => Effect.die("not used"),
@@ -370,6 +372,8 @@ it.effect("returns not_configured when no review project is configured", () =>
 						makeWorkbenchConfigurationLayer(notConfigured),
 						makeLocalFilesTestLayer(),
 						makeReviewRepositoryTestLayer({
+							// This test never lists Review Sets.
+							listSets: () => Effect.die("not used"),
 							discardStaging: () => Effect.die("not used"),
 							findSet: () => Effect.die("not used"),
 							finalizeRun: () => Effect.die("not used"),
@@ -413,6 +417,8 @@ it.effect("enters first-run Map Review setup when a project has no configured Re
 						makeWorkbenchConfigurationLayer(projectConfigured),
 						makeLocalFilesTestLayer(),
 						makeReviewRepositoryTestLayer({
+							// This test never lists Review Sets.
+							listSets: () => Effect.die("not used"),
 							discardStaging: () => Effect.die("not used"),
 							findSet: () => Effect.die("not used"),
 							finalizeRun: () => Effect.die("not used"),
@@ -481,6 +487,8 @@ it.effect("loads the review set and reads captured artifacts with bounded concur
 							])
 						),
 						makeReviewRepositoryTestLayer({
+							// This test never lists Review Sets.
+							listSets: () => Effect.die("not used"),
 							discardStaging: () => Effect.die("not used"),
 							findSet: () => Effect.die("not used"),
 							finalizeRun: () => Effect.die("not used"),
@@ -688,6 +696,8 @@ it.effect("round-trips immutable policy replacement through the headless service
 						makeWorkbenchConfigurationLayer(configuredReview),
 						makeLocalFilesTestLayer(),
 						makeReviewRepositoryTestLayer({
+							// This test never lists Review Sets.
+							listSets: () => Effect.die("not used"),
 							discardStaging: () => Effect.die("not used"),
 							findSet: () => Effect.succeed(stored),
 							finalizeRun: () => Effect.die("not used"),
@@ -819,6 +829,8 @@ it.effect("does not carry the startup Review Set into a newly selected project",
 						makeWorkbenchConfigurationLayer(configuredReview),
 						makeLocalFilesTestLayer(),
 						makeReviewRepositoryTestLayer({
+							// This test never lists Review Sets.
+							listSets: () => Effect.die("not used"),
 							discardStaging: () => Effect.die("not used"),
 							findSet: () => Effect.die("not used"),
 							finalizeRun: () => Effect.die("not used"),
@@ -879,6 +891,8 @@ it.effect("generates framing candidates for a matching selection", () =>
 						makeWorkbenchConfigurationLayer(configuredReview),
 						makeLocalFilesTestLayer(),
 						makeReviewRepositoryTestLayer({
+							// This test never lists Review Sets.
+							listSets: () => Effect.die("not used"),
 							discardStaging: () => Effect.die("not used"),
 							findSet: () => Effect.die("not used"),
 							finalizeRun: () => Effect.die("not used"),
@@ -1086,6 +1100,8 @@ it.effect(
 							makeWorkbenchConfigurationLayer(projectConfigured),
 							makeLocalFilesTestLayer(),
 							makeReviewRepositoryTestLayer({
+								// This test never lists Review Sets.
+								listSets: () => Effect.die("not used"),
 								discardStaging: () => Effect.die("not used"),
 								findSet: () => Effect.die("not used"),
 								finalizeRun: () => Effect.die("not used"),
@@ -1174,6 +1190,8 @@ it.effect(
 							makeWorkbenchConfigurationLayer(configuredReview),
 							makeLocalFilesTestLayer(),
 							makeReviewRepositoryTestLayer({
+								// This test never lists Review Sets.
+								listSets: () => Effect.die("not used"),
 								discardStaging: () => Effect.die("not used"),
 								findSet: () => Effect.die("not used"),
 								finalizeRun: () => Effect.die("not used"),
@@ -1307,6 +1325,8 @@ it.effect("resumes the latest persisted authoring session after a fresh service 
 						makeWorkbenchConfigurationLayer(configuredReview),
 						makeLocalFilesTestLayer(),
 						makeReviewRepositoryTestLayer({
+							// This test never lists Review Sets.
+							listSets: () => Effect.die("not used"),
 							discardStaging: () => Effect.die("not used"),
 							findSet: () => Effect.die("not used"),
 							finalizeRun: () => Effect.die("not used"),
@@ -1397,6 +1417,8 @@ it.effect("surfaces stale bounds recovery and refuses Keep View approval", () =>
 						makeWorkbenchConfigurationLayer(configuredReview),
 						makeLocalFilesTestLayer(),
 						makeReviewRepositoryTestLayer({
+							// This test never lists Review Sets.
+							listSets: () => Effect.die("not used"),
 							discardStaging: () => Effect.die("not used"),
 							findSet: () => Effect.die("not used"),
 							finalizeRun: () => Effect.die("not used"),
@@ -1557,6 +1579,8 @@ it.effect("subscribes to world observations, coalesces transform bursts, and cle
 					makeWorkbenchConfigurationLayer(notConfigured),
 					makeLocalFilesTestLayer(),
 					makeReviewRepositoryTestLayer({
+						// This test never lists Review Sets.
+						listSets: () => Effect.die("not used"),
 						discardStaging: () => Effect.die("not used"),
 						findSet: () => Effect.die("not used"),
 						finalizeRun: () => Effect.die("not used"),
@@ -1746,6 +1770,8 @@ it.effect("keeps observation live while focusing an actor and retuning cadence",
 					makeWorkbenchConfigurationLayer(notConfigured),
 					makeLocalFilesTestLayer(),
 					makeReviewRepositoryTestLayer({
+						// This test never lists Review Sets.
+						listSets: () => Effect.die("not used"),
 						discardStaging: () => Effect.die("not used"),
 						findSet: () => Effect.die("not used"),
 						finalizeRun: () => Effect.die("not used"),
@@ -1987,6 +2013,8 @@ function makeLivePreviewServiceLayer(worldContext: "editor" | "play") {
 				makeWorkbenchConfigurationLayer(projectConfigured),
 				makeLocalFilesTestLayer(),
 				makeReviewRepositoryTestLayer({
+					// This test never lists Review Sets.
+					listSets: () => Effect.die("not used"),
 					discardStaging: () => Effect.die("not used"),
 					findSet: () => Effect.die("not used"),
 					finalizeRun: () => Effect.die("not used"),
@@ -2088,6 +2116,8 @@ it.effect("blocks Capture Set while PIE is running", () =>
 						makeWorkbenchConfigurationLayer(configuredReview),
 						makeLocalFilesTestLayer(),
 						makeReviewRepositoryTestLayer({
+							// This test never lists Review Sets.
+							listSets: () => Effect.die("not used"),
 							discardStaging: () => Effect.die("not used"),
 							findSet: () => Effect.die("not used"),
 							finalizeRun: () => Effect.die("not used"),
@@ -2133,6 +2163,8 @@ it.effect("closes the open camera set before Capture Set renders", () =>
 							makeWorkbenchConfigurationLayer(configuredReview),
 							makeLocalFilesTestLayer(),
 							makeReviewRepositoryTestLayer({
+								// This test never lists Review Sets.
+								listSets: () => Effect.die("not used"),
 								discardStaging: () => Effect.die("not used"),
 								findSet: () => Effect.die("not used"),
 								finalizeRun: () => Effect.die("not used"),

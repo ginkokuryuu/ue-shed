@@ -4,7 +4,7 @@ import {
 	ContentObservatoryHistoryRequest,
 	ContentObservatoryTargetCatalog,
 	decodeContentObservatoryTargetCatalog,
-	decodeContentObservatoryState,
+	parseContentObservatoryState,
 	type ContentObservatoryClientApi
 } from "@ue-shed/extension-content-observatory/client";
 import { Effect, Schema } from "effect";
@@ -22,7 +22,7 @@ function request<HostValue>(
 		try: invoke,
 		catch: (cause) => new ContentObservatoryClientError({ cause, operation, recovery })
 	}).pipe(
-		Effect.flatMap(decodeContentObservatoryState),
+		Effect.flatMap(parseContentObservatoryState),
 		Effect.mapError(
 			(cause) => new ContentObservatoryClientError({ cause, operation, recovery })
 		)

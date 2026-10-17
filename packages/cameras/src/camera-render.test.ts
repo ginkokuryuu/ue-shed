@@ -809,3 +809,46 @@ describe("editor ownership rejections", () => {
 		}
 	);
 });
+
+for (const functionName of [
+	"GetCapabilityManifest",
+	"GetCameraRenderCapabilities",
+	"PreflightCameraRender"
+]) {
+	it(`escalates malformed ${functionName} without suggesting a native operation already exists`, async () => {
+		const { renderer } = harness((name) =>
+			name === functionName ? Effect.succeed({}) : undefined
+		);
+		const error = await Effect.runPromise(
+			Effect.flip(
+				functionName === "PreflightCameraRender"
+					? renderer.preflight(request).pipe(Effect.as(undefined))
+					: renderer.capabilities().pipe(Effect.as(undefined))
+			)
+		);
+		expect(error.nextStep).toBe("escalate");
+		expect(error.retrySafe).toBe(true);
+		expect(error.recovery).toContain("matching host/plugin");
+		expect(error.recovery).not.toContain("existing native operation");
+	});
+}
+for (const nextStep of ["escalate", "fix_input", "retry"] as const) {
+	it(`preserves ${nextStep} from typed renderer read failures`, async () => {
+		const cause = new RemoteControlClientError({
+			endpoint: "http://fixture",
+			functionName: "GetCapabilityManifest",
+			operation: "read",
+			message: "Read failed.",
+			recovery: "Use the classified recovery.",
+			retrySafe: true,
+			nextStep
+		});
+		const { renderer } = harness((name) =>
+			name === "GetCapabilityManifest" ? Effect.fail(cause) : undefined
+		);
+		const error = await Effect.runPromise(Effect.flip(renderer.capabilities()));
+		expect(error.nextStep).toBe(nextStep);
+		expect(error.retrySafe).toBe(true);
+		expect(error.recovery).toBe(cause.recovery);
+	});
+}

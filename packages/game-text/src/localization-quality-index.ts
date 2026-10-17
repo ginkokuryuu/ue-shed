@@ -11,6 +11,7 @@ import {
 	compareLocalizationFindings,
 	compareReportedLocalizationFindings,
 	enabledLocalizationChecks,
+	localizationSourceCulture,
 	localizationDuplicateSources,
 	localizationDuplicatePlaces,
 	localizationPropertiesWhereLocalizable,
@@ -24,10 +25,15 @@ import {
 import type {
 	LocalizationCheckDiagnostic,
 	LocalizationCheckOptions,
+	LocalizationCustomFinding,
 	LocalizationPolicyFinding,
 	LocalizationQualityFinding
 } from "./localization-quality-schema.js";
 import { localizationLinePolicyFindings, localizationPolicyRules } from "./localization-policy.js";
+import {
+	customLocalizationChecks,
+	localizationLineCustomFindings
+} from "./localization-custom-checks.js";
 import { acceptedFindingFilter } from "./localization-review.js";
 import {
 	LocalizationUnknownReason,
@@ -39,7 +45,9 @@ import {
 	sharedSourceCandidate
 } from "./localization-text-shape.js";
 import {
+	BuiltInQualityFilter,
 	WorkspaceQualityFilter,
+	customQualityFilter,
 	eligibleLocalizationChange,
 	localizationFindingHash,
 	workspaceQualityFilterOf,
@@ -53,12 +61,19 @@ import { JoinedQueryData } from "./joined-query-data.js";
 import { u32 } from "./joined-target-input.js";
 import { runJoinedQuery } from "./joined-query-node.js";
 import type { JoinedTargetReader } from "./joined-target-reader.js";
-import type { GameTextRuleDocument } from "./quality-rules-v2.js";
-import { TextQualityRuleId } from "./quality-schema.js";
+import type { GameTextRuleDocument } from "./game-text-rules.js";
+import type { TextQualityRuleId } from "./quality-schema.js";
+import { CheckSeverity } from "./localization-check-ids.js";
+import {
+	localizationRuleId,
+	type InconsistentTranslationParams
+} from "./localization-check-catalogue.js";
 import type { TextCorpus, TextUnit, TextUnitId } from "./schema.js";
 import { snapshotCheck } from "./snapshot-format.js";
 import { decodeTextAudience } from "./text-audience.js";
 import { encodeWtf8 } from "./wtf8.js";
+import { GameTextIndexProgressReporter } from "./index-progress.js";
+import { StageClock } from "./stage-clock.js";
 
 /**
  * Lines hydrated and checked per scan page; the scan yields after each. Measured on 583,507
@@ -85,26 +100,15 @@ function nextPageLines(lines: number, elapsed: number): number {
 /** Positions hydrated per batch when a workspace reads many findings, as an export does. */
 const ITEM_BATCH = 2048;
 
-type Finding = LocalizationQualityFinding | LocalizationPolicyFinding;
+type Finding = LocalizationQualityFinding | LocalizationPolicyFinding | LocalizationCustomFinding;
 
-/** How far an indexed quality scan has got. */
-export interface LocalizationQualityProgress {
-	/** The join's lines checked so far. */
-	readonly checkedLines: number;
-	/** The join's lines the scan checks, known from the first call. */
-	readonly totalLines: number;
-	/** Findings so far, accepted findings left out; the last call has the scan's count. */
-	readonly findings: number;
-}
-
-/** Check options of an indexed quality scan. */
-export interface IndexedLocalizationQualityOptions extends LocalizationCheckOptions {
-	/**
-	 * Called once before the scan with no lines checked, then after each page of lines, the last
-	 * call with every line checked. It runs inside the scan, so it must be cheap and must not throw.
-	 */
-	readonly onProgress?: ((progress: LocalizationQualityProgress) => void) | undefined;
-}
+/**
+ * Check options of an indexed quality scan. Progress goes to `GameTextIndexProgressReporter`:
+ * a `localization_quality` event before the scan with no lines checked, then after each page of
+ * lines, the last with every line checked and the scan's finding count (accepted findings left
+ * out).
+ */
+export type IndexedLocalizationQualityOptions = LocalizationCheckOptions;
 
 /** Growable u32 column; scans append, then trim. */
 function u32Builder() {
@@ -415,10 +419,11 @@ const translationVariants = Effect.fn("GameText.localizationQuality.translations
 	data: JoinedQueryData,
 	shared: Parameters<typeof localizationTranslationVariants>[0],
 	rows: readonly number[],
-	rowSources: readonly string[]
+	rowSources: readonly string[],
+	params: InconsistentTranslationParams
 ) {
 	const target = data.joined.meta.input.target;
-	const variants = localizationTranslationVariants(shared, target.nativeCulture);
+	const variants = localizationTranslationVariants(shared, target.nativeCulture, params);
 	const outside = localizationStates.indexOf("outside_target"),
 		notSynced = 1 << localizationStates.indexOf("not_synced");
 	const cultures = target.cultures.flatMap((culture, index) =>
@@ -447,7 +452,7 @@ const translationVariants = Effect.fn("GameText.localizationQuality.translations
 		) {
 			const row = rows[index]!,
 				source = rowSources[index]!;
-			if (!consistentTranslationCandidate(source)) continue;
+			if (!consistentTranslationCandidate(source, params)) continue;
 			for (const culture of cultures) {
 				if (culture.state[row] === outside) continue;
 				const pending = (culture.facts[row]! & notSynced) !== 0,
@@ -612,10 +617,19 @@ export const indexedLocalizationQuality = Effect.fn("GameText.localizationQualit
 	corpus: Pick<TextCorpus, "status" | "coverage">,
 	evidence: LocalizationTargetEvidence,
 	joinRows: Uint32Array,
-	options: IndexedLocalizationQualityOptions = {},
-	ruleDocument?: GameTextRuleDocument
+	ruleDocument?: GameTextRuleDocument,
+	options: IndexedLocalizationQualityOptions = {}
 ) {
-	options.onProgress?.({ checkedLines: 0, totalLines: joinRows.length, findings: 0 });
+	const reportProgress = yield* GameTextIndexProgressReporter;
+	const report = (completed: number, findings: number) =>
+		reportProgress({
+			phase: "localization_quality",
+			completed,
+			total: joinRows.length,
+			findings
+		});
+	report(0, 0);
+	const stages = new StageClock();
 	const data = new JoinedQueryData(joined);
 	const target = data.joined.meta.input.target;
 	const join = {
@@ -625,16 +639,18 @@ export const indexedLocalizationQuality = Effect.fn("GameText.localizationQualit
 	};
 	const enabled = enabledLocalizationChecks(join, evidence, options, ruleDocument);
 	const policy =
-		ruleDocument?.schemaVersion === 2
+		ruleDocument !== undefined && ruleDocument.schemaVersion !== 1
 			? localizationPolicyRules(target.cultures, ruleDocument)
 			: undefined;
 	const keep = acceptedFindingFilter(options.review);
+	const customChecks = customLocalizationChecks(ruleDocument);
 	const count = data.joined.meta.count,
 		lineCount = joinRows.length;
 	const joinPosition = new Uint32Array(count).fill(NOT_JOINED);
 	for (let position = 0; position < lineCount; position++)
 		joinPosition[joinRows[position]!] = position;
 	const duplicates = yield* duplicateSources(data, target.cultures, joinPosition);
+	const ruleContext = localizationRuleContext(ruleDocument);
 	const context: LocalizationLineCheckContext = {
 		target: target.name,
 		nativeCulture: target.nativeCulture,
@@ -646,10 +662,11 @@ export const indexedLocalizationQuality = Effect.fn("GameText.localizationQualit
 					data,
 					duplicates.shared,
 					duplicates.rows,
-					duplicates.rowSources
+					duplicates.rowSources,
+					ruleContext.checks.inconsistent_translation.params
 				)
 			: new Map(),
-		...localizationRuleContext(ruleDocument),
+		...ruleContext,
 		localizableProperties: enabled.includes("culture_invariant_text")
 			? yield* localizableProperties(data)
 			: new Set(),
@@ -657,8 +674,16 @@ export const indexedLocalizationQuality = Effect.fn("GameText.localizationQualit
 		occurrenceNotes: (line) => units.occurrenceNotes(line),
 		stringTables: (line) => units.stringTables(line)
 	};
+	stages.mark("prepare");
 	const units = unitIndex(data);
+	const customContext = {
+		target: target.name,
+		nativeCulture: target.nativeCulture,
+		options,
+		roles: context.roles
+	};
 	yield* Effect.yieldNow;
+	stages.mark("units");
 
 	// Report order is line ID order, ties in join order. Decoding every line ID takes about 0.7 s
 	// at 583,507 lines, so it yields per page; the unit index above and the sort below take about
@@ -696,6 +721,7 @@ export const indexedLocalizationQuality = Effect.fn("GameText.localizationQualit
 	sorted.length = 0;
 	const rankOf = new Uint32Array(count);
 	for (let rank = 0; rank < lineCount; rank++) rankOf[order[rank]!] = rank;
+	stages.mark("order");
 	const blockEnd = (first: number) => {
 		let end = first + 1;
 		while (end < lineCount && tied[end]) end++;
@@ -736,9 +762,21 @@ export const indexedLocalizationQuality = Effect.fn("GameText.localizationQualit
 					options,
 					policyFindings
 				);
+		const customFindings: LocalizationCustomFinding[] = [];
+		for (const custom of customChecks)
+			for (let index = 0; index < lines.length; index++)
+				localizationLineCustomFindings(
+					lines[index]!,
+					unitsOf[index]!,
+					custom,
+					localizationSourceCulture(lines[index]!, target.nativeCulture),
+					customContext,
+					customFindings
+				);
 		const findings: Finding[] = [
 			...builtIns.sort(compareLocalizationFindings),
-			...policyFindings
+			...policyFindings,
+			...customFindings
 		];
 		const visible = keep
 			? findings.filter((finding) => keep(lineOf(lines, finding), finding))
@@ -750,9 +788,15 @@ export const indexedLocalizationQuality = Effect.fn("GameText.localizationQualit
 	};
 
 	const cultureIndex = new Map(target.cultures.map((culture, index) => [culture, index]));
-	const filterIndex = new Map(
-		WorkspaceQualityFilter.literals.map((filter, index) => [filter, index])
+	const severityIndex = new Map(
+		CheckSeverity.literals.map((severity, index) => [severity, index])
 	);
+	/** The built-in filters, then each custom check's, in the rule file's order. */
+	const filters: readonly WorkspaceQualityFilter[] = [
+		...BuiltInQualityFilter.literals,
+		...customChecks.map((custom) => customQualityFilter(custom.id))
+	];
+	const filterIndex = new Map(filters.map((filter, index) => [filter, index]));
 	const ruleIds: TextQualityRuleId[] = [];
 	const ruleIndex = new Map<string, number>();
 	const ruleOf = (id: TextQualityRuleId) => {
@@ -763,21 +807,18 @@ export const indexedLocalizationQuality = Effect.fn("GameText.localizationQualit
 		}
 		return index;
 	};
-	// Facts per finding: culture (bits 0-11), filter (12-17), fix eligible (18), rule (19-31).
+	// Facts per finding: culture (bits 0-11), fix eligible (12), filter (13-31). The rule has a
+	// column of its own, so a rule file may hold as many rules and custom checks as it likes.
 	const pack = (finding: Finding) => {
 		const culture = cultureIndex.get(finding.culture)!,
-			rule = ruleOf(finding.ruleId);
+			filter = filterIndex.get(workspaceQualityFilterOf(finding))!;
 		snapshotCheck(
-			culture < 4096 && rule < 8192,
+			culture < 4096 && filter < 2 ** 19,
 			"quality.findings",
-			"Too many cultures or rules"
+			"Too many cultures or filters"
 		);
 		return (
-			(culture |
-				(filterIndex.get(workspaceQualityFilterOf(finding))! << 12) |
-				(eligibleLocalizationChange(finding) ? 1 << 18 : 0) |
-				(rule << 19)) >>>
-			0
+			(culture | (eligibleLocalizationChange(finding) ? 1 << 12 : 0) | (filter << 13)) >>> 0
 		);
 	};
 	type Code = LocalizationCheckDiagnostic["code"];
@@ -807,6 +848,10 @@ export const indexedLocalizationQuality = Effect.fn("GameText.localizationQualit
 		});
 	};
 	const storedFacts = u32Builder(),
+		/** Each finding's severity, as its index in `CheckSeverity.literals`. */
+		storedSeverity = u32Builder(),
+		/** Each finding's rule, as its index in `ruleIds`. */
+		storedRule = u32Builder(),
 		storedFirst = u32Builder(),
 		storedSecond = u32Builder(),
 		/** Stored findings the rule file's source terminology reports in full, ascending. */
@@ -816,11 +861,15 @@ export const indexedLocalizationQuality = Effect.fn("GameText.localizationQualit
 	let checkedLines = 0;
 	/** Checks one page of blocks, then reports progress. */
 	const checkBlocks = (firsts: readonly number[]) => {
+		const hydrating = performance.now();
 		const blocks = blockLines(firsts);
+		stages.add("scan.hydrate", performance.now() - hydrating);
 		for (let block = 0; block < firsts.length; block++) {
 			const lines = blocks[block]!,
 				rank = firsts[block]!;
+			const checking = performance.now();
 			const { findings, diagnostics } = check(lines);
+			stages.add("scan.check", performance.now() - checking);
 			blockStart[rank] = storedFacts.length;
 			blockSize[rank] = findings.length;
 			for (const finding of findings) {
@@ -828,6 +877,8 @@ export const indexedLocalizationQuality = Effect.fn("GameText.localizationQualit
 				if (finding.kind === "placeholder_text" && finding.unreportedMatches?.length === 0)
 					storedReported.push(storedFacts.length);
 				storedFacts.push(pack(finding));
+				storedSeverity.push(severityIndex.get(finding.severity)!);
+				storedRule.push(ruleOf(finding.ruleId));
 				storedFirst.push(first);
 				storedSecond.push(second);
 			}
@@ -840,11 +891,7 @@ export const indexedLocalizationQuality = Effect.fn("GameText.localizationQualit
 				}
 			checkedLines += lines.length;
 		}
-		options.onProgress?.({
-			checkedLines,
-			totalLines: lineCount,
-			findings: storedFacts.length
-		});
+		report(checkedLines, storedFacts.length);
 	};
 	// One-line blocks in storage order, so each page hydrates adjacent rows. Which page a line
 	// is checked in does not change its findings or their order.
@@ -875,10 +922,14 @@ export const indexedLocalizationQuality = Effect.fn("GameText.localizationQualit
 	}
 	if (page.length) checkBlocks(page);
 	units.releaseMemos();
+	// The whole scan, including its yields; scan.hydrate and scan.check are parts of it.
+	stages.mark("scan");
 	page = [];
 
 	const total = storedFacts.length;
 	const facts = new Uint32Array(total),
+		severities = new Uint8Array(total),
+		rules = new Uint32Array(total),
 		first = new Uint32Array(total),
 		second = new Uint32Array(total),
 		blockOf = new Uint32Array(total),
@@ -889,6 +940,12 @@ export const indexedLocalizationQuality = Effect.fn("GameText.localizationQualit
 		storedIsReported![storedReported.at(index)] = 1;
 	const reportedBySource = storedIsReported && new Uint8Array(total);
 	const groupSizes = new Map<number, number>();
+	const ruleCount = Math.max(1, ruleIds.length);
+	snapshotCheck(ruleCount < 2 ** 18, "quality.findings", "Too many rules");
+	/** Facts, rule, severity and whether the source reports it, in one exact integer. */
+	const groupKey = (position: number) =>
+		((facts[position]! * ruleCount + rules[position]!) * 3 + severities[position]!) * 2 +
+		(reportedBySource?.[position] ?? 0);
 	let position = 0;
 	for (let rank = 0; rank < lineCount; rank++) {
 		if (tied[rank]) continue;
@@ -896,11 +953,13 @@ export const indexedLocalizationQuality = Effect.fn("GameText.localizationQualit
 		const end = blockStart[rank]! + blockSize[rank]!;
 		for (let stored = blockStart[rank]!; stored < end; stored++, position++) {
 			facts[position] = storedFacts.at(stored);
+			severities[position] = storedSeverity.at(stored);
+			rules[position] = storedRule.at(stored);
 			first[position] = storedFirst.at(stored);
 			second[position] = storedSecond.at(stored);
 			blockOf[position] = rank;
 			if (reportedBySource) reportedBySource[position] = storedIsReported![stored]!;
-			const key = facts[position]! * 2 + (reportedBySource?.[position] ?? 0);
+			const key = groupKey(position);
 			groupSizes.set(key, (groupSizes.get(key) ?? 0) + 1);
 			if ((position & 0xffff) === 0xffff) yield* Effect.yieldNow;
 		}
@@ -910,13 +969,15 @@ export const indexedLocalizationQuality = Effect.fn("GameText.localizationQualit
 	const groups: LocalizationFindingGroup[] = [];
 	const groupByKey = new Map<number, { positions: Uint32Array; next: number }>();
 	for (const [key, size] of groupSizes) {
-		const fact = Math.floor(key / 2);
+		const factAndRule = Math.floor(key / 6),
+			fact = Math.floor(factAndRule / ruleCount);
 		const positions = new Uint32Array(size);
 		groups.push({
 			culture: target.cultures[fact & 0xfff]!,
-			filter: WorkspaceQualityFilter.literals[(fact >>> 12) & 0x3f]!,
-			ruleId: ruleIds[fact >>> 19]!,
-			eligible: ((fact >>> 18) & 1) === 1,
+			filter: filters[fact >>> 13]!,
+			severity: CheckSeverity.literals[Math.floor(key / 2) % 3]!,
+			ruleId: ruleIds[factAndRule % ruleCount]!,
+			eligible: ((fact >>> 12) & 1) === 1,
 			reportedBySource: key % 2 === 1,
 			positions
 		});
@@ -924,11 +985,16 @@ export const indexedLocalizationQuality = Effect.fn("GameText.localizationQualit
 		if ((groups.length & 0x7ff) === 0) yield* Effect.yieldNow;
 	}
 	for (let position = 0; position < total; position++) {
-		const key = facts[position]! * 2 + (reportedBySource?.[position] ?? 0);
-		const group = groupByKey.get(key)!;
+		const group = groupByKey.get(groupKey(position))!;
 		group.positions[group.next++] = position;
 		if ((position & 0xffff) === 0xffff) yield* Effect.yieldNow;
 	}
+	stages.mark("columns");
+	yield* Effect.annotateCurrentSpan({
+		"game_text.quality.lines": lineCount,
+		"game_text.quality.findings": total,
+		...stages.attributes("game_text.quality.stage_ms")
+	});
 	const limits = new Map(
 		[...limitCounts].map(([scope, codes]) => [
 			scope,
@@ -996,9 +1062,10 @@ export const indexedLocalizationQuality = Effect.fn("GameText.localizationQualit
 		length: total,
 		groups,
 		culture: (position) => target.cultures[facts[position]! & 0xfff]!,
-		filter: (position) => WorkspaceQualityFilter.literals[(facts[position]! >>> 12) & 0x3f]!,
-		ruleId: (position) => ruleIds[facts[position]! >>> 19]!,
-		eligible: (position) => ((facts[position]! >>> 18) & 1) === 1,
+		filter: (position) => filters[facts[position]! >>> 13]!,
+		severity: (position) => CheckSeverity.literals[severities[position]!]!,
+		ruleId: (position) => ruleIds[rules[position]!]!,
+		eligible: (position) => ((facts[position]! >>> 12) & 1) === 1,
 		reportedBySource: (position) => reportedBySource?.[position] === 1,
 		find(id, culture) {
 			const match = /^localization-finding:([0-9a-f]{8})([0-9a-f]{8})$/u.exec(id);
@@ -1027,11 +1094,17 @@ export const indexedLocalizationQuality = Effect.fn("GameText.localizationQualit
 		metadata: {
 			join,
 			rules: [
-				...(ruleDocument?.schemaVersion === 2
+				...(ruleDocument !== undefined && ruleDocument.schemaVersion !== 1
 					? (ruleDocument.localizationRules ?? []).map((rule) => rule.id)
 					: []),
-				...enabled.map((id) => TextQualityRuleId.make(`localization.${id}`))
+				...enabled.map(localizationRuleId),
+				...customChecks.map((custom) => custom.id)
 			],
+			...(customChecks.length
+				? {
+						customChecks: customChecks.map(({ id, label }) => ({ ruleId: id, label }))
+					}
+				: undefined),
 			unsupportedRuleCultures: policy?.diagnostics.length ?? 0,
 			status: corpus.status,
 			coverage: corpus.coverage,

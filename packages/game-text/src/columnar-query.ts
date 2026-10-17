@@ -729,6 +729,8 @@ export function columnarTextCorpusQuery(
 				Effect.sync(
 					() =>
 						// SAFETY: preparedLabels creates this private cache key from a string array.
+						// Verified by: scripts/columnar-join-fuzz.test.ts
+						// ("persisted differential seed %i": asset and namespace filters)
 						new Set(
 							(JSON.parse(key) as string[])
 								.map((value) => places.findLabel(value))
@@ -1285,6 +1287,7 @@ export function columnarTextCorpusQuery(
 			};
 		};
 		// SAFETY: Every TextProblem literal is initialized exactly once to a numeric count.
+		// Verified by: scripts/columnar-join-fuzz.test.ts ("persisted differential seed %i")
 		const problems = Object.fromEntries(
 			TextProblem.literals.map((problem) => [problem, 0])
 		) as Record<TextProblem, number>;

@@ -11,7 +11,8 @@ import {
 	localizationOperationError,
 	type LocalizationError
 } from "@ue-shed/localization";
-import { localizationKeyChangesAcross, type LocalizationJoin } from "@ue-shed/game-text";
+import { localizationKeyChangesAcross } from "@ue-shed/game-text/corpus";
+import { type LocalizationJoin } from "@ue-shed/game-text/schema";
 import { LocalizationChangeSet } from "@ue-shed/localization";
 import { CliRuntime, printJson } from "../cli-runtime.js";
 import {

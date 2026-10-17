@@ -1,8 +1,7 @@
+import { TEXT_AUDIENCE_LABELS } from "@ue-shed/game-text/schema";
+import { TEXT_ORIGIN_LABELS, TEXT_PROBLEM_LABELS } from "@ue-shed/game-text/labels";
 import {
-	TEXT_AUDIENCE_LABELS,
-	TEXT_ORIGIN_LABELS,
 	TextAudience,
-	TEXT_PROBLEM_LABELS,
 	TextEditing,
 	TextFinding,
 	TextNotes,
@@ -16,7 +15,7 @@ import {
 	type TextFilterField,
 	type TextReviewLens,
 	type TextWhere
-} from "@ue-shed/game-text/browser";
+} from "@ue-shed/game-text/schema";
 
 export const FINDING_LABELS = {
 	shared: "Used in several places",

@@ -132,6 +132,7 @@ export function makeWorldPreparation(
 				endpoint,
 				objectPath: "/Script/UEShedCore.Default__UEShedCoreLibrary",
 				functionName: "GetCapabilityManifest",
+				idempotent: true,
 				parameters: {},
 				operation: "world.negotiate"
 			})
@@ -337,7 +338,8 @@ export function makeWorldPreparation(
 			);
 		}, mutex.withPermits(1));
 		const checkReady = Effect.fn("WorldLease.checkReady")(function* () {
-			return yield* inspect().pipe(Effect.flatMap(ready));
+			const value = yield* inspect();
+			return yield* ready(value);
 		});
 		const replace = Effect.fn("WorldLease.replace")(function* (
 			targets: ReadonlyArray<WorldTarget>

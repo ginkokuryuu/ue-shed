@@ -186,82 +186,75 @@ function listReviewSetsWithNode(
 	projectRoot: string
 ): Effect.Effect<readonly ReviewSetSummary[], ReviewStorageError> {
 	const root = reviewSetsRoot(projectRoot);
-	return Effect.tryPromise({
-		try: async () => {
-			await mkdir(root, { recursive: true });
-			const files = (await readdir(root, { withFileTypes: true })).filter(
-				(entry) => entry.isFile() && entry.name.toLowerCase().endsWith(".json")
-			);
-			return Promise.all(
-				files.map(async (entry) => {
-					const path = join(root, entry.name);
-					return {
-						input: Schema.decodeUnknownSync(Schema.Json)(
-							JSON.parse(await readFile(path, "utf8"))
-						),
-						path
-					};
+	return Effect.gen(function* () {
+		const entries = yield* Effect.tryPromise({
+			try: async () => {
+				await mkdir(root, { recursive: true });
+				const files = (await readdir(root, { withFileTypes: true })).filter(
+					(entry) => entry.isFile() && entry.name.toLowerCase().endsWith(".json")
+				);
+				return Promise.all(
+					files.map(async (entry) => {
+						const path = join(root, entry.name);
+						return {
+							input: Schema.decodeUnknownSync(Schema.Json)(
+								JSON.parse(await readFile(path, "utf8"))
+							),
+							path
+						};
+					})
+				);
+			},
+			catch: (cause) =>
+				new ReviewStorageError({
+					message: String(cause),
+					operation: "list_sets",
+					path: root,
+					recovery:
+						"Check the project Review Set directory and repair malformed documents.",
+					retrySafe: true,
+					nextStep: "fix_input"
 				})
-			);
-		},
-		catch: (cause) =>
-			new ReviewStorageError({
-				message: String(cause),
-				operation: "list_sets",
-				path: root,
-				recovery: "Check the project Review Set directory and repair malformed documents.",
-				retrySafe: true,
-				nextStep: "fix_input"
-			})
-	}).pipe(
-		Effect.flatMap((entries) =>
-			Effect.forEach(entries, ({ input, path }) =>
-				decodeReviewSet(input).pipe(
-					Effect.map((reviewSet) => summarizeReviewSet(path, reviewSet)),
-					Effect.mapError(
-						(cause) =>
-							new ReviewStorageError({
-								message: String(cause),
-								operation: "list_sets",
-								path,
-								recovery: "Validate or repair the malformed Review Set document.",
-								retrySafe: true,
-								nextStep: "fix_input"
-							})
-					)
-				)
-			)
-		),
-		Effect.flatMap((sets) => {
-			const ids = new Set<string>();
-			const duplicate = sets.find((reviewSet) => {
-				if (ids.has(reviewSet.id)) return true;
-				ids.add(reviewSet.id);
-				return false;
-			});
-			return duplicate === undefined
-				? Effect.succeed(sets)
-				: Effect.fail(
+		});
+		const sets = yield* Effect.forEach(entries, ({ input, path }) =>
+			decodeReviewSet(input).pipe(
+				Effect.map((reviewSet) => summarizeReviewSet(path, reviewSet)),
+				Effect.mapError(
+					(cause) =>
 						new ReviewStorageError({
-							message: `Review Set ID ${duplicate.id} is used by more than one document.`,
+							message: String(cause),
 							operation: "list_sets",
-							path: root,
-							recovery:
-								"Give every Review Set a unique ID, then reopen the set library.",
+							path,
+							recovery: "Validate or repair the malformed Review Set document.",
 							retrySafe: true,
 							nextStep: "fix_input"
 						})
-					);
-		}),
-		Effect.map((sets) =>
-			sets.toSorted(
-				(left, right) =>
-					left.mapPath.localeCompare(right.mapPath) ||
-					left.displayName.localeCompare(right.displayName)
+				)
 			)
-		),
-		Effect.withSpan("camera.review.sets.list", { attributes: { root } })
-	);
+		);
+		const ids = new Set<string>();
+		const duplicate = sets.find((reviewSet) => {
+			if (ids.has(reviewSet.id)) return true;
+			ids.add(reviewSet.id);
+			return false;
+		});
+		if (duplicate !== undefined)
+			return yield* Effect.fail(
+				new ReviewStorageError({
+					message: `Review Set ID ${duplicate.id} is used by more than one document.`,
+					operation: "list_sets",
+					path: root,
+					recovery: "Give every Review Set a unique ID, then reopen the set library.",
+					retrySafe: true,
+					nextStep: "fix_input"
+				})
+			);
+		return sets.toSorted(
+			(left, right) =>
+				left.mapPath.localeCompare(right.mapPath) ||
+				left.displayName.localeCompare(right.displayName)
+		);
+	}).pipe(Effect.withSpan("camera.review.sets.list", { attributes: { root } }));
 }
 
 function reviewSetSlug(displayName: string): string {
@@ -958,16 +951,11 @@ const makeReviewRepository = (): ReviewRepositoryApi => {
 
 export const ReviewRepositoryLive = Layer.sync(ReviewRepository, makeReviewRepository);
 
+/** A test layer over a complete fake repository; the test decides every operation. */
 export function makeReviewRepositoryTestLayer(
-	service: Omit<ReviewRepositoryApi, "listSets"> & Partial<Pick<ReviewRepositoryApi, "listSets">>
+	service: ReviewRepositoryApi
 ): Layer.Layer<ReviewRepository> {
-	return Layer.succeed(
-		ReviewRepository,
-		ReviewRepository.of({
-			...service,
-			listSets: service.listSets ?? (() => Effect.die("Review Set listing not stubbed"))
-		})
-	);
+	return Layer.succeed(ReviewRepository, ReviewRepository.of(service));
 }
 
 export function loadReviewSet(

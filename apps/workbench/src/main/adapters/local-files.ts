@@ -1,13 +1,14 @@
 import { existsSync } from "node:fs";
 import { randomUUID } from "node:crypto";
-import { open, rename, rm, writeFile } from "node:fs/promises";
-import { isAbsolute, relative, resolve, sep } from "node:path";
+import { mkdir, open, rename, rm, writeFile } from "node:fs/promises";
+import { dirname, isAbsolute, relative, resolve, sep } from "node:path";
 import { Context, Effect, Layer, Schema } from "effect";
 
 export class LocalFilesError extends Schema.TaggedError<LocalFilesError>()(
 	"Workbench.LocalFilesError",
 	{
 		causeText: Schema.String,
+		code: Schema.optionalKey(Schema.Literal("already_exists")),
 		message: Schema.String,
 		operation: Schema.Literals(["exists", "readFile", "writeFile"]),
 		path: Schema.String,
@@ -57,14 +58,18 @@ function filesError(
 	recovery: string,
 	retrySafe = true
 ): LocalFilesError {
-	return new LocalFilesError({
+	const fields = {
 		causeText: cause instanceof Error ? cause.message : String(cause),
 		message: `Local file ${operation} failed.`,
 		operation,
 		path,
 		recovery,
 		retrySafe
-	});
+	};
+
+	if (cause instanceof Object && "code" in cause && cause.code === "EEXIST")
+		return new LocalFilesError({ ...fields, code: "already_exists" });
+	return new LocalFilesError(fields);
 }
 
 export const LocalFilesLive = Layer.succeed(
@@ -92,53 +97,10 @@ export const LocalFilesLive = Layer.succeed(
 					);
 				}
 				return yield* Effect.scoped(
-					Effect.acquireRelease(
-						Effect.tryPromise({
-							try: () => open(path, "r"),
-							catch: (cause) =>
-								filesError(
-									"readFile",
-									path,
-									cause,
-									"Verify the artifact path still exists on disk."
-								)
-						}),
-						(handle) => Effect.promise(() => handle.close())
-					).pipe(
-						Effect.flatMap((handle) =>
+					Effect.gen(function* () {
+						const handle = yield* Effect.acquireRelease(
 							Effect.tryPromise({
-								try: async () => {
-									const stats = await handle.stat();
-									if (stats.size > maxBytes)
-										return { status: "too_large" as const };
-									const chunks: Array<Buffer> = [];
-									let total = 0;
-									while (total <= maxBytes) {
-										const buffer = Buffer.allocUnsafe(
-											Math.min(64 * 1_024, maxBytes + 1 - total)
-										);
-										const { bytesRead } = await handle.read(
-											buffer,
-											0,
-											buffer.byteLength,
-											total
-										);
-										if (bytesRead === 0) break;
-										chunks.push(buffer.subarray(0, bytesRead));
-										total += bytesRead;
-									}
-									const bytes = Buffer.concat(chunks, total);
-									return total > maxBytes
-										? ({ status: "too_large" } as const)
-										: {
-												status: "ready" as const,
-												bytes: new Uint8Array(
-													bytes.buffer,
-													bytes.byteOffset,
-													bytes.byteLength
-												)
-											};
-								},
+								try: () => open(path, "r"),
 								catch: (cause) =>
 									filesError(
 										"readFile",
@@ -146,22 +108,60 @@ export const LocalFilesLive = Layer.succeed(
 										cause,
 										"Verify the artifact path still exists on disk."
 									)
-							})
-						),
-						Effect.flatMap((result) =>
-							result.status === "ready"
-								? Effect.succeed(result.bytes)
-								: Effect.fail(
-										filesError(
-											"readFile",
-											path,
-											`File exceeds the ${maxBytes} byte host read limit.`,
-											"Use a smaller artifact or raise the bounded read limit deliberately.",
-											false
-										)
-									)
-						)
-					)
+							}),
+							(handle) => Effect.promise(() => handle.close())
+						);
+						const result = yield* Effect.tryPromise({
+							try: async () => {
+								const stats = await handle.stat();
+								if (stats.size > maxBytes) return { status: "too_large" as const };
+								const chunks: Array<Buffer> = [];
+								let total = 0;
+								while (total <= maxBytes) {
+									const buffer = Buffer.allocUnsafe(
+										Math.min(64 * 1_024, maxBytes + 1 - total)
+									);
+									const { bytesRead } = await handle.read(
+										buffer,
+										0,
+										buffer.byteLength,
+										total
+									);
+									if (bytesRead === 0) break;
+									chunks.push(buffer.subarray(0, bytesRead));
+									total += bytesRead;
+								}
+								const bytes = Buffer.concat(chunks, total);
+								return total > maxBytes
+									? ({ status: "too_large" } as const)
+									: {
+											status: "ready" as const,
+											bytes: new Uint8Array(
+												bytes.buffer,
+												bytes.byteOffset,
+												bytes.byteLength
+											)
+										};
+							},
+							catch: (cause) =>
+								filesError(
+									"readFile",
+									path,
+									cause,
+									"Verify the artifact path still exists on disk."
+								)
+						});
+						if (result.status === "ready") return result.bytes;
+						return yield* Effect.fail(
+							filesError(
+								"readFile",
+								path,
+								`File exceeds the ${maxBytes} byte host read limit.`,
+								"Use a smaller artifact or raise the bounded read limit deliberately.",
+								false
+							)
+						);
+					})
 				);
 			});
 
@@ -210,6 +210,7 @@ export const LocalFilesLive = Layer.succeed(
 						return yield* Effect.tryPromise({
 							try: async () => {
 								try {
+									await mkdir(dirname(path), { recursive: true });
 									if (options?.exclusive) {
 										await writeFile(path, bytes, { flag: "wx" });
 										return;

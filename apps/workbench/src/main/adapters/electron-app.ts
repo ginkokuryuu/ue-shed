@@ -142,6 +142,8 @@ export const electronAppLayer = (app: ElectronAppHost): Layer.Layer<ElectronApp>
 				),
 				on: Effect.fn("Workbench.ElectronApp.on")(function* (event, listener) {
 					// SAFETY: Electron passes variadic event arguments, while this adapter ignores their values.
+					// Verified by: apps/workbench/src/main/adapters/adapters.test.ts
+					// ("ElectronApp forwards host event arguments and removes the same listener")
 					const wrapped = listener as (...args: Array<unknown>) => void;
 					yield* Effect.try({
 						try: () => app.on(event, wrapped),

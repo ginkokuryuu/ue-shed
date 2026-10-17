@@ -1,10 +1,12 @@
 import type {
 	GameTextInvestigationQuery,
 	GameTextInvestigationPresetResult,
-	InvestigationFileResult,
-	InvestigationFormat,
 	LocalizationLinesFileResult
-} from "@ue-shed/game-text/browser";
+} from "@ue-shed/game-text/corpus";
+import type {
+	InvestigationFileResult,
+	InvestigationFormat
+} from "@ue-shed/unreal-assets/investigation";
 import type {
 	WorkspaceQualityRequest,
 	WorkspaceQualityResult,
@@ -23,20 +25,22 @@ import type {
 	LocalizationTargetResult,
 	LocalizationFocusRequest,
 	LocalizationFocusResult,
+	TextQualityFocusRequest,
+	TextQualityFocusResult,
+	TextQualityQueryRunResult,
+	TextQualityRuleUpdateResult,
+	TextQualitySearchRequest,
+	TextQualitySearchResult
+} from "@ue-shed/game-text/corpus";
+import type { GameTextRuleDocument } from "@ue-shed/game-text/rules";
+import type {
 	LocalizationSelection,
 	TextCorpusFocusRequest,
 	TextCorpusFocusResult,
 	TextCorpusQueryRunResult,
 	TextCorpusSearchRequest,
-	TextCorpusSearchResult,
-	TextQualityFocusRequest,
-	TextQualityFocusResult,
-	TextQualityQueryRunResult,
-	GameTextRuleDocument,
-	TextQualityRuleUpdateResult,
-	TextQualitySearchRequest,
-	TextQualitySearchResult
-} from "@ue-shed/game-text/browser";
+	TextCorpusSearchResult
+} from "@ue-shed/game-text/schema";
 import type { EditorAssetLocateResult } from "@ue-shed/protocol";
 import type { TaskProgress } from "@ue-shed/ui/task-progress";
 import { Context, type Effect, Schema, type Stream } from "effect";
@@ -48,7 +52,7 @@ import type {
 	WorkbenchOperationProgress,
 	WorkbenchOperationFilesRequest,
 	WorkbenchOperationFilesResult
-} from "@ue-shed/game-text/browser";
+} from "@ue-shed/game-text/schema";
 
 export class GameTextClientError extends Schema.TaggedError<GameTextClientError>()(
 	"GameTextClientError",
