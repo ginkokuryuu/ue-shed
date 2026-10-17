@@ -5,6 +5,7 @@ import { join } from "node:path";
 import { after, before, test } from "node:test";
 import {
 	checkCatalogUsage,
+	checkCompositionPolicy,
 	checkLocalizationBoundaries,
 	checkSourcePolicy,
 	checkServiceStrategies,
@@ -361,4 +362,42 @@ test("rejects renderer IPC access outside transport adapters", async () => {
 			]);
 		}
 	);
+});
+
+test("rejects layer factories taking a Layer and make* exports only their module uses", async () => {
+	const fixtureRoot = await mkdtemp(join(tmpdir(), "ue-shed-composition-"));
+	try {
+		const source = join(fixtureRoot, "packages/example/src");
+		await mkdir(source, { recursive: true });
+		await writeFile(
+			join(source, "service.ts"),
+			[
+				'import { Layer } from "effect";',
+				"export function serviceLayer(config: string, ids: Layer.Layer<Ids>) {",
+				"\treturn ids;",
+				"}",
+				"export const viewLayer = <E>(",
+				"\tbacking: Layer.Layer<Index, E>",
+				") => backing;",
+				"export const makeUnused = () => 1;",
+				"export function makeShared() {",
+				"\treturn 2;",
+				"}",
+				"export function configuredLayer(config: string) {",
+				"\treturn config;",
+				"}"
+			].join("\n")
+		);
+		await writeFile(
+			join(source, "service.test.ts"),
+			'import { makeShared } from "./service.js";\nmakeShared();\n'
+		);
+		assert.deepEqual(await checkCompositionPolicy(fixtureRoot), [
+			"packages/example/src/service.ts:2: serviceLayer takes a Layer; require its service instead",
+			"packages/example/src/service.ts:5: viewLayer takes a Layer; require its service instead",
+			"packages/example/src/service.ts:8: makeUnused is used only in its module; do not export it"
+		]);
+	} finally {
+		await rm(fixtureRoot, { recursive: true, force: true });
+	}
 });

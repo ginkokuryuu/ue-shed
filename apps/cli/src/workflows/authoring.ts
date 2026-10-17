@@ -1,5 +1,5 @@
 import { AssetReader } from "@ue-shed/unreal-assets";
-import { Effect } from "effect";
+import { Effect, Layer } from "effect";
 import { CliCommandError, printJson } from "../cli-runtime.js";
 import { observeCliOperation, readerLayer } from "../cli-operation.js";
 import type { CliCommand } from "../command-model.js";
@@ -49,7 +49,7 @@ function catalogWithLive(args: {
 	readonly reader?: string;
 }) {
 	return Effect.gen(function* () {
-		const { authoringLiveConnectionLayer, AuthoringCatalog, AuthoringCatalogLive } =
+		const { AuthoringLiveConnection, AuthoringCatalog, AuthoringCatalogLive } =
 			yield* Effect.promise(() => import("@ue-shed/authoring-catalog"));
 		const { connectUnrealAuthoring, RemoteControlClientLive } = yield* Effect.promise(
 			() => import("@ue-shed/unreal-connection")
@@ -64,7 +64,7 @@ function catalogWithLive(args: {
 			});
 			return yield* inner.pipe(
 				Effect.provide(AuthoringCatalogLive),
-				Effect.provide(authoringLiveConnectionLayer(connection))
+				Effect.provideService(AuthoringLiveConnection, connection)
 			);
 		});
 		return yield* program.pipe(
@@ -328,6 +328,7 @@ function sessionProgram(command: SessionCommand) {
 		}),
 		({ authoring, connection }) => {
 			const {
+				AuthoringIdGeneratorLive,
 				authoringSessionLivePortLayer,
 				authoringSessionServiceLayer,
 				AuthoringSessions,
@@ -485,7 +486,11 @@ function sessionProgram(command: SessionCommand) {
 					}
 				}
 			}).pipe(
-				Effect.provide(authoringSessionServiceLayer({ projectRoot: command.projectRoot })),
+				Effect.provide(
+					authoringSessionServiceLayer({ projectRoot: command.projectRoot }).pipe(
+						Layer.provide(AuthoringIdGeneratorLive)
+					)
+				),
 				Effect.provide(readerLayer("reader" in command ? command.reader : undefined)),
 				Effect.provide(RemoteControlClientLive)
 			);

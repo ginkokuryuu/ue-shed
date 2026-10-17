@@ -902,16 +902,11 @@ const makeReviewRepository = (): ReviewRepositoryApi => {
 
 export const ReviewRepositoryLive = Layer.sync(ReviewRepository, makeReviewRepository);
 
+/** A test layer over a complete fake repository; the test decides every operation. */
 export function makeReviewRepositoryTestLayer(
-	service: Omit<ReviewRepositoryApi, "listSets"> & Partial<Pick<ReviewRepositoryApi, "listSets">>
+	service: ReviewRepositoryApi
 ): Layer.Layer<ReviewRepository> {
-	return Layer.succeed(
-		ReviewRepository,
-		ReviewRepository.of({
-			...service,
-			listSets: service.listSets ?? (() => Effect.die("Review Set listing not stubbed"))
-		})
-	);
+	return Layer.succeed(ReviewRepository, ReviewRepository.of(service));
 }
 
 export function loadReviewSet(

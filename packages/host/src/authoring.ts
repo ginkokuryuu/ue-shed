@@ -1,4 +1,5 @@
 import {
+	AuthoringIdGeneratorLive,
 	authoringSessionLivePortLayer,
 	authoringSessionServiceLayer,
 	makeAuthoringSessionService,
@@ -91,7 +92,7 @@ export const ShedAuthoringSessionsLive = Layer.unwrap(
 						...(project.sessionStorageRoot === undefined
 							? undefined
 							: { storageRoot: project.sessionStorageRoot })
-					})
+					}).pipe(Layer.provide(AuthoringIdGeneratorLive))
 				: Layer.empty
 		)
 	)
@@ -201,7 +202,7 @@ const makeShedAuthoring = Effect.gen(function* () {
 						...(project.sessionStorageRoot === undefined
 							? undefined
 							: { storageRoot: project.sessionStorageRoot })
-					})
+					}).pipe(Effect.provide(AuthoringIdGeneratorLive))
 				)
 			: Option.none();
 
