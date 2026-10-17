@@ -26,6 +26,7 @@ import { writeSnapshotFile, openSnapshotFile, type SnapshotFileReader } from "./
 import { importColdPackageTextShards } from "./package-text-cold.js";
 import { TEXT_AUDIENCE_MATCHER_VERSION, TEXT_AUDIENCE_POLICY } from "./text-audience.js";
 import { HostSliceClock, sortRowsInSlices } from "./host-slices.js";
+import { StageClock } from "./stage-clock.js";
 
 /** The caller supplies the Project Index's opaque package-and-sidecar signature, never a layer hash.
  * Header evidence and signatures must come from the same complete inventory generation.
@@ -146,6 +147,7 @@ export const refreshPackageTextLayer = Effect.fn("PackageText.refresh")(function
 	const store = yield* SharedIndex,
 		writer = yield* store.writer();
 	const reportProgress = yield* GameTextIndexProgressReporter;
+	const stages = new StageClock();
 	const manifest = writer.manifest();
 	let inventory = input.inventory;
 	const retainedEligibility = new Map<string, boolean>();
@@ -217,6 +219,7 @@ export const refreshPackageTextLayer = Effect.fn("PackageText.refresh")(function
 		inventory = Array.from(rows, (row) => entries[row]!);
 	}
 	const selection = yield* packageTextSelectionInSlices(inventory, retainedEligibility);
+	stages.mark("selection");
 	if (!inventory.length && manifest.active[selection[0]!.name] === selection[0]!.key)
 		return {
 			readPackages: 0,
@@ -346,6 +349,8 @@ export const refreshPackageTextLayer = Effect.fn("PackageText.refresh")(function
 			},
 			catch: (cause) => snapshotFailure("package-text.stage", String(cause))
 		});
+		// Reading includes the reader's own work and staging the records it returns.
+		stages.mark("read");
 		reportProgress({ phase: "joining", completed: 0, total: 0 });
 		const result = yield* importColdPackageTextShards(
 			{ inventory, recordDirectory: directory, stagingRoot: directory },
@@ -360,6 +365,11 @@ export const refreshPackageTextLayer = Effect.fn("PackageText.refresh")(function
 				})
 			)
 		);
+		stages.mark("import");
+		yield* Effect.annotateCurrentSpan({
+			"package-text.readPackages": requested.size,
+			...stages.attributes("package-text.stage_ms")
+		});
 		return {
 			readPackages: requested.size,
 			reusedPackages: inventory.length - requested.size,
@@ -479,14 +489,18 @@ export const refreshPackageTextLayer = Effect.fn("PackageText.refresh")(function
 			});
 		} else sources.push({ name: shard.name, key: shard.key, source: packageTextColumns(next) });
 	}
+	// Reading includes the reader's own work and each shard's staging.
+	stages.mark("read");
 	reportProgress({ phase: "joining", completed: 0, total: 0 });
 	if (!Object.keys(manifest.layers).length || sources.length > 8)
 		yield* writer.publishCold(sources, removed);
 	else yield* writer.publishBatch(sources, removed);
+	stages.mark("publish");
 	yield* Effect.annotateCurrentSpan({
 		"package-text.readPackages": readPackages,
 		"package-text.changedShards": changed.length,
-		"package-text.removedShards": removed.length
+		"package-text.removedShards": removed.length,
+		...stages.attributes("package-text.stage_ms")
 	});
 	return {
 		readPackages,
