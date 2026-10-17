@@ -3,8 +3,8 @@ import {
 	type ScenarioStudioClient
 } from "@ue-shed/extension-scenarios/client";
 import {
-	decodeScenarioRun,
-	decodeScenarioStatusResponse,
+	parseScenarioRun,
+	parseScenarioStatusResponse,
 	ScenarioRunHandle,
 	ScenarioDocumentFileResult,
 	type ScenarioDocument,
@@ -35,7 +35,7 @@ const status = (handle: ScenarioRunHandle) =>
 			})
 	}).pipe(
 		Effect.flatMap((value) =>
-			decodeScenarioStatusResponse(value).pipe(
+			parseScenarioStatusResponse(value).pipe(
 				Effect.mapError((cause) =>
 					clientError({
 						cause,
@@ -100,7 +100,7 @@ export const scenarioStudioClient: ScenarioStudioClient = {
 				})
 		}).pipe(
 			Effect.flatMap((value) =>
-				decodeScenarioRun(value).pipe(
+				parseScenarioRun(value).pipe(
 					Effect.mapError((cause) =>
 						clientError({
 							cause,

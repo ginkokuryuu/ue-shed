@@ -1,9 +1,9 @@
 import {
 	CustodianClientError,
-	decodeCustodianCancelRunResult,
-	decodeCustodianExecutionRunResult,
-	decodeCustodianPrepareRunResult,
-	decodeCustodianRunResult,
+	parseCustodianCancelRunResult,
+	parseCustodianExecutionRunResult,
+	parseCustodianPrepareRunResult,
+	parseCustodianRunResult,
 	type CustodianClientApi
 } from "@ue-shed/extension-project-custodian/client";
 import { Effect } from "effect";
@@ -40,7 +40,7 @@ export const projectCustodianClient: CustodianClientApi = {
 				invoke: () => window.ueShed.projectCustodian.configuredScan(),
 				operation: "projectCustodian.configuredScan"
 			},
-			decodeCustodianRunResult
+			parseCustodianRunResult
 		)
 	),
 	prepare: Effect.fn("ProjectCustodianClient.prepare")((intent) =>
@@ -49,7 +49,7 @@ export const projectCustodianClient: CustodianClientApi = {
 				invoke: () => window.ueShed.projectCustodian.prepare(intent),
 				operation: "projectCustodian.prepare"
 			},
-			decodeCustodianPrepareRunResult
+			parseCustodianPrepareRunResult
 		)
 	),
 	execute: Effect.fn("ProjectCustodianClient.execute")((intent) =>
@@ -58,7 +58,7 @@ export const projectCustodianClient: CustodianClientApi = {
 				invoke: () => window.ueShed.projectCustodian.execute(intent),
 				operation: "projectCustodian.execute"
 			},
-			decodeCustodianExecutionRunResult
+			parseCustodianExecutionRunResult
 		)
 	),
 	cancel: Effect.fn("ProjectCustodianClient.cancel")((proposalId) =>
@@ -67,7 +67,7 @@ export const projectCustodianClient: CustodianClientApi = {
 				invoke: () => window.ueShed.projectCustodian.cancel(proposalId),
 				operation: "projectCustodian.cancel"
 			},
-			decodeCustodianCancelRunResult
+			parseCustodianCancelRunResult
 		)
 	)
 };
