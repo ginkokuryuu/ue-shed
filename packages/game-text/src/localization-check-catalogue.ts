@@ -79,7 +79,7 @@ export const PlaceholderTranslationParams = Schema.Struct({
 export type PlaceholderTranslationParams = typeof PlaceholderTranslationParams.Type;
 
 /**
- * `placeholder_text`: `markers` matched as whole words and as written (upper case only by
+ * `placeholder_text`: `markers` matched between Unicode word boundaries and as written (upper case only by
  * default: "todo" is Spanish and Portuguese for "all"), and `phrases` matched as whole words in
  * any case.
  */
@@ -136,7 +136,13 @@ function check<Id extends BuiltInCheckId, Params extends object, EncodedParams>(
 	const defaults = Schema.decodeUnknownSync(descriptor.params)({});
 	return {
 		id,
-		subject: Schema.is(SourceCheckId)(id) ? "source" : "localization",
+		// These two source checks retain their historical LocalizationCheckId membership.
+		subject:
+			id === "missing_translator_notes" ||
+			id === "duplicate_source" ||
+			Schema.is(SourceCheckId)(id)
+				? "source"
+				: "localization",
 		...descriptor,
 		defaults,
 		defaultCondition: descriptor.condition(defaults)
