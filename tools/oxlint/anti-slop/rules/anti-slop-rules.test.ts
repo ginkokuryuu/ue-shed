@@ -2,6 +2,7 @@ import { RuleTester } from "oxlint/plugins-dev";
 import { describe, it } from "vitest";
 
 import { noModuleMockingRule } from "./no-module-mocking.ts";
+import { noStringifiedCauseInErrorRule } from "./no-stringified-cause-in-error.ts";
 import { noForbiddenTermInSymbolNamesRule } from "./no-shape-in-symbol-names.ts";
 
 RuleTester.describe = describe;
@@ -60,6 +61,28 @@ export type ServiceShape = OtherApi;`,
 /** @deprecated Use ServiceApi. */
 type ServiceShape = ServiceApi;`,
 			errors: [{ messageId: "forbiddenSymbolName" }]
+		}
+	]
+});
+
+ruleTester.run("no-stringified-cause-in-error", noStringifiedCauseInErrorRule, {
+	valid: [
+		'new ReaderError({ message: "The reader failed.", cause });',
+		"new ReaderError({ message: `Could not read ${path}.`, cause: error });",
+		"report({ message: String(cause) });"
+	],
+	invalid: [
+		{
+			code: "new ReaderError({ message: String(cause) });",
+			errors: [{ messageId: "stringifiedCause" }]
+		},
+		{
+			code: "new errors.ReaderError({ message: `Read failed: ${String(error)}` });",
+			errors: [{ messageId: "stringifiedCause" }]
+		},
+		{
+			code: "new ReaderFailure({ message: Cause.pretty(cause) });",
+			errors: [{ messageId: "stringifiedCause" }]
 		}
 	]
 });

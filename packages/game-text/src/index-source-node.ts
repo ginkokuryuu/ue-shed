@@ -25,12 +25,13 @@ const bundlePaths = (path: string) => [
 	path,
 	...["uexp", "ubulk", "uptnl"].map((extension) => path.replace(/\.[^.]+$/u, `.${extension}`))
 ];
-const failure = (operation: string, cause: unknown) =>
+const failure = (operation: string, message: string, cause?: unknown) =>
 	new GameTextIndexError({
 		operation,
-		message: String(cause),
+		message,
 		recovery:
-			"Save the packages, refresh the Project Index and retry with the paired native reader."
+			"Save the packages, refresh the Project Index and retry with the paired native reader.",
+		...(cause === undefined ? undefined : { cause })
 	});
 
 class InventoryKey extends Data.Class<{
@@ -169,7 +170,13 @@ export function gameTextIndexSourceNodeLayer(
 							const expected = yield* Schema.decodeUnknownEffect(
 								Schema.fromJsonString(Signature)
 							)(entry.signature).pipe(
-								Effect.mapError((cause) => failure("signature", cause))
+								Effect.mapError((cause) =>
+									failure(
+										"signature",
+										"The Project Index returned an unreadable package bundle signature.",
+										cause
+									)
+								)
 							);
 							const paths = bundlePaths(resolve(root, entry.path));
 							if (expected.length !== paths.length)
@@ -200,7 +207,12 @@ export function gameTextIndexSourceNodeLayer(
 											throw cause;
 										}
 									},
-									catch: (cause) => failure("signature", cause)
+									catch: (cause) =>
+										failure(
+											"signature",
+											`Could not check the bundle files of ${entry.path}.`,
+											cause
+										)
 								});
 								const prior = expected[index];
 								if (
@@ -247,7 +259,7 @@ export function gameTextIndexSourceNodeLayer(
 											).replaceAll("\\", "/")
 										}
 							),
-							Stream.mapError((cause) => failure("read", cause.message)),
+							Stream.mapError((cause) => failure("read", cause.message, cause)),
 							Stream.concat(
 								Stream.fromEffect(verify(root, entries)).pipe(Stream.drain)
 							)

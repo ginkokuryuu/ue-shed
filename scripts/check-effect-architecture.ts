@@ -846,6 +846,7 @@ function objectFieldNames(
 ): Set<string> | undefined {
 	if (ts.isIdentifier(node)) {
 		if (node.text === "ErrorGuidanceFields") return new Set(errorGuidanceFieldNames);
+		if (node.text === "ErrorCauseFields") return new Set(["cause"]);
 		const local = locals.get(node.text);
 		if (local === undefined || seen.has(node.text)) return undefined;
 		seen.add(node.text);

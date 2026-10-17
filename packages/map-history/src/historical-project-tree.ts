@@ -1,7 +1,7 @@
 import { copyFile, mkdir, mkdtemp, rename, rm } from "node:fs/promises";
 import { basename, dirname, isAbsolute, relative, resolve } from "node:path";
 import { tmpdir } from "node:os";
-import { Effect, Schema, Scope } from "effect";
+import { Effect, Predicate, Schema, Scope } from "effect";
 import { MapHistoryError } from "./errors.js";
 
 const TEMPORARY_PROJECT_PREFIX = "ue-shed-map-history-";
@@ -27,11 +27,24 @@ export interface HistoricalProjectTree {
 	) => Effect.Effect<void, MapHistoryError>;
 }
 
+function temporaryStorageMessage(operation: string, path: string, cause: unknown): string {
+	const code =
+		cause instanceof Object && "code" in cause && Predicate.isString(cause.code)
+			? cause.code
+			: undefined;
+	if (code === "ENOSPC") return `${operation} ran out of disk space for ${path}.`;
+	if (code === "EACCES" || code === "EPERM") {
+		return `${operation} was denied permission for ${path}.`;
+	}
+	if (code === "ENOENT") return `${operation} could not find ${path}.`;
+	return `${operation} failed for ${path}.`;
+}
+
 function temporaryStorageError(operation: string, path: string, cause: unknown): MapHistoryError {
 	return new MapHistoryError({
 		cause,
 		kind: "temporary_storage",
-		message: `${operation} failed for ${path}: ${String(cause)}`,
+		message: temporaryStorageMessage(operation, path, cause),
 		recovery: "Check temporary-directory permissions and available disk space, then retry.",
 		retrySafe: true
 	});

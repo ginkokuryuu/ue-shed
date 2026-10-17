@@ -52,7 +52,7 @@ function isInputMappingContextClass(classPath: string): boolean {
 
 export class EnhancedInputScanError extends Schema.TaggedError<EnhancedInputScanError>()(
 	"EnhancedInputScanError",
-	EnhancedInputPublicError.fields
+	{ ...EnhancedInputPublicError.fields, cause: Schema.optionalKey(Schema.Defect()) }
 ) {}
 
 export const EnhancedInputScanOptions = Schema.Struct({
@@ -508,9 +508,11 @@ export const EnhancedInputServiceLive = Layer.effect(
 					(cause) =>
 						new EnhancedInputScanError({
 							code: "scan_limit_exceeded",
-							message: `Invalid Enhanced Input scan options: ${String(cause)}`,
+							message:
+								"Enhanced Input scan options need a project root and positive scan limits.",
 							recovery: "Provide a project root and positive scan limits.",
-							retrySafe: false
+							retrySafe: false,
+							cause
 						})
 				)
 			);

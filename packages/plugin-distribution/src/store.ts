@@ -16,7 +16,7 @@ import {
 	writeFile
 } from "node:fs/promises";
 import { dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
-import { Context, Effect, Layer, Option, Schema, type Scope } from "effect";
+import { Context, Effect, Layer, Option, Predicate, Schema, type Scope } from "effect";
 import { extractPluginArchiveToDirectory } from "./archive.js";
 import {
 	PluginInstallCancelled,
@@ -181,18 +181,39 @@ async function digestFile(path: string): Promise<`sha256:${string}`> {
 	return `sha256:${hash.digest("hex")}`;
 }
 
+/** Node errno code of a filesystem failure, when the cause carries one. */
+function errnoCode(cause: unknown): string | undefined {
+	return cause instanceof Object && "code" in cause && Predicate.isString(cause.code)
+		? cause.code
+		: undefined;
+}
+
+/** Classified storage message: what failed for which release, without the raw cause text. */
+function storageMessage(releaseVersion: string, operation: string, cause: unknown): string {
+	const code = errnoCode(cause);
+	if (code === "EACCES" || code === "EPERM") {
+		return `${operation} for plugin release ${releaseVersion} was denied permission.`;
+	}
+	if (code === "ENOSPC") {
+		return `${operation} for plugin release ${releaseVersion} ran out of disk space.`;
+	}
+	return `${operation} failed for plugin release ${releaseVersion}.`;
+}
+
 function storageError(releaseVersion: string, operation: string, cause: unknown) {
 	return new PluginStorageFailure({
-		message: `${operation} failed: ${String(cause)}`,
+		message: storageMessage(releaseVersion, operation, cause),
 		operation,
 		recovery: "Check the caller-owned cache permissions and free space, then retry.",
 		releaseVersion,
-		retrySafe: true
+		retrySafe: true,
+		cause
 	});
 }
 
-function corrupt(releaseVersion: string, cachePath: string, message: string) {
+function corrupt(releaseVersion: string, cachePath: string, message: string, cause?: unknown) {
 	return new CorruptCacheEntry({
+		...(cause === undefined ? undefined : { cause }),
 		cachePath,
 		message,
 		recovery: "Explicitly prune the corrupt release, then reinstall the exact artifact.",
@@ -311,7 +332,8 @@ async function readStoredManifest(cacheRoot: string, releaseVersion: string, roo
 		throw corrupt(
 			releaseVersion,
 			root,
-			`Cached release metadata is malformed: ${String(cause)}`
+			"Cached release metadata is missing, unsafe or malformed.",
+			cause
 		);
 	}
 	if (metadata.releaseVersion !== releaseVersion) {
@@ -329,7 +351,7 @@ async function readStoredManifest(cacheRoot: string, releaseVersion: string, roo
 	}
 	const manifestPath = join(root, manifestFile);
 	await assertRegularCacheFile(manifestPath).catch((cause) => {
-		throw corrupt(releaseVersion, root, `Cached release manifest is unsafe: ${String(cause)}`);
+		throw corrupt(releaseVersion, root, "Cached release manifest is unsafe.", cause);
 	});
 	const manifestBytes = await readFile(manifestPath);
 	if (digestBytes(manifestBytes) !== metadata.manifestDigest) {
@@ -345,7 +367,7 @@ async function readStoredManifest(cacheRoot: string, releaseVersion: string, roo
 			JSON.parse(manifestBytes.toString("utf8"))
 		);
 	} catch (cause) {
-		throw corrupt(releaseVersion, root, `Cached manifest JSON is malformed: ${String(cause)}`);
+		throw corrupt(releaseVersion, root, "Cached manifest JSON is malformed.", cause);
 	}
 	return { manifest, manifestPath, metadata, root };
 }
@@ -354,7 +376,7 @@ async function readStoredBasic(cacheRoot: string, releaseVersion: string, root: 
 	const storedManifest = await readStoredManifest(cacheRoot, releaseVersion, root);
 	const artifactPath = join(root, artifactFile);
 	await assertRegularCacheFile(artifactPath).catch((cause) => {
-		throw corrupt(releaseVersion, root, `Cached release artifact is unsafe: ${String(cause)}`);
+		throw corrupt(releaseVersion, root, "Cached release artifact is unsafe.", cause);
 	});
 	const artifactDetails = await stat(artifactPath);
 	if (
@@ -418,11 +440,7 @@ function verifyStored(cacheRoot: string, releaseVersion: string, root: string) {
 		catch: (cause) =>
 			cause instanceof CorruptCacheEntry
 				? cause
-				: corrupt(
-						releaseVersion,
-						root,
-						`Cached release cannot be verified: ${String(cause)}`
-					)
+				: corrupt(releaseVersion, root, "Cached release cannot be verified.", cause)
 	}).pipe(
 		Effect.flatMap((basic) =>
 			validatePluginBundleManifest(basic.manifest, {
@@ -450,7 +468,8 @@ function verifyStoredVariantIdentity(cacheRoot: string, releaseVersion: string, 
 				: corrupt(
 						releaseVersion,
 						root,
-						`Cached release identity cannot be recovered: ${String(cause)}`
+						"Cached release identity cannot be recovered.",
+						cause
 					)
 	}).pipe(
 		Effect.flatMap((stored) =>

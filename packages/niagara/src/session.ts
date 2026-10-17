@@ -4,9 +4,12 @@ import { Effect, Exit, Schedule, Schema } from "effect";
 
 export class NiagaraSessionError extends Schema.TaggedError<NiagaraSessionError>()(
 	"NiagaraSessionError",
-	{ message: Schema.String }
+	{ message: Schema.String, cause: Schema.optionalKey(Schema.Defect()) }
 ) {}
-const failure = (cause: unknown) => new NiagaraSessionError({ message: String(cause) });
+const failure = (message: string, cause?: unknown) =>
+	new NiagaraSessionError({ message, ...(cause === undefined ? undefined : { cause }) });
+const maximumSessionFileBytes = 4096;
+class OversizedSessionFile extends Error {}
 const resultSchema = Schema.Struct({
 	protocol: Schema.Literal("ue-shed-niagara-session.v1"),
 	runId: Schema.String,
@@ -17,7 +20,7 @@ const readOptional = (path: string) =>
 		try: async () => {
 			try {
 				const details = await stat(path);
-				if (details.size > 4096) throw new Error("Oversized session result.");
+				if (details.size > maximumSessionFileBytes) throw new OversizedSessionFile();
 				return await readFile(path, "utf8");
 			} catch (error) {
 				if (error instanceof Error && "code" in error && error.code === "ENOENT")
@@ -25,7 +28,13 @@ const readOptional = (path: string) =>
 				throw error;
 			}
 		},
-		catch: failure
+		catch: (cause) =>
+			failure(
+				cause instanceof OversizedSessionFile
+					? `Niagara session file ${path} exceeds ${maximumSessionFileBytes} bytes.`
+					: `Could not read Niagara session file ${path}.`,
+				cause
+			)
 	});
 
 /** The host owns the process; interruption leaves a cancellation marker before releasing the request. */
@@ -71,7 +80,11 @@ export const submitNiagaraSessionRequest = Effect.fn("NiagaraSession.submit")(fu
 				await copyFile(input.requestPath, `${prefix}.pending`);
 				await rename(`${prefix}.pending`, `${prefix}.request.json`);
 			},
-			catch: failure
+			catch: (cause) =>
+				failure(
+					`Could not submit Niagara session request ${input.runId} to ${input.directory}.`,
+					cause
+				)
 		}),
 		() => poll.pipe(Effect.timeout(input.timeoutMs ?? 30 * 60_000)),
 		(_, exit) =>
@@ -79,7 +92,11 @@ export const submitNiagaraSessionRequest = Effect.fn("NiagaraSession.submit")(fu
 				? Effect.void
 				: Effect.tryPromise({
 						try: () => writeFile(`${prefix}.cancel`, "cancelled\n"),
-						catch: failure
+						catch: (cause) =>
+							failure(
+								`Could not write the cancellation marker for Niagara session run ${input.runId}.`,
+								cause
+							)
 					}).pipe(
 						Effect.tapError((error) =>
 							Effect.logWarning("Niagara session cancellation marker failed", error)

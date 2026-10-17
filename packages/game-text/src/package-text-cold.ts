@@ -6,7 +6,7 @@ import { availableParallelism } from "node:os";
 import { Effect, Schema } from "effect";
 import { SharedIndex } from "./shared-index.js";
 import { openSnapshotFile, type SnapshotFileReader } from "./snapshot-file.js";
-import { SnapshotStoreError } from "./snapshot-store.js";
+import { SnapshotStoreError, snapshotStoreFailure } from "./snapshot-store.js";
 import { packageTextSelection, type PackageTextInventoryEntry } from "./package-text-layer.js";
 import { PreparedColdStrings, type ColdLayerSource } from "./shared-string-sort.js";
 
@@ -137,12 +137,11 @@ export const importColdPackageTextShards = Effect.fn("PackageText.importCold")(f
 				}
 			},
 			catch: (cause) =>
-				new SnapshotStoreError({
-					operation: "package-text.cold",
-					code: "unavailable",
-					message: String(cause),
-					recovery: "Rebuild the derived package layer."
-				})
+				snapshotStoreFailure(
+					"package-text.cold",
+					cause,
+					"Rebuild the derived package layer."
+				)
 		}),
 		(result) =>
 			Effect.promise(async () => {

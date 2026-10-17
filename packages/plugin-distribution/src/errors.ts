@@ -6,9 +6,12 @@ const ErrorFields = {
 	retrySafe: Schema.Boolean
 };
 
+/** The original failure behind a classified error; diagnostic evidence, not text to branch on. */
+const CauseFields = { cause: Schema.optionalKey(Schema.Defect()) };
+
 export class ReleaseUnavailable extends Schema.TaggedError<ReleaseUnavailable>()(
 	"ReleaseUnavailable",
-	{ ...ErrorFields, releaseVersion: Schema.String }
+	{ ...ErrorFields, releaseVersion: Schema.String, ...CauseFields }
 ) {}
 
 export class OfflineCacheMiss extends Schema.TaggedError<OfflineCacheMiss>()("OfflineCacheMiss", {
@@ -67,7 +70,7 @@ export class MalformedOrUnsafeArchive extends Schema.TaggedError<MalformedOrUnsa
 
 export class CorruptCacheEntry extends Schema.TaggedError<CorruptCacheEntry>()(
 	"CorruptCacheEntry",
-	{ ...ErrorFields, cachePath: Schema.String, releaseVersion: Schema.String }
+	{ ...ErrorFields, cachePath: Schema.String, releaseVersion: Schema.String, ...CauseFields }
 ) {}
 
 export class ImmutableVersionConflict extends Schema.TaggedError<ImmutableVersionConflict>()(
@@ -88,17 +91,18 @@ export class ActiveLeasePreventsPrune extends Schema.TaggedError<ActiveLeasePrev
 export class TransportFailure extends Schema.TaggedError<TransportFailure>()("TransportFailure", {
 	...ErrorFields,
 	operation: Schema.String,
-	releaseVersion: Schema.String
+	releaseVersion: Schema.String,
+	...CauseFields
 }) {}
 
 export class PluginStorageFailure extends Schema.TaggedError<PluginStorageFailure>()(
 	"PluginStorageFailure",
-	{ ...ErrorFields, operation: Schema.String, releaseVersion: Schema.String }
+	{ ...ErrorFields, operation: Schema.String, releaseVersion: Schema.String, ...CauseFields }
 ) {}
 
 export class PluginDistributionValidationError extends Schema.TaggedError<PluginDistributionValidationError>()(
 	"PluginDistributionValidationError",
-	{ ...ErrorFields, field: Schema.String }
+	{ ...ErrorFields, field: Schema.String, ...CauseFields }
 ) {}
 
 export class InternalInvariantFailure extends Schema.TaggedError<InternalInvariantFailure>()(

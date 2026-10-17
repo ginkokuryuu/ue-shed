@@ -128,8 +128,10 @@ export function exportGameTextInvestigation(
 			try: () => (localized ?? textCorpusQuery(corpus)).export(preset.query),
 			catch: (error) =>
 				new InvestigationError({
-					message: error instanceof Error ? error.message : String(error),
+					message:
+						"This export filters by localization state, which needs a loaded target.",
 					recovery: "Select a localization target, or remove its translation filters.",
+					cause: error,
 					retrySafe: true,
 					nextStep: "fix_input"
 				})

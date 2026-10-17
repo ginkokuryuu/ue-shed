@@ -49,11 +49,12 @@ export const refreshCliGameTextIndex = Effect.fn("Cli.game_text.refresh")(
 	},
 	(effect) =>
 		effect.pipe(
-			Effect.catchTag("ConfigError", (cause) =>
+			Effect.catchTag("ConfigError", () =>
 				Effect.fail(
 					new GameTextIndexError({
 						operation: "configuration",
-						message: String(cause),
+						message:
+							"The game text index cache root or reader configuration is invalid.",
 						recovery:
 							"Check the project index cache root and reader configuration, then retry."
 					})
@@ -71,11 +72,11 @@ export const invalidateCliGameTextIndex = Effect.fn("Cli.game_text.invalidate")(
 		service.invalidate(request)
 	).pipe(
 		Effect.provide(cliGameTextIndexLayer()),
-		Effect.catchTag("ConfigError", (cause) =>
+		Effect.catchTag("ConfigError", () =>
 			Effect.fail(
 				new GameTextIndexError({
 					operation: "configuration",
-					message: String(cause),
+					message: "The game text index cache root or reader configuration is invalid.",
 					recovery:
 						"Check the project index cache root and reader configuration, then retry."
 				})

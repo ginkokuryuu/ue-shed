@@ -31,8 +31,10 @@ export const gameTextIndexRefreshLayer = (
 						(cause) =>
 							new GameTextIndexError({
 								operation: "request",
-								message: String(cause),
-								recovery: "Choose a project and localization target."
+								message:
+									"The Game Text index refresh request does not match its schema.",
+								recovery: "Choose a project and localization target.",
+								cause
 							})
 					)
 				);

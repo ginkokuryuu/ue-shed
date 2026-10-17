@@ -3,6 +3,7 @@ import {
 	EditorWindowActivationLive,
 	EditorForegroundPermissionLive
 } from "@ue-shed/engine";
+import { ErrorCauseFields } from "@ue-shed/protocol";
 import { RemoteControlClient, RemoteControlClientError } from "@ue-shed/unreal-connection";
 import { Context, Effect, Layer, Schema, type Stream } from "effect";
 import { WorldActorSnapshot, type ActorId as ActorIdType } from "./actor-models.js";
@@ -43,7 +44,8 @@ export class ObservatoryConnectionError extends Schema.TaggedError<ObservatoryCo
 		message: Schema.String,
 		operation: Schema.String,
 		recovery: Schema.String,
-		retrySafe: Schema.Boolean
+		retrySafe: Schema.Boolean,
+		...ErrorCauseFields
 	}
 ) {}
 
@@ -89,11 +91,15 @@ function connectionError(
 	cause: RemoteControlClientError | unknown
 ): ObservatoryConnectionError {
 	return new ObservatoryConnectionError({
-		message: cause instanceof RemoteControlClientError ? cause.message : String(cause),
+		message:
+			cause instanceof RemoteControlClientError
+				? cause.message
+				: `The observatory ${operation} response does not match the observatory contract.`,
 		operation,
 		recovery:
 			"Open an editor world with UEShedObservatory enabled, then retry the live world scan.",
-		retrySafe: cause instanceof RemoteControlClientError ? cause.retrySafe : false
+		retrySafe: cause instanceof RemoteControlClientError ? cause.retrySafe : false,
+		cause
 	});
 }
 

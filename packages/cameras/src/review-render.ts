@@ -226,9 +226,10 @@ export const captureRenderedReviewView = Effect.fn("ReviewRenderer.capture")(fun
 		code: "review_render_or_restoration_failed",
 		operation: "capture",
 		sessionId: request.operationId,
-		message: Cause.pretty(outcome.cause),
+		message: `Review View ${request.viewId} (operation ${request.operationId}) failed during rendering or restoration; editor state is unknown.`,
 		recovery: "Inspect rendering and restoration errors before retrying this Review View.",
 		retrySafe: false,
-		nextStep: "escalate"
+		nextStep: "escalate",
+		cause: outcome.cause
 	});
 });

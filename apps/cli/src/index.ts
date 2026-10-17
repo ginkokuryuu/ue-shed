@@ -1,7 +1,7 @@
 import { NodeServices } from "@effect/platform-node";
 import { runtimeObservabilityLayer } from "@ue-shed/observability";
 import { Cause, Effect, Exit, Layer } from "effect";
-import { CliCommandError, CliRuntime, CliRuntimeLive } from "./cli-runtime.js";
+import { CliCommandError, CliRuntime, CliRuntimeLive, inputIssueDetail } from "./cli-runtime.js";
 import { runCli } from "./command.js";
 import { CliSignalError, withCliSignalHandling } from "./signal.js";
 

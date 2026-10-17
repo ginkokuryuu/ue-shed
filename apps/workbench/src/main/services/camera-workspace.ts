@@ -1,7 +1,7 @@
 import { createHash, randomUUID } from "node:crypto";
 import { readdir } from "node:fs/promises";
 import { basename, join } from "node:path";
-import { Context, Effect, Layer, Schedule, Schema, Semaphore } from "effect";
+import { Context, Effect, Layer, Predicate, Schedule, Schema, Semaphore } from "effect";
 import {
 	FramingCandidateId,
 	ensureProvisionedCameras,
@@ -29,13 +29,27 @@ import {
 } from "@ue-shed/cameras/review-contracts";
 import { WorkbenchEditorHandoff } from "./editor-handoff.js";
 import { RemoteControlClient } from "@ue-shed/unreal-connection";
+import { ErrorCauseFields } from "@ue-shed/protocol";
 
 export class CameraWorkspaceError extends Schema.TaggedError<CameraWorkspaceError>()(
 	"CameraWorkspaceError",
-	{ message: Schema.String }
+	{ message: Schema.String, ...ErrorCauseFields }
 ) {}
-const failure = (cause: unknown) =>
-	new CameraWorkspaceError({ message: cause instanceof Error ? cause.message : String(cause) });
+const failure = (message: string) => new CameraWorkspaceError({ message });
+const directoryReadFailure = (purpose: string, path: string) => (cause: unknown) => {
+	const code = Predicate.isObject(cause) && "code" in cause ? cause.code : undefined;
+	return new CameraWorkspaceError({
+		message:
+			code === "EACCES" || code === "EPERM"
+				? `Permission was denied to list ${purpose} in ${path}.`
+				: code === "ENOENT"
+					? `The ${purpose} folder ${path} does not exist.`
+					: `Could not list ${purpose} in ${path}.`,
+		cause
+	});
+};
+const requestFailureMessage = (cause: unknown) =>
+	cause instanceof Error ? cause.message : "The camera workspace request failed.";
 
 /** Workbench composition of public camera ports. No independent synchronization protocol. */
 export const makeCameraWorkspace = Effect.fn("Workbench.CameraWorkspace.make")(function* () {
@@ -81,7 +95,7 @@ export const makeCameraWorkspace = Effect.fn("Workbench.CameraWorkspace.make")(f
 					throw cause;
 				}
 			},
-			catch: failure
+			catch: directoryReadFailure("camera sets", root)
 		});
 		return yield* Effect.forEach(
 			names.filter((name) => /^[a-zA-Z0-9][a-zA-Z0-9._-]*\.json$/u.test(name)),
@@ -220,7 +234,7 @@ export const makeCameraWorkspace = Effect.fn("Workbench.CameraWorkspace.make")(f
 						);
 					const projects = yield* Effect.tryPromise({
 						try: () => readdir(context.projectRoot),
-						catch: failure
+						catch: directoryReadFailure("project files", context.projectRoot)
 					});
 					const projectFile = projects.find((name) => name.endsWith(".uproject"));
 					if (!projectFile)
@@ -392,7 +406,7 @@ export const makeCameraWorkspace = Effect.fn("Workbench.CameraWorkspace.make")(f
 				panel: active?.snapshot.panel ?? null,
 				sets: savedSets,
 				recovery,
-				error: failure(cause).message
+				error: requestFailureMessage(cause)
 			})
 		)
 	);

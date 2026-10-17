@@ -3,7 +3,7 @@ import { mkdir, open, readdir, rename, rmdir, unlink } from "node:fs/promises";
 import { join } from "node:path";
 import { hostname } from "node:os";
 import * as zlib from "node:zlib";
-import { Context, Effect, Layer, Metric, Schema, Semaphore, type Scope } from "effect";
+import { Context, Effect, Layer, Metric, Predicate, Schema, Semaphore, type Scope } from "effect";
 import {
 	SnapshotFormatError,
 	snapshotFailure,
@@ -67,18 +67,81 @@ export class SnapshotStoreError extends Schema.TaggedError<SnapshotStoreError>()
 		operation: Schema.String,
 		code: Schema.Literals(["unavailable", "busy", "missing", "invalid_input"]),
 		message: Schema.String,
-		recovery: Schema.String
+		recovery: Schema.String,
+		cause: Schema.optionalKey(Schema.Defect())
 	}
 ) {}
 type StoreFailure = SnapshotStoreError | SnapshotFormatError;
-function failure(operation: string, cause: unknown): StoreFailure {
+const errnoCode = (cause: unknown) =>
+	cause instanceof Error && "code" in cause && Predicate.isString(cause.code)
+		? cause.code
+		: undefined;
+
+/**
+ * @internal Classify an unexpected cache failure by its filesystem code, keeping the original as
+ * `cause`. Typed snapshot failures pass through unchanged.
+ */
+export function snapshotStoreFailure(
+	operation: string,
+	cause: unknown,
+	fallbackRecovery: string
+): StoreFailure {
 	if (cause instanceof SnapshotStoreError || cause instanceof SnapshotFormatError) return cause;
-	return new SnapshotStoreError({
+	const code = errnoCode(cause);
+	switch (code) {
+		case "ENOENT":
+			return new SnapshotStoreError({
+				operation,
+				code: "missing",
+				message: `Game Text cache ${operation} failed: a cache file is missing (ENOENT).`,
+				recovery: "Rebuild the Game Text index; its cache files are disposable.",
+				cause
+			});
+		case "EACCES":
+		case "EPERM":
+			return new SnapshotStoreError({
+				operation,
+				code: "unavailable",
+				message: `Game Text cache ${operation} failed: access to a cache file was denied (${code}).`,
+				recovery:
+					"Give this process read and write access to the cache folder, or close the program holding the file.",
+				cause
+			});
+		case "EBUSY":
+			return new SnapshotStoreError({
+				operation,
+				code: "busy",
+				message: `Game Text cache ${operation} failed: a cache file is in use (EBUSY).`,
+				recovery: "Close other programs using the cache folder, then retry.",
+				cause
+			});
+		case "ENOSPC":
+			return new SnapshotStoreError({
+				operation,
+				code: "unavailable",
+				message: `Game Text cache ${operation} failed: the disk is full (ENOSPC).`,
+				recovery: "Free disk space on the cache drive, then retry.",
+				cause
+			});
+		default:
+			return new SnapshotStoreError({
+				operation,
+				code: "unavailable",
+				message:
+					code === undefined
+						? `Game Text cache ${operation} failed.`
+						: `Game Text cache ${operation} failed (${code}).`,
+				recovery: fallbackRecovery,
+				cause
+			});
+	}
+}
+function failure(operation: string, cause: unknown): StoreFailure {
+	return snapshotStoreFailure(
 		operation,
-		code: "unavailable",
-		message: String(cause),
-		recovery: "Retry after resolving the cache filesystem failure."
-	});
+		cause,
+		"Retry after resolving the cache filesystem failure."
+	);
 }
 const busy = () =>
 	new SnapshotStoreError({
@@ -276,9 +339,10 @@ export function snapshotStoreNodeLayer(
 					new SnapshotStoreError({
 						operation: "configure",
 						code: "invalid_input",
-						message: String(cause),
+						message: "The snapshot store configuration does not match its schema.",
 						recovery:
-							"Provide a bounded cache root and nonempty project and target keys."
+							"Provide a bounded cache root and nonempty project and target keys.",
+						cause
 					})
 			),
 			Effect.flatMap(() => {
@@ -502,8 +566,10 @@ function makeNodeLayer(options: SnapshotStoreOptions): Layer.Layer<SnapshotStore
 										throw new SnapshotStoreError({
 											operation: "publish",
 											code: "invalid_input",
-											message: String(cause),
-											recovery: "Provide bounded string input keys."
+											message:
+												"The snapshot input keys do not match their schema.",
+											recovery: "Provide bounded string input keys.",
+											cause
 										});
 									}
 									const physicalSnapshot = `snapshot-${randomUUID()}.snapshot`;

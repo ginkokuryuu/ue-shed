@@ -1,4 +1,5 @@
 import {
+	ErrorCauseFields,
 	ErrorGuidanceFields,
 	BlueprintGraphRead,
 	LevelSequenceRead,
@@ -149,7 +150,8 @@ export class AssetReaderError extends Schema.TaggedError<AssetReaderError>()("As
 	]),
 	path: Schema.optional(Schema.String),
 	exitCode: Schema.optional(Schema.Number),
-	...ErrorGuidanceFields
+	...ErrorGuidanceFields,
+	...ErrorCauseFields
 }) {}
 
 /**

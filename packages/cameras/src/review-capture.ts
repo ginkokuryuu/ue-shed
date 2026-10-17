@@ -6,7 +6,7 @@ import {
 	RemoteControlClient,
 	type RemoteControlClientApi
 } from "@ue-shed/unreal-connection";
-import { ErrorGuidanceFields } from "@ue-shed/protocol";
+import { ErrorCauseFields, ErrorGuidanceFields } from "@ue-shed/protocol";
 import { Clock, Context, Effect, Layer, Schema } from "effect";
 import { captureReviewView } from "./review-live.js";
 import {
@@ -39,6 +39,7 @@ export class ReviewCaptureRunError extends Schema.TaggedError<ReviewCaptureRunEr
 	"ReviewCaptureRunError",
 	{
 		...ErrorGuidanceFields,
+		...ErrorCauseFields,
 		operation: Schema.Literals(["prepare", "capture", "finalize"]),
 		runId: Schema.String
 	}
@@ -516,12 +517,13 @@ function captureReviewSetWith(args: {
 						Effect.mapError(
 							(cause) =>
 								new ReviewCaptureRunError({
-									message: String(cause),
+									message: `The camera renderer policy for Capture Run ${runId} is not supported.`,
 									operation: "prepare",
 									runId,
 									recovery: "Choose a supported camera renderer and retry.",
 									retrySafe: true,
-									nextStep: "fix_input"
+									nextStep: "fix_input",
+									cause
 								})
 						)
 					);
@@ -625,12 +627,13 @@ function captureReviewSetWith(args: {
 						Effect.mapError(
 							(cause) =>
 								new ReviewCaptureRunError({
-									message: String(cause),
+									message: `Capture Run ${runId} for Review Set ${reviewSet.id} does not match the Capture Run contract.`,
 									operation: "finalize",
 									recovery: "Inspect the generated Capture Run values and retry.",
 									retrySafe: false,
 									nextStep: "escalate",
-									runId
+									runId,
+									cause
 								})
 						)
 					);

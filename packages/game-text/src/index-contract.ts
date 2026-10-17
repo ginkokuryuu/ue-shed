@@ -28,7 +28,8 @@ export class GameTextIndexError extends Schema.TaggedError<GameTextIndexError>()
 		message: Schema.String,
 		recovery: Schema.String,
 		retrySafe: Schema.optionalKey(Schema.Boolean),
-		localizationError: Schema.optionalKey(LocalizationError)
+		localizationError: Schema.optionalKey(LocalizationError),
+		cause: Schema.optionalKey(Schema.Defect())
 	}
 ) {}
 

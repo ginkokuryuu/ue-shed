@@ -54,7 +54,7 @@ export function oracleGameTextIndexLayer<E>(
 												message:
 													cause instanceof Error
 														? cause.message
-														: String(cause),
+														: `The test scan of ${request.projectRoot} failed.`,
 												recovery:
 													cause instanceof Object && "recovery" in cause
 														? String(cause.recovery)

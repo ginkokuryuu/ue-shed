@@ -1,6 +1,10 @@
 import { createHash, randomUUID } from "node:crypto";
 import { resolve } from "node:path";
-import { decodeCompanionCapabilityManifest, ErrorGuidanceFields } from "@ue-shed/protocol";
+import {
+	decodeCompanionCapabilityManifest,
+	ErrorCauseFields,
+	ErrorGuidanceFields
+} from "@ue-shed/protocol";
 import {
 	makeRemoteControlClient,
 	RemoteControlClient,
@@ -63,6 +67,7 @@ export class MapCaptureRunError extends Schema.TaggedError<MapCaptureRunError>()
 	"MapCaptureRunError",
 	{
 		...ErrorGuidanceFields,
+		...ErrorCauseFields,
 		operation: Schema.Literals(["inspect", "prepare", "capture", "publish"]),
 		runId: Schema.optionalKey(Schema.String)
 	}
@@ -272,34 +277,43 @@ export interface InspectMapCapturePlanResult {
 export function inspectMapCapturePlan(
 	plan: MapCapturePlan
 ): Effect.Effect<InspectMapCapturePlanResult, MapCaptureRunError> {
+	const recovery = "Reduce bounds or levels, or increase coarsest world-units-per-pixel.";
 	return Effect.try({
-		try: () => {
-			const grid = createMapTileGrid({
+		try: () =>
+			createMapTileGrid({
 				coarsestUnitsPerPixel: plan.levels.coarsestUnitsPerPixel,
 				levelCount: plan.levels.count,
 				requestedBounds: plan.requestedBounds,
 				tilePixelSize: plan.tilePixelSize
-			});
+			}),
+		catch: (cause) =>
+			new MapCaptureRunError({
+				message: `Map capture plan ${plan.id} does not describe a valid tile grid.`,
+				operation: "inspect",
+				recovery,
+				retrySafe: true,
+				nextStep: "fix_input",
+				cause
+			})
+	}).pipe(
+		Effect.flatMap((grid) => {
 			const tileCount = grid.levels.reduce(
 				(count, level) => count + level.rows * level.columns,
 				0
 			);
-			if (tileCount > maximumEnumeratedTiles) {
-				throw new RangeError(
-					`Plan expands to ${tileCount} tiles; the v1 host limit is ${maximumEnumeratedTiles}.`
+			if (tileCount > maximumEnumeratedTiles)
+				return Effect.fail(
+					new MapCaptureRunError({
+						message: `Map capture plan ${plan.id} expands to ${tileCount} tiles; the v1 host limit is ${maximumEnumeratedTiles}.`,
+						operation: "inspect",
+						recovery,
+						retrySafe: true,
+						nextStep: "fix_input"
+					})
 				);
-			}
-			return { grid, plan, tileCount };
-		},
-		catch: (cause) =>
-			new MapCaptureRunError({
-				message: String(cause),
-				operation: "inspect",
-				recovery: "Reduce bounds or levels, or increase coarsest world-units-per-pixel.",
-				retrySafe: true,
-				nextStep: "fix_input"
-			})
-	});
+			return Effect.succeed({ grid, plan, tileCount });
+		})
+	);
 }
 
 export interface RunMapCaptureOptions {
@@ -354,46 +368,42 @@ function selectedTileKeys(args: {
 	readonly levels?: ReadonlyArray<number>;
 	readonly tiles?: ReadonlyArray<MapTileKey>;
 }): Effect.Effect<ReadonlyArray<MapTileKey>, MapCaptureRunError> {
-	return Effect.try({
-		try: () => {
-			if (args.levels !== undefined && args.tiles !== undefined) {
-				throw new RangeError("Select levels or explicit tiles, not both.");
-			}
-			const keys = args.tiles
-				? [...args.tiles]
-				: allTileKeys(args.grid).filter(
-						(key) => args.levels === undefined || args.levels.includes(key.zoom)
-					);
-			if (keys.length === 0) throw new RangeError("The capture selection is empty.");
-			const identities = new Set<string>();
-			for (const key of keys) {
-				const level = args.grid.levels[key.zoom];
-				if (
-					!level ||
-					!Number.isInteger(key.row) ||
-					key.row < 0 ||
-					key.row >= level.rows ||
-					!Number.isInteger(key.column) ||
-					key.column < 0 ||
-					key.column >= level.columns
-				) {
-					throw new RangeError(`Tile ${mapTileKeyId(key)} is outside the plan grid.`);
-				}
-				const identity = mapTileKeyId(key);
-				if (identities.has(identity)) throw new RangeError(`Duplicate tile ${identity}.`);
-				identities.add(identity);
-			}
-			return keys;
-		},
-		catch: (cause) =>
+	const invalid = (message: string) =>
+		Effect.fail(
 			new MapCaptureRunError({
-				message: String(cause),
+				message,
 				operation: "prepare",
 				recovery: "Inspect the plan grid and request a valid bounded level or tile subset.",
 				retrySafe: true,
 				nextStep: "fix_input"
 			})
-	});
+		);
+	if (args.levels !== undefined && args.tiles !== undefined)
+		return invalid("Select levels or explicit tiles, not both.");
+	const keys = args.tiles
+		? [...args.tiles]
+		: allTileKeys(args.grid).filter(
+				(key) => args.levels === undefined || args.levels.includes(key.zoom)
+			);
+	if (keys.length === 0) return invalid("The capture selection is empty.");
+	const identities = new Set<string>();
+	for (const key of keys) {
+		const level = args.grid.levels[key.zoom];
+		if (
+			!level ||
+			!Number.isInteger(key.row) ||
+			key.row < 0 ||
+			key.row >= level.rows ||
+			!Number.isInteger(key.column) ||
+			key.column < 0 ||
+			key.column >= level.columns
+		)
+			return invalid(`Tile ${mapTileKeyId(key)} is outside the plan grid.`);
+		const identity = mapTileKeyId(key);
+		if (identities.has(identity)) return invalid(`Duplicate tile ${identity}.`);
+		identities.add(identity);
+	}
+	return Effect.succeed(keys);
 }
 
 function batches<T>(values: ReadonlyArray<T>, size: number): ReadonlyArray<ReadonlyArray<T>> {
@@ -408,11 +418,11 @@ function sha256(bytes: Uint8Array): string {
 	return `sha256:${createHash("sha256").update(bytes).digest("hex")}`;
 }
 
+/** PNG width and height, or `undefined` when the bytes are not a PNG. */
 function readPngDimensions(bytes: Uint8Array) {
 	const signature = [137, 80, 78, 71, 13, 10, 26, 10];
-	if (bytes.length < 24 || !signature.every((value, index) => bytes[index] === value)) {
-		throw new Error("Staged artifact is not a PNG file.");
-	}
+	if (bytes.length < 24 || !signature.every((value, index) => bytes[index] === value))
+		return undefined;
 	const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
 	return { height: view.getUint32(20), width: view.getUint32(16) };
 }
@@ -457,44 +467,41 @@ function viewportLevelBatches(args: {
 	readonly grid: MapTileGrid;
 	readonly keys: ReadonlyArray<MapTileKey>;
 }): Effect.Effect<ReadonlyArray<ReadonlyArray<MapTileKey>>, MapCaptureRunError> {
-	return Effect.try({
-		try: () => {
-			const selected = new Set(args.keys.map(mapTileKeyId));
-			const zooms = [...new Set(args.keys.map((key) => key.zoom))].toSorted((a, b) => a - b);
-			return zooms.map((zoom) => {
-				const level = args.grid.levels[zoom];
-				if (level === undefined)
-					throw new RangeError(`Zoom ${zoom} is outside the plan grid.`);
-				const levelKeys: MapTileKey[] = [];
-				for (let row = 0; row < level.rows; row += 1) {
-					for (let column = 0; column < level.columns; column += 1) {
-						const key = { zoom, row, column };
-						if (!selected.has(mapTileKeyId(key))) {
-							throw new RangeError(
-								"Viewport High Resolution capture requires complete zoom levels."
-							);
-						}
-						levelKeys.push(key);
-					}
-				}
-				if (levelKeys.length > maximumTilesPerRequest) {
-					throw new RangeError(
-						`Viewport High Resolution test supports at most ${maximumTilesPerRequest} tiles per zoom; Z${zoom} has ${levelKeys.length}.`
-					);
-				}
-				return levelKeys;
-			});
-		},
-		catch: (cause) =>
+	const invalid = (message: string) =>
+		Effect.fail(
 			new MapCaptureRunError({
-				message: String(cause),
+				message,
 				operation: "prepare",
 				recovery:
 					"Capture complete levels no larger than 8 x 8 tiles, or use the tiled Scene Capture backend.",
 				retrySafe: true,
 				nextStep: "fix_input"
 			})
-	});
+		);
+	const selected = new Set(args.keys.map(mapTileKeyId));
+	const zooms = [...new Set(args.keys.map((key) => key.zoom))].toSorted((a, b) => a - b);
+	const result: Array<ReadonlyArray<MapTileKey>> = [];
+	for (const zoom of zooms) {
+		const level = args.grid.levels[zoom];
+		if (level === undefined) return invalid(`Zoom ${zoom} is outside the plan grid.`);
+		const levelKeys: MapTileKey[] = [];
+		for (let row = 0; row < level.rows; row += 1) {
+			for (let column = 0; column < level.columns; column += 1) {
+				const key = { zoom, row, column };
+				if (!selected.has(mapTileKeyId(key)))
+					return invalid(
+						"Viewport High Resolution capture requires complete zoom levels."
+					);
+				levelKeys.push(key);
+			}
+		}
+		if (levelKeys.length > maximumTilesPerRequest)
+			return invalid(
+				`Viewport High Resolution test supports at most ${maximumTilesPerRequest} tiles per zoom; Z${zoom} has ${levelKeys.length}.`
+			);
+		result.push(levelKeys);
+	}
+	return Effect.succeed(result);
 }
 
 function captureFailure(args: {
@@ -548,11 +555,12 @@ function runMapCaptureWith(args: {
 				Effect.mapError(
 					(cause) =>
 						new MapCaptureRunError({
-							message: String(cause),
+							message: "The map capture run identity is not a safe identifier.",
 							operation: "prepare",
 							recovery: "Use a safe run identity of at most 128 characters.",
 							retrySafe: true,
-							nextStep: "fix_input"
+							nextStep: "fix_input",
+							cause
 						})
 				)
 			);
@@ -562,12 +570,13 @@ function runMapCaptureWith(args: {
 				Effect.mapError(
 					(cause) =>
 						new MapCaptureRunError({
-							message: String(cause),
+							message: `The correlation identity for map capture run ${runId} is not a safe identifier.`,
 							operation: "prepare",
 							recovery: "Use a safe correlation identity of at most 128 characters.",
 							runId,
 							retrySafe: true,
-							nextStep: "fix_input"
+							nextStep: "fix_input",
+							cause
 						})
 				)
 			);
@@ -654,13 +663,14 @@ function runMapCaptureWith(args: {
 						Effect.mapError(
 							(cause) =>
 								new MapCaptureRunError({
-									message: String(cause),
+									message: `Map capture run ${runId} failed while capturing batch ${input.batchIndex} (${input.batch.length} ${input.batch.length === 1 ? "tile" : "tiles"}).`,
 									operation: "capture",
 									recovery:
 										"Reconnect to the expected editor map and retry this run or tile subset.",
 									runId,
 									retrySafe: false,
-									nextStep: "reconcile"
+									nextStep: "reconcile",
+									cause
 								})
 						),
 						Effect.withSpan("camera.map_tile.capture_batch", {
@@ -745,19 +755,17 @@ function runMapCaptureWith(args: {
 								continue;
 							}
 							const bytes = stored;
-							const dimensions = yield* Effect.try({
-								try: () => readPngDimensions(bytes),
-								catch: (cause) =>
-									new MapCaptureRunError({
-										message: String(cause),
-										operation: "capture",
-										recovery:
-											"Quarantine the invalid staged artifact and retry its tile.",
-										runId,
-										retrySafe: false,
-										nextStep: "escalate"
-									})
-							});
+							const dimensions = readPngDimensions(bytes);
+							if (dimensions === undefined)
+								return yield* new MapCaptureRunError({
+									message: `Staged artifact for tile ${mapTileKeyId(key)} in map capture run ${runId} is not a PNG file.`,
+									operation: "capture",
+									recovery:
+										"Quarantine the invalid staged artifact and retry its tile.",
+									runId,
+									retrySafe: false,
+									nextStep: "escalate"
+								});
 							if (
 								dimensions.width !== plan.tilePixelSize ||
 								dimensions.height !== plan.tilePixelSize
@@ -835,13 +843,14 @@ function runMapCaptureWith(args: {
 					Effect.mapError(
 						(cause) =>
 							new MapCaptureRunError({
-								message: String(cause),
+								message: `Map capture run ${runId} could not release the editor viewport, camera and scene freeze.`,
 								operation: "publish",
 								recovery:
 									"Editor restoration failed; artifacts were not published.",
 								runId,
 								retrySafe: false,
-								nextStep: "escalate"
+								nextStep: "escalate",
+								cause
 							})
 					)
 				);
@@ -901,13 +910,14 @@ function runMapCaptureWith(args: {
 				Effect.mapError(
 					(cause) =>
 						new MapCaptureRunError({
-							message: String(cause),
+							message: `Map capture run ${runId} for plan ${plan.id} produced a tile pyramid manifest that fails its contract.`,
 							operation: "publish",
 							recovery:
 								"Inspect grid and artifact inventory invariants before retrying.",
 							runId,
 							retrySafe: false,
-							nextStep: "escalate"
+							nextStep: "escalate",
+							cause
 						})
 				)
 			);

@@ -4,7 +4,8 @@ import { dirname, join } from "node:path";
 import {
 	decodeCompanionCapabilityManifest,
 	EditorWindowActivationRequest,
-	EditorWindowActivationResult
+	EditorWindowActivationResult,
+	ErrorCauseFields
 } from "@ue-shed/protocol";
 import { RemoteControlClient } from "@ue-shed/unreal-connection";
 import { Context, Effect, Layer, Schema } from "effect";
@@ -12,7 +13,12 @@ import { isLoopbackEndpoint } from "./loopback-endpoint.js";
 
 export class EditorWindowActivationError extends Schema.TaggedError<EditorWindowActivationError>()(
 	"EditorWindowActivationError",
-	{ message: Schema.String, recovery: Schema.String, operation: Schema.String }
+	{
+		message: Schema.String,
+		recovery: Schema.String,
+		operation: Schema.String,
+		...ErrorCauseFields
+	}
 ) {}
 
 /** Optional local OS permission handoff; a remote editor must never receive a local PID grant. */
@@ -23,10 +29,11 @@ export class EditorForegroundPermission extends Context.Service<
 	}
 >()("@ue-shed/engine/EditorForegroundPermission") {}
 
-const failure = (operation: string, cause: unknown) =>
+const failure = (operation: string, message: string, cause?: unknown) =>
 	new EditorWindowActivationError({
+		...(cause === undefined ? undefined : { cause }),
 		operation,
-		message: String(cause),
+		message,
 		recovery: "Check the connected editor and compatible UE Shed Core plugin."
 	});
 
@@ -35,7 +42,15 @@ export const EditorForegroundPermissionLive = Layer.succeed(EditorForegroundPerm
 		if (process.platform !== "win32") return;
 		yield* Schema.decodeUnknownEffect(EditorWindowActivationRequest)({
 			expectedProcessId: processId
-		}).pipe(Effect.mapError((cause) => failure("grant.validate", cause)));
+		}).pipe(
+			Effect.mapError((cause) =>
+				failure(
+					"grant.validate",
+					`The foreground permission request for process ${processId} is invalid.`,
+					cause
+				)
+			)
+		);
 		const result = yield* Effect.tryPromise({
 			try: (signal) =>
 				new Promise<string>((resolve, reject) => {
@@ -53,7 +68,12 @@ export const EditorForegroundPermissionLive = Layer.succeed(EditorForegroundPerm
 						(error, stdout) => (error ? reject(error) : resolve(stdout.trim()))
 					);
 				}),
-			catch: (cause) => failure("grant", cause)
+			catch: (cause) =>
+				failure(
+					"grant",
+					`The process supervisor could not grant foreground permission to process ${processId}.`,
+					cause
+				)
 		});
 		if (result !== "granted")
 			yield* Effect.logDebug("Foreground permission was not granted", { result });
@@ -88,7 +108,15 @@ export const EditorWindowActivationLive = Layer.effect(
 					})
 					.pipe(
 						Effect.flatMap(decodeCompanionCapabilityManifest),
-						Effect.mapError((cause) => failure("negotiate", cause))
+						Effect.mapError((cause) =>
+							failure(
+								"negotiate",
+								Schema.isSchemaError(cause)
+									? `The editor at ${endpoint} returned a capability manifest that does not match the companion contract.`
+									: `Could not read the capability manifest from the editor at ${endpoint}.`,
+								cause
+							)
+						)
 					);
 				if (
 					!manifest.capabilities.includes("editor.window-activation.v1") ||
@@ -127,7 +155,15 @@ export const EditorWindowActivationLive = Layer.effect(
 					})
 					.pipe(
 						Effect.flatMap(Schema.decodeUnknownEffect(EditorWindowActivationResult)),
-						Effect.mapError((cause) => failure("activate", cause))
+						Effect.mapError((cause) =>
+							failure(
+								"activate",
+								Schema.isSchemaError(cause)
+									? `The editor at ${endpoint} returned a window activation result that does not match the contract.`
+									: `The window activation request to the editor at ${endpoint} failed.`,
+								cause
+							)
+						)
 					);
 				if (result.processId !== processId)
 					return yield* Effect.fail(

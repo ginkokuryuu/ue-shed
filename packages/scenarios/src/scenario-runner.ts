@@ -1,5 +1,6 @@
 import {
 	decodeCompanionCapabilityManifest,
+	ErrorCauseFields,
 	type CompanionCapabilityManifest
 } from "@ue-shed/protocol";
 import { EditorPlaySession, type EditorPlaySessionError } from "@ue-shed/engine";
@@ -39,7 +40,8 @@ export class ScenarioRunnerError extends Schema.TaggedError<ScenarioRunnerError>
 		message: Schema.String,
 		operation: Schema.String,
 		recovery: Schema.String,
-		retrySafe: Schema.Boolean
+		retrySafe: Schema.Boolean,
+		...ErrorCauseFields
 	}
 ) {}
 
@@ -92,7 +94,8 @@ function transportError(
 		operation,
 		recovery:
 			"Confirm that the selected Unreal Editor and Remote Control endpoint are reachable.",
-		retrySafe: "retrySafe" in cause ? cause.retrySafe : false
+		retrySafe: "retrySafe" in cause ? cause.retrySafe : false,
+		cause
 	});
 }
 
@@ -100,11 +103,12 @@ function contractError(endpoint: string, operation: string, cause: unknown): Sce
 	return new ScenarioRunnerError({
 		code: "contract_failure",
 		endpoint,
-		message: `The scenario producer returned an invalid response: ${String(cause)}`,
+		message: `The scenario producer at ${endpoint} returned a ${operation} response that does not match the scenario contract.`,
 		operation,
 		recovery:
 			"Update UE Shed so the client and Unreal scenario capability use compatible contracts.",
-		retrySafe: false
+		retrySafe: false,
+		cause
 	});
 }
 
@@ -394,11 +398,13 @@ export const ScenarioRunnerLive = Layer.effect(
 					new ScenarioRunnerError({
 						code: "invalid_document",
 						endpoint,
-						message: String(cause),
+						message:
+							"The scenario document cannot be turned into a live Movement Gym execution request.",
 						operation: "scenario.request",
 						recovery:
 							"Use the shipped pre-evaluation Movement Gym document without unsupported tracks.",
-						retrySafe: false
+						retrySafe: false,
+						cause
 					})
 			});
 			const startOperation = "scenario.start";

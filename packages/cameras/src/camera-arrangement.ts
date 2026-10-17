@@ -1,5 +1,5 @@
 import { CameraRenderPolicy } from "./camera-render-schema.js";
-import { ErrorGuidanceFields } from "@ue-shed/protocol";
+import { ErrorCauseFields, ErrorGuidanceFields } from "@ue-shed/protocol";
 import { Schema } from "effect";
 import {
 	CameraActorEntry,
@@ -749,7 +749,8 @@ export class CameraArrangementError extends Schema.TaggedError<CameraArrangement
 			"storage",
 			"operation_reused"
 		]),
-		...ErrorGuidanceFields
+		...ErrorGuidanceFields,
+		...ErrorCauseFields
 	}
 ) {}
 /**

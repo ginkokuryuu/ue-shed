@@ -1,7 +1,8 @@
 import { Effect, Schema } from "effect";
-import { ErrorGuidanceFields } from "@ue-shed/protocol";
+import { ErrorCauseFields, ErrorGuidanceFields } from "@ue-shed/protocol";
 import { recordReviewAssessment } from "@ue-shed/observability";
 import { RemoteControlClient, RemoteControlClientError } from "@ue-shed/unreal-connection";
+import { CameraRenderError } from "./camera-render.js";
 import { captureRenderedReviewView } from "./review-render.js";
 import { ReviewCaptureRequestCurrent } from "./review-schema.js";
 import {
@@ -16,29 +17,42 @@ const reviewLibraryPath = "/Script/UEShedCamerasEditor.Default__UEShedCameraRevi
 
 export class ReviewCaptureConnectionError extends Schema.TaggedError<ReviewCaptureConnectionError>()(
 	"ReviewCaptureConnectionError",
-	{ ...ErrorGuidanceFields, endpoint: Schema.String }
+	{ ...ErrorGuidanceFields, ...ErrorCauseFields, endpoint: Schema.String }
 ) {}
 
 function connectionError(
 	endpoint: string,
 	cause: RemoteControlClientError | unknown
 ): ReviewCaptureConnectionError {
-	if (cause instanceof RemoteControlClientError) {
+	// These already carry a classified message and truthful guidance; keep both.
+	if (cause instanceof RemoteControlClientError || cause instanceof CameraRenderError) {
 		return new ReviewCaptureConnectionError({
 			endpoint,
 			message: cause.message,
 			nextStep: cause.nextStep,
 			recovery: cause.recovery,
-			retrySafe: cause.retrySafe
+			retrySafe: cause.retrySafe,
+			cause
 		});
 	}
+	const recovery =
+		"Update the Core and Cameras plugins together so the capture response matches this UE Shed version.";
+	if (Schema.isSchemaError(cause))
+		return new ReviewCaptureConnectionError({
+			endpoint,
+			message: `A review capture request or response at ${endpoint} does not match the review capture contract.`,
+			nextStep: "escalate",
+			recovery,
+			retrySafe: false,
+			cause
+		});
 	return new ReviewCaptureConnectionError({
 		endpoint,
-		message: String(cause),
+		message: `Review capture at ${endpoint} failed unexpectedly.`,
 		nextStep: "escalate",
-		recovery:
-			"Update the Core and Cameras plugins together so the capture response matches this UE Shed version.",
-		retrySafe: false
+		recovery,
+		retrySafe: false,
+		cause
 	});
 }
 

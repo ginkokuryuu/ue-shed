@@ -75,10 +75,11 @@ export function resolveScanTarget(
 				message:
 					cause instanceof ScanTargetError
 						? cause.message
-						: `Could not resolve a scan target from ${path}: ${String(cause)}`,
+						: `Could not resolve a scan target from ${path}.`,
 				path,
 				retrySafe: false,
-				...assetReaderGuidance("discovery", false)
+				...assetReaderGuidance("discovery", false),
+				...(cause instanceof ScanTargetError ? undefined : { cause })
 			})
 	}).pipe(Effect.withSpan("unreal_assets.resolve_scan_target"));
 }

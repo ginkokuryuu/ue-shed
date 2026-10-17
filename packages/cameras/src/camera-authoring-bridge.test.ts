@@ -487,6 +487,6 @@ describe("replaceable camera bridge coordinator", () => {
 			await Effect.runPromise(
 				invalid.call({ version: 1, operation: "discover" }).pipe(Effect.flip)
 			)
-		).toMatchObject({ code: "protocol" });
+		).toMatchObject({ code: "manifest_invalid" });
 	});
 });

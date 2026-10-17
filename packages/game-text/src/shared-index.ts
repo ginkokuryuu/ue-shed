@@ -21,6 +21,7 @@ import {
 import {
 	SnapshotStore,
 	SnapshotStoreError,
+	snapshotStoreFailure,
 	snapshotStoreNodeLayer,
 	snapshotStoreDirectory,
 	type SnapshotStoreOptions,
@@ -64,12 +65,11 @@ const boundary = <A>(operation: string, run: () => Promise<A>) =>
 		catch: (cause): Failure =>
 			cause instanceof SnapshotFormatError || cause instanceof SnapshotStoreError
 				? cause
-				: new SnapshotStoreError({
+				: snapshotStoreFailure(
 						operation,
-						code: "unavailable",
-						message: String(cause),
-						recovery: "Reopen or rebuild the disposable shared index."
-					})
+						cause,
+						"Reopen or rebuild the disposable shared index."
+					)
 	}).pipe(Effect.uninterruptible);
 const initial = (): SharedIndexManifest => ({
 	version: 2,

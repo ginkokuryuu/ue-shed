@@ -3,7 +3,7 @@ import { createReadStream } from "node:fs";
 import { lstat, mkdir, open, readFile, realpath, stat } from "node:fs/promises";
 import { dirname, isAbsolute, relative, resolve, sep } from "node:path";
 import { createGunzip } from "node:zlib";
-import { Effect, Schema } from "effect";
+import { Effect, Predicate, Schema } from "effect";
 import {
 	PluginInstallCancelled,
 	ArtifactDigestMismatch,
@@ -57,13 +57,33 @@ function abortError(signal: AbortSignal, releaseVersion: string, stage: string) 
 		: undefined;
 }
 
+/** Node errno code of a filesystem failure, when the cause carries one. */
+function errnoCode(cause: unknown): string | undefined {
+	return cause instanceof Object && "code" in cause && Predicate.isString(cause.code)
+		? cause.code
+		: undefined;
+}
+
+/** Classified storage message: what failed for which release, without the raw cause text. */
+function storageMessage(releaseVersion: string, operation: string, cause: unknown): string {
+	const code = errnoCode(cause);
+	if (code === "EACCES" || code === "EPERM") {
+		return `${operation} for plugin release ${releaseVersion} was denied permission.`;
+	}
+	if (code === "ENOSPC") {
+		return `${operation} for plugin release ${releaseVersion} ran out of disk space.`;
+	}
+	return `${operation} failed for plugin release ${releaseVersion}.`;
+}
+
 function storageFailure(releaseVersion: string, operation: string, cause: unknown) {
 	return new PluginStorageFailure({
-		message: `${operation} failed: ${String(cause)}`,
+		message: storageMessage(releaseVersion, operation, cause),
 		operation,
 		recovery: "Check cache permissions and free space, then retry.",
 		releaseVersion,
-		retrySafe: true
+		retrySafe: true,
+		cause
 	});
 }
 

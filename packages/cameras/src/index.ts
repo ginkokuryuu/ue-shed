@@ -1,6 +1,7 @@
 import {
 	decodeCameraScheduleConfig,
 	decodeCameraStatus,
+	ErrorCauseFields,
 	ErrorGuidanceFields,
 	type CameraScheduleConfig,
 	type CameraStatus
@@ -66,6 +67,7 @@ export interface CameraFeedMetrics {
 
 export class CameraFeedError extends Schema.TaggedError<CameraFeedError>()("CameraFeedError", {
 	...ErrorGuidanceFields,
+	...ErrorCauseFields,
 	operation: Schema.Literal("listen"),
 	pipeName: Schema.String
 }) {}
@@ -285,7 +287,12 @@ function listen(server: Server, pipeName: string): Effect.Effect<void, CameraFee
 			}),
 		catch: (cause) =>
 			new CameraFeedError({
-				message: String(cause),
+				message: `Could not listen on camera feed pipe ${pipeName}${
+					cause instanceof Error && "code" in cause && cause.code === "EADDRINUSE"
+						? " because another process is already listening on it"
+						: ""
+				}.`,
+				cause,
 				nextStep: "retry",
 				operation: "listen",
 				pipeName,
@@ -431,6 +438,7 @@ export class CameraControlError extends Schema.TaggedError<CameraControlError>()
 	"CameraControlError",
 	{
 		...ErrorGuidanceFields,
+		...ErrorCauseFields,
 		endpoint: Schema.String,
 		operation: Schema.Literals(["configure", "status"]),
 		status: Schema.optional(Schema.Number)
@@ -450,17 +458,19 @@ function cameraControlError(
 			operation,
 			recovery: cause.recovery,
 			retrySafe: cause.retrySafe,
+			cause,
 			...(cause.status === undefined ? undefined : { status: cause.status })
 		});
 	}
 	return new CameraControlError({
 		endpoint,
-		message: `Invalid camera ${operation} response: ${String(cause)}`,
+		message: `The editor at ${endpoint} returned a camera ${operation} response that does not match this UE Shed version.`,
 		nextStep: "escalate",
 		operation,
 		recovery:
 			"Update the Core and Cameras plugins together so their response matches this UE Shed version.",
-		retrySafe: false
+		retrySafe: false,
+		cause
 	});
 }
 

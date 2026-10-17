@@ -2,6 +2,7 @@ import {
 	decodeCompanionCapabilityManifest,
 	decodeEditorPlaySessionCommandResponse,
 	decodeEditorPlaySessionStateResponse,
+	ErrorCauseFields,
 	type EditorPlaySessionCommand,
 	type EditorPlaySessionCommandResponse,
 	type EditorPlaySessionMode,
@@ -21,7 +22,8 @@ export class EditorPlaySessionError extends Schema.TaggedError<EditorPlaySession
 		message: Schema.String,
 		operation: Schema.String,
 		recovery: Schema.String,
-		retrySafe: Schema.Boolean
+		retrySafe: Schema.Boolean,
+		...ErrorCauseFields
 	}
 ) {}
 
@@ -67,7 +69,8 @@ function transportError(
 		message: cause.message,
 		operation,
 		recovery: "Confirm that Unreal Editor and Remote Control are reachable, then retry.",
-		retrySafe: cause.retrySafe
+		retrySafe: cause.retrySafe,
+		cause
 	});
 }
 
@@ -79,10 +82,11 @@ function contractError(
 	return new EditorPlaySessionError({
 		code: "contract_failure",
 		endpoint,
-		message: `The editor returned an invalid play-session response: ${String(cause)}`,
+		message: `The editor at ${endpoint} returned a ${operation} response that does not match the play-session contract.`,
 		operation,
 		recovery: "Update UE Shed so the client and Unreal companion use compatible contracts.",
-		retrySafe: false
+		retrySafe: false,
+		cause
 	});
 }
 

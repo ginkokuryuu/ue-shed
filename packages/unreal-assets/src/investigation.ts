@@ -1,4 +1,4 @@
-import { ErrorGuidanceFields } from "@ue-shed/protocol";
+import { ErrorCauseFields, ErrorGuidanceFields } from "@ue-shed/protocol";
 import { Schema } from "effect";
 
 /** Generation is null for a direct scan that did not use a persistent Project Index. */
@@ -13,7 +13,7 @@ export const InvestigationFormat = Schema.Literals(["json", "csv"]);
 export type InvestigationFormat = Schema.Schema.Type<typeof InvestigationFormat>;
 export class InvestigationError extends Schema.TaggedError<InvestigationError>()(
 	"InvestigationError",
-	ErrorGuidanceFields
+	{ ...ErrorGuidanceFields, ...ErrorCauseFields }
 ) {}
 export const InvestigationFailure = Schema.Struct({
 	status: Schema.Literal("failed"),

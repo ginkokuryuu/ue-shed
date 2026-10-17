@@ -46,10 +46,11 @@ interface ExtractionProgress {
 export class TextCorpusScanError extends Schema.TaggedError<TextCorpusScanError>()(
 	"TextCorpusScanError",
 	{
-		code: Schema.Literals(["invalid_project", "scan_limit_exceeded"]),
+		code: Schema.Literals(["invalid_project", "invalid_options", "scan_limit_exceeded"]),
 		message: Schema.String,
 		recovery: Schema.String,
-		retrySafe: Schema.Boolean
+		retrySafe: Schema.Boolean,
+		cause: Schema.optionalKey(Schema.Defect())
 	}
 ) {}
 
@@ -1067,10 +1068,11 @@ export const TextCorpusServiceLive = Layer.effect(
 				Effect.mapError(
 					(cause) =>
 						new TextCorpusScanError({
-							code: "scan_limit_exceeded",
-							message: `Invalid text corpus scan options: ${String(cause)}`,
+							code: "invalid_options",
+							message: "The text corpus scan options do not match their schema.",
 							recovery: "Provide a project root and positive scan limits.",
-							retrySafe: false
+							retrySafe: false,
+							cause
 						})
 				)
 			);
@@ -1084,10 +1086,11 @@ export const TextCorpusServiceLive = Layer.effect(
 				Effect.mapError(
 					(cause) =>
 						new TextCorpusScanError({
-							code: "scan_limit_exceeded",
-							message: `Invalid text corpus scan options: ${String(cause)}`,
+							code: "invalid_options",
+							message: "The text corpus scan options do not match their schema.",
 							recovery: "Provide a project root and positive scan limits.",
-							retrySafe: false
+							retrySafe: false,
+							cause
 						})
 				)
 			);

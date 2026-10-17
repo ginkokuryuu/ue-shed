@@ -6,7 +6,8 @@ import {
 	RemoteControlClientError,
 	type RemoteControlClientApi
 } from "@ue-shed/unreal-connection";
-import { ErrorGuidanceFields } from "@ue-shed/protocol";
+import { ErrorCauseFields, ErrorGuidanceFields } from "@ue-shed/protocol";
+import { fileFailureReason } from "./file-failure.js";
 import { Context, Effect, Layer, Schema } from "effect";
 import { captureReviewView } from "./review-live.js";
 import {
@@ -40,6 +41,7 @@ export class ReviewAuthoringConnectionError extends Schema.TaggedError<ReviewAut
 	"ReviewAuthoringConnectionError",
 	{
 		...ErrorGuidanceFields,
+		...ErrorCauseFields,
 		endpoint: Schema.String,
 		operation: Schema.Literals(["inspect_selection", "inspect_subject", "preview_candidate"])
 	}
@@ -57,16 +59,18 @@ function reviewConnectionError(
 			nextStep: cause.nextStep,
 			operation,
 			recovery: cause.recovery,
-			retrySafe: cause.retrySafe
+			retrySafe: cause.retrySafe,
+			cause
 		});
 	}
 	return new ReviewAuthoringConnectionError({
 		endpoint,
-		message: String(cause),
+		message: `Map Review ${operation} at ${endpoint} failed unexpectedly.`,
 		nextStep: "escalate",
 		operation,
 		recovery: "Verify the Map Review editor capability and retry the operation.",
-		retrySafe: false
+		retrySafe: false,
+		cause
 	});
 }
 
@@ -147,11 +151,12 @@ export const ReviewAuthoringLive = Layer.effect(
 					(cause) =>
 						new ReviewAuthoringConnectionError({
 							endpoint,
-							message: String(cause),
+							message: `The editor at ${endpoint} returned a selection inspection response that does not match the Map Review contract.`,
 							operation: "inspect_selection",
 							recovery: "Verify the Map Review editor capability contract.",
 							retrySafe: true,
-							nextStep: "escalate"
+							nextStep: "escalate",
+							cause
 						})
 				),
 				Effect.withSpan("camera.review.authoring.selection.inspect")
@@ -167,12 +172,14 @@ export const ReviewAuthoringLive = Layer.effect(
 					(cause) =>
 						new ReviewAuthoringConnectionError({
 							endpoint: args.endpoint,
-							message: `Invalid persisted subject locator: ${String(cause)}`,
+							message:
+								"The persisted subject locator does not match the subject locator contract.",
 							operation: "inspect_subject",
 							recovery:
 								"Discard the malformed authoring session and create a new one.",
 							retrySafe: true,
-							nextStep: "fix_input"
+							nextStep: "fix_input",
+							cause
 						})
 				)
 			);
@@ -193,12 +200,13 @@ export const ReviewAuthoringLive = Layer.effect(
 					(cause) =>
 						new ReviewAuthoringConnectionError({
 							endpoint: args.endpoint,
-							message: String(cause),
+							message: `The editor at ${args.endpoint} returned a subject inspection response for ${subject.kind === "actor_guid" ? `actor ${subject.actorGuid}` : subject.actorPath} that does not match the Map Review contract.`,
 							operation: "inspect_subject",
 							recovery:
 								"Verify the persisted subject and Map Review editor capability.",
 							retrySafe: true,
-							nextStep: "escalate"
+							nextStep: "escalate",
+							cause
 						})
 				),
 				Effect.withSpan("camera.review.authoring.subject.inspect")
@@ -243,7 +251,8 @@ export const ReviewAuthoringLive = Layer.effect(
 							recovery:
 								"Verify the Map Review editor capability and retry the preview.",
 							retrySafe: cause.retrySafe,
-							nextStep: cause.nextStep
+							nextStep: cause.nextStep,
+							cause
 						})
 				)
 			);
@@ -291,11 +300,12 @@ export const ReviewAuthoringLive = Layer.effect(
 				catch: (cause) =>
 					new ReviewAuthoringConnectionError({
 						endpoint: args.endpoint,
-						message: String(cause),
+						message: `Could not read the staged preview for candidate ${args.candidate.id} because ${fileFailureReason(cause)}.`,
 						operation: "preview_candidate",
 						recovery: "Check the Unreal staging directory and retry the preview.",
 						retrySafe: true,
-						nextStep: "retry"
+						nextStep: "retry",
+						cause
 					})
 			}).pipe(
 				Effect.withSpan("camera.review.authoring.candidate.preview", {

@@ -1,6 +1,6 @@
 import { CameraVisibilityList } from "./camera-visibility.js";
 import { RemoteControlClient, RemoteControlClientError } from "@ue-shed/unreal-connection";
-import { ErrorGuidanceFields } from "@ue-shed/protocol";
+import { ErrorCauseFields, ErrorGuidanceFields } from "@ue-shed/protocol";
 import { Clock, Duration, Effect, Schema } from "effect";
 import {
 	FramingCandidateId,
@@ -19,6 +19,7 @@ export class ProvisionedCameraError extends Schema.TaggedError<ProvisionedCamera
 	"ProvisionedCameraError",
 	{
 		...ErrorGuidanceFields,
+		...ErrorCauseFields,
 		operation: Schema.Literals(["ensure_cameras", "clear_cameras", "await_frame", "configure"]),
 		/** Set when the connected plugin cannot honour a requested option. */
 		code: Schema.optionalKey(Schema.Literal("unsupported_capability"))
@@ -203,7 +204,9 @@ export type ProvisionedCameraFrame = Schema.Schema.Type<typeof ProvisionedCamera
 function provisionedCameraError(
 	operation: ProvisionedCameraError["operation"],
 	cause: RemoteControlClientError | unknown,
-	recovery: string
+	recovery: string,
+	/** Which side of the exchange failed to decode: the caller's request or the editor's response. */
+	subject: "request" | "response" = "response"
 ): ProvisionedCameraError {
 	if (cause instanceof RemoteControlClientError) {
 		return new ProvisionedCameraError({
@@ -211,15 +214,35 @@ function provisionedCameraError(
 			nextStep: cause.nextStep,
 			operation,
 			recovery,
-			retrySafe: cause.retrySafe
+			retrySafe: cause.retrySafe,
+			cause
 		});
 	}
+	if (Schema.isSchemaError(cause))
+		return subject === "request"
+			? new ProvisionedCameraError({
+					message: `The provisioned camera request for ${operation} does not match the provisioning contract.`,
+					nextStep: "fix_input",
+					operation,
+					recovery,
+					retrySafe: true,
+					cause
+				})
+			: new ProvisionedCameraError({
+					message: `The editor response to ${operation} does not match the provisioning contract.`,
+					nextStep: "escalate",
+					operation,
+					recovery,
+					retrySafe: false,
+					cause
+				});
 	return new ProvisionedCameraError({
-		message: String(cause),
+		message: `Provisioned camera operation ${operation} failed unexpectedly.`,
 		nextStep: "escalate",
 		operation,
 		recovery,
-		retrySafe: false
+		retrySafe: false,
+		cause
 	});
 }
 
@@ -264,7 +287,8 @@ export function ensureProvisionedCameras(
 				provisionedCameraError(
 					"ensure_cameras",
 					cause,
-					"Provide one through 32 valid temporary camera requests."
+					"Provide one through 32 valid temporary camera requests.",
+					"request"
 				)
 			)
 		);

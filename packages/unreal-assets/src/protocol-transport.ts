@@ -679,10 +679,14 @@ export function mapProtocolFailure(
 		...(code === undefined ? undefined : { code }),
 		kind: "process",
 		operation,
-		message: cause instanceof Error ? cause.message : String(cause),
+		message:
+			code === undefined
+				? `The saved-asset reader process failed during ${operation}.`
+				: `The saved-asset reader process failed during ${operation} (${code}).`,
 		path,
 		retrySafe: false,
-		...assetReaderGuidance("process", false)
+		...assetReaderGuidance("process", false),
+		cause
 	});
 }
 

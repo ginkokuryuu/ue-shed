@@ -24,6 +24,7 @@ import { fingerprintTable } from "./fingerprint.js";
 import {
 	AuthoringApplyRequest,
 	AuthoringSaveRequest,
+	ErrorCauseFields,
 	type AuthoringApplyResult,
 	type AuthoringSaveResult,
 	type AuthoringTableSnapshot
@@ -113,7 +114,8 @@ export class SessionCorruptError extends Schema.TaggedError<SessionCorruptError>
 		sessionId: Schema.String,
 		quarantinePath: Schema.String,
 		message: Schema.String,
-		recovery: Schema.String
+		recovery: Schema.String,
+		...ErrorCauseFields
 	}
 ) {}
 
@@ -123,14 +125,23 @@ export class AuthoringSessionStorageError extends Schema.TaggedError<AuthoringSe
 		operation: Schema.String,
 		sessionId: Schema.optional(Schema.String),
 		message: Schema.String,
-		recovery: Schema.String
+		recovery: Schema.String,
+		...ErrorCauseFields
 	}
 ) {}
 
 export class AuthoringSessionTransitionError extends Schema.TaggedError<AuthoringSessionTransitionError>()(
 	"AuthoringSessionTransitionError",
-	{ sessionId: Schema.String, message: Schema.String, recovery: Schema.String }
+	{
+		sessionId: Schema.String,
+		message: Schema.String,
+		recovery: Schema.String,
+		...ErrorCauseFields
+	}
 ) {}
+
+/** An authored refusal from a session transition; its message is classified, not a raw cause. */
+class SessionTransitionRejected extends Error {}
 
 export type AuthoringSessionServiceError =
 	| InvalidSessionIdError
@@ -145,7 +156,8 @@ export class AuthoringSessionLiveError extends Schema.TaggedError<AuthoringSessi
 	{
 		message: Schema.String,
 		operation: Schema.Literals(["apply", "lookup_apply", "save"]),
-		retrySafe: Schema.Boolean
+		retrySafe: Schema.Boolean,
+		...ErrorCauseFields
 	}
 ) {}
 
@@ -167,14 +179,34 @@ function liveError(
 			? cause.retrySafe
 			: false;
 	return new AuthoringSessionLiveError({
-		message: cause instanceof Error ? cause.message : String(cause),
+		message:
+			cause instanceof Error
+				? cause.message
+				: `The live authoring ${operation} request failed.`,
 		operation,
-		retrySafe
+		retrySafe,
+		cause
 	});
 }
 
 function hasErrorCode(cause: unknown, code: string): boolean {
 	return cause instanceof Object && "code" in cause && cause.code === code;
+}
+
+/** Classified session-storage message: the operation, session and directory, never the raw cause. */
+function storageMessage(
+	operation: string,
+	target: string,
+	storageRoot: string,
+	cause: unknown
+): string {
+	if (hasErrorCode(cause, "EACCES") || hasErrorCode(cause, "EPERM")) {
+		return `Permission was denied to ${operation} ${target} in ${storageRoot}.`;
+	}
+	if (hasErrorCode(cause, "ENOSPC")) {
+		return `The disk is full; could not ${operation} ${target} in ${storageRoot}.`;
+	}
+	return `Could not ${operation} ${target} in ${storageRoot}.`;
 }
 
 export function authoringSessionLivePortLayer<E>(
@@ -449,7 +481,13 @@ export function authoringSessionRepositoryLayer(
 					},
 					catch: (cause) =>
 						new AuthoringSessionStorageError({
-							message: String(cause),
+							cause,
+							message: storageMessage(
+								"write",
+								`authoring session ${document.draft.id}`,
+								storageRoot,
+								cause
+							),
 							operation: "persist",
 							recovery: "Check that the project session directory is writable.",
 							sessionId: document.draft.id
@@ -470,7 +508,13 @@ export function authoringSessionRepositoryLayer(
 									sessionId
 								})
 							: new AuthoringSessionStorageError({
-									message: String(cause),
+									cause,
+									message: storageMessage(
+										"read",
+										`authoring session ${sessionId}`,
+										storageRoot,
+										cause
+									),
 									operation: "read",
 									recovery: "Check access to the project session directory.",
 									sessionId
@@ -493,7 +537,13 @@ export function authoringSessionRepositoryLayer(
 					},
 					catch: (cause) =>
 						new AuthoringSessionStorageError({
-							message: String(cause),
+							cause,
+							message: storageMessage(
+								"check for",
+								`authoring session ${sessionId}`,
+								storageRoot,
+								cause
+							),
 							operation: "create",
 							recovery: "Check access to the project session directory.",
 							sessionId
@@ -509,7 +559,13 @@ export function authoringSessionRepositoryLayer(
 					},
 					catch: (cause) =>
 						new AuthoringSessionStorageError({
-							message: String(cause),
+							cause,
+							message: storageMessage(
+								"list",
+								"authoring sessions",
+								storageRoot,
+								cause
+							),
 							operation: "list",
 							recovery: "Check access to the project session directory."
 						})
@@ -529,14 +585,24 @@ export function authoringSessionRepositoryLayer(
 					try: () => rename(pathFor(sessionId), quarantinePath),
 					catch: (renameCause) =>
 						new AuthoringSessionStorageError({
-							message: String(renameCause),
+							cause: renameCause,
+							message: storageMessage(
+								"quarantine",
+								`malformed authoring session ${sessionId}`,
+								storageRoot,
+								renameCause
+							),
 							operation: "quarantine",
 							recovery: "Move the malformed session aside, then retry.",
 							sessionId
 						})
 				});
 				return yield* new SessionCorruptError({
-					message: `Session ${sessionId} is malformed: ${String(cause)}`,
+					cause,
+					message:
+						cause instanceof SyntaxError
+							? `Session ${sessionId} is not valid JSON and was moved to ${quarantinePath}.`
+							: `Session ${sessionId} does not match the authoring session schema and was moved to ${quarantinePath}.`,
 					quarantinePath,
 					recovery: "Inspect the quarantined file or create a new session.",
 					sessionId
@@ -556,7 +622,13 @@ export function authoringSessionRepositoryLayer(
 									sessionId
 								})
 							: new AuthoringSessionStorageError({
-									message: String(cause),
+									cause,
+									message: storageMessage(
+										"delete",
+										`authoring session ${sessionId}`,
+										storageRoot,
+										cause
+									),
 									operation: "discard",
 									recovery: "Check access to the project session directory.",
 									sessionId
@@ -673,7 +745,11 @@ function makeAuthoringSessionServiceEffect(): Effect.Effect<
 										cause instanceof DraftIntentError
 											? cause
 											: new AuthoringSessionTransitionError({
-													message: String(cause),
+													cause,
+													message:
+														cause instanceof SessionTransitionRejected
+															? cause.message
+															: `Authoring session ${sessionId} could not apply the requested change.`,
 													recovery:
 														"Correct the rejected intent and retry the complete gesture.",
 													sessionId
@@ -690,7 +766,7 @@ function makeAuthoringSessionServiceEffect(): Effect.Effect<
 
 		const requireIdle = (document: AuthoringSessionDocument): void => {
 			if (document.pendingOperation.kind !== "none") {
-				throw new Error(
+				throw new SessionTransitionRejected(
 					`Session has an unresolved ${document.pendingOperation.kind} operation; reconcile it first`
 				);
 			}
@@ -702,7 +778,8 @@ function makeAuthoringSessionServiceEffect(): Effect.Effect<
 					try: () => reviewAuthoringSession(document),
 					catch: (cause) =>
 						new AuthoringSessionTransitionError({
-							message: `Session review failed: ${String(cause)}`,
+							cause,
+							message: `Session ${document.draft.id} review could not be derived.`,
 							recovery:
 								"Discard the malformed command group or restore the session from a valid backup.",
 							sessionId: document.draft.id
@@ -745,7 +822,9 @@ function makeAuthoringSessionServiceEffect(): Effect.Effect<
 			(sessionId: string, message: string) =>
 				update(sessionId, (document, timestamp) => {
 					if (document.pendingOperation.kind !== "apply") {
-						throw new Error("Session has no pending Apply operation");
+						throw new SessionTransitionRejected(
+							"Session has no pending Apply operation"
+						);
 					}
 					return {
 						...document,
@@ -762,7 +841,9 @@ function makeAuthoringSessionServiceEffect(): Effect.Effect<
 			(sessionId: string, result: AuthoringApplyResult) =>
 				update(sessionId, (document, timestamp) => {
 					if (document.pendingOperation.kind !== "apply") {
-						throw new Error("Session has no pending Apply operation");
+						throw new SessionTransitionRejected(
+							"Session has no pending Apply operation"
+						);
 					}
 					return {
 						...document,
@@ -801,7 +882,9 @@ function makeAuthoringSessionServiceEffect(): Effect.Effect<
 			(sessionId: string, message: string) =>
 				update(sessionId, (document, timestamp) => {
 					if (document.pendingOperation.kind !== "save") {
-						throw new Error("Session has no pending Save operation");
+						throw new SessionTransitionRejected(
+							"Session has no pending Save operation"
+						);
 					}
 					return {
 						...document,
@@ -818,7 +901,9 @@ function makeAuthoringSessionServiceEffect(): Effect.Effect<
 			(sessionId: string, result: AuthoringSaveResult) =>
 				update(sessionId, (document, timestamp) => {
 					if (document.pendingOperation.kind !== "save") {
-						throw new Error("Session has no pending Save operation");
+						throw new SessionTransitionRejected(
+							"Session has no pending Save operation"
+						);
 					}
 					return {
 						...document,

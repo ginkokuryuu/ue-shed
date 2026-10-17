@@ -29,7 +29,7 @@ test("tagged errors in migrated packages carry the guidance fields", async () =>
 				'import { Schema } from "effect";',
 				'import { ErrorGuidanceFields } from "@ue-shed/protocol";',
 				"const Shared = { ...ErrorGuidanceFields, message: Schema.String };",
-				'export class Good extends Schema.TaggedError<Good>()("Good", { id: Schema.String, ...ErrorGuidanceFields }) {}',
+				'export class Good extends Schema.TaggedError<Good>()("Good", { id: Schema.String, ...ErrorGuidanceFields, ...ErrorCauseFields }) {}',
 				'export class Local extends Schema.TaggedError<Local>()("Local", Shared) {}',
 				'export class Bad extends Schema.TaggedError<Bad>()("Bad", { message: Schema.String, retrySafe: Schema.Boolean }) {}'
 			].join("\n")

@@ -3,12 +3,14 @@ import {
 	recordObservatoryPacket,
 	recordObservatoryReceiverReplacements
 } from "@ue-shed/observability";
+import { ErrorCauseFields } from "@ue-shed/protocol";
 import { RemoteControlClientError, type RemoteControlClientApi } from "@ue-shed/unreal-connection";
 import {
 	Context,
 	Duration,
 	Effect,
 	Layer,
+	Predicate,
 	PubSub,
 	Result,
 	Schedule,
@@ -73,7 +75,8 @@ export class ActorFeedError extends Schema.TaggedError<ActorFeedError>()("ActorF
 	message: Schema.String,
 	operation: Schema.Literals(["listen", "decode_limit"]),
 	pipeName: Schema.String,
-	retrySafe: Schema.Boolean
+	retrySafe: Schema.Boolean,
+	...ErrorCauseFields
 }) {}
 
 export interface ActorFeedApi {
@@ -130,13 +133,24 @@ function listen(server: Server, pipeName: string): Effect.Effect<void, ActorFeed
 				signal.addEventListener("abort", onAbort, { once: true });
 				server.listen(pipeName);
 			}),
-		catch: (cause) =>
-			new ActorFeedError({
-				message: String(cause),
+		catch: (cause) => {
+			const code =
+				cause instanceof Object && "code" in cause && Predicate.isString(cause.code)
+					? cause.code
+					: undefined;
+			return new ActorFeedError({
+				message:
+					code === "EADDRINUSE"
+						? `Actor feed pipe ${pipeName} is already in use by another listener.`
+						: code === "EACCES" || code === "EPERM"
+							? `Permission was denied to listen on actor feed pipe ${pipeName}.`
+							: `Could not listen on actor feed pipe ${pipeName}.`,
 				operation: "listen",
 				pipeName,
-				retrySafe: true
-			})
+				retrySafe: true,
+				cause
+			});
+		}
 	});
 }
 
@@ -299,7 +313,8 @@ export class ActorObservationControlError extends Schema.TaggedError<ActorObserv
 		message: Schema.String,
 		operation: Schema.Literals(["start", "stop", "status"]),
 		retrySafe: Schema.Boolean,
-		status: Schema.optional(Schema.Number)
+		status: Schema.optional(Schema.Number),
+		...ErrorCauseFields
 	}
 ) {}
 
@@ -392,14 +407,16 @@ function controlError(
 			message: cause.message,
 			operation,
 			retrySafe: cause.retrySafe,
-			...(cause.status === undefined ? undefined : { status: cause.status })
+			...(cause.status === undefined ? undefined : { status: cause.status }),
+			cause
 		});
 	}
 	return new ActorObservationControlError({
 		endpoint,
-		message: `Invalid observatory ${operation} response: ${String(cause)}`,
+		message: `The observatory ${operation} response from ${endpoint} does not match the actor observation contract.`,
 		operation,
-		retrySafe: false
+		retrySafe: false,
+		cause
 	});
 }
 
@@ -491,9 +508,10 @@ function buildCatalogFromReady(
 		catch: (cause) =>
 			new ActorObservationControlError({
 				endpoint,
-				message: `Invalid StartActorObservation catalog: ${String(cause)}`,
+				message: `The StartActorObservation catalog from ${endpoint} is invalid.`,
 				operation: "start",
-				retrySafe: false
+				retrySafe: false,
+				cause
 			})
 	});
 }

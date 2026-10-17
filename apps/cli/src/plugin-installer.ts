@@ -22,7 +22,8 @@ import {
 	validatePluginBundleManifest,
 	verifyPluginArtifact
 } from "@ue-shed/plugin-distribution";
-import { Effect, Schema } from "effect";
+import { ErrorCauseFields } from "@ue-shed/protocol";
+import { Effect, Predicate, Schema } from "effect";
 
 /**
  * This is the intentionally narrow filesystem/archive boundary consumed by the CLI. The manifest
@@ -33,7 +34,7 @@ export type PluginReleaseManifest = PluginBundleManifest;
 
 export class PluginInstallerError extends Schema.TaggedError<PluginInstallerError>()(
 	"PluginInstallerError",
-	{ message: Schema.String }
+	{ message: Schema.String, ...ErrorCauseFields }
 ) {}
 
 export interface PluginVerificationReport {
@@ -104,8 +105,23 @@ function isRecord(value: Schema.Json): value is Schema.JsonObject {
 	return Schema.is(JsonObject)(value);
 }
 
-function fail(message: string): never {
-	throw new Error(message);
+/** A classified installer refusal; its message is authored here, never copied from a cause. */
+class PluginInstallRejected extends Error {}
+
+function fail(message: string, cause?: unknown): never {
+	throw new PluginInstallRejected(message, cause === undefined ? undefined : { cause });
+}
+
+function errnoCode(cause: unknown): string | undefined {
+	return cause instanceof Object && "code" in cause && Predicate.isString(cause.code)
+		? cause.code
+		: undefined;
+}
+
+function recoverySuffix(cause: unknown): string {
+	return cause instanceof Object && "recovery" in cause && Predicate.isString(cause.recovery)
+		? ` Recovery: ${cause.recovery}`
+		: "";
 }
 
 function isGeneratedPluginPath(
@@ -128,7 +144,7 @@ function parseManifest(value: Schema.Json): PluginReleaseManifest {
 		if (cause instanceof PluginBundleManifestValidationError) {
 			fail(`${cause.message} Recovery: ${cause.recovery}`);
 		}
-		fail(`Plugin manifest is invalid: ${String(cause)}`);
+		fail("Plugin manifest does not match the plugin bundle manifest schema.", cause);
 	}
 }
 
@@ -138,7 +154,14 @@ async function readManifest(path: string): Promise<PluginReleaseManifest> {
 	try {
 		parsed = decodeJson(JSON.parse(await readFile(resolved, "utf8")));
 	} catch (cause) {
-		fail(`Could not read plugin manifest ${resolved}: ${String(cause)}`);
+		fail(
+			cause instanceof SyntaxError || Schema.isSchemaError(cause)
+				? `Plugin manifest ${resolved} is not valid JSON.`
+				: errnoCode(cause) === "ENOENT"
+					? `Plugin manifest ${resolved} does not exist.`
+					: `Could not read plugin manifest ${resolved}.`,
+			cause
+		);
 	}
 	return parseManifest(parsed);
 }
@@ -180,7 +203,7 @@ async function readJsonRecord(path: string): Promise<Schema.JsonObject> {
 	try {
 		return Schema.decodeUnknownSync(JsonObject)(JSON.parse(await readFile(path, "utf8")));
 	} catch (cause) {
-		fail(`Could not read JSON file ${path}: ${String(cause)}`);
+		fail(`Could not read JSON object file ${path}.`, cause);
 	}
 }
 
@@ -246,7 +269,12 @@ async function projectFileFor(
 	try {
 		details = await stat(resolved);
 	} catch (cause) {
-		fail(`Project path does not exist: ${resolved} (${String(cause)})`);
+		fail(
+			errnoCode(cause) === "ENOENT"
+				? `Project path does not exist: ${resolved}`
+				: `Could not read project path: ${resolved}`,
+			cause
+		);
 	}
 	if (details.isFile()) {
 		if (extname(resolved).toLowerCase() !== ".uproject")
@@ -273,7 +301,7 @@ async function updateProjectFile(
 	try {
 		parsed = decodeJson(JSON.parse(original));
 	} catch (cause) {
-		fail(`Project file is not valid JSON: ${projectFile} (${String(cause)})`);
+		fail(`Project file is not valid JSON: ${projectFile}`, cause);
 	}
 	if (!isRecord(parsed)) fail(`Project file must contain a JSON object: ${projectFile}`);
 	const existing = parsed.Plugins;
@@ -331,12 +359,9 @@ async function verifyArtifact(
 			})
 		);
 	} catch (cause) {
-		const recovery =
-			cause instanceof Object && "recovery" in cause
-				? ` Recovery: ${String(cause.recovery)}`
-				: "";
 		fail(
-			`Plugin artifact ${cause instanceof ArtifactDigestMismatch ? "checksum mismatch" : "verification failed"}: ${String(cause)}.${recovery}`
+			`Plugin artifact ${cause instanceof ArtifactDigestMismatch ? "checksum mismatch" : "verification failed"}: ${artifact}.${recoverySuffix(cause)}`,
+			cause
 		);
 	}
 	const validationRoot = await mkdtemp(join(tmpdir(), "ue-shed-plugin-verify-"));
@@ -351,11 +376,10 @@ async function verifyArtifact(
 			})
 		);
 	} catch (cause) {
-		const recovery =
-			cause instanceof Object && "recovery" in cause
-				? ` Recovery: ${String(cause.recovery)}`
-				: "";
-		fail(`Plugin artifact archive validation failed: ${String(cause)}.${recovery}`);
+		fail(
+			`Plugin artifact archive validation failed: ${artifact}.${recoverySuffix(cause)}`,
+			cause
+		);
 	} finally {
 		await rm(validationRoot, { force: true, recursive: true });
 	}
@@ -442,11 +466,10 @@ async function install(options: PluginInstallOptions): Promise<PluginInstallRepo
 				})
 			);
 		} catch (cause) {
-			const recovery =
-				cause instanceof Object && "recovery" in cause
-					? ` Recovery: ${String(cause.recovery)}`
-					: "";
-			fail(`Plugin artifact extraction failed: ${String(cause)}.${recovery}`);
+			fail(
+				`Plugin artifact extraction failed: ${resolvedArtifact}.${recoverySuffix(cause)}`,
+				cause
+			);
 		}
 		const sourceRoot = join(extractionRoot, "Plugins");
 		const sourceDetails = await stat(sourceRoot).catch(() => undefined);
@@ -554,12 +577,29 @@ async function install(options: PluginInstallOptions): Promise<PluginInstallRepo
 	}
 }
 
-function fromPromise<A>(thunk: () => Promise<A>): Effect.Effect<A, PluginInstallerError> {
+function fromPromise<A>(
+	operation: string,
+	thunk: () => Promise<A>
+): Effect.Effect<A, PluginInstallerError> {
 	return Effect.tryPromise({
-		catch: (cause) =>
-			new PluginInstallerError({
-				message: cause instanceof Error ? cause.message : String(cause)
-			}),
+		catch: (cause) => {
+			if (cause instanceof PluginInstallRejected) {
+				return new PluginInstallerError({
+					message: cause.message,
+					...(cause.cause === undefined ? undefined : { cause: cause.cause })
+				});
+			}
+			const code = errnoCode(cause);
+			return new PluginInstallerError({
+				message:
+					code === "EACCES" || code === "EPERM"
+						? `Permission was denied while trying to ${operation}.`
+						: code === "ENOSPC"
+							? `The disk is full; could not ${operation}.`
+							: `Could not ${operation}.`,
+				cause
+			});
+		},
 		try: thunk
 	});
 }
@@ -567,7 +607,7 @@ function fromPromise<A>(thunk: () => Promise<A>): Effect.Effect<A, PluginInstall
 export function readPluginManifest(
 	path: string
 ): Effect.Effect<PluginReleaseManifest, PluginInstallerError> {
-	return fromPromise(() => readManifest(path));
+	return fromPromise(`read plugin manifest ${path}`, () => readManifest(path));
 }
 
 export function listPluginManifest(
@@ -589,7 +629,7 @@ export function verifyPluginManifest(options: {
 }): Effect.Effect<PluginVerificationReport, PluginInstallerError> {
 	return readPluginManifest(options.manifestPath).pipe(
 		Effect.flatMap((manifest) =>
-			fromPromise(() =>
+			fromPromise(`verify the plugin artifact for ${options.manifestPath}`, () =>
 				verifyArtifact(
 					manifest,
 					artifactPathFor(manifest, options.manifestPath, options.artifactPath)
@@ -602,5 +642,7 @@ export function verifyPluginManifest(options: {
 export function installPluginBundle(
 	options: PluginInstallOptions
 ): Effect.Effect<PluginInstallReport, PluginInstallerError> {
-	return fromPromise(() => install(options));
+	return fromPromise(`install the plugin bundle into ${options.projectPath}`, () =>
+		install(options)
+	);
 }

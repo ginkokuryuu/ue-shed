@@ -16,32 +16,27 @@ import {
 } from "../workflows/authoring.js";
 import { nonNegativeIntegerFlag, optionalFlag, optionalValue, readerFields } from "./options.js";
 
-function parseAuthoringValue(valueJson: string) {
+/** Decode an inline JSON flag value, classifying JSON syntax and schema failures separately. */
+function parseJsonFlag<A>(label: string, value: string, schema: Schema.Decoder<A>) {
 	return Effect.try({
-		try: () => Schema.decodeUnknownSync(Schema.Json)(JSON.parse(valueJson)),
-		catch: (cause) => new CliCommandError({ message: `Invalid value JSON: ${String(cause)}` })
+		try: () => Schema.decodeUnknownSync(Schema.Json)(JSON.parse(value)),
+		catch: (cause) => new CliCommandError({ message: `${label} is not valid JSON.`, cause })
 	}).pipe(
-		Effect.flatMap(Schema.decodeUnknownEffect(AuthoringValue)),
+		Effect.flatMap(Schema.decodeUnknownEffect(schema)),
 		Effect.mapError((cause) =>
 			cause instanceof CliCommandError
 				? cause
-				: new CliCommandError({ message: `Invalid authoring value: ${String(cause)}` })
+				: new CliCommandError({ message: `${label} does not match its schema.`, cause })
 		)
 	);
 }
 
+function parseAuthoringValue(valueJson: string) {
+	return parseJsonFlag("Authoring value", valueJson, AuthoringValue);
+}
+
 function parseRowIds(value: string) {
-	return Effect.try({
-		try: () => Schema.decodeUnknownSync(Schema.Json)(JSON.parse(value)),
-		catch: (cause) => new CliCommandError({ message: `Invalid row IDs JSON: ${String(cause)}` })
-	}).pipe(
-		Effect.flatMap(Schema.decodeUnknownEffect(Schema.Array(Schema.String))),
-		Effect.mapError((cause) =>
-			cause instanceof CliCommandError
-				? cause
-				: new CliCommandError({ message: `Invalid row IDs: ${String(cause)}` })
-		)
-	);
+	return parseJsonFlag("Row IDs", value, Schema.Array(Schema.String));
 }
 
 const readerFlag = optionalFlag("reader");

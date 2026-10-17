@@ -1,6 +1,7 @@
 import { mkdir, mkdtemp, readFile, rename, rm, stat, writeFile } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
-import { Effect, Schema } from "effect";
+import { ErrorCauseFields } from "@ue-shed/protocol";
+import { Effect, Predicate, Schema } from "effect";
 import { ScenarioDocument } from "./schema.js";
 
 const maximumBytes = 4 * 1024 * 1024;
@@ -8,28 +9,60 @@ const documentJson = Schema.fromJsonString(ScenarioDocument);
 
 export class ScenarioDocumentFileError extends Schema.TaggedError<ScenarioDocumentFileError>()(
 	"ScenarioDocumentFileError",
-	{ message: Schema.String, path: Schema.String, recovery: Schema.String }
+	{ message: Schema.String, path: Schema.String, recovery: Schema.String, ...ErrorCauseFields }
 ) {}
 
-const failure = (path: string, cause: unknown) =>
-	new ScenarioDocumentFileError({
-		path,
-		message: `Could not read or save the scenario document: ${String(cause)}`,
-		recovery: "Use a valid version 1 scenario JSON file under 4 MiB and check file permissions."
-	});
+class DocumentTooLarge extends Error {
+	constructor() {
+		super("Document exceeds 4 MiB.");
+	}
+}
+
+const errnoCode = (cause: unknown): string | undefined =>
+	Predicate.isObject(cause) && "code" in cause && Predicate.isString(cause.code)
+		? cause.code
+		: undefined;
+
+const failureMessage = (operation: "read" | "save", path: string, cause: unknown): string => {
+	if (cause instanceof DocumentTooLarge) return `The scenario document ${path} exceeds 4 MiB.`;
+	if (Schema.isSchemaError(cause)) {
+		return operation === "read"
+			? `The scenario document ${path} is not a valid version 1 scenario.`
+			: `The scenario document was not saved to ${path} because it is not a valid version 1 scenario.`;
+	}
+	const code = errnoCode(cause);
+	if (code === "ENOENT" && operation === "read") {
+		return `The scenario document ${path} does not exist.`;
+	}
+	if (code === "EACCES" || code === "EPERM") {
+		return `Permission was denied to ${operation} the scenario document ${path}.`;
+	}
+	return `Could not ${operation} the scenario document ${path}.`;
+};
+
+const failure = (operation: "read" | "save", path: string, cause: unknown) =>
+	cause instanceof ScenarioDocumentFileError
+		? cause
+		: new ScenarioDocumentFileError({
+				path,
+				message: failureMessage(operation, path, cause),
+				recovery:
+					"Use a valid version 1 scenario JSON file under 4 MiB and check file permissions.",
+				cause
+			});
 
 export const readScenarioDocumentFile = Effect.fn("ScenarioDocumentFile.read")((path: string) =>
 	Effect.tryPromise({
 		try: async () => {
-			if ((await stat(path)).size > maximumBytes) throw new Error("Document exceeds 4 MiB.");
+			if ((await stat(path)).size > maximumBytes) throw new DocumentTooLarge();
 			const bytes = await readFile(path);
-			if (bytes.length > maximumBytes) throw new Error("Document exceeds 4 MiB.");
+			if (bytes.length > maximumBytes) throw new DocumentTooLarge();
 			return bytes.toString("utf8");
 		},
-		catch: (cause) => failure(path, cause)
+		catch: (cause) => failure("read", path, cause)
 	}).pipe(
 		Effect.flatMap(Schema.decodeUnknownEffect(documentJson)),
-		Effect.mapError((cause) => failure(path, cause))
+		Effect.mapError((cause) => failure("read", path, cause))
 	)
 );
 
@@ -41,7 +74,7 @@ export const writeScenarioDocumentFile = Effect.fn("ScenarioDocumentFile.write")
 				Effect.tryPromise({
 					try: async () => {
 						const bytes = Buffer.from(`${JSON.stringify(decoded, null, "\t")}\n`);
-						if (bytes.length > maximumBytes) throw new Error("Document exceeds 4 MiB.");
+						if (bytes.length > maximumBytes) throw new DocumentTooLarge();
 						const destination = resolve(path);
 						await mkdir(dirname(destination), { recursive: true });
 						const temporary = await mkdtemp(
@@ -56,9 +89,9 @@ export const writeScenarioDocumentFile = Effect.fn("ScenarioDocumentFile.write")
 						}
 						return decoded;
 					},
-					catch: (cause) => failure(path, cause)
+					catch: (cause) => failure("save", path, cause)
 				})
 			),
-			Effect.mapError((cause) => failure(path, cause))
+			Effect.mapError((cause) => failure("save", path, cause))
 		)
 );
