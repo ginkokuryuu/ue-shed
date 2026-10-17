@@ -97,11 +97,13 @@ it.live.skipIf(!enabled)(
 				Effect.gen(function* () {
 					const result = yield* service.refresh(fixture.request);
 					const scanned = yield* withEventLoopGaps(
-						result.localizationQuality!({ review: result.review.file }).pipe(
-							Effect.tap((quality) =>
-								Effect.sync(() => quality.findings.items([0, 1, 2]))
+						result
+							.localizationQuality(undefined, { review: result.review.file })
+							.pipe(
+								Effect.tap((quality) =>
+									Effect.sync(() => quality.findings.items([0, 1, 2]))
+								)
 							)
-						)
 					);
 					yield* Effect.logInfo("Quality scan event-loop gap").pipe(
 						Effect.annotateLogs({

@@ -889,30 +889,38 @@ export type WorkbenchProjectTestApi = Omit<
 	Partial<
 		Pick<
 			WorkbenchProjectApi,
-			| "candidates"
-			| "openRecent"
-			| "progress"
-			| "recent"
-			| "selectedProject"
-			| "refresh"
-			| "count"
-			| "sample"
+			"candidates" | "progress" | "selectedProject" | "refresh" | "count" | "sample"
 		>
-	>;
+	> &
+	(
+		| { readonly recent?: undefined; readonly openRecent?: WorkbenchProjectApi["openRecent"] }
+		| Pick<WorkbenchProjectApi, "recent" | "openRecent">
+	);
 
+/**
+ * A project workspace over the test's `current` state, with no Project Index unless the test
+ * supplies one: counts and candidates fail as an unindexed project does. A supplied recent list
+ * requires an explicit openRecent transition; current alone cannot open another root.
+ */
 export function makeWorkbenchProjectTestLayer(
 	service: WorkbenchProjectTestApi
 ): Layer.Layer<WorkbenchProject> {
+	const unindexed = () =>
+		Effect.fail(
+			new WorkbenchProjectUnavailable({
+				message: "This project has no Project Index.",
+				recovery: "Refresh the project to build its Project Index."
+			})
+		);
+	const recent = service.recent ?? (() => Effect.succeed([]));
 	return Layer.succeed(
 		WorkbenchProject,
 		WorkbenchProject.of({
 			...service,
 			sample: service.sample ?? (() => Effect.succeed({ status: "not_configured" })),
 			refresh: service.refresh ?? service.current,
-			count: service.count ?? (() => Effect.die("project counts are not used by this test")),
-			candidates:
-				service.candidates ??
-				(() => Effect.die("project candidates are not used by this test")),
+			count: service.count ?? unindexed,
+			candidates: service.candidates ?? unindexed,
 			progress:
 				service.progress ??
 				(() =>
@@ -924,11 +932,32 @@ export function makeWorkbenchProjectTestLayer(
 					})),
 			openRecent:
 				service.openRecent ??
-				(() => Effect.die("recent project selection is not used by this test")),
-			recent: service.recent ?? (() => Effect.succeed([])),
+				(() =>
+					Effect.succeed({
+						status: "failed" as const,
+						error: mapProjectFailure(
+							"Recent project opening is not configured.",
+							"Provide openRecent when the test supplies recent projects."
+						)
+					})),
+			recent,
 			selectedProject:
 				service.selectedProject ??
-				(() => Effect.die("selected project identity is not used by this test"))
+				(() =>
+					Effect.gen(function* () {
+						const state = yield* service.current();
+						if (state.status === "ready")
+							return {
+								projectName: state.project.projectName,
+								projectRoot: state.project.projectRoot
+							};
+						return yield* Effect.fail(
+							new WorkbenchProjectUnavailable({
+								message: "No Workbench project is selected.",
+								recovery: "Choose a project from the Workbench header, then retry."
+							})
+						);
+					}))
 		})
 	);
 }

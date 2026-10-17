@@ -1229,28 +1229,25 @@ export const AuthoringSessionServiceLayer = Layer.effect(
 	makeAuthoringSessionServiceEffect().pipe(Effect.map(AuthoringSessions.of))
 );
 
-function authoringSessionDependencies(
-	config: AuthoringSessionServiceConfig,
-	idLayer: Layer.Layer<AuthoringIdGenerator>
-) {
-	const repository = authoringSessionRepositoryLayer(config).pipe(Layer.provide(idLayer));
-	return Layer.merge(repository, idLayer);
-}
+/** The session repository for `config`, over the `AuthoringIdGenerator` the caller provides. */
+const authoringSessionDependencies = (config: AuthoringSessionServiceConfig) =>
+	authoringSessionRepositoryLayer(config);
 
+/**
+ * Authoring sessions stored for `config`. Provide an `AuthoringIdGenerator`:
+ * `AuthoringIdGeneratorLive` in hosts, `authoringIdGeneratorLayer(...)` in tests.
+ */
 export function authoringSessionServiceLayer(
-	config: AuthoringSessionServiceConfig,
-	idLayer: Layer.Layer<AuthoringIdGenerator> = AuthoringIdGeneratorLive
-): Layer.Layer<AuthoringSessions> {
-	return AuthoringSessionServiceLayer.pipe(
-		Layer.provide(authoringSessionDependencies(config, idLayer))
-	);
+	config: AuthoringSessionServiceConfig
+): Layer.Layer<AuthoringSessions, never, AuthoringIdGenerator> {
+	return AuthoringSessionServiceLayer.pipe(Layer.provide(authoringSessionDependencies(config)));
 }
 
+/** The session service for `config`, needing an `AuthoringIdGenerator` like the layer. */
 export function makeAuthoringSessionService(
-	config: AuthoringSessionServiceConfig,
-	idLayer: Layer.Layer<AuthoringIdGenerator> = AuthoringIdGeneratorLive
-): Effect.Effect<AuthoringSessionService> {
+	config: AuthoringSessionServiceConfig
+): Effect.Effect<AuthoringSessionService, never, AuthoringIdGenerator> {
 	return makeAuthoringSessionServiceEffect().pipe(
-		Effect.provide(authoringSessionDependencies(config, idLayer))
+		Effect.provide(authoringSessionDependencies(config))
 	);
 }

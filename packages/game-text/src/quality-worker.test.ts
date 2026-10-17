@@ -5,7 +5,7 @@ import { MessagePort, Worker } from "node:worker_threads";
 import { GameTextIndexRefresh } from "./index-refresh.js";
 import { makeIndexRegressionFixture } from "./index-refresh-regressions.test-support.js";
 import type { LocalizationQuality } from "./localization-workspace.js";
-import type { LocalizationQualityProgress } from "./localization-quality-index.js";
+import { GameTextIndexProgressReporter, type GameTextIndexProgress } from "./index-progress.js";
 import { TextQualityFindingId } from "./quality-query.js";
 import { GameTextRuleDocument } from "./game-text-rules.js";
 import {
@@ -89,14 +89,14 @@ it.live(
 				Effect.gen(function* () {
 					const refresh = yield* GameTextIndexRefresh;
 					const result = yield* refresh.refresh(fixture.request);
-					const progress: LocalizationQualityProgress[] = [];
-					const quality = yield* result.localizationQuality!(
-						{
-							review: result.review.file,
-							onProgress: (event) => progress.push(event)
-						},
-						rules
-					);
+					const progress: GameTextIndexProgress[] = [];
+					const quality = yield* result
+						.localizationQuality(rules, { review: result.review.file })
+						.pipe(
+							Effect.provideService(GameTextIndexProgressReporter, (event) =>
+								progress.push(event)
+							)
+						);
 					const unit = result.query.search({ query: "", capability: "all", pageSize: 1 })
 						.units[0]!;
 					return {
@@ -127,7 +127,8 @@ it.live(
 				)
 			).toBe(true);
 			expect(host.line).toBeDefined();
-			expect(host.lastProgress?.checkedLines).toBe(host.lastProgress?.totalLines);
+			expect(host.lastProgress?.completed).toBe(host.lastProgress?.total);
+			expect(host.lastProgress?.phase).toBe("localization_quality");
 			expect(worker).toEqual(host);
 		}),
 	30_000
@@ -170,12 +171,12 @@ for (const mode of ["interrupt", "failure"] as const)
 				const fixture = yield* makeIndexRegressionFixture();
 				yield* Effect.gen(function* () {
 					const model = yield* (yield* GameTextIndexRefresh).refresh(fixture.request);
-					const scan = yield* Effect.forkChild(model.localizationQuality!());
+					const scan = yield* Effect.forkChild(model.localizationQuality());
 					const abandoned = yield* Effect.promise(() => registered);
 					if (mode === "interrupt") yield* Fiber.interrupt(scan);
 					else yield* Fiber.join(scan); // Startup failure falls back to a host scan.
 					expect(abandoned.threadId).toBe(-1);
-					const retried = yield* model.localizationQuality!();
+					const retried = yield* model.localizationQuality();
 					expect(retried.findings.length).toBeGreaterThan(0);
 					expect([...workers].filter((worker) => worker.threadId !== -1)).toHaveLength(1);
 				}).pipe(Effect.scoped, Effect.provide(fixture.layer(false, fixture.source, true)));
@@ -212,11 +213,11 @@ it.live(
 			const fixture = yield* makeIndexRegressionFixture();
 			yield* Effect.gen(function* () {
 				const model = yield* (yield* GameTextIndexRefresh).refresh(fixture.request);
-				const scan = yield* Effect.forkChild(model.localizationQuality!());
+				const scan = yield* Effect.forkChild(model.localizationQuality());
 				const done = yield* Effect.promise(() => completed);
 				yield* Fiber.interrupt(scan);
 				done.deliver(); // Now ignored by the host; no result objects can release this scan.
-				const next = yield* model.localizationQuality!(); // Same port: cancellation ran first.
+				const next = yield* model.localizationQuality(); // Same port: cancellation ran first.
 				expect(next.findings.length).toBeGreaterThan(0);
 				const post = MessagePort.prototype.postMessage;
 				const calls = vi
@@ -248,9 +249,9 @@ it.live(
 			yield* Effect.gen(function* () {
 				const refresh = yield* GameTextIndexRefresh;
 				const result = yield* refresh.refresh(fixture.request);
-				const running = yield* Effect.forkChild(result.localizationQuality!());
+				const running = yield* Effect.forkChild(result.localizationQuality());
 				yield* Fiber.interrupt(running);
-				const quality = yield* result.localizationQuality!();
+				const quality = yield* result.localizationQuality();
 				expect(quality.findings.items([])).toEqual([]);
 				expect(quality.metadata.join.target).toBe(fixture.target.name);
 			}).pipe(Effect.scoped, Effect.provide(fixture.layer(false, fixture.source, true)));

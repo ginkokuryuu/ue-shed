@@ -50,7 +50,7 @@ it.live("records the join and quality scan stages of a real index build", () =>
 		yield* Effect.gen(function* () {
 			const refresh = yield* GameTextIndexRefresh;
 			const result = yield* refresh.refresh(fixture.request);
-			yield* result.localizationQuality!({ review: result.review.file });
+			yield* result.localizationQuality(undefined, { review: result.review.file });
 		}).pipe(Effect.scoped, Effect.provide(fixture.layer()), Effect.withTracer(recorder.tracer));
 		const counts = recorder.counts();
 		for (const stage of ["inputs", "order", "lines", "query_places", "publish"])

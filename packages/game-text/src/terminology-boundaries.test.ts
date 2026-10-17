@@ -115,7 +115,7 @@ effectIt.live(
 					document
 				);
 				expect(report.findings).toHaveLength(6);
-				const quality = yield* indexed.localizationQuality!({ checks: [] }, document);
+				const quality = yield* indexed.localizationQuality(document, { checks: [] });
 				expect(quality.findings.length).toBe(6);
 				const sourceReport = evaluateGameTextSourceQuality(indexed.corpus, document);
 				const memory = localizationQualityWorkspace(

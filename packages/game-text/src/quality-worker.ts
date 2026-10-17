@@ -9,6 +9,7 @@ import { indexedLocalizationQuality } from "./localization-quality-index.js";
 import type { LocalizationQuality } from "./localization-workspace.js";
 import { withHostSlices } from "./host-slices.js";
 import { postSyncReply } from "./worker-calls.js";
+import { GameTextIndexProgressReporter } from "./index-progress.js";
 import {
 	QualityWorkerCall,
 	QualityWorkerCallReply,
@@ -123,12 +124,13 @@ void Effect.runPromise(
 					task.corpus,
 					evidence,
 					task.rows,
-					{
-						...task.options,
-						onProgress: (progress) => reply({ kind: "progress", id: task.id, progress })
-					},
-					task.ruleDocument
+					task.ruleDocument,
+					task.options
 				).pipe(
+					// The scan's progress goes to the host, which hands it to its own reporter.
+					Effect.provideService(GameTextIndexProgressReporter, (progress) =>
+						reply({ kind: "progress", id: task.id, progress })
+					),
 					Effect.map((quality) => {
 						scans.set(task.id, quality);
 						reply({ kind: "done", id: task.id, findings: hostFindings(quality) });

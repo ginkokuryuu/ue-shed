@@ -15,7 +15,6 @@ import type { TextCorpus, TextCorpusSearchRequest, TextCorpusSearchPage } from "
 import type { LocalizationJoin } from "./localization-schema.js";
 import type { IndexedLocalizationQualityOptions } from "./localization-quality-index.js";
 import type { LocalizationQuality } from "./localization-workspace.js";
-import type { IndexedSourceQualityOptions } from "./source-quality-index.js";
 import type { TextQualityQuery } from "./quality-query.js";
 import type { GameTextRuleDocument } from "./game-text-rules.js";
 import { LocalizationKeyChangePair } from "./localization-key-changes.js";
@@ -87,27 +86,21 @@ export interface GameTextIndexRefreshResult {
 	readonly review: LocalizationReviewSnapshot;
 	/**
 	 * Localization quality checked over the index in bounded pages, with findings kept as columns.
-	 * The scan yields between pages and can be interrupted. Absent on adapters without an index;
-	 * hosts then check `localizationJoin` in memory.
+	 * The scan yields between pages and can be interrupted, and reports `localization_quality`
+	 * progress through `GameTextIndexProgressReporter`. Arguments are in the same order as
+	 * `sourceQuality`: the rule document first.
 	 */
-	readonly localizationQuality?:
-		| ((
-				options?: IndexedLocalizationQualityOptions,
-				ruleDocument?: GameTextRuleDocument
-		  ) => Effect.Effect<LocalizationQuality>)
-		| undefined;
+	readonly localizationQuality: (
+		ruleDocument?: GameTextRuleDocument,
+		options?: IndexedLocalizationQualityOptions
+	) => Effect.Effect<LocalizationQuality>;
 	/**
 	 * Source quality rules evaluated over the index in bounded pages: the query
 	 * `textQualityQuery(evaluateGameTextSourceQuality(corpus, ruleDocument))` gives, without
-	 * building the corpus's units. The scan yields between pages and can be interrupted. Absent on
-	 * adapters without an index; hosts then evaluate `corpus` in memory.
+	 * building the corpus's units. The scan yields between pages and can be interrupted, and
+	 * reports `source_quality` progress through `GameTextIndexProgressReporter`.
 	 */
-	readonly sourceQuality?:
-		| ((
-				ruleDocument: GameTextRuleDocument,
-				options?: IndexedSourceQualityOptions
-		  ) => Effect.Effect<TextQualityQuery>)
-		| undefined;
+	readonly sourceQuality: (ruleDocument: GameTextRuleDocument) => Effect.Effect<TextQualityQuery>;
 }
 
 export type IndexFailure = SnapshotStoreError | SnapshotFormatError | GameTextIndexError;

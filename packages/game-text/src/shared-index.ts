@@ -204,7 +204,10 @@ function readIndex(reader: SnapshotReader) {
 
 /** One lock and atomic root for segments and every layer; individual cache keys remain independent. */
 export function sharedIndexNodeLayer(options: SharedIndexOptions) {
-	return projectIndexViewLayer(options.projectView, makeSharedIndexNodeLayer(options));
+	const backing = makeSharedIndexNodeLayer(options);
+	return options.projectView
+		? projectIndexViewLayer(options.projectView).pipe(Layer.provide(backing))
+		: backing;
 }
 
 function makeSharedIndexNodeLayer(options: SharedIndexOptions) {

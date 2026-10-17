@@ -347,7 +347,7 @@ describe.skipIf(!executable)("Game Text problem cases in the saved fixture", () 
 							);
 							const indexed = localizationQualityWorkspaceOf(
 								indexedSource,
-								yield* result.localizationQuality!({}, ruleDocument)
+								yield* result.localizationQuality(ruleDocument)
 							);
 							for (const culture of [undefined, ...result.localizationJoin.cultures])
 								for (const filter of BuiltInQualityFilter.literals) {

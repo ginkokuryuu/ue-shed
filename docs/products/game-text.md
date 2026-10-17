@@ -896,12 +896,13 @@ evidence, review and workspace model.
 Hosts whose projects cannot store translator notes (packages saved by UE 4.27 and by UE5 before 5.8;
 String Tables and UE 5.8+ can) can pass `disabledChecks: ["missing_translator_notes"]`.
 
-Indexed hosts run these checks through an opened model's `localizationQuality(options?,
-ruleDocument?)`, which checks the join in pages of 256 lines and yields between them. On large
-targets the scan takes minutes, so its options also take `onProgress`, called with
-`{ checkedLines, totalLines, findings }` once before the scan and after each page; `totalLines` is
-known from the first call, so a host can show a percentage. Progress does not change the findings,
-their order or IDs. The callback must be cheap and must not throw.
+Indexed hosts run these checks through an opened model's `localizationQuality(ruleDocument?,
+options?)`, which checks the join in pages of 256 lines and yields between them. On large
+targets the scan takes minutes, so it reports `localization_quality` progress through
+`GameTextIndexProgressReporter`, the same reporter index refreshes use: `{ completed, total,
+findings }` once before the scan and after each page; `total` is known from the first event, so a
+host can show a percentage. Progress does not change the findings, their order or IDs. The
+reporter must be cheap and must not throw.
 
 Notes, shared source text and the source checks are facts about the source line, not a translation.
 They report once per line, under the target's native culture, or the line's first culture in the

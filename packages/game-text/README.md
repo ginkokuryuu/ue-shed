@@ -153,23 +153,23 @@ uses the same version as its preset.
 
 `evaluateGameTextSourceQuality(corpus, ruleDocument)` evaluates source rules over a corpus in
 memory, and `textQualityQuery(report)` pages it. An opened index model's
-`sourceQuality(ruleDocument, options?)` returns that same `TextQualityQuery` from the index,
+`sourceQuality(ruleDocument)` returns that same `TextQualityQuery` from the index,
 without building the corpus's units: the same summary, role and rule counts, pages, cursors,
 focus, export and finding IDs. Hosts with an index replace
 `textQualityQuery(evaluateGameTextSourceQuality(result.corpus, document))` with
-`yield* result.sourceQuality(document)`; adapters without one keep the in-memory functions.
-`indexedSourceQuality(joined, corpus, ruleDocument, options?)` is the same scan over a pinned
-joined reader.
+`yield* result.sourceQuality(document)`. Every index result has `sourceQuality` and
+`localizationQuality`; an adapter without an index implements them with the in-memory functions.
+`indexedSourceQuality(joined, corpus, ruleDocument)` is the same scan over a pinned joined reader.
 
 The scan reads text units in report order, in pages of up to 256 units or 1,024 occurrences, and
 yields between pages, so it can be interrupted. Roles match each occurrence's stored location;
 only occurrences a rule's role selects have their source read. Each finding is kept as its rule,
 unit, place among the unit's findings and ID hash, 18 bytes. Search pages, focus and export
 rebuild only the findings they return from their units and check each against its hash; `export`
-rebuilds every matching finding, in batches. `options.onProgress` receives `SourceQualityProgress`
-(`{ checkedTextUnits, totalTextUnits, findings }`): once before the scan with nothing checked and
-`totalTextUnits` already known, then after each page, the last call with every unit checked and the
-scan's finding count. It runs inside the scan; keep it cheap and do not throw from it.
+rebuilds every matching finding, in batches. The scan reports `source_quality` events to
+`GameTextIndexProgressReporter` (`{ phase, completed, total, findings }`): once before the scan
+with nothing checked and `total` already known, then after each page, the last with every unit
+checked and the scan's finding count.
 
 Roles match a place by its own location, in memory and over the index alike. A folded Blueprint
 place's copies (`occurrence.copies`) never match by their compiled paths (`X_C`, `X_C.Name_INST`,
@@ -498,13 +498,18 @@ unavailable source/translation, unsupported cultures and syntax limits.
 Syntax is capped at one million code units and 16 nested modifier forms. Coverage is not upgraded
 when a syntax check succeeds on a partial corpus.
 
-An opened index model's `localizationQuality(options?, ruleDocument?)` runs the same checks over the
-index in pages of 256 lines, yielding between pages. Its options add
-`onProgress?: (progress: LocalizationQualityProgress) => void` to the check options. The callback
-receives `{ checkedLines, totalLines, findings }`: once before the scan with `checkedLines: 0` and
-`totalLines` already known, then after each page, the last call with every line checked and the
-scan's finding count. It does not change findings, their order or IDs. It runs inside the scan, so
-keep it cheap and do not throw from it.
+An opened index model's `localizationQuality(ruleDocument?, options?)` runs the same checks over the
+index in pages of 256 lines, yielding between pages. Like `sourceQuality`, it takes the rule
+document first. It reports `localization_quality` events to `GameTextIndexProgressReporter`: once
+before the scan with `completed: 0` and `total` already known, then after each page, the last with
+every line checked and the scan's finding count. Progress does not change findings, their order
+or IDs.
+
+**Progress.** Every Game Text operation reports progress the same way: provide
+`GameTextIndexProgressReporter` around the operation with `Effect.provideService`. Index refreshes
+report their build phases, `TextCorpusService` scans report `corpus` and quality scans report
+`localization_quality` or `source_quality`, all as `{ phase, completed, total, findings? }`. The
+reporter runs inside the operation, so keep it cheap and do not throw from it.
 
 `parseUnrealFormatPattern`, `unrealPluralForms`, and `unrealRichTextCounts` expose the verified
 Unreal grammar helpers. Required plural categories come from the identical ICU 64 category data

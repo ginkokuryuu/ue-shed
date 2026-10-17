@@ -66,8 +66,8 @@ await Effect.runPromise(
 						cultures: target.cultures.length
 					})
 				);
-				const source = (yield* result.sourceQuality!(rules)).export("all");
-				const quality = yield* result.localizationQuality!({}, rules);
+				const source = (yield* result.sourceQuality(rules)).export("all");
+				const quality = yield* result.localizationQuality(rules);
 				console.log(
 					JSON.stringify({
 						stage: "scanned",

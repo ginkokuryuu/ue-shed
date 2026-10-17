@@ -8,6 +8,7 @@ import {
 } from "@ue-shed/unreal-assets";
 import { Effect, Ref, Stream } from "effect";
 import { expect } from "vitest";
+import { GameTextIndexProgressReporter, type GameTextIndexProgress } from "./index-progress.js";
 import {
 	TEXT_PROPERTY_NAME,
 	TextCorpusScanError,
@@ -175,19 +176,22 @@ it.effect("decodes only candidates from an existing project header index", () =>
 			}
 		};
 
-		const [corpus, progress] = yield* Effect.gen(function* () {
+		const progress: GameTextIndexProgress[] = [];
+		const corpus = yield* Effect.gen(function* () {
 			const service = yield* TextCorpusService;
-			const corpus = yield* service.scanFromProjectIndex(index, {
-				projectRoot: "C:/Fixture"
-			});
-			return [corpus, yield* service.progress()] as const;
-		}).pipe(Effect.provide(TextCorpusServiceLive), Effect.provide(reader));
+			return yield* service.scanFromProjectIndex(index, { projectRoot: "C:/Fixture" });
+		}).pipe(
+			Effect.provide(TextCorpusServiceLive),
+			Effect.provide(reader),
+			Effect.provideService(GameTextIndexProgressReporter, (event) => progress.push(event))
+		);
 
 		const [options] = yield* Ref.get(seen);
 		expect(options?.paths).toEqual(["C:/Fixture/Content/Text/ST_Game.uasset"]);
 		expect(corpus.coverage.discoveredPackages).toBe(30);
 		expect(corpus.coverage.inspectedPackages).toBe(1);
-		expect(progress).toEqual({ phase: "ready", processedAssets: 1, totalAssets: 1 });
+		expect(progress[0]).toEqual({ phase: "corpus", completed: 0, total: 1 });
+		expect(progress.at(-1)).toEqual({ phase: "corpus", completed: 1, total: 1 });
 	})
 );
 

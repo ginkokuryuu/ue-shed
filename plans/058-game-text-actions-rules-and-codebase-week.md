@@ -60,8 +60,8 @@
 | D5   | Classified causes instead of prose             | D    | TODO               |
 | D6   | Deliberate error translation                   | D    | TODO               |
 | D7   | Domain parsers instead of raw decoders         | D    | IN PROGRESS — #127 |
-| D8   | Layers and test layers                         | D    | TODO               |
-| D9   | One progress mechanism, one completeness shape | D    | TODO               |
+| D8   | Layers and test layers                         | D    | IN PROGRESS — #125 |
+| D9   | One progress mechanism, one completeness shape | D    | IN PROGRESS — #125 |
 | D10  | Workspace orchestration as a package           | D    | TODO               |
 | D11  | JSDoc on public exports                        | D    | TODO               |
 | D12  | Small cleanups                                 | D    | IN PROGRESS — #107 |

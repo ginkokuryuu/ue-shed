@@ -154,7 +154,7 @@ export async function scaleQuality(result: GameTextIndexRefreshResult, tracer?: 
 	const stalls = eventLoopGaps();
 	try {
 		const quality = await Effect.runPromise(
-			traced(result.localizationQuality({ review: result.review.file }), tracer)
+			traced(result.localizationQuality(undefined, { review: result.review.file }), tracer)
 		);
 		const measured = stalls();
 		// Findings by check, from the finding columns; no line is read.
@@ -278,7 +278,7 @@ export async function scaleSourceQuality(
 	try {
 		const query =
 			mode === "indexed"
-				? await Effect.runPromise(result.sourceQuality!(scaleSourceRules))
+				? await Effect.runPromise(result.sourceQuality(scaleSourceRules))
 				: textQualityQuery(evaluateGameTextSourceQuality(result.corpus, scaleSourceRules));
 		const measured = stalls();
 		const summary = query.summary();

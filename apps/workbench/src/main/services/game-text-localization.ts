@@ -4,10 +4,7 @@ import {
 	GameTextIndexSteps,
 	type GameTextProjectIndex,
 	GameTextIndexError,
-	checkLocalizationTarget,
-	localizationQuality,
 	localizationQualityWorkspaceOf,
-	evaluateGameTextSourceQuality,
 	localizationProgressReport,
 	localizationReportPage,
 	localizationReportCsv,
@@ -431,24 +428,11 @@ export const makeGameTextLocalization = Effect.fn("Workbench.GameText.localizati
 						// Indexed source rules read only the units their findings name.
 						const source = !document
 							? undefined
-							: retained.sourceQuality
-								? (yield* retained.sourceQuality(document)).export("all")
-								: evaluateGameTextSourceQuality(retained.corpus, document);
+							: (yield* retained.sourceQuality(document)).export("all");
 						// Indexed targets check page by page, yielding between pages.
 						return localizationQualityWorkspaceOf(
 							source,
-							retained.quality
-								? yield* retained.quality(options, document)
-								: localizationQuality(
-										checkLocalizationTarget(
-											retained.corpus,
-											retained.join,
-											retained.evidence,
-											options,
-											document
-										),
-										retained.join
-									)
+							yield* retained.quality(document, options)
 						);
 					})
 				).pipe(Effect.forkIn(serviceScope));

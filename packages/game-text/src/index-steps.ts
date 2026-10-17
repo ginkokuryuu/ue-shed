@@ -801,15 +801,15 @@ export const makeGameTextIndexSteps = (
 				corpus,
 				localizationJoin: indexedLocalizationJoin(joined, query),
 				// The scan checks exactly the join's lines, read as rows in the join's order.
-				localizationQuality: (scanOptions, ruleDocument) => {
+				localizationQuality: (ruleDocument, scanOptions) => {
 					const onHost = Effect.suspend(() =>
 						indexedLocalizationQuality(
 							joined,
 							corpus,
 							indexedEvidence,
 							columnar.localizationRows(indexedLocalizationLinesRequest(joined)),
-							scanOptions,
-							ruleDocument
+							ruleDocument,
+							scanOptions
 						)
 					);
 					return qualityWorker
@@ -835,10 +835,8 @@ export const makeGameTextIndexSteps = (
 							)
 						: onHost;
 				},
-				sourceQuality: (ruleDocument, options) =>
-					Effect.suspend(() =>
-						indexedSourceQuality(joined, corpus, ruleDocument, options)
-					)
+				sourceQuality: (ruleDocument) =>
+					Effect.suspend(() => indexedSourceQuality(joined, corpus, ruleDocument))
 			};
 		}, normalizeFailure);
 		const invalidate = Effect.fn("GameTextIndex.invalidate")(function* (

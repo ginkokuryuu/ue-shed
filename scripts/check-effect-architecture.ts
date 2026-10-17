@@ -934,6 +934,80 @@ export async function checkDecoderExports(
 	return failures;
 }
 
+/**
+ * Exported `make*` functions no other module uses. Each is a public package helper that predates
+ * the rule; removing it from the package's exports belongs to that package's entry-point review
+ * (Plan 058 D1 for game-text, D13 for the others). Remove an entry once it is no longer exported.
+ */
+const exportedMakeBaseline = new Set([
+	"packages/cameras/src/map-tile-repository.ts:makeMapCaptureRepositoryTestLayer",
+	"packages/cameras/src/review-visibility-policy.ts:makeReviewViewId",
+	"packages/cameras/src/review-visibility-policy.ts:makeVisibilityPolicyId",
+	"packages/config-explorer/src/file-access.ts:makeConfigFileAccessTestLayer",
+	"packages/config-explorer/src/service.ts:makeConfigExplorerTestLayer",
+	"packages/engine/src/project-launcher.ts:makeUnrealProjectLauncherTestLayer",
+	"packages/engine/src/supervised-editor-session.ts:makeSupervisedEditorSessionTestLayer",
+	"packages/game-text/src/quality-query.ts:makeTextQualityFindingId",
+	"packages/host/src/configuration.ts:makeShedHostConfiguration",
+	"packages/host/src/saved-table-index.ts:makeSavedTableIndexTestLayer",
+	"packages/project-custodian/src/service.ts:makeCustodianTestLayer",
+	"packages/protocol/src/editor-play-session.ts:makeEditorPlaySessionJsonSchema"
+]);
+
+/** The parameter list of each exported function or arrow constant, with its name. */
+function exportedSignatures(text: string) {
+	return [
+		...text.matchAll(/export (?:async )?function (\w+)(?:<[^(]*?>)?\(([^)]*)\)/gsu),
+		...text.matchAll(/export const (\w+) = (?:<[^(]*?>)?\(([^)]*)\)\s*(?::[^=]*)?=>/gsu)
+	].map((match) => ({ name: match[1]!, parameters: match[2]!, offset: match.index }));
+}
+
+/**
+ * Layers compose through requirements: no exported factory takes a Layer, which hides a
+ * dependency a caller can no longer replace. An exported `make*` constructor is used by another
+ * module (production or test); one only its own module uses stays private.
+ */
+export async function checkCompositionPolicy(root: string) {
+	const failures: string[] = [];
+	const files = (
+		await Promise.all(
+			[...sourceRoots, "scripts"].map((directory) => filesUnder(root, directory))
+		)
+	)
+		.flat()
+		.filter((path) => /\.tsx?$/u.test(path) && !path.endsWith(".d.ts"));
+	const texts = new Map<string, string>();
+	for (const absolute of files)
+		texts.set(relative(root, absolute).replaceAll("\\", "/"), await readFile(absolute, "utf8"));
+	for (const [path, text] of texts) {
+		if (path.startsWith("scripts/") || testSourcePattern.test(path)) continue;
+		if (!/^(?:apps|packages|extensions)\/[^/]+\/src\//u.test(path)) continue;
+		for (const { name, parameters, offset } of exportedSignatures(text))
+			if (/\bLayer\.Layer</u.test(parameters))
+				failures.push(
+					`${path}:${lineOf(text, offset)}: ${name} takes a Layer; require its service instead`
+				);
+		for (const match of text.matchAll(
+			/^export (?:const|function|async function) (make[A-Z]\w*)/gmu
+		)) {
+			const name = match[1]!;
+			if (exportedMakeBaseline.has(`${path}:${name}`)) continue;
+			const used = new RegExp(`\\b${name}\\b`, "u");
+			let elsewhere = false;
+			for (const [other, otherText] of texts)
+				if (other !== path && used.test(otherText)) {
+					elsewhere = true;
+					break;
+				}
+			if (!elsewhere)
+				failures.push(
+					`${path}:${lineOf(text, match.index)}: ${name} is used only in its module; do not export it`
+				);
+		}
+	}
+	return failures;
+}
+
 export async function checkArchitecture(root: string = repositoryRoot) {
 	return [
 		...(await checkCatalogUsage(root)),
@@ -942,7 +1016,8 @@ export async function checkArchitecture(root: string = repositoryRoot) {
 		...(await checkDomainServices(root)),
 		...(await checkLocalizationBoundaries(root)),
 		...(await checkWorkbenchBoundaries(root)),
-		...(await checkDecoderExports(root))
+		...(await checkDecoderExports(root)),
+		...(await checkCompositionPolicy(root))
 	];
 }
 
