@@ -27,8 +27,6 @@ import {
 import { scopedGameTextOperation as scoped } from "./game-text-scope.js";
 import {
 	decodeGameTextRuleDocumentJson,
-	evaluateGameTextSourceQuality,
-	textQualityQuery,
 	makeRetainedGameTextIndexWith,
 	GameTextIndexSteps,
 	GameTextIndexProgressReporter,
