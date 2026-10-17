@@ -231,22 +231,35 @@ function borrowWorkerQuery(
 	joined: JoinedTargetReader
 ): ColumnarTextCorpusQuery {
 	let local: ColumnarTextCorpusQuery | undefined;
-	const pick = () =>
-		worker.healthy() ? worker.query : (local ??= columnarTextCorpusQuery(joined));
+	const execute = <A>(call: (query: ColumnarTextCorpusQuery) => A): A => {
+		if (!worker.healthy()) return call((local ??= columnarTextCorpusQuery(joined)));
+		try {
+			return call(worker.query);
+		} catch (cause) {
+			// A transport deadline can discover loss during dispatch, before an exit callback runs.
+			// Only retry failed transport calls; typed query/selection errors retain their meaning.
+			if (worker.healthy()) throw cause;
+			return call((local ??= columnarTextCorpusQuery(joined)));
+		}
+	};
 	return {
 		summary: () => worker.query.summary(),
-		search: (request) => pick().search(request),
-		focus: (request) => pick().focus(request),
-		localizationFocus: (id) => pick().localizationFocus(id),
-		localizationLines: (request) => pick().localizationLines(request),
-		localizationRows: (request) => pick().localizationRows(request),
-		export: (request) => pick().export(request)
+		search: (request) => execute((query) => query.search(request)),
+		focus: (request) => execute((query) => query.focus(request)),
+		localizationFocus: (id) => execute((query) => query.localizationFocus(id)),
+		localizationLines: (request) => execute((query) => query.localizationLines(request)),
+		localizationRows: (request) => execute((query) => query.localizationRows(request)),
+		export: (request) => execute((query) => query.export(request))
 	};
 }
 
 export const makeGameTextIndexSteps = (
 	cacheRoot: string,
-	options: { readonly searchWorker?: boolean; readonly latestSearchOnly?: boolean } = {}
+	options: {
+		readonly searchWorker?: boolean;
+		readonly latestSearchOnly?: boolean;
+		readonly syncCallTimeoutMs?: number;
+	} = {}
 ) =>
 	Effect.gen(function* () {
 		const source = yield* GameTextIndexSource;
@@ -273,7 +286,10 @@ export const makeGameTextIndexSteps = (
 					),
 					Effect.flatMap(({ input }) =>
 						makeGameTextSearchWorkerResource(input, {
-							latestOnly: options.latestSearchOnly ?? false
+							latestOnly: options.latestSearchOnly ?? false,
+							...(options.syncCallTimeoutMs === undefined
+								? undefined
+								: { syncCallTimeoutMs: options.syncCallTimeoutMs })
 						})
 					)
 				)
@@ -818,5 +834,9 @@ export class GameTextIndexSteps extends Context.Service<
 
 export const gameTextIndexStepsLayer = (
 	cacheRoot: string,
-	options: { readonly searchWorker?: boolean; readonly latestSearchOnly?: boolean } = {}
+	options: {
+		readonly searchWorker?: boolean;
+		readonly latestSearchOnly?: boolean;
+		readonly syncCallTimeoutMs?: number;
+	} = {}
 ) => Layer.effect(GameTextIndexSteps, makeGameTextIndexSteps(cacheRoot, options));

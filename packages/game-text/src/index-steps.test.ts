@@ -16,6 +16,58 @@ import { HostSliceScheduler } from "./host-slices.js";
 import { performance } from "node:perf_hooks";
 
 it.live(
+	"falls back when a ready worker terminates before the host can dispatch its exit",
+	() => {
+		const messages = vi.spyOn(Worker.prototype, "postMessage");
+		const wait = Atomics.wait;
+		const waits = vi
+			.spyOn(Atomics, "wait")
+			.mockImplementation((array, index, value, timeout) => {
+				// Fail the old 30-second bridge immediately instead of freezing this regression test.
+				expect(timeout).toBeLessThanOrEqual(100);
+				return wait(array, index, value, timeout);
+			});
+		return Effect.gen(function* () {
+			const fixture = yield* makeIndexRegressionFixture();
+			yield* Effect.gen(function* () {
+				const model = yield* (yield* GameTextIndexRefresh).refresh(fixture.request);
+				const request = { query: "Source", capability: "all" as const, pageSize: 10 };
+				const expected = yield* model.search(request);
+				const worker = messages.mock.contexts.at(-1);
+				if (!(worker instanceof Worker))
+					throw new Error("Expected the actual query worker.");
+				let exited = false;
+				worker.once("exit", () => {
+					exited = true;
+				});
+				// There must be no yield between termination and this synchronous query.
+				const termination = worker.terminate();
+				expect(model.query.search(request)).toEqual(expected);
+				expect(exited).toBe(false);
+				const waited = waits.mock.calls.length;
+				expect(waited).toBeGreaterThan(0);
+				// Subsequent calls reuse the same pinned local query without waiting on the dead peer.
+				expect(model.query.search(request)).toEqual(expected);
+				expect(
+					model.query.focus({ id: expected.units[0]!.id, pageSize: 10 })?.unit.id
+				).toBe(expected.units[0]!.id);
+				expect(waits).toHaveBeenCalledTimes(waited);
+				yield* Effect.promise(() => termination);
+			}).pipe(Effect.provide(fixture.layer(true)));
+		}).pipe(
+			Effect.scoped,
+			Effect.ensuring(
+				Effect.sync(() => {
+					messages.mockRestore();
+					waits.mockRestore();
+				})
+			)
+		);
+	},
+	30_000
+);
+
+it.live(
 	"replaces a dead worker on unchanged rescan without evicting its healthy replacement",
 	() => {
 		const messages = vi.spyOn(Worker.prototype, "postMessage");

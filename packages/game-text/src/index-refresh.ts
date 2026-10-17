@@ -16,7 +16,11 @@ const refreshDuration = Metric.histogram("game_text.index.refresh_duration_ms", 
 /** Compatibility workflow, composed entirely from the independently usable project/target steps. */
 export const gameTextIndexRefreshLayer = (
 	cacheRoot: string,
-	options: { readonly searchWorker?: boolean; readonly latestSearchOnly?: boolean } = {}
+	options: {
+		readonly searchWorker?: boolean;
+		readonly latestSearchOnly?: boolean;
+		readonly syncCallTimeoutMs?: number;
+	} = {}
 ) =>
 	Layer.effectContext(
 		Effect.gen(function* () {
