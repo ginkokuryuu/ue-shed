@@ -70,3 +70,34 @@ export function gameTextProblemsFixtureSteps(project: string) {
 		stage("AfterGather")
 	];
 }
+
+/**
+ * The `GameTextActions` target's identity cases (fixture README, "Game Text identity cases"), each
+ * entry a fresh editor process. `Branch` copies package files without loading them, so the copy is
+ * a plain file copy. Evidence is recorded last, from the saved packages.
+ */
+export function gameTextActionsFixtureSteps(project: string, evidence: string) {
+	const common = [project, "-unattended", "-nop4", "-nosplash", "-NullRHI"];
+	const stage = (name: string, ...extra: string[]) => [
+		...common,
+		"-run=UEShedBuildFixture",
+		"-GameTextActionsOnly",
+		`-GameTextActionsStage=${name}`,
+		...extra
+	];
+	const operation = (name: string) => [
+		...common,
+		"-run=GatherText",
+		`-config=${join(dirname(project), "Config", "Localization", `GameTextActions_${name}.ini`)}`
+	];
+	return [
+		stage("Author"),
+		stage("CopyInPackage"),
+		stage("DuplicateAssets"),
+		stage("Branch"),
+		stage("EditBranch"),
+		operation("Gather"),
+		operation("GenerateReports"),
+		stage("Evidence", `-GameTextActionsEvidence=${evidence}`)
+	];
+}

@@ -10,6 +10,7 @@ import {
 } from "./unreal-plugin-host.ts";
 import { unrealRemoteControlLaunchArguments } from "./workbench-tools.ts";
 import {
+	gameTextActionsFixtureSteps,
 	gameTextProblemsFixtureSteps,
 	localizationFixtureSteps
 } from "./localization-fixture-steps.ts";
@@ -20,7 +21,8 @@ const action = process.argv[2];
 const isLocalization =
 	action === "localization" ||
 	action === "localization-verify" ||
-	action === "game-text-problems";
+	action === "game-text-problems" ||
+	action === "game-text-actions";
 const fixtureRoot =
 	isLocalization && process.env.UE_SHED_LOCALIZATION_FIXTURE_ROOT
 		? resolve(process.env.UE_SHED_LOCALIZATION_FIXTURE_ROOT)
@@ -255,6 +257,7 @@ if (
 		"localization-verify",
 		"localization-427",
 		"game-text-problems",
+		"game-text-actions",
 		"world-partition",
 		"save",
 		"scenario",
@@ -263,7 +266,7 @@ if (
 	]).has(action)
 ) {
 	throw new Error(
-		"Usage: node scripts/unreal-fixture.ts <apply|build|conformance|evidence|generate|launch|launch-authoring|localization|localization-verify|localization-427|game-text-problems|map-history|world-partition|save|scenario|verify|snapshot> [input] [output]"
+		"Usage: node scripts/unreal-fixture.ts <apply|build|conformance|evidence|generate|launch|launch-authoring|localization|localization-verify|localization-427|game-text-problems|game-text-actions|map-history|world-partition|save|scenario|verify|snapshot> [input] [output]"
 	);
 }
 
@@ -308,6 +311,24 @@ if (action === "game-text-problems") {
 	for (const generated of ["Content/Localization/Game", "Content/Fixture/GameTextProblems"])
 		rmSync(join(fixtureRoot, generated), { recursive: true, force: true });
 	for (const args of gameTextProblemsFixtureSteps(projectFile)) run(tools.editorCommandlet, args);
+}
+if (action === "game-text-actions") {
+	const output = resolve(
+		process.argv[3] ?? join(fixtureRoot, "FixtureExpected", "game-text-actions")
+	);
+	process.stdout.write(
+		`Game Text actions write: ${join(fixtureRoot, "Content/Fixture/GameTextActions")}, ` +
+			`${join(fixtureRoot, "Config/DefaultEditor.ini")}, ${join(fixtureRoot, "Config/Localization")}, ` +
+			`${join(fixtureRoot, "Content/Localization/GameTextActions")}, ${output}\n`
+	);
+	// Only the GameTextActions target's outputs and its generated packages are disposable.
+	for (const generated of [
+		"Content/Localization/GameTextActions",
+		"Content/Fixture/GameTextActions"
+	])
+		rmSync(join(fixtureRoot, generated), { recursive: true, force: true });
+	for (const args of gameTextActionsFixtureSteps(projectFile, output))
+		run(tools.editorCommandlet, args);
 }
 if (action === "localization-verify") {
 	runCommandlet(

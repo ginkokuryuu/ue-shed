@@ -58,7 +58,7 @@ const runIn = <A, E>(root: string, effect: Effect.Effect<A, E, SharedIndex | Sco
 	);
 
 describe("package text layer", () => {
-	it("selected refresh retains unlisted outer eligibility and recognizes map sidecars", async () => {
+	it("selected refresh retains unlisted eligibility and recognizes map sidecars", async () => {
 		await withStore(async (cache) => {
 			const outer = "Content/Maps/World.umap";
 			const external = "Content/__ExternalActors__/Maps/World/AA/BB/Actor.uasset";
@@ -79,7 +79,7 @@ describe("package text layer", () => {
 				...first.map((entry) =>
 					entry.path === map ? { ...entry, signature: "after" } : entry
 				),
-				{ path: external, signature: "new", headerData: header(false) }
+				{ path: external, signature: "new", headerData: header(true) }
 			].sort((a, b) => (a.path < b.path ? -1 : 1));
 			await runIn(
 				cache,
@@ -438,7 +438,7 @@ describe("package text layer", () => {
 			).toEqual(prior);
 		});
 	});
-	it("external package addition/removal changes selection without changing the outer package signature", async () => {
+	it("external packages follow their own saved header, not their outer package", async () => {
 		await withStore(async (cache) => {
 			const outer = {
 				path: "Content/Maps/World.umap",
@@ -455,16 +455,17 @@ describe("package text layer", () => {
 				calls.push(...paths);
 				return Stream.fromIterable(paths.map(emptyPackageTextRecord));
 			};
-			await runIn(cache, refreshPackageTextLayer({ inventory: [outer], read }));
-			expect(calls).toEqual([]);
 			await runIn(cache, refreshPackageTextLayer({ inventory: [outer, actor], read }));
-			expect(calls.sort()).toEqual([outer.path, actor.path].sort());
-			calls.length = 0;
-			await runIn(cache, refreshPackageTextLayer({ inventory: [outer], read }));
 			expect(calls).toEqual([]);
+			const flagged = { ...actor, signature: "2", headerData: header(true) };
+			await runIn(cache, refreshPackageTextLayer({ inventory: [outer, flagged], read }));
+			expect(calls).toEqual([actor.path]);
 			expect(
 				(await runIn(cache, textCorpusFromPackageTextLayer("."))).packageCoverage
-			).toEqual([{ packageFile: normalize(outer.path), status: "not_gatherable" }]);
+			).toEqual([
+				{ packageFile: normalize(actor.path), status: "complete" },
+				{ packageFile: normalize(outer.path), status: "not_gatherable" }
+			]);
 		});
 	});
 });

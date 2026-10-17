@@ -1,0 +1,8 @@
+ - F85FBD7247F578AAC17FCBAED13F08BB 
+	/Game/Fixture/GameTextActions/Branched/DA_ActionNotes.DA_ActionNotes.SharedPrimary - "Keep the lamp lit at night" 
+	/Game/Fixture/GameTextActions/DA_ActionNotes.DA_ActionNotes.SharedPrimary - "Keep the lamp lit" 
+
+ - DAF309EF4E2E7A8D22F28E95469E6B80 
+	/Game/Fixture/GameTextActions/WBP_ActionPanel.WBP_ActionPanel_C:WidgetTree.Heading.Text - "Harbor master" 
+	/Game/Fixture/GameTextActions/Branched/WBP_ActionPanel.WBP_ActionPanel_C:WidgetTree.Heading.Text - "Harbor master\'s office" 
+

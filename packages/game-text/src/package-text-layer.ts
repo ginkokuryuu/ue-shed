@@ -9,8 +9,6 @@ import { SharedIndex } from "./shared-index.js";
 import { snapshotFailure } from "./snapshot-format.js";
 import {
 	isPackageTextCandidate,
-	packageTextExternalReferences,
-	PackageTextExternalScan,
 	textCorpusWithExcludedPackages
 } from "./package-text-candidates.js";
 import {
@@ -66,15 +64,14 @@ export interface PackageTextRefreshInput<E, R> {
 	) => Stream.Stream<typeof SavedAssetPackageTextEvent.Type, E, R>;
 }
 
-/** Signature keys include eligibility, so external-reference/header transitions invalidate reuse.
+/** Signature keys include eligibility, so header transitions invalidate reuse.
  * Digest framing prevents ambiguous concatenations. Inventory order is required to be path sorted.
  */
 export function packageTextSelection(
 	inventory: readonly PackageTextInventoryEntry[],
 	retainedEligibility?: ReadonlyMap<string, boolean>
 ) {
-	const external = packageTextExternalReferences(inventory.map((entry) => entry.path));
-	const selection = new PackageTextSelectionBuilder(external, retainedEligibility);
+	const selection = new PackageTextSelectionBuilder(retainedEligibility);
 	for (const entry of inventory) selection.add(entry);
 	return selection.finish();
 }
@@ -89,10 +86,8 @@ class PackageTextSelectionBuilder {
 			.update(JSON.stringify([TEXT_AUDIENCE_MATCHER_VERSION, TEXT_AUDIENCE_POLICY]))
 	);
 	private previous: Uint8Array | undefined;
-	private readonly external: ReadonlySet<string>;
 	private readonly retainedEligibility: ReadonlyMap<string, boolean> | undefined;
-	constructor(external: ReadonlySet<string>, retainedEligibility?: ReadonlyMap<string, boolean>) {
-		this.external = external;
+	constructor(retainedEligibility?: ReadonlyMap<string, boolean>) {
 		this.retainedEligibility = retainedEligibility;
 	}
 	add(entry: PackageTextInventoryEntry) {
@@ -110,8 +105,7 @@ class PackageTextSelectionBuilder {
 				"Missing header evidence; upgrade the paired reader"
 			);
 		const selected =
-			this.retainedEligibility?.get(entry.path) ??
-			isPackageTextCandidate(entry.headerData, this.external.has(entry.path));
+			this.retainedEligibility?.get(entry.path) ?? isPackageTextCandidate(entry.headerData);
 		const shard = packageTextShard(entry.path);
 		this.buckets[shard]!.push({ entry, selected });
 		this.hashes[shard]!.update(JSON.stringify([entry.path, entry.signature, selected]));
@@ -131,17 +125,7 @@ export const packageTextSelectionInSlices = Effect.fn("PackageText.selection")(f
 	retainedEligibility?: ReadonlyMap<string, boolean>
 ) {
 	const clock = new HostSliceClock();
-	const scan = new PackageTextExternalScan();
-	for (const entry of inventory) {
-		scan.visit(entry.path);
-		if (clock.step()) yield* Effect.yieldNow;
-	}
-	if (scan.hasOuters)
-		for (let index = 0; index < inventory.length; index++) {
-			scan.revisit(index, inventory[index]!.path);
-			if (clock.step()) yield* Effect.yieldNow;
-		}
-	const selection = new PackageTextSelectionBuilder(scan.references, retainedEligibility);
+	const selection = new PackageTextSelectionBuilder(retainedEligibility);
 	for (let next = 0; next < inventory.length; ) {
 		yield* Effect.try({
 			try: () => {

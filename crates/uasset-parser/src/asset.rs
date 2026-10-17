@@ -14,6 +14,8 @@
 use std::fmt;
 
 mod native_data;
+mod script;
+pub use script::{DecodedFunction, FUNCTION_CLASS, FunctionDecoder};
 
 use crate::archive::{ArchiveError, ArchiveErrorKind, Guid, NameRef, Span};
 use crate::codec::decode_property_stream_values;
@@ -137,6 +139,7 @@ pub enum DecodedAsset {
     Skeleton(DecodedSkeleton),
     AnimSequence(DecodedAnimSequence),
     BlueprintGraphNode(DecodedBlueprintGraphNode),
+    Function(DecodedFunction),
 }
 
 /// A UE 5.7 Blueprint graph node with its shared native pin stream decoded.
@@ -1218,6 +1221,30 @@ fn decode_struct_definition(
     context: &AssetDecodeContext<'_>,
     object_path: &ObjectPath,
 ) -> Result<Vec<StructField>, AssetError> {
+    let fields = decode_struct_members(reader, context, object_path)?;
+
+    // FStructScriptLoader reads the bytecode and serialized-storage sizes.
+    // User-defined structs should not carry script, but preserve the legacy
+    // rejection boundary if malformed input claims that they do.
+    let bytecode_size = reader.read_i32(&format!("{object_path}.ScriptBytecodeSize"))?;
+    let storage_size = reader.read_i32(&format!("{object_path}.ScriptStorageSize"))?;
+    if bytecode_size != 0 || storage_size != 0 {
+        return Err(AssetError::new(
+            AssetErrorKind::UnsupportedCapability,
+            format!(
+                "struct {object_path} carries {storage_size} bytes of script bytecode (unsupported)"
+            ),
+        ));
+    }
+    Ok(fields)
+}
+
+/// `UStruct::Serialize` up to its script: SuperStruct, Children and ChildProperties.
+fn decode_struct_members(
+    reader: &mut crate::archive::Reader<'_>,
+    context: &AssetDecodeContext<'_>,
+    object_path: &ObjectPath,
+) -> Result<Vec<StructField>, AssetError> {
     // UStruct::Serialize tail. SuperStruct is an FPackageIndex; user structs
     // have no super, so it is null (0). Children is a TArray<UField*>; user
     // structs carry their members as ChildProperties (FFields), not UFields.
@@ -1246,20 +1273,6 @@ fn decode_struct_definition(
         if let Some(field) = read_field(reader, context, &field_path)? {
             fields.push(field);
         }
-    }
-
-    // FStructScriptLoader reads the bytecode and serialized-storage sizes.
-    // User-defined structs should not carry script, but preserve the legacy
-    // rejection boundary if malformed input claims that they do.
-    let bytecode_size = reader.read_i32(&format!("{object_path}.ScriptBytecodeSize"))?;
-    let storage_size = reader.read_i32(&format!("{object_path}.ScriptStorageSize"))?;
-    if bytecode_size != 0 || storage_size != 0 {
-        return Err(AssetError::new(
-            AssetErrorKind::UnsupportedCapability,
-            format!(
-                "struct {object_path} carries {storage_size} bytes of script bytecode (unsupported)"
-            ),
-        ));
     }
     Ok(fields)
 }
@@ -1387,6 +1400,16 @@ fn read_field_type_tail(
             Ok(property_class)
         }
         "InterfaceProperty" => read_ref(reader, "InterfaceClass"),
+        // FDelegateProperty and FMulticastDelegateProperty::Serialize: the signature UFunction.
+        "DelegateProperty"
+        | "MulticastDelegateProperty"
+        | "MulticastInlineDelegateProperty"
+        | "MulticastSparseDelegateProperty" => read_ref(reader, "SignatureFunction"),
+        // FFieldPathProperty::Serialize: the FFieldClass, saved as its name.
+        "FieldPathProperty" => {
+            reader.read_name_ref(&format!("{path}.PropertyClass"))?;
+            Ok(None)
+        }
         "ArrayProperty" => {
             read_field_at_depth(reader, context, &format!("{path}.Inner"), depth + 1)?;
             Ok(None)
@@ -2351,6 +2374,12 @@ pub fn decode_export(
     };
     if is_binary_only_export_class(class_path.as_str()) {
         return Ok(None);
+    }
+
+    // Before source models: a function's script follows its UStruct body, which no generated
+    // model describes.
+    if FunctionDecoder.supports(class_path) {
+        return FunctionDecoder.decode(export, context).map(Some);
     }
 
     if let Some(decoded) = decode_modeled_export(export, context)? {
@@ -5022,7 +5051,7 @@ mod tests {
     fn rejects_unsupported_struct_field_type() {
         let package = test_package(vec![
             "None".into(),
-            "DelegateProperty".into(),
+            "VerseStringProperty".into(),
             "OnFire".into(),
         ]);
         let mut fields = Vec::new();

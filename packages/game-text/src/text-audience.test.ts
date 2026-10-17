@@ -273,6 +273,15 @@ describe("text audience policy table", () => {
 				"/Script/UMG.TextBlock"
 			),
 			"widget_tree"
+		],
+		[
+			"compiled Blueprint literal",
+			property(
+				"/Game/Props/BP_Sign.BP_Sign_C.ExecuteUbergraph_BP_Sign",
+				"ScriptBytecode",
+				"/Script/CoreUObject.Function"
+			),
+			"script_bytecode"
 		]
 	])("classifies %s as player", (_name, occurrence, rule) => {
 		expect(classifyTextAudience(occurrence)).toMatchObject({ audience: "player", rule });

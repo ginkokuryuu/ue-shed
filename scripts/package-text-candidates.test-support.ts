@@ -4,7 +4,6 @@ import { Effect } from "effect";
 import { assetReaderLayer, scanSavedProject } from "../packages/unreal-assets/dist/index.js";
 import {
 	isPackageTextCandidate,
-	packageTextExternalReferences,
 	textCorpusWithExcludedPackages,
 	textCorpusFromExtractionEvents
 } from "../packages/game-text/dist/index.js";
@@ -43,14 +42,16 @@ export async function auditPackageTextCandidates(
 			(header.package.header_data?.gatherableTextDataOffset ?? 0) > 0
 	);
 	const textProperty = headers.filter((header) => header.package.header_data?.hasTextProperty);
-	const external = packageTextExternalReferences(paths);
-	const world = headers.filter((header) => external.has(header.path));
+	// Reported only: external packages are selected by their own header like any other.
+	const external = headers.filter((header) =>
+		/[\\/]__External(?:Actors|Objects)__[\\/]/u.test(header.path)
+	);
 	const candidates = headers
 		.filter((header) => {
 			const data = header.package.header_data;
 			if (data === undefined)
 				throw new Error("Missing package header data: upgrade the reader");
-			return isPackageTextCandidate(data, external.has(header.path));
+			return isPackageTextCandidate(data);
 		})
 		.map((header) => header.path);
 	const selected = new Set(candidates);
@@ -100,7 +101,7 @@ export async function auditPackageTextCandidates(
 				textProperty: textProperty.length,
 				textPropertyBeyondFlag: textProperty.filter((header) => !flag.includes(header))
 					.length,
-				external: world.length
+				external: external.length
 			},
 			excludedPackages,
 			gapsMovedToExcluded,
