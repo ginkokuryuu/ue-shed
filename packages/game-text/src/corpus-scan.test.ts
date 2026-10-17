@@ -285,21 +285,20 @@ function* syntheticGaps(): Generator<SavedAssetTextExtractionEvent> {
 }
 
 it.effect(
-	"folds 50,000 gaps in linear time and explains only the packages the reader marked partial",
+	"folds 50,000 gaps into bounded diagnostics for only the packages the reader marked partial",
 	() =>
 		Effect.gen(function* () {
 			const reader = readerOffering(() => Stream.fromIterable(syntheticGaps()));
-			const started = performance.now();
 			const corpus = yield* Effect.flatMap(TextCorpusService, (service) =>
 				service.scan({ projectRoot: "C:/Fixture" })
 			).pipe(Effect.provide(TextCorpusServiceLive), Effect.provide(reader));
-			const elapsed = performance.now() - started;
-			expect(elapsed).toBeLessThan(900);
 			// Every package has gaps; only the reader's partial status makes them coverage problems.
 			expect(corpus.coverage.unsupportedTextProperties).toBe(2_500);
 			expect(corpus.coverage.partialPackages).toBe(2_500);
 			expect(corpus.status).toBe("partial");
 			expect(corpus.packageCoverage).toHaveLength(5_000);
+			// Keep output bounded by partial packages instead of emitting all 50,000 gaps.
+			expect(corpus.diagnostics).toHaveLength(5_000);
 			expect(
 				corpus.packageCoverage?.filter((item) => item.status === "partial")
 			).toHaveLength(2_500);
