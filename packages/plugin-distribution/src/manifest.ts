@@ -1,4 +1,5 @@
 import { Effect, Schema } from "effect";
+import { PluginErrorGuidanceFields as ErrorGuidanceFields } from "./errors.js";
 
 const NonEmptyString = Schema.String.check(Schema.isMinLength(1));
 const SafeIdentifier = NonEmptyString.check(Schema.isPattern(/^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/));
@@ -317,8 +318,7 @@ export class PluginBundleManifestValidationError extends Schema.TaggedError<Plug
 	"PluginBundleManifestValidationError",
 	{
 		code: PluginBundleManifestValidationCode,
-		message: Schema.String,
-		recovery: Schema.String
+		...ErrorGuidanceFields
 	}
 ) {}
 
@@ -335,7 +335,14 @@ function validationError(
 	message: string,
 	recovery: string
 ): PluginBundleManifestValidationError {
-	return new PluginBundleManifestValidationError({ code, message, recovery });
+	// Validation is pure: the manifest, its artifact or the requested engine must change.
+	return new PluginBundleManifestValidationError({
+		code,
+		message,
+		nextStep: "fix_input",
+		recovery,
+		retrySafe: true
+	});
 }
 
 function parseVersion(value: string): readonly [number, number, number] | undefined {
@@ -730,8 +737,7 @@ export class PluginDependencyResolutionError extends Schema.TaggedError<PluginDe
 	"PluginDependencyResolutionError",
 	{
 		code: Schema.Literals(["duplicate_requested_plugin", "requested_plugin_unavailable"]),
-		message: Schema.String,
-		recovery: Schema.String
+		...ErrorGuidanceFields
 	}
 ) {}
 
@@ -748,7 +754,9 @@ export const resolvePluginBundleDependencies = (
 				return yield* new PluginDependencyResolutionError({
 					code: "duplicate_requested_plugin",
 					message: `Plugin ${pluginId} was requested more than once.`,
-					recovery: "Request each plugin ID once."
+					recovery: "Request each plugin ID once.",
+					retrySafe: true,
+					nextStep: "fix_input"
 				});
 			}
 			requestedSet.add(pluginId);
@@ -760,7 +768,9 @@ export const resolvePluginBundleDependencies = (
 				return yield* new PluginDependencyResolutionError({
 					code: "requested_plugin_unavailable",
 					message: `Plugin ${pluginId} is not present in release ${manifest.releaseVersion}.`,
-					recovery: "Choose a plugin ID declared by the exact release manifest."
+					recovery: "Choose a plugin ID declared by the exact release manifest.",
+					retrySafe: true,
+					nextStep: "fix_input"
 				});
 			}
 		}

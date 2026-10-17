@@ -17,7 +17,7 @@ import {
 } from "p4client-ts/node";
 import { tmpdir } from "node:os";
 import { join, resolve, win32 } from "node:path";
-import { MapHistoryError } from "./errors.js";
+import { MapHistoryError, mapHistoryNextStep } from "./errors.js";
 
 const isMapHistoryError = Schema.is(MapHistoryError);
 
@@ -245,6 +245,9 @@ function toMapHistoryError(operation: string, cause: unknown): MapHistoryError {
 		...(isString(category) ? { category } : undefined),
 		...(isString(reason) ? { reason } : undefined)
 	});
+	// Map History only reads from Perforce, so a timeout or dropped connection can be repeated.
+	const retrySafe =
+		tag === "P4TimeoutError" || (tag === "P4CommandError" && category === "connection");
 	return new MapHistoryError({
 		cause,
 		kind,
@@ -261,8 +264,8 @@ function toMapHistoryError(operation: string, cause: unknown): MapHistoryError {
 							: kind === "resource_limit"
 								? "Narrow the history range or raise the explicit operation limit."
 								: "Inspect the Perforce diagnostic and retry when it is safe.",
-		retrySafe:
-			tag === "P4TimeoutError" || (tag === "P4CommandError" && category === "connection")
+		retrySafe,
+		nextStep: mapHistoryNextStep(kind, retrySafe)
 	});
 }
 
@@ -277,7 +280,8 @@ function mapLineageError(
 			kind === "map_lineage_limit"
 				? "Choose a range with fewer direct map relocations."
 				: "Inspect the map's direct Perforce move records and resolve the ambiguity before retrying.",
-		retrySafe: false
+		retrySafe: false,
+		nextStep: "fix_input"
 	});
 }
 
@@ -427,7 +431,8 @@ export function makePerforceHistorySource(
 				kind: "perforce_configuration",
 				message: `The Perforce test source does not resolve ${localPath}.`,
 				recovery: "Provide a resolveLocalPath test implementation.",
-				retrySafe: false
+				retrySafe: false,
+				nextStep: "fix_input"
 			})
 		),
 	resolveMapLineage?: NonNullable<PerforceHistorySourceApi["resolveMapLineage"]>
@@ -502,7 +507,8 @@ export function makePerforceHistorySource(
 							message:
 								"Map History received invalid exact Perforce revision metadata.",
 							recovery: "Resolve valid depot revisions before materializing history.",
-							retrySafe: false
+							retrySafe: false,
+							nextStep: "escalate"
 						})
 				)
 			);
@@ -652,7 +658,8 @@ export function perforceHistorySourceLayer(
 							message: `Perforce could not map ${path} to exactly one depot file.`,
 							recovery:
 								"Use a project path covered by one unambiguous Perforce client mapping.",
-							retrySafe: false
+							retrySafe: false,
+							nextStep: "fix_input"
 						})
 					);
 				}
@@ -668,7 +675,8 @@ export function perforceHistorySourceLayer(
 							kind: "ambiguous_depot_mapping",
 							message: `Perforce did not return a depot path for ${localPath}.`,
 							recovery: "Check the Perforce client mapping and retry.",
-							retrySafe: false
+							retrySafe: false,
+							nextStep: "fix_input"
 						})
 					);
 				}
@@ -748,7 +756,8 @@ export function perforceHistorySourceLayer(
 									kind: "ambiguous_depot_mapping",
 									message: `Perforce did not return a workspace path for ${depotPath}.`,
 									recovery: "Check the Perforce client mapping and retry.",
-									retrySafe: false
+									retrySafe: false,
+									nextStep: "fix_input"
 								})
 							);
 						}

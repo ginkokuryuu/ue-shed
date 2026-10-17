@@ -53,7 +53,9 @@ function poEditFailure(error: POEditError): LocalizationChangeSetError {
 	return new LocalizationChangeSetError({
 		code: "unwritable_change",
 		message: error.message,
-		recovery: error.recovery
+		recovery: error.recovery,
+		retrySafe: error.retrySafe,
+		nextStep: error.nextStep
 	});
 }
 
@@ -72,7 +74,9 @@ export const applyLocalizationChangeSet = Effect.fn("Localization.applyChangeSet
 				new LocalizationChangeSetError({
 					code: "invalid_change_set",
 					message: "The change-set request does not match version 1.",
-					recovery: "Provide a project root and a valid version 1 change set."
+					recovery: "Provide a project root and a valid version 1 change set.",
+					retrySafe: true,
+					nextStep: "fix_input"
 				})
 		)
 	);
@@ -85,7 +89,9 @@ export const applyLocalizationChangeSet = Effect.fn("Localization.applyChangeSet
 			new LocalizationChangeSetError({
 				code: "multiple_targets",
 				message: "The change set edits more than one localization target.",
-				recovery: "Split the change set so each one edits a single target."
+				recovery: "Split the change set so each one edits a single target.",
+				retrySafe: true,
+				nextStep: "fix_input"
 			})
 		);
 	const targetName = targetNames[0];
@@ -94,7 +100,9 @@ export const applyLocalizationChangeSet = Effect.fn("Localization.applyChangeSet
 			new LocalizationChangeSetError({
 				code: "invalid_change_set",
 				message: "The change set contains no changes.",
-				recovery: "Stage at least one translation change before writing."
+				recovery: "Stage at least one translation change before writing.",
+				retrySafe: true,
+				nextStep: "fix_input"
 			})
 		);
 	const discovery = yield* evidenceService.discover({ projectRoot: request.projectRoot, limits });

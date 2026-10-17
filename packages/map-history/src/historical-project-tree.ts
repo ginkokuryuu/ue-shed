@@ -48,7 +48,8 @@ function temporaryStorageError(operation: string, path: string, cause: unknown):
 		kind: "temporary_storage",
 		message: temporaryStorageMessage(operation, path, cause),
 		recovery: "Check temporary-directory permissions and available disk space, then retry.",
-		retrySafe: true
+		retrySafe: true,
+		nextStep: "retry"
 	});
 }
 
@@ -57,7 +58,8 @@ function invalidTarget(path: string, message: string): MapHistoryError {
 		kind: "invalid_target",
 		message,
 		recovery: "Use a non-empty project-relative path contained by the historical project.",
-		retrySafe: false
+		retrySafe: false,
+		nextStep: "fix_input"
 	});
 }
 

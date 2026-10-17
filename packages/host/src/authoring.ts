@@ -447,8 +447,11 @@ const makeShedAuthoring = Effect.gen(function* () {
 					(error) =>
 						new AuthoringClientError({
 							cause: error,
+							message: error.message,
 							operation: "authoring.chooseTable",
-							recovery: error.recovery
+							recovery: error.recovery,
+							retrySafe: error.retrySafe,
+							nextStep: error.nextStep
 						})
 				)
 			);

@@ -5,7 +5,8 @@ import {
 	makeWorldPreparation,
 	WorldPreparation,
 	WorldPreparationError,
-	withPreparedWorld
+	withPreparedWorld,
+	worldPreparationGuidance
 } from "./preparation.js";
 import {
 	WorldId,
@@ -259,7 +260,9 @@ it.effect("reports work and restoration failures through the scoped public bound
 					code: "work_failed",
 					operation: "test",
 					message: "Work failed",
-					recovery: "Inspect work"
+					recovery: "Inspect work",
+					retrySafe: false,
+					nextStep: "escalate"
 				})
 			)
 		).pipe(Effect.provideService(WorldPreparation, service), Effect.result);
@@ -378,3 +381,22 @@ it.effect("rejects unrelated response evidence and cleans up uncertain ownership
 		expect(h.calls.at(-1)?.action).toBe("release");
 	})
 );
+
+it("guides each world failure to its next step", () => {
+	expect(worldPreparationGuidance("connection_failed")).toEqual({
+		retrySafe: true,
+		nextStep: "retry"
+	});
+	expect(worldPreparationGuidance("revision_conflict")).toEqual({
+		retrySafe: false,
+		nextStep: "reconcile"
+	});
+	expect(worldPreparationGuidance("layer_missing")).toEqual({
+		retrySafe: false,
+		nextStep: "fix_input"
+	});
+	expect(worldPreparationGuidance("restoration_failed")).toEqual({
+		retrySafe: false,
+		nextStep: "escalate"
+	});
+});

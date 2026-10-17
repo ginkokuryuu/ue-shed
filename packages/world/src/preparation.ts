@@ -14,7 +14,7 @@ import {
 	Semaphore,
 	Stream
 } from "effect";
-import { decodeCompanionCapabilityManifest } from "@ue-shed/protocol";
+import { decodeCompanionCapabilityManifest, ErrorGuidanceFields } from "@ue-shed/protocol";
 import { RemoteControlClient, type RemoteControlClientApi } from "@ue-shed/unreal-connection";
 import {
 	WorldLeaseId,
@@ -32,8 +32,7 @@ export class WorldPreparationError extends Schema.TaggedError<WorldPreparationEr
 	{
 		code: Schema.String,
 		operation: Schema.String,
-		message: Schema.String,
-		recovery: Schema.String,
+		...ErrorGuidanceFields,
 		snapshot: Schema.optionalKey(WorldSnapshot)
 	}
 ) {}
@@ -51,12 +50,50 @@ class WorldRestorationFailure extends Error {
 		this.name = "WorldRestorationFailure";
 	}
 }
+/**
+ * Guidance for client and editor failure codes. Requests carry a lease id and revision, so a lost
+ * response may be sent again; a held or full lease table may free up. Changed worlds, revisions
+ * and leases need a fresh read; unknown codes go to a person.
+ */
+export function worldPreparationGuidance(
+	code: string
+): Pick<WorldPreparationError, "retrySafe" | "nextStep"> {
+	switch (code) {
+		case "connection_failed":
+		case "active_lease_limit":
+		case "lease_conflict":
+			return { retrySafe: true, nextStep: "retry" };
+		case "correlation_mismatch":
+		case "lease_released":
+		case "lease_unknown":
+		case "revision_conflict":
+		case "world_changed":
+			return { retrySafe: false, nextStep: "reconcile" };
+		case "actor_missing":
+		case "bounds_unavailable":
+		case "budget_exceeded":
+		case "capability_unavailable":
+		case "container_unavailable":
+		case "dependency_budget_exceeded":
+		case "editor_required":
+		case "invalid_request":
+		case "layer_conflict":
+		case "layer_missing":
+		case "policy_mismatch":
+		case "preparation_blocked":
+		case "retention_budget_exceeded":
+			return { retrySafe: false, nextStep: "fix_input" };
+		default:
+			return { retrySafe: false, nextStep: "escalate" };
+	}
+}
 const failure = (code: string, operation: string, message: string, snapshot?: WorldSnapshot) =>
 	new WorldPreparationError({
 		code,
 		operation,
 		message,
 		recovery: "Inspect world preparation evidence and the existing lease before retrying.",
+		...worldPreparationGuidance(code),
 		...(snapshot === undefined ? undefined : { snapshot })
 	});
 const decode = <S extends Schema.Top, Input>(schema: S, value: Input, operation: string) =>
@@ -167,7 +204,11 @@ export function makeWorldPreparation(
 			);
 		yield* Metric.update(outcomes, response.status);
 		if (response.status === "failed")
-			return yield* new WorldPreparationError({ ...response, operation: request.action });
+			return yield* new WorldPreparationError({
+				...response,
+				operation: request.action,
+				...worldPreparationGuidance(response.code)
+			});
 		return response;
 	});
 	const snapshot = (request: WorldRequest) =>

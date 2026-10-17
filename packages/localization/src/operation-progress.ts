@@ -60,6 +60,7 @@ export function localizationExitFailure(
 		message: error.message,
 		recovery: error.recovery,
 		retrySafe: false,
+		nextStep: error.nextStep,
 		logExcerpt: excerpt,
 		logPath,
 		exitCode

@@ -11,7 +11,7 @@ import {
 	type SavedAssetTextureRecord,
 	type SavedProperty
 } from "@ue-shed/unreal-assets";
-import { ErrorCauseFields } from "@ue-shed/protocol";
+import { ErrorCauseFields, ErrorGuidanceFields } from "@ue-shed/protocol";
 import { Context, Effect, Layer, Predicate, Ref, Schema, Stream } from "effect";
 import { maximumDimensionKey } from "./report.js";
 import {
@@ -39,7 +39,7 @@ interface ExtractionProgress {
 
 export class TextureAuditScanError extends Schema.TaggedError<TextureAuditScanError>()(
 	"TextureAuditScanError",
-	{ ...TextureAuditPublicError.fields, ...ErrorCauseFields }
+	{ code: TextureAuditPublicError.fields.code, ...ErrorGuidanceFields, ...ErrorCauseFields }
 ) {}
 
 const TextureAuditScanFields = {
@@ -70,7 +70,8 @@ function textureScanFailure(error: AssetReaderError): TextureAuditScanError {
 			code: "scan_failed",
 			message: error.message,
 			recovery: "Narrow the project or raise the explicit maximum asset limit.",
-			retrySafe: false
+			retrySafe: false,
+			nextStep: "fix_input"
 		});
 	}
 	if (error.kind === "discovery") {
@@ -78,14 +79,16 @@ function textureScanFailure(error: AssetReaderError): TextureAuditScanError {
 			code: "invalid_project",
 			message: error.message,
 			recovery: "Choose an Unreal project directory containing a Content folder.",
-			retrySafe: true
+			retrySafe: true,
+			nextStep: "fix_input"
 		});
 	}
 	return new TextureAuditScanError({
 		code: "scan_failed",
 		message: error.message,
 		recovery: "Retry the scan, then verify the saved-asset reader is installed.",
-		retrySafe: error.retrySafe
+		retrySafe: error.retrySafe,
+		nextStep: error.nextStep
 	});
 }
 
@@ -338,6 +341,10 @@ function readRuleSet(path: string): Effect.Effect<TextureAuditRuleSet, TextureAu
 							: `Could not read texture audit rule file ${path}.`,
 				recovery: "Choose a readable schema-version-1 JSON rule file.",
 				retrySafe: true,
+				nextStep:
+					code === "ENOENT" || code === "EACCES" || code === "EPERM"
+						? "fix_input"
+						: "retry",
 				cause
 			});
 		}
@@ -351,6 +358,7 @@ function readRuleSet(path: string): Effect.Effect<TextureAuditRuleSet, TextureAu
 						message: `Texture audit rule file ${path} is not valid JSON.`,
 						recovery: "Choose a schema-version-1 rule file with supported rule kinds.",
 						retrySafe: false,
+						nextStep: "fix_input",
 						cause
 					})
 			}).pipe(
@@ -364,6 +372,7 @@ function readRuleSet(path: string): Effect.Effect<TextureAuditRuleSet, TextureAu
 									recovery:
 										"Choose a schema-version-1 rule file with supported rule kinds.",
 									retrySafe: false,
+									nextStep: "fix_input",
 									cause
 								})
 						)
@@ -667,6 +676,7 @@ export const TextureAuditLive = Layer.effect(
 							recovery:
 								"Provide a project root, rule file, and positive scan limits.",
 							retrySafe: false,
+							nextStep: "fix_input",
 							cause
 						})
 				)
@@ -687,6 +697,7 @@ export const TextureAuditLive = Layer.effect(
 							recovery:
 								"Provide a project root, rule file, and positive scan limits.",
 							retrySafe: false,
+							nextStep: "fix_input",
 							cause
 						})
 				)

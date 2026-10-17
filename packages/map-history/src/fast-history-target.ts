@@ -42,7 +42,8 @@ function targetError(message: string, recovery: string): MapHistoryError {
 		kind: "invalid_target",
 		message,
 		recovery,
-		retrySafe: false
+		retrySafe: false,
+		nextStep: "fix_input"
 	});
 }
 

@@ -1,6 +1,7 @@
 import { readdir, readFile } from "node:fs/promises";
 import { execFile } from "node:child_process";
 import { basename, dirname, extname, join, resolve } from "node:path";
+import { ErrorGuidanceFields } from "@ue-shed/protocol";
 import { Config, Context, Effect, Layer, Schema } from "effect";
 
 export const EngineVersion = Schema.Struct({
@@ -50,9 +51,7 @@ export class EngineInstallationError extends Schema.TaggedError<EngineInstallati
 			"engine_not_found",
 			"engine_ambiguous"
 		]),
-		message: Schema.String,
-		recovery: Schema.String,
-		retrySafe: Schema.Boolean,
+		...ErrorGuidanceFields,
 		candidates: Schema.optionalKey(Schema.Array(Schema.String))
 	}
 ) {}
@@ -80,6 +79,8 @@ function failure(
 		message,
 		recovery,
 		retrySafe,
+		// Every discovery failure is fixed by choosing another descriptor or engine root.
+		nextStep: "fix_input",
 		...(candidates === undefined ? undefined : { candidates: [...candidates] })
 	});
 }

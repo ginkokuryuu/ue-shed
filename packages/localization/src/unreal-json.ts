@@ -20,7 +20,9 @@ export function validateUnrealJsonEscapes(
 		throw new LocalizationError({
 			code: format === "manifest" ? "malformed_manifest" : "malformed_archive",
 			message: `${file} at character offset ${baseOffset + match.index}: escaped unpaired UTF-16 surrogate; Unreal Engine 5.7 and 5.8 cannot load this file either.`,
-			recovery: "Repair the escaped surrogate or regenerate the file through Unreal."
+			recovery: "Repair the escaped surrogate or regenerate the file through Unreal.",
+			retrySafe: true,
+			nextStep: "fix_input"
 		});
 	}
 }

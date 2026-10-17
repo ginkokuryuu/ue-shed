@@ -28,6 +28,7 @@ import { Clock, Context, Duration, Effect, Layer, Schema } from "effect";
 import {
 	NiagaraPreviewProducerReceipt,
 	NiagaraPreviewProducerRequest,
+	NiagaraErrorGuidanceFields as ErrorGuidanceFields,
 	NiagaraPreviewFailure,
 	NiagaraPreviewRunManifest,
 	decodeNiagaraPreviewProducerReceipt,
@@ -63,8 +64,45 @@ export interface NiagaraPreviewRunOutcome {
 
 export class NiagaraPreviewError extends Schema.TaggedError<NiagaraPreviewError>()(
 	"NiagaraPreviewError",
-	NiagaraPreviewFailure.fields
+	{
+		code: NiagaraPreviewFailure.fields.code,
+		...ErrorGuidanceFields,
+		runId: NiagaraPreviewFailure.fields.runId,
+		stage: NiagaraPreviewFailure.fields.stage
+	}
 ) {}
+
+/**
+ * The next step for a preview failure. Setup and request problems need changed input, a producer
+ * that breaks its receipt contract needs a matching plugin, and leftover staged or published state
+ * must be inspected before a run that is not retry-safe is repeated.
+ */
+function niagaraPreviewNextStep(
+	code: NiagaraPreviewError["code"],
+	retrySafe: boolean
+): NiagaraPreviewError["nextStep"] {
+	switch (code) {
+		case "invalid_request":
+		case "engine_discovery_failed":
+		case "commandlet_unavailable":
+		case "plugin_unavailable":
+		case "rendering_unavailable":
+		case "system_unavailable":
+		case "baker_camera_missing":
+		case "compilation_failed":
+			return "fix_input";
+		case "receipt_invalid":
+			return retrySafe ? "retry" : "escalate";
+		case "capture_failed":
+		case "process_failed":
+		case "process_timeout":
+		case "receipt_missing":
+		case "artifact_invalid":
+		case "run_exists":
+		case "publish_failed":
+			return retrySafe ? "retry" : "reconcile";
+	}
+}
 
 export interface NiagaraPreviewApi {
 	readonly run: (
@@ -87,6 +125,7 @@ function previewError(
 	return new NiagaraPreviewError({
 		code,
 		message,
+		nextStep: niagaraPreviewNextStep(code, retrySafe),
 		recovery,
 		retrySafe,
 		stage,

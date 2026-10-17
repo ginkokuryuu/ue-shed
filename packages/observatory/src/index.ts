@@ -3,7 +3,7 @@ import {
 	EditorWindowActivationLive,
 	EditorForegroundPermissionLive
 } from "@ue-shed/engine";
-import { ErrorCauseFields } from "@ue-shed/protocol";
+import { ErrorCauseFields, ErrorGuidanceFields } from "@ue-shed/protocol";
 import { RemoteControlClient, RemoteControlClientError } from "@ue-shed/unreal-connection";
 import { Context, Effect, Layer, Schema, type Stream } from "effect";
 import { WorldActorSnapshot, type ActorId as ActorIdType } from "./actor-models.js";
@@ -41,10 +41,8 @@ const ObservationCadenceResponse = Schema.Union([
 export class ObservatoryConnectionError extends Schema.TaggedError<ObservatoryConnectionError>()(
 	"ObservatoryConnectionError",
 	{
-		message: Schema.String,
 		operation: Schema.String,
-		recovery: Schema.String,
-		retrySafe: Schema.Boolean,
+		...ErrorGuidanceFields,
 		...ErrorCauseFields
 	}
 ) {}
@@ -99,6 +97,7 @@ function connectionError(
 		recovery:
 			"Open an editor world with UEShedObservatory enabled, then retry the live world scan.",
 		retrySafe: isRemoteControlClientError(cause) ? cause.retrySafe : false,
+		nextStep: isRemoteControlClientError(cause) ? cause.nextStep : "fix_input",
 		cause
 	});
 }
@@ -135,7 +134,8 @@ export const ObservatoryLive = Layer.effect(
 						message: response.message,
 						operation: "actor_snapshot",
 						recovery: response.recovery,
-						retrySafe: true
+						retrySafe: true,
+						nextStep: "retry"
 					})
 				);
 			}
@@ -202,7 +202,8 @@ export const ObservatoryLive = Layer.effect(
 					message: response.message,
 					operation: "set_actor_observation_cadence",
 					recovery: response.recovery,
-					retrySafe: true
+					retrySafe: true,
+					nextStep: "retry"
 				})
 			);
 		});

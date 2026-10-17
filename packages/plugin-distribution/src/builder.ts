@@ -19,7 +19,11 @@ import { createGzip, type ZlibOptions } from "node:zlib";
 import { OwnedProcessTree, type OwnedProcessExit } from "@ue-shed/engine";
 import { Context, Duration, Effect, Layer, Schema } from "effect";
 import { extractPluginArchive, verifyPluginArtifact } from "./archive.js";
-import { PluginInstallCancelled } from "./errors.js";
+import {
+	PluginErrorGuidanceFields as ErrorGuidanceFields,
+	PluginInstallCancelled,
+	type PluginErrorNextStep
+} from "./errors.js";
 import {
 	CompiledPluginBundleManifestV3,
 	PluginBundlePlugin,
@@ -65,9 +69,7 @@ export const CompiledPluginBuildResult = Schema.Struct({
 export type CompiledPluginBuildResult = typeof CompiledPluginBuildResult.Type;
 
 const BuildErrorFields = {
-	message: Schema.String,
-	recovery: Schema.String,
-	retrySafe: Schema.Boolean,
+	...ErrorGuidanceFields,
 	stage: Schema.String
 };
 
@@ -153,8 +155,18 @@ function sha256(bytes: Uint8Array) {
 	return Sha256Checksum.make(`sha256:${createHash("sha256").update(bytes).digest("hex")}`);
 }
 
-function invalid(stage: string, message: string, recovery: string) {
-	return new InvalidCompiledPluginBuild({ message, recovery, retrySafe: false, stage });
+/**
+ * Builds run in a private random stage and publish with one final rename, so a failed build leaves
+ * no published output and repeating it is idempotent. Most failures are input the caller can fix;
+ * pass `escalate` when UAT or the builder itself produced the bad state.
+ */
+function invalid(
+	stage: string,
+	message: string,
+	recovery: string,
+	nextStep: PluginErrorNextStep = "fix_input"
+) {
+	return new InvalidCompiledPluginBuild({ message, nextStep, recovery, retrySafe: true, stage });
 }
 
 function cancelled(stage: CompiledPluginBuildStage) {
@@ -162,6 +174,7 @@ function cancelled(stage: CompiledPluginBuildStage) {
 		message: `Compiled plugin build was cancelled during ${stage}.`,
 		recovery: "Retry the exact build; no output was published.",
 		retrySafe: true,
+		nextStep: "retry",
 		stage
 	});
 }
@@ -537,7 +550,8 @@ function validateExit(exit: OwnedProcessExit) {
 			message: `AutomationTool BuildPlugin exited without success (${String(exit.exitCode)}).`,
 			recovery:
 				"Inspect AutomationTool's reported final log, correct the deterministic build input, and retry.",
-			retrySafe: false,
+			retrySafe: true,
+			nextStep: "fix_input",
 			stage: "build"
 		})
 	);
@@ -812,6 +826,7 @@ export const compiledPluginBuilderLayer = (): Layer.Layer<
 											recovery:
 												"Increase the bounded timeout only after inspecting the build host.",
 											retrySafe: true,
+											nextStep: "fix_input",
 											stage: "build"
 										});
 									}
@@ -834,7 +849,8 @@ export const compiledPluginBuilderLayer = (): Layer.Layer<
 												: invalid(
 														"validation",
 														`RunUAT output is invalid: ${String(cause)}`,
-														"Inspect UAT products and rebuild; invalid output is never published."
+														"Inspect UAT products and rebuild; invalid output is never published.",
+														"escalate"
 													)
 									});
 									yield* Effect.sync(() =>
@@ -889,7 +905,8 @@ export const compiledPluginBuilderLayer = (): Layer.Layer<
 											invalid(
 												"validation",
 												`Could not attest compiled modules: ${String(cause)}`,
-												"Inspect UAT module output and rebuild."
+												"Inspect UAT module output and rebuild.",
+												"escalate"
 											)
 									});
 									if (state.sourceManifest.schemaVersion !== 3) {
@@ -956,7 +973,8 @@ export const compiledPluginBuilderLayer = (): Layer.Layer<
 											invalid(
 												"manifest",
 												"Generated compiled manifest is invalid.",
-												"Inspect the validated build inputs and retry."
+												"Inspect the validated build inputs and retry.",
+												"escalate"
 											)
 										)
 									);

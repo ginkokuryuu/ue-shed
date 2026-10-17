@@ -1,13 +1,37 @@
 import { copyFile, readFile, rename, stat, writeFile } from "node:fs/promises";
 import { isAbsolute, join } from "node:path";
 import { Effect, Exit, Schedule, Schema } from "effect";
+import { NiagaraErrorGuidanceFields as ErrorGuidanceFields } from "./schema.js";
 
 export class NiagaraSessionError extends Schema.TaggedError<NiagaraSessionError>()(
 	"NiagaraSessionError",
-	{ message: Schema.String, cause: Schema.optionalKey(Schema.Defect()) }
+	{ ...ErrorGuidanceFields, cause: Schema.optionalKey(Schema.Defect()) }
 ) {}
-const failure = (message: string, cause?: unknown) =>
-	new NiagaraSessionError({ message, ...(cause === undefined ? undefined : { cause }) });
+type SessionGuidance = Pick<NiagaraSessionError, "nextStep" | "recovery" | "retrySafe">;
+const failure = (message: string, guidance: SessionGuidance, cause?: unknown) =>
+	new NiagaraSessionError({
+		message,
+		...guidance,
+		...(cause === undefined ? undefined : { cause })
+	});
+/** Before the request is published nothing has run, so the whole submission can be repeated. */
+const beforeSubmit: SessionGuidance = {
+	recovery:
+		"Check that the Niagara session directory is readable and writable, then submit again.",
+	retrySafe: true,
+	nextStep: "retry"
+};
+/** After publication the session may already be capturing the run; resubmitting could repeat it. */
+const afterSubmit: SessionGuidance = {
+	recovery: "Inspect the session directory for this run's result before submitting it again.",
+	retrySafe: false,
+	nextStep: "reconcile"
+};
+const producerMismatch: SessionGuidance = {
+	recovery: "Use a UEShedNiagara session producer that matches this host.",
+	retrySafe: false,
+	nextStep: "escalate"
+};
 const maximumSessionFileBytes = 4096;
 class OversizedSessionFile extends Error {}
 const resultSchema = Schema.Struct({
@@ -15,7 +39,7 @@ const resultSchema = Schema.Struct({
 	runId: Schema.String,
 	exitCode: Schema.Int.check(Schema.isBetween({ minimum: 0, maximum: 255 }))
 });
-const readOptional = (path: string) =>
+const readOptional = (path: string, guidance: SessionGuidance) =>
 	Effect.tryPromise({
 		try: async () => {
 			try {
@@ -33,6 +57,7 @@ const readOptional = (path: string) =>
 				cause instanceof OversizedSessionFile
 					? `Niagara session file ${path} exceeds ${maximumSessionFileBytes} bytes.`
 					: `Could not read Niagara session file ${path}.`,
+				guidance,
 				cause
 			)
 	});
@@ -45,28 +70,51 @@ export const submitNiagaraSessionRequest = Effect.fn("NiagaraSession.submit")(fu
 	timeoutMs?: number;
 }) {
 	if (!isAbsolute(input.directory) || !/^[a-f0-9-]{36}$/.test(input.runId))
-		return yield* Effect.fail(failure("Invalid Niagara session request."));
-	const ready = yield* readOptional(join(input.directory, "ready.json"));
+		return yield* Effect.fail(
+			failure("Invalid Niagara session request.", {
+				recovery: "Pass an absolute session directory and a UUID run ID.",
+				retrySafe: true,
+				nextStep: "fix_input"
+			})
+		);
+	const ready = yield* readOptional(join(input.directory, "ready.json"), beforeSubmit);
 	yield* Schema.decodeUnknownEffect(
 		Schema.fromJsonString(
 			Schema.Struct({
 				protocol: Schema.Literal("ue-shed-niagara-session.v1")
 			})
 		)
-	)(ready).pipe(Effect.mapError(() => failure("Session is not ready.")));
+	)(ready).pipe(
+		Effect.mapError(() =>
+			failure("Session is not ready.", {
+				recovery:
+					"Wait for the Niagara session to write its ready marker, or start a new session.",
+				retrySafe: true,
+				nextStep: "retry"
+			})
+		)
+	);
 	const prefix = join(input.directory, input.runId);
 	const poll = Effect.gen(function* () {
-		const text = yield* readOptional(`${prefix}.result.json`);
+		const text = yield* readOptional(`${prefix}.result.json`, afterSubmit);
 		if (text !== undefined) {
 			const result = yield* Schema.decodeUnknownEffect(Schema.fromJsonString(resultSchema))(
 				text
-			).pipe(Effect.mapError(() => failure("Invalid session result.")));
+			).pipe(Effect.mapError(() => failure("Invalid session result.", producerMismatch)));
 			if (result.runId !== input.runId)
-				return yield* Effect.fail(failure("Invalid session result identity."));
+				return yield* Effect.fail(
+					failure("Invalid session result identity.", producerMismatch)
+				);
 			return result.exitCode;
 		}
-		if ((yield* readOptional(join(input.directory, "closed"))) !== undefined)
-			return yield* Effect.fail(failure("Niagara session closed before completing capture."));
+		if ((yield* readOptional(join(input.directory, "closed"), afterSubmit)) !== undefined)
+			return yield* Effect.fail(
+				failure("Niagara session closed before completing capture.", {
+					recovery: "Start a new Niagara session, then submit the run again.",
+					retrySafe: false,
+					nextStep: "reconcile"
+				})
+			);
 		return undefined;
 	}).pipe(
 		Effect.repeat({
@@ -83,6 +131,7 @@ export const submitNiagaraSessionRequest = Effect.fn("NiagaraSession.submit")(fu
 			catch: (cause) =>
 				failure(
 					`Could not submit Niagara session request ${input.runId} to ${input.directory}.`,
+					beforeSubmit,
 					cause
 				)
 		}),
@@ -95,6 +144,12 @@ export const submitNiagaraSessionRequest = Effect.fn("NiagaraSession.submit")(fu
 						catch: (cause) =>
 							failure(
 								`Could not write the cancellation marker for Niagara session run ${input.runId}.`,
+								{
+									recovery:
+										"Remove the run's request from the session directory or close the session.",
+									retrySafe: true,
+									nextStep: "retry"
+								},
 								cause
 							)
 					}).pipe(

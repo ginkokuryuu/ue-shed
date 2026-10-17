@@ -3,7 +3,8 @@ import {
 	defaultLocalizationLimits,
 	LocalizationError,
 	isLocalizationError,
-	LocalizationLimits
+	LocalizationLimits,
+	localizationErrorGuidance
 } from "./schema.js";
 import { validateUnrealJsonEscapes } from "./unreal-json.js";
 
@@ -41,7 +42,8 @@ export function localizationError(code: LocalizationError["code"]): Localization
 	return new LocalizationError({
 		code,
 		message: `Localization evidence could not be read (${code}).`,
-		recovery: recovery[code]
+		recovery: recovery[code],
+		...localizationErrorGuidance(code)
 	});
 }
 

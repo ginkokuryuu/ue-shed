@@ -50,9 +50,21 @@ function isInputMappingContextClass(classPath: string): boolean {
 	);
 }
 
+/** The shared UE Shed error guidance shape, defined here because this package stays protocol-free. */
+const ErrorGuidanceFields = {
+	message: Schema.String,
+	recovery: Schema.String,
+	retrySafe: Schema.Boolean,
+	nextStep: Schema.Literals(["fix_input", "retry", "reconcile", "escalate"])
+};
+
 export class EnhancedInputScanError extends Schema.TaggedError<EnhancedInputScanError>()(
 	"EnhancedInputScanError",
-	{ ...EnhancedInputPublicError.fields, cause: Schema.optionalKey(Schema.Defect()) }
+	{
+		code: EnhancedInputPublicError.fields.code,
+		...ErrorGuidanceFields,
+		cause: Schema.optionalKey(Schema.Defect())
+	}
 ) {}
 
 export const EnhancedInputScanOptions = Schema.Struct({
@@ -73,14 +85,16 @@ function enhancedInputScanFailure(error: AssetReaderError): EnhancedInputScanErr
 			code: "scan_limit_exceeded",
 			message: error.message,
 			recovery: "Narrow the project or raise the explicit maximum asset limit.",
-			retrySafe: false
+			retrySafe: false,
+			nextStep: "fix_input"
 		});
 	}
 	return new EnhancedInputScanError({
 		code: "invalid_project",
 		message: error.message,
 		recovery: "Choose an Unreal project directory containing a Content folder.",
-		retrySafe: error.retrySafe
+		retrySafe: error.retrySafe,
+		nextStep: error.nextStep
 	});
 }
 
@@ -470,7 +484,8 @@ function inspectEnhancedInputPathWith(
 						code: "invalid_path",
 						message: error.message,
 						recovery: "Provide a readable .uasset path or Unreal project root.",
-						retrySafe: true
+						retrySafe: true,
+						nextStep: "fix_input"
 					})
 			)
 		);
@@ -512,6 +527,7 @@ export const EnhancedInputServiceLive = Layer.effect(
 								"Enhanced Input scan options need a project root and positive scan limits.",
 							recovery: "Provide a project root and positive scan limits.",
 							retrySafe: false,
+							nextStep: "fix_input",
 							cause
 						})
 				)
@@ -524,7 +540,8 @@ export const EnhancedInputServiceLive = Layer.effect(
 					code: "invalid_path",
 					message: "Enhanced Input inspect requires a non-empty path.",
 					recovery: "Provide a .uasset path or Unreal project root.",
-					retrySafe: false
+					retrySafe: false,
+					nextStep: "fix_input"
 				});
 			}
 			return yield* inspectEnhancedInputPathWith(reader, path);

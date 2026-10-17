@@ -19,6 +19,17 @@ import {
 	type CustodianReport
 } from "./schema.js";
 
+/**
+ * The UE Shed error guidance shape, kept local because this package does not depend on
+ * `@ue-shed/protocol`. `retry` is only valid when `retrySafe` is true.
+ */
+const CustodianErrorGuidanceFields = {
+	message: Schema.String,
+	recovery: Schema.String,
+	retrySafe: Schema.Boolean,
+	nextStep: Schema.Literals(["fix_input", "retry", "reconcile", "escalate"])
+};
+
 export class CustodianError extends Schema.TaggedError<CustodianError>()("ProjectCustodian.Error", {
 	code: Schema.Literals([
 		"invalid_request",
@@ -28,9 +39,7 @@ export class CustodianError extends Schema.TaggedError<CustodianError>()("Projec
 		"execution_in_progress",
 		"execution_failed"
 	]),
-	message: Schema.String,
-	recovery: Schema.String,
-	retrySafe: Schema.Boolean,
+	...CustodianErrorGuidanceFields,
 	cause: Schema.Defect()
 }) {}
 const isCustodianError = Schema.is(CustodianError);
@@ -63,6 +72,7 @@ function invalidRequest(operation: "scan" | "prepare" | "execute", cause: unknow
 				? "Provide one readable directory as the explicit scan root."
 				: "Review the schema-owned request and retry without changing any target paths.",
 		retrySafe: false,
+		nextStep: "fix_input",
 		cause
 	});
 }
@@ -86,6 +96,7 @@ export const CustodianNodeLive = Layer.effect(
 						message: `Project Custodian could not scan ${request.root}.`,
 						recovery: "Choose a readable directory and retry. No files were changed.",
 						retrySafe: true,
+						nextStep: "fix_input",
 						cause
 					})
 			});
@@ -97,6 +108,7 @@ export const CustodianNodeLive = Layer.effect(
 							message: "Project Custodian produced an invalid report.",
 							recovery: "Update UE Shed and retry the scan. No files were changed.",
 							retrySafe: false,
+							nextStep: "escalate",
 							cause
 						})
 				)
@@ -118,6 +130,7 @@ export const CustodianNodeLive = Layer.effect(
 						recovery:
 							"Rescan the root, select only targets in the current plan, and retry. No files were changed.",
 						retrySafe: true,
+						nextStep: "reconcile",
 						cause
 					})
 			});
@@ -138,6 +151,7 @@ export const CustodianNodeLive = Layer.effect(
 						recovery:
 							"Prepare a fresh proposal and review it before approving cleanup.",
 						retrySafe: false,
+						nextStep: "fix_input",
 						cause
 					})
 			});
@@ -149,6 +163,7 @@ export const CustodianNodeLive = Layer.effect(
 							message: "Project Custodian rejected a malformed cleanup proposal.",
 							recovery: "Prepare a fresh proposal and do not edit its JSON document.",
 							retrySafe: false,
+							nextStep: "fix_input",
 							cause
 						})
 				)
@@ -161,6 +176,7 @@ export const CustodianNodeLive = Layer.effect(
 						recovery:
 							"Prepare a fresh proposal and do not move or edit its JSON document.",
 						retrySafe: false,
+						nextStep: "fix_input",
 						cause: proposal
 					})
 				);
@@ -179,6 +195,7 @@ export const CustodianNodeLive = Layer.effect(
 						message: "This cleanup proposal is already executing.",
 						recovery: "Wait for the active run or cancel its remaining targets.",
 						retrySafe: true,
+						nextStep: "retry",
 						cause: proposal.id
 					})
 				);
@@ -198,6 +215,7 @@ export const CustodianNodeLive = Layer.effect(
 						recovery:
 							"Inspect the proposal event log and receipt, then rescan before retrying any remaining targets.",
 						retrySafe: false,
+						nextStep: "reconcile",
 						cause
 					})
 			}).pipe(
@@ -211,6 +229,7 @@ export const CustodianNodeLive = Layer.effect(
 								recovery:
 									"Inspect the event log and rescan before retrying any remaining targets.",
 								retrySafe: false,
+								nextStep: "reconcile",
 								cause
 							})
 				),

@@ -173,6 +173,14 @@ export const NiagaraPreviewDiagnostic = Schema.Struct({
 });
 export type NiagaraPreviewDiagnostic = typeof NiagaraPreviewDiagnostic.Type;
 
+/** The shared UE Shed error guidance shape; this package does not depend on the protocol. */
+export const NiagaraErrorGuidanceFields = {
+	message: Schema.String,
+	recovery: Schema.String,
+	retrySafe: Schema.Boolean,
+	nextStep: Schema.Literals(["fix_input", "retry", "reconcile", "escalate"])
+};
+
 export const NiagaraPreviewFailure = Schema.Struct({
 	code: Schema.Literals([
 		"invalid_request",

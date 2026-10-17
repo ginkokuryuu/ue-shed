@@ -1,11 +1,18 @@
 import { readFile, lstat } from "node:fs/promises";
 import { Effect, Schema } from "effect";
 import { NiagaraPreviewProgress } from "./progress-schema.js";
+import { NiagaraErrorGuidanceFields as ErrorGuidanceFields } from "./schema.js";
 export * from "./progress-schema.js";
 export class NiagaraProgressError extends Schema.TaggedError<NiagaraProgressError>()(
 	"NiagaraProgressError",
-	{ message: Schema.String }
+	ErrorGuidanceFields
 ) {}
+/** Progress is optional telemetry the producer rewrites; reading it again is always safe. */
+const progressError = (
+	message: string,
+	nextStep: NiagaraProgressError["nextStep"],
+	recovery: string
+) => new NiagaraProgressError({ message, recovery, retrySafe: true, nextStep });
 /** Optional telemetry; a missing file is normal with an older producer or before initialization. */
 export const readNiagaraPreviewProgress = Effect.fn("NiagaraPreview.readProgress")(function* (
 	path: string,
@@ -25,17 +32,31 @@ export const readNiagaraPreviewProgress = Effect.fn("NiagaraPreview.readProgress
 			}
 		},
 		catch: () =>
-			new NiagaraProgressError({ message: "Could not read bounded Niagara progress." })
+			progressError(
+				"Could not read bounded Niagara progress.",
+				"retry",
+				"Read progress again; the preview run does not depend on it."
+			)
 	});
 	if (text === undefined) return undefined;
 	const progress = yield* Schema.decodeUnknownEffect(
 		Schema.fromJsonString(NiagaraPreviewProgress)
 	)(text).pipe(
-		Effect.mapError(() => new NiagaraProgressError({ message: "Invalid Niagara progress." }))
+		Effect.mapError(() =>
+			progressError(
+				"Invalid Niagara progress.",
+				"retry",
+				"Read progress again after the producer rewrites it."
+			)
+		)
 	);
 	if (progress.runId !== runId)
 		return yield* Effect.fail(
-			new NiagaraProgressError({ message: "Niagara progress belongs to another run." })
+			progressError(
+				"Niagara progress belongs to another run.",
+				"reconcile",
+				"Wait for the current run to write its own progress, then read it again."
+			)
 		);
 	return progress;
 });

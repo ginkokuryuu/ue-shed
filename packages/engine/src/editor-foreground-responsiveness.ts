@@ -4,7 +4,9 @@ import {
 	EditorForegroundLeaseId,
 	EditorForegroundLeaseRequest,
 	EditorForegroundLeaseResult,
-	EditorForegroundStateResult
+	EditorForegroundStateResult,
+	ErrorGuidanceFields,
+	type ErrorNextStep
 } from "@ue-shed/protocol";
 import { RemoteControlClient } from "@ue-shed/unreal-connection";
 import { Clock, Context, Duration, Effect, Layer, Metric, Ref, Schema, Scope } from "effect";
@@ -29,10 +31,7 @@ export class EditorForegroundResponsivenessError extends Schema.TaggedError<Edit
 		reason: EditorForegroundResponsivenessFailure,
 		operation: Schema.String,
 		endpoint: Schema.String,
-		/** True when the same request may succeed later without a change by the caller. */
-		retryable: Schema.Boolean,
-		message: Schema.String,
-		recovery: Schema.String
+		...ErrorGuidanceFields
 	}
 ) {}
 
@@ -101,7 +100,8 @@ const failure = (
 	reason: EditorForegroundResponsivenessFailure,
 	message: string,
 	recovery: string,
-	retryable: boolean
+	retrySafe: boolean,
+	nextStep: ErrorNextStep
 ) =>
 	new EditorForegroundResponsivenessError({
 		endpoint,
@@ -109,8 +109,21 @@ const failure = (
 		reason,
 		message,
 		recovery,
-		retryable
+		retrySafe,
+		nextStep
 	});
+
+/**
+ * A refused acquire grants no lease, so asking again is safe. A full lease table may free up; a
+ * replaced editor needs a fresh negotiation, which the next acquire performs.
+ */
+function rejectedAcquireGuidance(
+	reason: string
+): Pick<EditorForegroundResponsivenessError, "retrySafe" | "nextStep"> {
+	if (reason === "lease_limit") return { retrySafe: true, nextStep: "retry" };
+	if (reason === "target_changed") return { retrySafe: true, nextStep: "reconcile" };
+	return { retrySafe: false, nextStep: "fix_input" };
+}
 
 /** Backoff after consecutive failures: 1 s doubling to 30 s. */
 export function editorForegroundBackoffMs(failures: number): number {
@@ -132,7 +145,8 @@ export const EditorForegroundResponsivenessLive = Layer.effect(
 							"remote_endpoint",
 							"Foreground responsiveness is only offered to an editor on this machine.",
 							"Connect to a local editor; a remote editor keeps Unreal's normal policy.",
-							false
+							false,
+							"fix_input"
 						)
 					);
 
@@ -156,7 +170,8 @@ export const EditorForegroundResponsivenessLive = Layer.effect(
 							"transport",
 							`Could not read the editor capability manifest: ${String(cause)}`,
 							"Start the editor with UE Shed Core and Remote Control, then retry.",
-							true
+							true,
+							"retry"
 						)
 					)
 				);
@@ -171,7 +186,8 @@ export const EditorForegroundResponsivenessLive = Layer.effect(
 					"capability_missing",
 					"The connected editor does not offer foreground responsiveness.",
 					"Update UE Shed Core in the project. The feature is Windows only.",
-					false
+					false,
+					"fix_input"
 				);
 			}
 			return {
@@ -204,7 +220,8 @@ export const EditorForegroundResponsivenessLive = Layer.effect(
 						"transport",
 						`The ${request.operation} request did not complete: ${String(cause)}`,
 						"Check that the editor is still running; the lease is retried automatically.",
-						true
+						true,
+						"retry"
 					)
 				),
 				Effect.flatMap((json) =>
@@ -216,7 +233,8 @@ export const EditorForegroundResponsivenessLive = Layer.effect(
 								"invalid_response",
 								`The editor returned an unrecognised lease result: ${String(cause)}`,
 								"Update UE Shed Core or this client so their contracts match.",
-								false
+								false,
+								"escalate"
 							)
 						)
 					)
@@ -248,14 +266,18 @@ export const EditorForegroundResponsivenessLive = Layer.effect(
 			);
 			if (result.status === "granted") return { target, result };
 			if (result.status === "rejected" || result.status === "unsupported") {
+				const guidance =
+					result.status === "rejected"
+						? rejectedAcquireGuidance(result.reason)
+						: ({ retrySafe: false, nextStep: "escalate" } as const);
 				return yield* failure(
 					options.endpoint,
 					"acquire",
 					result.status,
 					`${result.message} (${result.reason})`,
 					result.recovery,
-					result.status === "rejected" &&
-						(result.reason === "lease_limit" || result.reason === "target_changed")
+					guidance.retrySafe,
+					guidance.nextStep
 				);
 			}
 			return yield* failure(
@@ -264,7 +286,8 @@ export const EditorForegroundResponsivenessLive = Layer.effect(
 				"invalid_response",
 				`An acquire returned ${result.status}.`,
 				"Update UE Shed Core or this client so their contracts match.",
-				false
+				false,
+				"escalate"
 			);
 		});
 
@@ -434,7 +457,8 @@ export const EditorForegroundResponsivenessLive = Layer.effect(
 							"transport",
 							String(cause),
 							"Check that the editor is still running.",
-							true
+							true,
+							"retry"
 						)
 					),
 					Effect.flatMap((json) =>
@@ -446,7 +470,8 @@ export const EditorForegroundResponsivenessLive = Layer.effect(
 									"invalid_response",
 									String(cause),
 									"Update UE Shed Core or this client so their contracts match.",
-									false
+									false,
+									"escalate"
 								)
 							)
 						)

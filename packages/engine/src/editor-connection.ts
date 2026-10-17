@@ -1,6 +1,7 @@
 import {
 	decodeCompanionCapabilityManifest,
 	ErrorCauseFields,
+	ErrorGuidanceFields,
 	type CompanionCapabilityManifest
 } from "@ue-shed/protocol";
 import { RemoteControlClient, type RemoteControlClientError } from "@ue-shed/unreal-connection";
@@ -18,9 +19,7 @@ export class EditorConnectionError extends Schema.TaggedError<EditorConnectionEr
 			"readiness_timeout"
 		]),
 		endpoint: Schema.String,
-		message: Schema.String,
-		recovery: Schema.String,
-		retrySafe: Schema.Boolean,
+		...ErrorGuidanceFields,
 		...ErrorCauseFields
 	}
 ) {}
@@ -59,6 +58,7 @@ function transportError(endpoint: string, cause: RemoteControlClientError): Edit
 		message: cause.message,
 		recovery: "Confirm that Unreal Editor and Remote Control are reachable, then retry.",
 		retrySafe: cause.retrySafe,
+		nextStep: cause.nextStep,
 		cause
 	});
 }
@@ -90,6 +90,7 @@ export const EditorConnectionLive = Layer.effect(
 							recovery:
 								"Update UE Shed so the client and Unreal companion use compatible contracts.",
 							retrySafe: false,
+							nextStep: "escalate",
 							cause
 						})
 				)
@@ -103,7 +104,8 @@ export const EditorConnectionLive = Layer.effect(
 					endpoint,
 					message: `The editor identifies project ${manifest.projectName ?? "unknown"}, not ${request.expectedProjectName}.`,
 					recovery: "Connect to the selected project's Remote Control endpoint.",
-					retrySafe: false
+					retrySafe: false,
+					nextStep: "fix_input"
 				});
 			}
 			return manifest;
@@ -128,7 +130,8 @@ export const EditorConnectionLive = Layer.effect(
 								message: "Unreal Editor did not become ready before the deadline.",
 								recovery:
 									"Inspect the editor log, Remote Control port, and enabled UEShedCore plugin.",
-								retrySafe: true
+								retrySafe: true,
+								nextStep: "retry"
 							})
 						)
 				})

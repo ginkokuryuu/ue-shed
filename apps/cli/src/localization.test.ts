@@ -92,7 +92,9 @@ it.effect("a manifest over the byte limit keeps its cause and recovery before sc
 								message:
 									"Localization evidence could not be read (limit_exceeded).",
 								recovery:
-									"Reduce the input or explicitly increase the localization reader limits."
+									"Reduce the input or explicitly increase the localization reader limits.",
+								retrySafe: true,
+								nextStep: "fix_input"
 							})
 						})
 					)

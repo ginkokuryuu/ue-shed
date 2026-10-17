@@ -11,7 +11,8 @@ function baselineError(message: string, recovery: string): MapHistoryError {
 		kind: "baseline_unavailable",
 		message,
 		recovery,
-		retrySafe: false
+		retrySafe: false,
+		nextStep: "fix_input"
 	});
 }
 
@@ -20,7 +21,8 @@ function resourceLimitError(change: number, maxFiles: number): MapHistoryError {
 		kind: "resource_limit",
 		message: `Baseline changelist ${change} exceeds the ${maxFiles} file limit.`,
 		recovery: "Narrow the selected map scope or raise maxMaterializedFiles explicitly.",
-		retrySafe: false
+		retrySafe: false,
+		nextStep: "fix_input"
 	});
 }
 

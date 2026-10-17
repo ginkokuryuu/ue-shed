@@ -330,7 +330,8 @@ it.effect("translates a typed scan failure into the failed result variant", () =
 										code: "scan_failed",
 										message: "boom",
 										recovery: "retry",
-										retrySafe: false
+										retrySafe: false,
+										nextStep: "escalate"
 									})
 								)
 						}),

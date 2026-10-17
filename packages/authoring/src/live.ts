@@ -1,5 +1,6 @@
 import {
 	AUTHORING_MUTATION_CONTRACT_VERSION,
+	ErrorGuidanceFields,
 	type AuthoringApplyRequest,
 	type AuthoringApplyResult,
 	type AuthoringSaveRequest,
@@ -20,9 +21,7 @@ export class ApplyWorkflowError extends Schema.TaggedError<ApplyWorkflowError>()
 	{
 		code: Schema.String,
 		operationId: Schema.String,
-		message: Schema.String,
-		recovery: Schema.String,
-		retrySafe: Schema.Boolean
+		...ErrorGuidanceFields
 	}
 ) {}
 const isApplyWorkflowError = Schema.is(ApplyWorkflowError);
@@ -45,7 +44,8 @@ function workflowError(operationId: string, code: string, message: string): Appl
 		message,
 		operationId,
 		recovery: "Refresh the live tables, review the draft, and start a new Apply operation.",
-		retrySafe: false
+		retrySafe: false,
+		nextStep: "reconcile"
 	});
 }
 

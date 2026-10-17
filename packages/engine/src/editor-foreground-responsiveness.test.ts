@@ -215,7 +215,8 @@ describe("EditorForegroundResponsiveness", () => {
 			Effect.gen(function* () {
 				const error = yield* hold("http://editor.example:30010").pipe(Effect.flip);
 				expect(error.reason).toBe("remote_endpoint");
-				expect(error.retryable).toBe(false);
+				expect(error.retrySafe).toBe(false);
+				expect(error.nextStep).toBe("fix_input");
 				const stateError = yield* Effect.flatMap(
 					EditorForegroundResponsiveness,
 					(service) => service.state("http://10.0.0.5:30010")
@@ -250,7 +251,8 @@ describe("EditorForegroundResponsiveness", () => {
 			Effect.gen(function* () {
 				const error = yield* hold().pipe(Effect.flip);
 				expect(error.reason).toBe("rejected");
-				expect(error.retryable).toBe(true);
+				expect(error.retrySafe).toBe(true);
+				expect(error.nextStep).toBe("retry");
 				expect(error.message).toMatch(/lease_limit/);
 			})
 		).pipe(Effect.provide(layer));
@@ -263,7 +265,8 @@ describe("EditorForegroundResponsiveness", () => {
 			Effect.gen(function* () {
 				const error = yield* hold().pipe(Effect.flip);
 				expect(error.reason).toBe("transport");
-				expect(error.retryable).toBe(true);
+				expect(error.retrySafe).toBe(true);
+				expect(error.nextStep).toBe("retry");
 			})
 		).pipe(Effect.provide(layer));
 	});

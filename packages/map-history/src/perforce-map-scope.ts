@@ -2,7 +2,7 @@ import { isAbsolute, relative, resolve, win32 } from "node:path";
 import { AssetReader, type AssetReaderError } from "@ue-shed/unreal-assets";
 import type { SavedWorld } from "@ue-shed/protocol";
 import { Effect, Schema } from "effect";
-import { MapHistoryError } from "./errors.js";
+import { MapHistoryError, mapHistoryNextStep } from "./errors.js";
 import { PerforceHistorySource, type PerforceMapMove } from "./perforce.js";
 import type { ScopedPerforceFile } from "./revision-plan.js";
 import type { PerforceMapHistoryQuery } from "./schema.js";
@@ -32,14 +32,16 @@ export interface ResolvedPerforceMapLineage {
 export const MAX_DIRECT_MAP_MOVES = 16;
 
 function savedWorldError(error: AssetReaderError): MapHistoryError {
+	const kind = error.kind === "resource_limit" ? "resource_limit" : "saved_world_decode";
 	return new MapHistoryError({
-		kind: error.kind === "resource_limit" ? "resource_limit" : "saved_world_decode",
+		kind,
 		message: `Could not resolve the saved map scope: ${error.message}`,
 		recovery:
 			error.kind === "resource_limit"
 				? "Narrow the map scope or raise maxPackages explicitly."
 				: "Confirm that the selected map can be read from the project and retry.",
-		retrySafe: error.retrySafe
+		retrySafe: error.retrySafe,
+		nextStep: mapHistoryNextStep(kind, error.retrySafe)
 	});
 }
 
@@ -48,7 +50,8 @@ function invalidScope(message: string): MapHistoryError {
 		kind: "invalid_target",
 		message,
 		recovery: "Select a map and external-actor root contained by the project root.",
-		retrySafe: false
+		retrySafe: false,
+		nextStep: "fix_input"
 	});
 }
 
@@ -227,7 +230,8 @@ export function resolvePerforceMapLineage(options: {
 					kind: "ambiguous_map_lineage",
 					message: `Perforce returned no direct lineage location for ${options.scope.mapDepotPath}.`,
 					recovery: "Inspect the selected map's Perforce filelog and retry.",
-					retrySafe: false
+					retrySafe: false,
+					nextStep: "fix_input"
 				})
 			);
 		}
@@ -241,7 +245,8 @@ export function resolvePerforceMapLineage(options: {
 						kind: "ambiguous_map_lineage",
 						message: `Perforce returned an inconsistent direct lineage for ${options.scope.mapDepotPath}.`,
 						recovery: "Inspect the selected map's Perforce filelog and retry.",
-						retrySafe: false
+						retrySafe: false,
+						nextStep: "fix_input"
 					})
 				);
 			}
@@ -255,7 +260,8 @@ export function resolvePerforceMapLineage(options: {
 						"Direct map relocation currently cannot prove the matching historical World Partition external-actor roots.",
 					recovery:
 						"Choose a range after the World Partition map move, or use a conventional saved map.",
-					retrySafe: false
+					retrySafe: false,
+					nextStep: "fix_input"
 				})
 			);
 		}
@@ -279,7 +285,8 @@ export function resolvePerforceMapLineage(options: {
 						message: `Direct map move destination ${location.depotPath} is not a supported project .umap path.`,
 						recovery:
 							"Inspect the selected map's direct Perforce move records and retry.",
-						retrySafe: false
+						retrySafe: false,
+						nextStep: "fix_input"
 					})
 				);
 			}
@@ -308,7 +315,8 @@ export function resolvePerforceMapLineage(options: {
 						message: `Perforce returned an unordered direct move lineage for ${options.scope.mapDepotPath}.`,
 						recovery:
 							"Inspect the selected map's direct Perforce move records and retry.",
-						retrySafe: false
+						retrySafe: false,
+						nextStep: "fix_input"
 					})
 				);
 			}
@@ -357,7 +365,8 @@ export function resolvePresentDayMapScope(query: {
 							"The World Partition map did not report its external-actor root, so its actor history cannot be scoped safely.",
 						recovery:
 							"Confirm the map's saved external-actor layout can be read, then retry.",
-						retrySafe: false
+						retrySafe: false,
+						nextStep: "escalate"
 					})
 				);
 			}

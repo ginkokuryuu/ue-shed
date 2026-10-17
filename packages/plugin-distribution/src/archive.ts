@@ -56,6 +56,7 @@ function abortError(signal: AbortSignal, releaseVersion: string, stage: string) 
 				recovery: "Retry installing the exact release when the host is ready.",
 				releaseVersion,
 				retrySafe: true,
+				nextStep: "retry",
 				stage
 			})
 		: undefined;
@@ -80,6 +81,12 @@ function storageMessage(releaseVersion: string, operation: string, cause: unknow
 	return `${operation} failed for plugin release ${releaseVersion}.`;
 }
 
+/** Permission and disk-space failures need the caller to fix the cache; others may be transient. */
+function storageNextStep(cause: unknown): "fix_input" | "retry" {
+	const code = errnoCode(cause);
+	return code === "EACCES" || code === "EPERM" || code === "ENOSPC" ? "fix_input" : "retry";
+}
+
 function storageFailure(releaseVersion: string, operation: string, cause: unknown) {
 	return new PluginStorageFailure({
 		message: storageMessage(releaseVersion, operation, cause),
@@ -87,6 +94,7 @@ function storageFailure(releaseVersion: string, operation: string, cause: unknow
 		recovery: "Check cache permissions and free space, then retry.",
 		releaseVersion,
 		retrySafe: true,
+		nextStep: storageNextStep(cause),
 		cause
 	});
 }
@@ -97,7 +105,8 @@ function archiveFailure(releaseVersion: string, message: string, entry?: string)
 		message,
 		recovery: "Discard the artifact and install it again from a trusted exact release.",
 		releaseVersion,
-		retrySafe: false
+		retrySafe: false,
+		nextStep: "escalate"
 	});
 }
 
@@ -240,7 +249,8 @@ export const verifyPluginArtifact = (options: {
 					message: `Artifact size ${details.size} does not match ${options.expectedBytes}.`,
 					recovery: "Discard the truncated or oversized artifact and download it again.",
 					releaseVersion: options.releaseVersion,
-					retrySafe: true
+					retrySafe: true,
+					nextStep: "retry"
 				});
 			}
 			const hash = createHash("sha256");
@@ -268,7 +278,8 @@ export const verifyPluginArtifact = (options: {
 					message: `Artifact digest ${digest} does not match ${options.expectedDigest}.`,
 					recovery: "Discard the artifact and download the exact release asset again.",
 					releaseVersion: options.releaseVersion,
-					retrySafe: true
+					retrySafe: true,
+					nextStep: "escalate"
 				});
 			}
 			return { bytes: details.size, digest, path: resolve(options.artifactPath) };

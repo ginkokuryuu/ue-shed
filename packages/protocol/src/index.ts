@@ -1,4 +1,5 @@
 import { Effect, Schema } from "effect";
+import { ErrorGuidanceFields } from "./error-guidance.js";
 
 export const IdentifierKind = Schema.Literals([
 	"actor",
@@ -14,7 +15,7 @@ export class IdentifierValidationError extends Schema.TaggedError<IdentifierVali
 	{
 		kind: IdentifierKind,
 		input: Schema.String,
-		recovery: Schema.String
+		...ErrorGuidanceFields
 	}
 ) {}
 
@@ -39,7 +40,10 @@ function identifierError(kind: IdentifierKind, input: string): IdentifierValidat
 	return new IdentifierValidationError({
 		kind,
 		input,
-		recovery: `Provide a non-empty ${kind} identifier.`
+		message: `The ${kind} identifier is empty or whitespace.`,
+		recovery: `Provide a non-empty ${kind} identifier.`,
+		retrySafe: true,
+		nextStep: "fix_input"
 	});
 }
 

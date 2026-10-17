@@ -6,6 +6,7 @@ import {
 } from "@ue-shed/engine";
 import { Context, Effect, Layer, Result, Schema } from "effect";
 import {
+	ConfigErrorGuidanceFields as ErrorGuidanceFields,
 	ConfigFileAccess,
 	ConfigFileAccessLive,
 	type ConfigFileAccessError
@@ -37,8 +38,24 @@ import {
 
 export class ConfigExplorerError extends Schema.TaggedError<ConfigExplorerError>()(
 	"ConfigExplorerError",
-	ConfigExplorerPublicError.fields
+	{
+		code: ConfigExplorerPublicError.fields.code,
+		...ErrorGuidanceFields,
+		candidates: ConfigExplorerPublicError.fields.candidates
+	}
 ) {}
+
+/**
+ * Request, project, engine, family and platform failures all need a changed selection; only a
+ * resolution failure that is retry-safe may succeed by repeating the same read.
+ */
+function configNextStep(
+	code: ConfigExplorerError["code"],
+	retrySafe: boolean
+): ConfigExplorerError["nextStep"] {
+	if (code === "resolution_failed") return retrySafe ? "retry" : "escalate";
+	return "fix_input";
+}
 
 export interface ConfigExplorerApi {
 	readonly explain: (
@@ -106,6 +123,7 @@ function error(
 	return new ConfigExplorerError({
 		code,
 		message,
+		nextStep: configNextStep(code, retrySafe),
 		recovery,
 		retrySafe,
 		...(candidates === undefined ? undefined : { candidates: [...candidates] })

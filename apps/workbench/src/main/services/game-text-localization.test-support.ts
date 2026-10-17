@@ -134,7 +134,9 @@ export function evidence(po = poDocument()): LocalizationTargetEvidence {
 				_tag: "LocalizationError",
 				code: "file_missing",
 				message: "Missing",
-				recovery: "Gather"
+				recovery: "Gather",
+				retrySafe: true,
+				nextStep: "fix_input"
 			}
 		},
 		wordCount: {
@@ -144,7 +146,9 @@ export function evidence(po = poDocument()): LocalizationTargetEvidence {
 				_tag: "LocalizationError",
 				code: "file_missing",
 				message: "Missing",
-				recovery: "Gather"
+				recovery: "Gather",
+				retrySafe: true,
+				nextStep: "fix_input"
 			}
 		}
 	});

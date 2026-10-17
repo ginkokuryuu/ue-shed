@@ -2,6 +2,7 @@ import { Result, Schema } from "effect";
 import {
 	CultureCode,
 	FileProvenance,
+	LocalizationErrorGuidanceFields as ErrorGuidanceFields,
 	LocalizationIdentity,
 	LocalizationTargetName
 } from "./schema.js";
@@ -39,8 +40,7 @@ export class LocalizationChangeSetError extends Schema.TaggedError<LocalizationC
 			"multiple_targets",
 			"unwritable_change"
 		]),
-		message: Schema.String,
-		recovery: Schema.String
+		...ErrorGuidanceFields
 	}
 ) {}
 
@@ -54,7 +54,9 @@ export function decodeLocalizationChangeSet(
 				code: "invalid_change_set",
 				message: "The change-set document does not match version 1.",
 				recovery:
-					"Provide valid JSON with provenance and complete identity, source and replacement fields."
+					"Provide valid JSON with provenance and complete identity, source and replacement fields.",
+				retrySafe: true,
+				nextStep: "fix_input"
 			})
 		);
 	const identities = result.success.changes.map((change) =>
@@ -66,7 +68,9 @@ export function decodeLocalizationChangeSet(
 				code: "duplicate_change",
 				message: "The change set contains duplicate translation identities.",
 				recovery:
-					"Keep exactly one proposed replacement per target, culture, namespace and key."
+					"Keep exactly one proposed replacement per target, culture, namespace and key.",
+				retrySafe: true,
+				nextStep: "fix_input"
 			})
 		);
 	return Result.succeed(result.success);

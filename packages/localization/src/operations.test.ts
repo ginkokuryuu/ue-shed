@@ -64,6 +64,7 @@ it.effect("engine discovery failures are actionable and discard private candidat
 									message: "private-installation",
 									recovery: "private-project",
 									retrySafe: true,
+									nextStep: "fix_input",
 									candidates: ["private-installation"]
 								})
 							)

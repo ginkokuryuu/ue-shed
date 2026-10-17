@@ -272,6 +272,7 @@ export const LocalizationOperationsLive = Layer.effect(
 									message: error.message,
 									recovery: error.recovery,
 									retrySafe: false,
+									nextStep: error.nextStep,
 									logExcerpt: lines.slice(-40),
 									logPath: plan.logPath
 								})

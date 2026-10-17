@@ -83,7 +83,10 @@ const WorkbenchAuthoringFilePickerLive = Layer.effect(
 								new AuthoringFilePickerError({
 									cause,
 									message: cause.message,
-									recovery: cause.recovery
+									recovery: cause.recovery,
+									// Showing the dialog again changes nothing.
+									retrySafe: true,
+									nextStep: "retry"
 								})
 						)
 					)

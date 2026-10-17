@@ -205,6 +205,12 @@ function storageMessage(releaseVersion: string, operation: string, cause: unknow
 	return `${operation} failed for plugin release ${releaseVersion}.`;
 }
 
+/** Permission and disk-space failures need the caller to fix the cache; others may be transient. */
+function storageNextStep(cause: unknown): "fix_input" | "retry" {
+	const code = errnoCode(cause);
+	return code === "EACCES" || code === "EPERM" || code === "ENOSPC" ? "fix_input" : "retry";
+}
+
 function storageError(releaseVersion: string, operation: string, cause: unknown) {
 	return new PluginStorageFailure({
 		message: storageMessage(releaseVersion, operation, cause),
@@ -212,6 +218,7 @@ function storageError(releaseVersion: string, operation: string, cause: unknown)
 		recovery: "Check the caller-owned cache permissions and free space, then retry.",
 		releaseVersion,
 		retrySafe: true,
+		nextStep: storageNextStep(cause),
 		cause
 	});
 }
@@ -223,7 +230,8 @@ function corrupt(releaseVersion: string, cachePath: string, message: string, cau
 		message,
 		recovery: "Explicitly prune the corrupt release, then reinstall the exact artifact.",
 		releaseVersion,
-		retrySafe: false
+		retrySafe: false,
+		nextStep: "reconcile"
 	});
 }
 
@@ -235,7 +243,8 @@ function decodeReleaseVersion(input: string) {
 					field: "releaseVersion",
 					message: "Plugin release version must be an exact semantic version.",
 					recovery: "Provide an exact SemVer release such as 0.4.0.",
-					retrySafe: false
+					retrySafe: true,
+					nextStep: "fix_input"
 				})
 		)
 	);
@@ -715,7 +724,8 @@ export const pluginStoreLayer = (options: PluginStoreLayerOptions): Layer.Layer<
 								field: "variantIdentity",
 								message: "Cached plugin variant reference is invalid.",
 								recovery: "Use an exact reference returned by install or list.",
-								retrySafe: false
+								retrySafe: true,
+								nextStep: "fix_input"
 							})
 					)
 				);
@@ -725,7 +735,8 @@ export const pluginStoreLayer = (options: PluginStoreLayerOptions): Layer.Layer<
 					field: "variantIdentity",
 					message: `Cached plugin variant ${reference.variantIdentity} does not exist for release ${reference.releaseVersion}.`,
 					recovery: "Install the exact variant or use a reference returned by list.",
-					retrySafe: false
+					retrySafe: true,
+					nextStep: "reconcile"
 				});
 
 			const resolveReference = Effect.fn("PluginStore.resolveReference")((
@@ -780,7 +791,8 @@ export const pluginStoreLayer = (options: PluginStoreLayerOptions): Layer.Layer<
 											: `Release ${reference} has multiple cached variants.`,
 									recovery:
 										"Pass the exact releaseVersion and variantIdentity returned by install or list.",
-									retrySafe: false
+									retrySafe: true,
+									nextStep: "fix_input"
 								})
 							);
 						})
@@ -840,7 +852,8 @@ export const pluginStoreLayer = (options: PluginStoreLayerOptions): Layer.Layer<
 										recovery:
 											"Use its exact pinned digests or explicitly prune this source variant.",
 										releaseVersion: request.releaseVersion,
-										retrySafe: false
+										retrySafe: true,
+										nextStep: "reconcile"
 									})
 								);
 							}
@@ -925,7 +938,8 @@ export const pluginStoreLayer = (options: PluginStoreLayerOptions): Layer.Layer<
 											recovery:
 												"Verify and reuse it, or explicitly prune it before reacquisition.",
 											releaseVersion,
-											retrySafe: false
+											retrySafe: true,
+											nextStep: "reconcile"
 										});
 									} catch (cause) {
 										if (isImmutableVersionConflict(cause)) throw cause;
@@ -1182,7 +1196,8 @@ export const pluginStoreLayer = (options: PluginStoreLayerOptions): Layer.Layer<
 													recovery:
 														"Release all scoped consumers before pruning this exact variant.",
 													releaseVersion: release.releaseVersion,
-													retrySafe: true
+													retrySafe: true,
+													nextStep: "retry"
 												});
 											}
 											await rm(release.cachePath, {

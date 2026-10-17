@@ -2,7 +2,11 @@ import { execFile, spawn, type ChildProcess } from "node:child_process";
 import { createRequire } from "node:module";
 import { access, readFile, readdir } from "node:fs/promises";
 import { dirname, isAbsolute, join, resolve } from "node:path";
-import type { CompanionCapabilityManifest } from "@ue-shed/protocol";
+import {
+	ErrorGuidanceFields,
+	type CompanionCapabilityManifest,
+	type ErrorNextStep
+} from "@ue-shed/protocol";
 import { Context, Duration, Effect, Exit, Layer, Option, Schema, type Scope } from "effect";
 import {
 	EngineInstallationDiscovery,
@@ -86,9 +90,7 @@ export class SupervisedEditorSessionError extends Schema.TaggedError<SupervisedE
 			"capability_unavailable",
 			"termination_failed"
 		]),
-		message: Schema.String,
-		recovery: Schema.String,
-		retrySafe: Schema.Boolean,
+		...ErrorGuidanceFields,
 		stage: Schema.Literals(["validation", "launch", "readiness", "operation", "termination"])
 	}
 ) {}
@@ -143,14 +145,41 @@ export class SupervisedEditorSession extends Context.Service<
 	SupervisedEditorSessionApi
 >()("@ue-shed/engine/SupervisedEditorSession") {}
 
+/**
+ * The usual next step per code. A failed acquire closes its scope, which terminates the owned
+ * process tree, so a supervisor failure can be retried; a crash or a stuck tree needs a person.
+ */
+const sessionNextStep = {
+	invalid_request: "fix_input",
+	engine_discovery_failed: "fix_input",
+	editor_missing: "fix_input",
+	project_missing: "fix_input",
+	plugin_missing: "fix_input",
+	process_tree_supervision_unavailable: "fix_input",
+	spawn_failed: "fix_input",
+	supervisor_failed: "retry",
+	process_exited: "escalate",
+	readiness_failed: "escalate",
+	capability_unavailable: "fix_input",
+	termination_failed: "escalate"
+} satisfies Readonly<Record<SupervisedEditorSessionError["code"], ErrorNextStep>>;
+
 function sessionError(
 	code: SupervisedEditorSessionError["code"],
 	stage: SupervisedEditorSessionError["stage"],
 	message: string,
 	recovery: string,
-	retrySafe = false
+	retrySafe = false,
+	nextStep: ErrorNextStep = sessionNextStep[code]
 ): SupervisedEditorSessionError {
-	return new SupervisedEditorSessionError({ code, message, recovery, retrySafe, stage });
+	return new SupervisedEditorSessionError({
+		code,
+		message,
+		recovery,
+		retrySafe,
+		nextStep,
+		stage
+	});
 }
 
 function engineDiscoveryError(cause: EngineInstallationError): SupervisedEditorSessionError {
@@ -159,7 +188,8 @@ function engineDiscoveryError(cause: EngineInstallationError): SupervisedEditorS
 		"validation",
 		cause.message,
 		cause.recovery,
-		cause.retrySafe
+		cause.retrySafe,
+		cause.nextStep
 	);
 }
 
@@ -169,7 +199,8 @@ function readinessError(cause: EditorConnectionError): SupervisedEditorSessionEr
 		"readiness",
 		cause.message,
 		cause.recovery,
-		cause.retrySafe
+		cause.retrySafe,
+		cause.nextStep
 	);
 }
 
@@ -461,7 +492,9 @@ function makePosixHandle(
 			"spawn_failed",
 			"launch",
 			"The supervised process started without a process identity.",
-			"Check operating-system process limits and retry."
+			"Check operating-system process limits and retry.",
+			false,
+			"escalate"
 		);
 	}
 	let requestedReason: OwnedProcessTerminationReason | undefined;
@@ -557,7 +590,9 @@ export const OwnedProcessTreeLive = Layer.succeed(
 												"spawn_failed",
 												"launch",
 												`Could not retain the supervised process identity: ${String(cause)}`,
-												"Check operating-system process limits and retry."
+												"Check operating-system process limits and retry.",
+												false,
+												"escalate"
 											)
 								)
 							);

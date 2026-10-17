@@ -1,6 +1,6 @@
 import { mkdir, mkdtemp, readFile, rename, rm, stat, writeFile } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
-import { ErrorCauseFields } from "@ue-shed/protocol";
+import { ErrorCauseFields, ErrorGuidanceFields } from "@ue-shed/protocol";
 import { Effect, Predicate, Schema } from "effect";
 import { ScenarioDocument } from "./schema.js";
 
@@ -9,7 +9,7 @@ const documentJson = Schema.fromJsonString(ScenarioDocument);
 
 export class ScenarioDocumentFileError extends Schema.TaggedError<ScenarioDocumentFileError>()(
 	"ScenarioDocumentFileError",
-	{ message: Schema.String, path: Schema.String, recovery: Schema.String, ...ErrorCauseFields }
+	{ path: Schema.String, ...ErrorGuidanceFields, ...ErrorCauseFields }
 ) {}
 const isScenarioDocumentFileError = Schema.is(ScenarioDocumentFileError);
 
@@ -41,6 +41,25 @@ const failureMessage = (operation: "read" | "save", path: string, cause: unknown
 	return `Could not ${operation} the scenario document ${path}.`;
 };
 
+/**
+ * Reads are always repeatable. Saves stage a private temporary file and rename it over the
+ * destination, so repeating one is idempotent too. Invalid or oversized documents and denied
+ * permissions need a changed input; other filesystem failures may clear on their own.
+ */
+const documentFileGuidance = (
+	operation: "read" | "save",
+	cause: unknown
+): Pick<ScenarioDocumentFileError, "nextStep" | "retrySafe"> => {
+	const code = errnoCode(cause);
+	const needsInput =
+		cause instanceof DocumentTooLarge ||
+		Schema.isSchemaError(cause) ||
+		code === "EACCES" ||
+		code === "EPERM" ||
+		(code === "ENOENT" && operation === "read");
+	return { retrySafe: true, nextStep: needsInput ? "fix_input" : "retry" };
+};
+
 const failure = (operation: "read" | "save", path: string, cause: unknown) =>
 	isScenarioDocumentFileError(cause)
 		? cause
@@ -49,6 +68,7 @@ const failure = (operation: "read" | "save", path: string, cause: unknown) =>
 				message: failureMessage(operation, path, cause),
 				recovery:
 					"Use a valid version 1 scenario JSON file under 4 MiB and check file permissions.",
+				...documentFileGuidance(operation, cause),
 				cause
 			});
 

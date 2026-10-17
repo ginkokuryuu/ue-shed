@@ -16,7 +16,8 @@ const unavailable = new EditorPlaySessionError({
 	message: "HTTP request failed",
 	operation: "editor.play_session.negotiate",
 	recovery: "Confirm that Unreal Editor and Remote Control are reachable, then retry.",
-	retrySafe: true
+	retrySafe: true,
+	nextStep: "retry"
 });
 
 const editorSession = makeEditorPlaySessionTestLayer({

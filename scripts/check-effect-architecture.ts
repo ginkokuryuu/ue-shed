@@ -832,9 +832,26 @@ export async function checkLocalizationBoundaries(root: string = repositoryRoot)
  * this list once every one of its `Schema.TaggedError` classes is migrated; it never leaves it.
  */
 const errorGuidancePackages = [
+	"packages/asset-audits",
+	"packages/authoring",
+	"packages/authoring-sdk",
 	"packages/cameras",
+	"packages/config-explorer",
+	"packages/engine",
+	"packages/enhanced-input",
+	"packages/host",
+	"packages/localization",
+	"packages/map-history",
+	"packages/niagara",
+	"packages/observatory",
+	"packages/plugin-distribution",
+	"packages/project-custodian",
+	"packages/protocol",
+	"packages/scenarios",
+	"packages/ui",
 	"packages/unreal-assets",
-	"packages/unreal-connection"
+	"packages/unreal-connection",
+	"packages/world"
 ];
 const errorGuidanceFieldNames = ["message", "recovery", "retrySafe", "nextStep"];
 

@@ -15,6 +15,7 @@ import {
 	createDraftSession,
 	decodeDraftSessionWithMigration,
 	DraftIntentError,
+	draftIntentNextStep,
 	redo,
 	undo,
 	workingTable,
@@ -25,6 +26,8 @@ import {
 	AuthoringApplyRequest,
 	AuthoringSaveRequest,
 	ErrorCauseFields,
+	ErrorGuidanceFields,
+	ErrorNextStep,
 	type AuthoringApplyResult,
 	type AuthoringSaveResult,
 	type AuthoringTableSnapshot
@@ -101,12 +104,12 @@ function decodeDocument<Input>(input: Input) {
 
 export class InvalidSessionIdError extends Schema.TaggedError<InvalidSessionIdError>()(
 	"InvalidSessionIdError",
-	{ sessionId: Schema.String, message: Schema.String, recovery: Schema.String }
+	{ sessionId: Schema.String, ...ErrorGuidanceFields }
 ) {}
 
 export class SessionNotFoundError extends Schema.TaggedError<SessionNotFoundError>()(
 	"SessionNotFoundError",
-	{ sessionId: Schema.String, message: Schema.String, recovery: Schema.String }
+	{ sessionId: Schema.String, ...ErrorGuidanceFields }
 ) {}
 
 export class SessionCorruptError extends Schema.TaggedError<SessionCorruptError>()(
@@ -114,8 +117,7 @@ export class SessionCorruptError extends Schema.TaggedError<SessionCorruptError>
 	{
 		sessionId: Schema.String,
 		quarantinePath: Schema.String,
-		message: Schema.String,
-		recovery: Schema.String,
+		...ErrorGuidanceFields,
 		...ErrorCauseFields
 	}
 ) {}
@@ -125,8 +127,7 @@ export class AuthoringSessionStorageError extends Schema.TaggedError<AuthoringSe
 	{
 		operation: Schema.String,
 		sessionId: Schema.optional(Schema.String),
-		message: Schema.String,
-		recovery: Schema.String,
+		...ErrorGuidanceFields,
 		...ErrorCauseFields
 	}
 ) {}
@@ -135,8 +136,7 @@ export class AuthoringSessionTransitionError extends Schema.TaggedError<Authorin
 	"AuthoringSessionTransitionError",
 	{
 		sessionId: Schema.String,
-		message: Schema.String,
-		recovery: Schema.String,
+		...ErrorGuidanceFields,
 		...ErrorCauseFields
 	}
 ) {}
@@ -155,9 +155,8 @@ export type AuthoringSessionServiceError =
 export class AuthoringSessionLiveError extends Schema.TaggedError<AuthoringSessionLiveError>()(
 	"AuthoringSessionLiveError",
 	{
-		message: Schema.String,
 		operation: Schema.Literals(["apply", "lookup_apply", "save"]),
-		retrySafe: Schema.Boolean,
+		...ErrorGuidanceFields,
 		...ErrorCauseFields
 	}
 ) {}
@@ -169,23 +168,41 @@ export class AuthoringSessionLivePort extends Context.Service<
 	AuthoringSessionLivePortApi
 >()("@ue-shed/authoring/AuthoringSessionLivePort") {}
 
+const CauseGuidance = Schema.Struct({
+	recovery: Schema.String,
+	retrySafe: Schema.Boolean,
+	nextStep: ErrorNextStep
+});
+const isCauseGuidance = Schema.is(CauseGuidance);
+
+/**
+ * Keeps the port's own guidance when it carries one. Otherwise an Apply or Save whose outcome is
+ * unknown leaves the session indeterminate, so the caller reconciles before sending it again.
+ */
 function liveError(
 	operation: AuthoringSessionLiveError["operation"],
 	cause: unknown
 ): AuthoringSessionLiveError {
-	const retrySafe =
-		cause instanceof Object &&
-		"retrySafe" in cause &&
-		Schema.is(Schema.Boolean)(cause.retrySafe)
-			? cause.retrySafe
-			: false;
+	const guidance = isCauseGuidance(cause)
+		? { recovery: cause.recovery, retrySafe: cause.retrySafe, nextStep: cause.nextStep }
+		: operation === "lookup_apply"
+			? {
+					recovery: "Check the live editor connection, then reconcile the Apply again.",
+					retrySafe: true,
+					nextStep: "escalate" as const
+				}
+			: {
+					recovery: `Reconcile the session's pending ${operation} before sending it again.`,
+					retrySafe: false,
+					nextStep: "reconcile" as const
+				};
 	return new AuthoringSessionLiveError({
 		message:
 			cause instanceof Error
 				? cause.message
 				: `The live authoring ${operation} request failed.`,
 		operation,
-		retrySafe,
+		...guidance,
 		cause
 	});
 }
@@ -208,6 +225,21 @@ function storageMessage(
 		return `The disk is full; could not ${operation} ${target} in ${storageRoot}.`;
 	}
 	return `Could not ${operation} ${target} in ${storageRoot}.`;
+}
+
+/**
+ * Session files are read, written atomically or renamed whole, so repeating a storage step is
+ * safe. Permission and disk-space failures need the caller to fix the directory first.
+ */
+function storageGuidance(cause: unknown) {
+	const blocked =
+		hasErrorCode(cause, "EACCES") ||
+		hasErrorCode(cause, "EPERM") ||
+		hasErrorCode(cause, "ENOSPC");
+	return {
+		retrySafe: true,
+		nextStep: blocked ? "fix_input" : "retry"
+	} satisfies Pick<AuthoringSessionStorageError, "retrySafe" | "nextStep">;
 }
 
 export function authoringSessionLivePortLayer<E>(
@@ -491,6 +523,7 @@ export function authoringSessionRepositoryLayer(
 							),
 							operation: "persist",
 							recovery: "Check that the project session directory is writable.",
+							...storageGuidance(cause),
 							sessionId: document.draft.id
 						})
 				});
@@ -506,6 +539,8 @@ export function authoringSessionRepositoryLayer(
 							? new SessionNotFoundError({
 									message: `Authoring session ${sessionId} does not exist`,
 									recovery: "List project sessions or create a new one.",
+									retrySafe: false,
+									nextStep: "fix_input",
 									sessionId
 								})
 							: new AuthoringSessionStorageError({
@@ -518,6 +553,7 @@ export function authoringSessionRepositoryLayer(
 									),
 									operation: "read",
 									recovery: "Check access to the project session directory.",
+									...storageGuidance(cause),
 									sessionId
 								})
 				});
@@ -547,6 +583,7 @@ export function authoringSessionRepositoryLayer(
 							),
 							operation: "create",
 							recovery: "Check access to the project session directory.",
+							...storageGuidance(cause),
 							sessionId
 						})
 				});
@@ -568,7 +605,8 @@ export function authoringSessionRepositoryLayer(
 								cause
 							),
 							operation: "list",
-							recovery: "Check access to the project session directory."
+							recovery: "Check access to the project session directory.",
+							...storageGuidance(cause)
 						})
 				});
 				return names
@@ -595,6 +633,7 @@ export function authoringSessionRepositoryLayer(
 							),
 							operation: "quarantine",
 							recovery: "Move the malformed session aside, then retry.",
+							...storageGuidance(renameCause),
 							sessionId
 						})
 				});
@@ -606,6 +645,8 @@ export function authoringSessionRepositoryLayer(
 							: `Session ${sessionId} does not match the authoring session schema and was moved to ${quarantinePath}.`,
 					quarantinePath,
 					recovery: "Inspect the quarantined file or create a new session.",
+					retrySafe: false,
+					nextStep: "fix_input",
 					sessionId
 				});
 			});
@@ -620,6 +661,8 @@ export function authoringSessionRepositoryLayer(
 							? new SessionNotFoundError({
 									message: `Authoring session ${sessionId} does not exist`,
 									recovery: "List project sessions or create a new one.",
+									retrySafe: false,
+									nextStep: "fix_input",
 									sessionId
 								})
 							: new AuthoringSessionStorageError({
@@ -632,6 +675,7 @@ export function authoringSessionRepositoryLayer(
 									),
 									operation: "discard",
 									recovery: "Check access to the project session directory.",
+									...storageGuidance(cause),
 									sessionId
 								})
 				});
@@ -658,6 +702,8 @@ function validateSessionId(sessionId: string): Effect.Effect<string, InvalidSess
 				new InvalidSessionIdError({
 					message: `Invalid authoring session id: ${sessionId}`,
 					recovery: "Use 1-128 letters, numbers, dots, underscores, or hyphens.",
+					retrySafe: false,
+					nextStep: "fix_input",
 					sessionId
 				})
 			);
@@ -717,6 +763,8 @@ function makeAuthoringSessionServiceEffect(): Effect.Effect<
 											operation: "verify_project",
 											recovery:
 												"Open the session through its owning project.",
+											retrySafe: false,
+											nextStep: "fix_input",
 											sessionId: validId
 										})
 									)
@@ -753,6 +801,12 @@ function makeAuthoringSessionServiceEffect(): Effect.Effect<
 															: `Authoring session ${sessionId} could not apply the requested change.`,
 													recovery:
 														"Correct the rejected intent and retry the complete gesture.",
+													retrySafe: false,
+													// A rejection names session state that changed underneath the caller.
+													nextStep:
+														cause instanceof SessionTransitionRejected
+															? "reconcile"
+															: "fix_input",
 													sessionId
 												})
 								})
@@ -783,6 +837,8 @@ function makeAuthoringSessionServiceEffect(): Effect.Effect<
 							message: `Session ${document.draft.id} review could not be derived.`,
 							recovery:
 								"Discard the malformed command group or restore the session from a valid backup.",
+							retrySafe: false,
+							nextStep: "fix_input",
 							sessionId: document.draft.id
 						})
 				})
@@ -802,7 +858,9 @@ function makeAuthoringSessionServiceEffect(): Effect.Effect<
 							throw new DraftIntentError({
 								code: "incompatible_value",
 								message: firstError.message,
-								recovery: firstError.recovery
+								recovery: firstError.recovery,
+								retrySafe: false,
+								nextStep: draftIntentNextStep("incompatible_value")
 							});
 						}
 						const request = buildApplyRequest(document.draft, requestId, limits);
@@ -933,6 +991,8 @@ function makeAuthoringSessionServiceEffect(): Effect.Effect<
 								operation: "create",
 								recovery:
 									"Choose a different session id or resume the existing session.",
+								retrySafe: false,
+								nextStep: "fix_input",
 								sessionId: id
 							});
 						}
@@ -981,6 +1041,8 @@ function makeAuthoringSessionServiceEffect(): Effect.Effect<
 														message: error.message,
 														operation: "list_entry",
 														recovery: error.recovery,
+														retrySafe: error.retrySafe,
+														nextStep: error.nextStep,
 														sessionId
 													})
 												)
@@ -1201,6 +1263,8 @@ function makeAuthoringSessionServiceEffect(): Effect.Effect<
 					return yield* new AuthoringSessionTransitionError({
 						message: "Apply was not prepared",
 						recovery: "Retry the Apply gesture from an idle session.",
+						retrySafe: false,
+						nextStep: "reconcile",
 						sessionId
 					});
 				}
@@ -1240,6 +1304,8 @@ function makeAuthoringSessionServiceEffect(): Effect.Effect<
 					return yield* new AuthoringSessionTransitionError({
 						message: "Session has no unresolved Apply operation",
 						recovery: "Open a session with a pending Apply before reconciling.",
+						retrySafe: false,
+						nextStep: "reconcile",
 						sessionId
 					});
 				}
@@ -1266,6 +1332,8 @@ function makeAuthoringSessionServiceEffect(): Effect.Effect<
 					return yield* new AuthoringSessionTransitionError({
 						message: "Save was not prepared",
 						recovery: "Retry the Save gesture from an idle or indeterminate session.",
+						retrySafe: false,
+						nextStep: "reconcile",
 						sessionId
 					});
 				}
