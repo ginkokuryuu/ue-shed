@@ -235,6 +235,15 @@ export class SharedStringFiles {
 	private decodedBytes = 0;
 	private decodedHits = 0;
 	private decodedMisses = 0;
+	/** First IDs of the segments; appends only add segments, so the length tells it is current. */
+	private starts: number[] = [];
+	/** The block the previous single lookup decoded. Lookups in ID order mostly stay in it. */
+	private lastDecoded: { segment: number; block: number; values: PackedStrings } | undefined;
+	private segmentStarts() {
+		if (this.starts.length !== this.segments.length)
+			this.starts = this.segments.map((segment) => segment.start);
+		return this.starts;
+	}
 	cacheMetrics() {
 		return {
 			decodedBlocks: this.decoded.size,
@@ -418,7 +427,7 @@ export class SharedStringFiles {
 	/** A selected UTF-8 value for byte predicates; backed by the bounded decoded-block cache. */
 	bytesSync(id: number): Buffer {
 		snapshotCheck(!this.closed, "strings", "Shared string scope is closed");
-		const starts = this.segments.map((segment) => segment.start);
+		const starts = this.segmentStarts();
 		snapshotCheck(
 			Number.isInteger(id) && id >= 0 && id < this.count,
 			"strings",
@@ -426,7 +435,13 @@ export class SharedStringFiles {
 		);
 		const segment = containing(starts, id),
 			block = (id - starts[segment]!) >>> 6,
-			key = `${segment}:${block}`;
+			last = this.lastDecoded;
+		if (last && last.segment === segment && last.block === block) {
+			// Decoded blocks are immutable, so this stays valid after the cache evicts it.
+			this.decodedHits++;
+			return stringBytes(last.values, (id - starts[segment]!) & 63);
+		}
+		const key = `${segment}:${block}`;
 		let values = this.decoded.get(key);
 		if (!values) {
 			this.decodedMisses++;
@@ -451,6 +466,7 @@ export class SharedStringFiles {
 			this.decoded.delete(key);
 			this.decoded.set(key, values);
 		}
+		this.lastDecoded = { segment, block, values };
 		return stringBytes(values, (id - starts[segment]!) & 63);
 	}
 	private async block(segment: number, block: number) {
@@ -494,7 +510,7 @@ export class SharedStringFiles {
 				"strings",
 				"Invalid sorted shared IDs"
 			);
-		const starts = this.segments.map((segment) => segment.start);
+		const starts = this.segmentStarts();
 		let position = 0;
 		while (position < ids.length) {
 			const segment = containing(starts, ids[position]!),
@@ -514,7 +530,7 @@ export class SharedStringFiles {
 	/** Bounded batches reuse exact bytes without a UTF-8 decode/re-encode round trip. */
 	async bytes(ids: readonly number[]): Promise<Buffer[]> {
 		snapshotCheck(!this.closed, "strings", "Shared string scope is closed");
-		const starts = this.segments.map((s) => s.start),
+		const starts = this.segmentStarts(),
 			groups = new Map<string, { segment: number; block: number; rows: number[] }>();
 		for (let row = 0; row < ids.length; row++) {
 			const id = ids[row]!;
@@ -1037,5 +1053,6 @@ export class SharedStringFiles {
 		this.indexes.clear();
 		this.frames.clear();
 		this.decoded.clear();
+		this.lastDecoded = undefined;
 	}
 }
