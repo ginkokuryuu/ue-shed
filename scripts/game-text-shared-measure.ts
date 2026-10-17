@@ -1,4 +1,4 @@
-import { open, readFile, stat, readdir, mkdtemp, rm } from "node:fs/promises";
+import { open, readFile, stat, readdir, mkdtemp, rm, realpath } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { localizationColumnsBuilder } from "../packages/game-text/src/localization-columns.ts";
 import { defaultLocalizationImportLimits } from "../packages/game-text/src/localization-stream.ts";
@@ -29,12 +29,13 @@ type Measure = <A>(
 	summary: (value: A) => object
 ) => Promise<void>;
 export async function measureSharedIndex(
-	project: string,
+	projectRoot: string,
 	cache: string,
 	measure: Measure,
 	task = "all",
 	changedPoByte = 110
 ) {
+	const project = await realpath(projectRoot);
 	const recipe = await readScaleRecipe(project);
 	const target = await Effect.runPromise(
 		Effect.gen(function* () {
