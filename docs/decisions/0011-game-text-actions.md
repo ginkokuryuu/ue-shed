@@ -85,11 +85,13 @@ compiling or saving. A key that would be minted is reported as `minted` with no 
 
 ### Failure model
 
-A request is all or nothing. On any failure after an edit, the plugin restores every edited value,
-recompiles the Blueprints it compiled and restores dirty flags, then reports `status: "failed"`. A
-request that fails validation or preflight changes nothing and reports `status: "rejected"`. Save
-failures after a successful compile leave the edits in memory (the editor's state is still
-consistent) and report which packages were not saved.
+A request is all or nothing. A request that fails validation, preflight or the key check changes
+nothing (edits made before the failing action are restored, with each package's dirty flag) and
+reports `status: "rejected"`. When a compile or read-back fails, the plugin restores every edited
+value, recompiles the Blueprints it compiled and restores dirty flags, then reports
+`status: "failed"` with `rolledBack: true`. Save failures after a successful compile leave the
+edits in memory (the editor's state is still consistent), report `failed` with `rolledBack: false`
+and list which packages were saved.
 
 Errors have a stable `code`, the action they belong to, `message`, `recovery`, `retrySafe` and a
 typed `nextStep` (`fix_input`, `retry`, `reconcile`, `escalate`), the error shape Plan 058 lane D
@@ -126,7 +128,7 @@ Checked in UE 5.7 `Engine/Source`; the UE 5.8 follow-up must check the same list
 
 - Hosts get key fixes without UE Shed writing packages, and the editor's own id rules apply.
 - The plugin is optional and capability-advertised (`gameTextObjectPath` and the
-  `game_text.actions.v1` capability in the core manifest) and allow-listed for Remote Control.
+  `game-text.actions.v1` capability in the core manifest) and allow-listed for Remote Control.
 - Graph pins join once A2 makes them Game Text places; their edit uses
   `UEdGraphSchema_K2::TrySetDefaultText`.
 - A request edits at most 256 places, so one dry run or apply stays bounded.
