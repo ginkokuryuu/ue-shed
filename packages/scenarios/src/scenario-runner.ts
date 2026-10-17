@@ -196,21 +196,23 @@ export const ScenarioRunnerLive = Layer.effect(
 		const remote = yield* RemoteControlClient;
 		const playSession = yield* EditorPlaySession;
 
-		const call = Effect.fn("ScenarioRunner.call")(function* (options: {
-			readonly endpoint: string;
-			readonly functionName: string;
-			readonly objectPath: string;
-			readonly operation: string;
-			readonly parameters: Schema.JsonObject;
-		}) {
-			return yield* remote
-				.request(options)
-				.pipe(
+		const call = Effect.fn("ScenarioRunner.call")(
+			function* (options: {
+				readonly endpoint: string;
+				readonly functionName: string;
+				readonly objectPath: string;
+				readonly operation: string;
+				readonly parameters: Schema.JsonObject;
+			}) {
+				return yield* remote.request(options);
+			},
+			(effect, options) =>
+				effect.pipe(
 					Effect.mapError((cause) =>
 						transportError(options.endpoint, options.operation, cause)
 					)
-				);
-		});
+				)
+		);
 
 		const negotiate = Effect.fn("ScenarioRunner.negotiate")(function* (endpoint: string) {
 			const operation = "scenario.negotiate";

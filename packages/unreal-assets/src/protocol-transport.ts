@@ -1160,6 +1160,8 @@ async function* protocolEvents(options: {
 			options.request.requestId
 		);
 		// SAFETY: spawn configures stdout encoding to utf8 above, so iterator chunks are strings.
+		// Verified by: packages/unreal-assets/src/protocol-transport.test.ts
+		// ("decodes worker stdout as UTF-8 text even when a character spans two chunks")
 		for await (const chunk of child.stdout as AsyncIterable<string>) {
 			observeProtocolChunk(chunk, options.telemetry);
 			outputBudget.observe(chunk);

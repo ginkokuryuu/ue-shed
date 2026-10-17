@@ -426,7 +426,10 @@ export const WorkbenchProjectLive = Layer.effect(
 
 		const recoverInventory = Effect.fn("Workbench.WorkbenchProject.recoverInventory")(
 			function* (projectRoot: string, summary: ProjectIndexSummary) {
-				return yield* inventoryFromSummary(projectRoot, summary).pipe(
+				return yield* inventoryFromSummary(projectRoot, summary);
+			},
+			(effect, projectRoot) =>
+				effect.pipe(
 					Effect.catchTag("ProjectIndexStaleGeneration", () =>
 						getProjectIndexStatus({ projectRoot }).pipe(
 							Effect.provideService(ProjectIndex, projectIndexImplementation),
@@ -456,8 +459,7 @@ export const WorkbenchProjectLive = Layer.effect(
 									recovery: error.recovery
 								})
 					)
-				);
-			}
+				)
 		);
 
 		const loadSummaryUncached = Effect.fn("Workbench.WorkbenchProject.loadSummaryUncached")(
@@ -753,40 +755,34 @@ export const WorkbenchProjectLive = Layer.effect(
 				}
 				return yield* read(summary.project.projectRoot, summary.indexSummary).pipe(
 					Effect.catchTag("ProjectIndexStaleGeneration", () =>
-						getProjectIndexStatus({ projectRoot: summary.project.projectRoot }).pipe(
-							Effect.provideService(ProjectIndex, projectIndexImplementation),
-							Effect.mapError(
-								(error) =>
-									new WorkbenchProjectUnavailable({
-										message: error.message,
-										recovery: error.recovery
-									})
-							),
-							Effect.flatMap((status) =>
-								status.status === "ready"
-									? recoverInventory(summary.project.projectRoot, status.summary)
-									: refreshSummary(summary.project.projectRoot).pipe(
-											Effect.flatMap((latest) =>
-												recoverInventory(
-													summary.project.projectRoot,
-													latest
-												)
-											)
-										)
-							),
-							Effect.flatMap((latest) => {
-								if (latest.indexSummary === undefined) {
-									return Effect.fail(
+						Effect.gen(function* () {
+							const projectRoot = summary.project.projectRoot;
+							const status = yield* getProjectIndexStatus({ projectRoot }).pipe(
+								Effect.provideService(ProjectIndex, projectIndexImplementation),
+								Effect.mapError(
+									(error) =>
 										new WorkbenchProjectUnavailable({
-											message: "Project Index summary is unavailable.",
-											recovery:
-												"Refresh the Project Index, then retry the feature."
+											message: error.message,
+											recovery: error.recovery
 										})
-									);
-								}
-								return read(latest.project.projectRoot, latest.indexSummary);
-							})
-						)
+								)
+							);
+							const indexSummary =
+								status.status === "ready"
+									? status.summary
+									: yield* refreshSummary(projectRoot);
+							const latest = yield* recoverInventory(projectRoot, indexSummary);
+							if (latest.indexSummary === undefined) {
+								return yield* Effect.fail(
+									new WorkbenchProjectUnavailable({
+										message: "Project Index summary is unavailable.",
+										recovery:
+											"Refresh the Project Index, then retry the feature."
+									})
+								);
+							}
+							return yield* read(latest.project.projectRoot, latest.indexSummary);
+						})
 					),
 					Effect.mapError((error) =>
 						error instanceof WorkbenchProjectUnavailable

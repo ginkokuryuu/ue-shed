@@ -94,38 +94,31 @@ export function makeMapTileCaptureRemotePort(
 	return {
 		release: Effect.fn("MapCapture.remoteRelease")(function* (runId: string) {
 			if (!startedRuns.has(runId)) return;
-			yield* client
-				.request({
-					endpoint,
-					timeout: "5 seconds",
-					functionName: "EndMapTileCapture",
-					objectPath: mapTileReviewLibraryPath,
-					operation: "camera.map_tile.release.remote",
-					parameters: { RunId: runId }
-				})
-				.pipe(
-					Effect.flatMap(
-						Schema.decodeUnknownEffect(
-							startedRuns.get(runId)
-								? MapTileReleaseResult
-								: Schema.Struct({
-										released: Schema.Boolean,
-										restoration: Schema.optionalKey(
-											MapTileReleaseResult.fields.restoration
-										)
-									})
-						)
-					),
-					Effect.flatMap((result) =>
-						result.restoration === "restored" ||
-						(result.restoration === undefined && result.released)
-							? Effect.void
-							: Effect.fail(
-									new Error(
-										"Native map capture could not restore owned editor state."
-									)
-								)
-					)
+			const decodeResult = Schema.decodeUnknownEffect(
+				startedRuns.get(runId)
+					? MapTileReleaseResult
+					: Schema.Struct({
+							released: Schema.Boolean,
+							restoration: Schema.optionalKey(MapTileReleaseResult.fields.restoration)
+						})
+			);
+			const response = yield* client.request({
+				endpoint,
+				timeout: "5 seconds",
+				functionName: "EndMapTileCapture",
+				objectPath: mapTileReviewLibraryPath,
+				operation: "camera.map_tile.release.remote",
+				parameters: { RunId: runId }
+			});
+			const result = yield* decodeResult(response);
+			if (
+				!(
+					result.restoration === "restored" ||
+					(result.restoration === undefined && result.released)
+				)
+			)
+				return yield* Effect.fail(
+					new Error("Native map capture could not restore owned editor state.")
 				);
 			startedRuns.delete(runId);
 		}),

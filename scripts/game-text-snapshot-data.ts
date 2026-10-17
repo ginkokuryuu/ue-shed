@@ -7,7 +7,7 @@ import {
 	type SnapshotColumn
 } from "../packages/game-text/src/snapshot-format.ts";
 
-/** Phase 2 layout probe, not the Phase 5 join implementation or a public hydration contract. */
+/** Snapshot layout probe; not the production join or a public hydration contract. */
 export function joinedTargetSnapshot(root: string, corpus: TextCorpus, join: LocalizationJoin) {
 	const table = snapshotStringTableBuilder("identity");
 	const source = snapshotStringTableBuilder("source");

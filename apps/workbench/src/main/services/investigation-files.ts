@@ -9,6 +9,7 @@ import {
 	writeInvestigationFile
 } from "@ue-shed/unreal-assets/investigation-files";
 import type { ElectronDialogApi } from "../adapters/electron-dialog.js";
+import type { WorkbenchWindowError } from "../adapters/electron-window.js";
 
 export const investigationFailure = (error: {
 	readonly message: string;
@@ -19,16 +20,16 @@ export const investigationFailure = (error: {
 	recovery: error.recovery ?? "Try the file operation again."
 });
 
-export const saveInvestigation = Effect.fn("Workbench.Investigation.save")(function* (
-	dialog: ElectronDialogApi,
-	options: {
-		readonly contents: string;
-		readonly extension: "json" | "csv";
-		readonly rowCount: number;
-		readonly projectRoot?: string;
-	}
-): Effect.fn.Return<InvestigationFileResult> {
-	return yield* Effect.gen(function* () {
+export const saveInvestigation = Effect.fn("Workbench.Investigation.save")(
+	function* (
+		dialog: ElectronDialogApi,
+		options: {
+			readonly contents: string;
+			readonly extension: "json" | "csv";
+			readonly rowCount: number;
+			readonly projectRoot?: string;
+		}
+	): Effect.fn.Return<InvestigationFileResult, InvestigationError | WorkbenchWindowError> {
 		if (options.projectRoot && Buffer.byteLength(options.contents, "utf8") > 4 * 1024 * 1024)
 			return yield* Effect.fail(
 				new InvestigationError({
@@ -53,8 +54,10 @@ export const saveInvestigation = Effect.fn("Workbench.Investigation.save")(funct
 				? { replayCommand: investigationReplayCommand(options.projectRoot, choice.path) }
 				: undefined)
 		};
-	}).pipe(Effect.catch((error) => Effect.succeed(investigationFailure(error))));
-});
+	},
+	(effect): Effect.Effect<InvestigationFileResult> =>
+		effect.pipe(Effect.catch((error) => Effect.succeed(investigationFailure(error))))
+);
 
 export const openInvestigation = Effect.fn("Workbench.Investigation.open")(function* <A, I>(
 	dialog: ElectronDialogApi,

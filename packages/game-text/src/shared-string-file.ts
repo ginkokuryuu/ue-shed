@@ -127,7 +127,10 @@ function containing(starts: readonly number[], id: number) {
 	return low - 1;
 }
 
-/** Bulk callers retain the Phase 2 block/offset representation after A64 expansion. */
+/**
+ * Expand A64-decoded strings into the block/offset layout bulk callers read: blocks of up to
+ * 256 KiB, each a row count, row offsets and the row bytes.
+ */
 function expandDomain(packed: PackedStrings) {
 	const starts: number[] = [],
 		offsets: number[] = [0],
