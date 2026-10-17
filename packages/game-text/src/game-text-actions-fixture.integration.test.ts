@@ -1,7 +1,8 @@
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { assetReaderLayer, extractProjectTextPackages } from "@ue-shed/unreal-assets";
-import { Effect, Schema, Stream } from "effect";
+import { parseManifest } from "@ue-shed/localization/browser";
+import { Effect, Result, Schema, Stream } from "effect";
 import { describe, expect, it } from "vitest";
 import { useSavedFixtureProject } from "../../../fixtures/unreal-project/saved-project.test-support.js";
 import { textCorpusFromExtractionEvents } from "./corpus.js";
@@ -176,6 +177,45 @@ describe("Game Text identity cases in the saved fixture", () => {
 						: [{ case: item.case, id, packageNamespace }];
 				})
 		).toEqual([]);
+	});
+
+	it("records C++ LOCTEXT as Unreal gathers it from source (gather-only)", async () => {
+		// The saved-package reader never sees C++ text; this case pins only Unreal's source gather
+		// (GameTextActions_Source.ini) over FixtureSource/GameTextActions/GameTextActionsLoctext.cpp.
+		const manifest = parseManifest(
+			await readFile(
+				join(
+					fixture.root,
+					"Content/Localization/GameTextActionsSource/GameTextActionsSource.manifest"
+				)
+			)
+		);
+		expect(Result.isSuccess(manifest)).toBe(true);
+		if (!Result.isSuccess(manifest)) return;
+		const file = "FixtureSource/GameTextActions/GameTextActionsLoctext.cpp";
+		expect(
+			manifest.success.entries.map(({ namespace, key, source, path }) => ({
+				namespace,
+				key,
+				source: source.Text,
+				path
+			}))
+		).toEqual([
+			// A dotted LOCTEXT namespace is one id namespace; the repeated LOCTEXT with the same id
+			// and text is one entry, recorded at its first place only.
+			{
+				namespace: "GameTextActions.Source",
+				key: "HarborClosed",
+				source: "The harbor is closed",
+				path: `${file}(9)`
+			},
+			{
+				namespace: "GameTextActions.Tides",
+				key: "TideTable",
+				source: "Tide table",
+				path: `${file}(22)`
+			}
+		]);
 	});
 
 	it("matches Unreal's conflict report: one id, different text, only across branch copies", async () => {

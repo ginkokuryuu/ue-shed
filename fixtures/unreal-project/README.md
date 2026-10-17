@@ -231,7 +231,14 @@ engine's evidence covers. Slice 2 has UE 5.7 evidence only; its UE 5.8 evidence 
 recorded. Slice 2 was added to the committed fixture by running only its stage, the gather, reports
 and evidence on UE 5.7, so slice 1's packages and evidence are unchanged.
 
-Not covered yet: C++ `LOCTEXT` (gather-only; the target does not gather text files), UE 5.8's
+C++ `LOCTEXT` is gather-only: `FixtureSource/GameTextActions/GameTextActionsLoctext.cpp` is not
+compiled, and `GameTextActions_Source.ini` gathers it with `GatherTextFromSource` into its own
+`Content/Localization/GameTextActionsSource` manifest, so the asset gather and its evidence are
+unchanged. The saved-package reader never sees C++ text; the test checks only what Unreal gathers.
+Unreal joins a dotted `LOCTEXT` namespace into one id namespace and records a repeated `LOCTEXT`
+with the same id and text once, at its first place.
+
+Not covered yet: UE 5.8's
 renumbered literal types including text with translator notes (covered only by synthetic bytes
 from PR #99), and slice 2 on UE 5.8. Slice 2 found that the graph pin reader did not decode a pin
 holding a String Table reference (FText history 11); it now does, as tagged text properties do.

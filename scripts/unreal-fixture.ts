@@ -325,6 +325,7 @@ if (action === "game-text-actions") {
 	// Only the GameTextActions target's outputs and its generated packages are disposable.
 	for (const generated of [
 		"Content/Localization/GameTextActions",
+		"Content/Localization/GameTextActionsSource",
 		"Content/Fixture/GameTextActions",
 		"Content/__ExternalActors__/Fixture/GameTextActions"
 	])
