@@ -49,14 +49,15 @@ guidance.
 Import from a focused entry point. Each lists its exports by name; modules no entry point names
 are private to the package.
 
-| Entry point                 | Runtime      | Contents                                                                                      |
-| --------------------------- | ------------ | --------------------------------------------------------------------------------------------- |
-| `@ue-shed/game-text/schema` | browser-safe | Wire schemas, identifiers, check and rule ids, operation requests                             |
-| `@ue-shed/game-text/rules`  | browser-safe | Rule documents, starter rules, audience and origin policy, word counting                      |
-| `@ue-shed/game-text/checks` | browser-safe | Check catalogue and scopes, custom checks, the gate, text problems, Unreal text syntax        |
-| `@ue-shed/game-text/labels` | browser-safe | Display labels for states, problems, audiences, origins and quality                           |
-| `@ue-shed/game-text/corpus` | browser-safe | Corpus queries, search, localization join, reports, CSV, edits and package text diffs         |
-| `@ue-shed/game-text/index`  | Node         | `TextCorpus`, index layers/builders, workers, rules-file IO, progress and Unreal text actions |
+| Entry point                    | Runtime      | Contents                                                                                      |
+| ------------------------------ | ------------ | --------------------------------------------------------------------------------------------- |
+| `@ue-shed/game-text/schema`    | browser-safe | Wire schemas, identifiers, check and rule ids, operation requests                             |
+| `@ue-shed/game-text/rules`     | browser-safe | Rule documents, starter rules, audience and origin policy, word counting                      |
+| `@ue-shed/game-text/checks`    | browser-safe | Check catalogue and scopes, custom checks, the gate, text problems, Unreal text syntax        |
+| `@ue-shed/game-text/labels`    | browser-safe | Display labels for states, problems, audiences, origins and quality                           |
+| `@ue-shed/game-text/corpus`    | browser-safe | Corpus queries, search, localization join, reports, CSV, edits and package text diffs         |
+| `@ue-shed/game-text/index`     | Node         | `TextCorpus`, index layers/builders, workers, rules-file IO, progress and Unreal text actions |
+| `@ue-shed/game-text/workspace` | Node         | Workspace and localization operations with selected-project and file hooks                    |
 
 The browser-safe entry points do not expose filesystem, process, Electron, Perforce, or Unreal
 authority. The root `@ue-shed/game-text` and `@ue-shed/game-text/browser` aggregates still re-export

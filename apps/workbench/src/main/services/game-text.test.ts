@@ -1098,7 +1098,8 @@ it("exports one captured generation when the project changes during the save dia
 							Layer.mergeAll(
 								project,
 								dialog,
-								makeLocalFilesTestLayer(),
+								// Exports go through the host file hooks; this test reads them from disk.
+								LocalFilesLive,
 								makeTextCorpusServiceTestLayer({
 									scan: () => Effect.die("unused"),
 									scanFromProjectIndex: () => Effect.succeed(emptyCorpus)
@@ -1204,7 +1205,8 @@ it("exports the selected target's localization quality list as a replayable repo
 							Layer.mergeAll(
 								selectedProject,
 								dialog,
-								makeLocalFilesTestLayer(),
+								// Exports go through the host file hooks; this test reads them from disk.
+								LocalFilesLive,
 								makeTextCorpusServiceTestLayer({
 									scan: () => Effect.die("unused"),
 									scanFromProjectIndex: () => Effect.succeed(localizationCorpus())
@@ -1242,7 +1244,8 @@ it("restores embedded rules without retaining another rule file's write destinat
 		rules: validQualityDocument
 	};
 	try {
-		await writeFile(presetPath, JSON.stringify(preset));
+		// Presets are read through the same file hooks as the rules file.
+		files.set(presetPath, new TextEncoder().encode(JSON.stringify(preset)));
 		const dialog = Layer.succeed(
 			ElectronDialog,
 			ElectronDialog.of({
@@ -1271,7 +1274,7 @@ it("restores embedded rules without retaining another rule file's write destinat
 				});
 				expect(new TextDecoder().decode(files.get(qualityRulesPath))).toBe(original);
 				const { rules: _rules, ...withoutRules } = preset;
-				yield* Effect.promise(() => writeFile(presetPath, JSON.stringify(withoutRules)));
+				files.set(presetPath, new TextEncoder().encode(JSON.stringify(withoutRules)));
 				expect((yield* service.investigationOpen()).status).toBe("opened");
 				expect(yield* service.qualitySearch({ filter: "all", pageSize: 50 })).toEqual({
 					status: "not_ready"
@@ -1306,7 +1309,9 @@ it("restores embedded rules without retaining another rule file's write destinat
 				)
 			)
 		);
-		expect(JSON.parse(await readFile(outputPath, "utf8")).preset.rules).toBeUndefined();
+		expect(
+			JSON.parse(new TextDecoder().decode(files.get(outputPath))).preset.rules
+		).toBeUndefined();
 	} finally {
 		await rm(root, { recursive: true, force: true });
 	}

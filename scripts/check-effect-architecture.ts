@@ -782,7 +782,12 @@ const gameTextBrowserEntries = [
 export async function checkGameTextEntryPoints(root: string = repositoryRoot) {
 	const failures: string[] = [];
 	const source = join(root, "packages/game-text/src");
-	for (const entry of [...gameTextBrowserEntries, "index.ts", "entry-index.ts"]) {
+	for (const entry of [
+		...gameTextBrowserEntries,
+		"index.ts",
+		"entry-index.ts",
+		"entry-workspace.ts"
+	]) {
 		let text: string;
 		try {
 			text = await readFile(join(source, entry), "utf8");
@@ -816,7 +821,7 @@ export async function checkGameTextEntryPoints(root: string = repositoryRoot) {
 				)
 			)
 				failures.push(
-					`${label}: import a focused @ue-shed/game-text entry point (/schema, /rules, /checks, /labels, /corpus or /index)`
+					`${label}: import a focused @ue-shed/game-text entry point (/schema, /rules, /checks, /labels, /corpus, /index or /workspace)`
 				);
 		}
 	}

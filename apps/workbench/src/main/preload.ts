@@ -17,7 +17,7 @@ import type {
 } from "@ue-shed/extension-camera-review/client";
 import type { EditorHandoffNotice } from "../shared/editor-handoff.js";
 import type { MapCaptureProgressEvent } from "@ue-shed/extension-camera-review/map-capture-client";
-import type { WorkbenchOperationProgress } from "@ue-shed/game-text/schema";
+import type { GameTextOperationProgress } from "@ue-shed/game-text/schema";
 import type { ContentObservatoryHistoryRequestWire } from "@ue-shed/extension-content-observatory/client";
 import type {
 	CameraScheduleConfig,
@@ -171,10 +171,10 @@ const workbenchRendererApi = {
 		operationCancel: (id) => ipcRenderer.invoke("game-text:localization:operation-cancel", id),
 		operationFiles: (request) =>
 			ipcRenderer.invoke("game-text:localization:operation-files", request),
-		onOperationProgress: (listener: (progress: WorkbenchOperationProgress) => void) => {
+		onOperationProgress: (listener: (progress: GameTextOperationProgress) => void) => {
 			const handler = (
 				_event: Electron.IpcRendererEvent,
-				progress: WorkbenchOperationProgress
+				progress: GameTextOperationProgress
 			) => listener(progress);
 			ipcRenderer.on("game-text:localization:operation-progress", handler);
 			return () =>

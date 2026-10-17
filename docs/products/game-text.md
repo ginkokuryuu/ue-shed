@@ -534,6 +534,16 @@ rule document must not silently redefine its threshold or counts.
 
 ## Headless and Workbench surfaces
 
+Hosts that offer the interactive workspace (scan, search, quality rules, localization targets,
+edits, reviews, reports and investigations) build it with `makeGameTextWorkspace(host)` from
+`@ue-shed/game-text/workspace`, the same orchestration Workbench runs. The host supplies its
+selected project, which the workspace never changes, and file hooks through which every file the
+workspace reads or writes passes. Optional extension points set the rules location, a recovery copy
+taken before a rules file is overwritten, the localization file access that writes PO and review
+files, and the reviewer and change-set author policies. A scan belongs to the workspace, so it keeps
+running when the request that started it goes away, and the next request for the same project
+generation joins it.
+
 The supported headless quality journey is:
 
 ```text

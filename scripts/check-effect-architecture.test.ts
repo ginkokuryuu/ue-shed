@@ -56,8 +56,8 @@ test("Game Text entry points are named and first-party code imports focused entr
 			"const load = () => import('@ue-shed/game-text/browser');\n"
 		);
 		assert.deepEqual((await checkGameTextEntryPoints(fixtureRoot)).sort(), [
-			"apps/cli/src/browser.ts: import a focused @ue-shed/game-text entry point (/schema, /rules, /checks, /labels, /corpus or /index)",
-			"apps/cli/src/root.ts: import a focused @ue-shed/game-text entry point (/schema, /rules, /checks, /labels, /corpus or /index)",
+			"apps/cli/src/browser.ts: import a focused @ue-shed/game-text entry point (/schema, /rules, /checks, /labels, /corpus, /index or /workspace)",
+			"apps/cli/src/root.ts: import a focused @ue-shed/game-text entry point (/schema, /rules, /checks, /labels, /corpus, /index or /workspace)",
 			"packages/game-text/src/entry-corpus.ts: Game Text entry points use named exports only"
 		]);
 	} finally {

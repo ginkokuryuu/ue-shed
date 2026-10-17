@@ -30,44 +30,44 @@
 - **Category**: direction
 - **Planned at**: `docs/plan-058-ue-shed-week`, 2026-10-17
 
-| Item | Title                                          | Lane | State                                          |
-| ---- | ---------------------------------------------- | ---- | ---------------------------------------------- |
-| A1   | Name packages by file location                 | A    | TODO                                           |
-| A2   | Graph pin text as Game Text places             | A    | TODO                                           |
-| A3   | Game Text actions: editor plugin and API       | A    | IN PROGRESS — ADR #105; implementation pending |
-| A4   | Identity fixture, slice 2                      | A    | TODO                                           |
-| A5   | UE 4.27 identity slice                         | A    | TODO                                           |
-| A6   | Stretch: text diff of two package versions     | A    | DONE — #104                                    |
-| B1   | Check catalogue                                | B    | DONE — #106                                    |
-| B2   | Rules file v3                                  | B    | DONE — #109                                    |
-| B3   | Parameterised, scoped checks                   | B    | DONE — #111                                    |
-| B4   | Severity stored per finding                    | B    | DONE — #113                                    |
-| B5   | Host-supplied policies                         | B    | TODO                                           |
-| B6   | Studio-defined checks                          | B    | DONE — #117                                    |
-| B7   | Intended marks                                 | B    | TODO                                           |
-| B8   | Scans keyed on the resolved rules              | B    | TODO                                           |
-| C1   | Stage breakdown on real projects               | C    | IN PROGRESS — #114                             |
-| C2   | Prepare the query once, off the main thread    | C    | IN PROGRESS — #110                             |
-| C3   | Quality scan in a worker                       | C    | IN PROGRESS — #119                             |
-| C4   | Column cache per reader                        | C    | DONE — #116                                    |
-| C5   | Spike: binary package-text output              | C    | TODO                                           |
-| C6   | Electron vs Node build time                    | C    | TODO                                           |
-| C7   | Bytecode reader cost                           | C    | TODO                                           |
-| D1   | `game-text` entry points                       | D    | TODO                                           |
-| D2   | Reader batching inside the index source        | D    | DONE — #108                                    |
-| D3   | Unreal path module                             | D    | TODO                                           |
-| D4   | One error shape                                | D    | TODO                                           |
-| D5   | Classified causes instead of prose             | D    | TODO                                           |
-| D6   | Deliberate error translation                   | D    | TODO                                           |
-| D7   | Domain parsers instead of raw decoders         | D    | IN PROGRESS — #127                             |
-| D8   | Layers and test layers                         | D    | IN PROGRESS — #125                             |
-| D9   | One progress mechanism, one completeness shape | D    | IN PROGRESS — #125                             |
-| D10  | Workspace orchestration as a package           | D    | TODO                                           |
-| D11  | JSDoc on public exports                        | D    | TODO                                           |
-| D12  | Small cleanups                                 | D    | IN PROGRESS — #107                             |
-| D13  | API surface of the other host-facing packages  | D    | TODO                                           |
-| D14  | Native error audit                             | D    | TODO                                           |
-| R    | 0.17.0 release preparation                     | —    | TODO                                           |
+| Item | Title                                          | Lane | State                                   |
+| ---- | ---------------------------------------------- | ---- | --------------------------------------- |
+| A1   | Name packages by file location                 | A    | TODO                                    |
+| A2   | Graph pin text as Game Text places             | A    | TODO                                    |
+| A3   | Game Text actions: editor plugin and API       | A    | IN PROGRESS — #112; graph pins await A2 |
+| A4   | Identity fixture, slice 2                      | A    | TODO                                    |
+| A5   | UE 4.27 identity slice                         | A    | TODO                                    |
+| A6   | Stretch: text diff of two package versions     | A    | DONE — #104                             |
+| B1   | Check catalogue                                | B    | DONE — #106                             |
+| B2   | Rules file v3                                  | B    | DONE — #109                             |
+| B3   | Parameterised, scoped checks                   | B    | DONE — #111                             |
+| B4   | Severity stored per finding                    | B    | DONE — #113                             |
+| B5   | Host-supplied policies                         | B    | TODO                                    |
+| B6   | Studio-defined checks                          | B    | DONE — #117                             |
+| B7   | Intended marks                                 | B    | TODO                                    |
+| B8   | Scans keyed on the resolved rules              | B    | TODO                                    |
+| C1   | Stage breakdown on real projects               | C    | IN PROGRESS — #114                      |
+| C2   | Prepare the query once, off the main thread    | C    | IN PROGRESS — #110                      |
+| C3   | Quality scan in a worker                       | C    | IN PROGRESS — #119                      |
+| C4   | Column cache per reader                        | C    | DONE — #116                             |
+| C5   | Spike: binary package-text output              | C    | TODO                                    |
+| C6   | Electron vs Node build time                    | C    | TODO                                    |
+| C7   | Bytecode reader cost                           | C    | TODO                                    |
+| D1   | `game-text` entry points                       | D    | DONE — #115                             |
+| D2   | Reader batching inside the index source        | D    | DONE — #108                             |
+| D3   | Unreal path module                             | D    | TODO                                    |
+| D4   | One error shape                                | D    | TODO                                    |
+| D5   | Classified causes instead of prose             | D    | TODO                                    |
+| D6   | Deliberate error translation                   | D    | TODO                                    |
+| D7   | Domain parsers instead of raw decoders         | D    | IN PROGRESS — #127                      |
+| D8   | Layers and test layers                         | D    | IN PROGRESS — #125                      |
+| D9   | One progress mechanism, one completeness shape | D    | IN PROGRESS — #125                      |
+| D10  | Workspace orchestration as a package           | D    | DONE — #124                             |
+| D11  | JSDoc on public exports                        | D    | TODO                                    |
+| D12  | Small cleanups                                 | D    | IN PROGRESS — #107                      |
+| D13  | API surface of the other host-facing packages  | D    | TODO                                    |
+| D14  | Native error audit                             | D    | TODO                                    |
+| R    | 0.17.0 release preparation                     | —    | TODO                                    |
 
 ## Context
 

@@ -55,6 +55,10 @@
 		"./index": {
 			"types": "./dist/entry-index.d.ts",
 			"import": "./dist/entry-index.js"
+		},
+		"./workspace": {
+			"types": "./dist/entry-workspace.d.ts",
+			"import": "./dist/entry-workspace.js"
 		}
 	},
 	"publishConfig": {

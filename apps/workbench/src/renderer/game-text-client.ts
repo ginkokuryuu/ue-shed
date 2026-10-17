@@ -54,11 +54,11 @@ import {
 } from "../shared/project-workspace-contract.js";
 import { Effect, Queue, Schema, Stream } from "effect";
 import {
-	WorkbenchOperationState,
-	WorkbenchOperationPlanResult,
-	WorkbenchOperationResult,
-	WorkbenchOperationFilesResult,
-	WorkbenchOperationProgress
+	GameTextOperationState,
+	GameTextOperationPlanResult,
+	GameTextOperationResult,
+	GameTextOperationFilesResult,
+	GameTextOperationProgress
 } from "@ue-shed/game-text/schema";
 
 const recovery = "Restart Workbench. If the problem persists, verify package versions.";
@@ -83,33 +83,33 @@ export const gameTextClient: GameTextClientApi = GameTextClient.of({
 			invokeRequest(
 				"gameText.operationState",
 				() => window.ueShed.gameText.operationState(target),
-				Schema.decodeUnknownEffect(WorkbenchOperationState)
+				Schema.decodeUnknownEffect(GameTextOperationState)
 			),
 		plan: (request) =>
 			invokeRequest(
 				"gameText.operationPlan",
 				() => window.ueShed.gameText.operationPlan(request),
-				Schema.decodeUnknownEffect(WorkbenchOperationPlanResult)
+				Schema.decodeUnknownEffect(GameTextOperationPlanResult)
 			),
 		run: (id) =>
 			invokeRequest(
 				"gameText.operationRun",
 				() => window.ueShed.gameText.operationRun(id),
-				Schema.decodeUnknownEffect(WorkbenchOperationResult)
+				Schema.decodeUnknownEffect(GameTextOperationResult)
 			),
 		cancel: (id) =>
 			invokeRequest(
 				"gameText.operationCancel",
 				() => window.ueShed.gameText.operationCancel(id),
-				Schema.decodeUnknownEffect(WorkbenchOperationResult)
+				Schema.decodeUnknownEffect(GameTextOperationResult)
 			),
 		files: (request) =>
 			invokeRequest(
 				"gameText.operationFiles",
 				() => window.ueShed.gameText.operationFiles(request),
-				Schema.decodeUnknownEffect(WorkbenchOperationFilesResult)
+				Schema.decodeUnknownEffect(GameTextOperationFilesResult)
 			),
-		progress: Stream.callback<WorkbenchOperationProgress>(
+		progress: Stream.callback<GameTextOperationProgress>(
 			(queue) =>
 				Effect.acquireRelease(
 					Effect.sync(() =>
@@ -122,7 +122,7 @@ export const gameTextClient: GameTextClientApi = GameTextClient.of({
 			{ bufferSize: 1, strategy: "sliding" }
 		).pipe(
 			Stream.mapEffect((progress) =>
-				Schema.decodeUnknownEffect(WorkbenchOperationProgress)(progress)
+				Schema.decodeUnknownEffect(GameTextOperationProgress)(progress)
 			),
 			Stream.mapError(
 				(cause) =>

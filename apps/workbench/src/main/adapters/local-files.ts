@@ -1,13 +1,14 @@
 import { existsSync } from "node:fs";
 import { randomUUID } from "node:crypto";
-import { open, rename, rm, writeFile } from "node:fs/promises";
-import { isAbsolute, relative, resolve, sep } from "node:path";
+import { mkdir, open, rename, rm, writeFile } from "node:fs/promises";
+import { dirname, isAbsolute, relative, resolve, sep } from "node:path";
 import { Context, Effect, Layer, Schema } from "effect";
 
 export class LocalFilesError extends Schema.TaggedError<LocalFilesError>()(
 	"Workbench.LocalFilesError",
 	{
 		causeText: Schema.String,
+		code: Schema.optionalKey(Schema.Literal("already_exists")),
 		message: Schema.String,
 		operation: Schema.Literals(["exists", "readFile", "writeFile"]),
 		path: Schema.String,
@@ -57,14 +58,18 @@ function filesError(
 	recovery: string,
 	retrySafe = true
 ): LocalFilesError {
-	return new LocalFilesError({
+	const fields = {
 		causeText: cause instanceof Error ? cause.message : String(cause),
 		message: `Local file ${operation} failed.`,
 		operation,
 		path,
 		recovery,
 		retrySafe
-	});
+	};
+
+	if (cause instanceof Object && "code" in cause && cause.code === "EEXIST")
+		return new LocalFilesError({ ...fields, code: "already_exists" });
+	return new LocalFilesError(fields);
 }
 
 export const LocalFilesLive = Layer.succeed(
@@ -205,6 +210,7 @@ export const LocalFilesLive = Layer.succeed(
 						return yield* Effect.tryPromise({
 							try: async () => {
 								try {
+									await mkdir(dirname(path), { recursive: true });
 									if (options?.exclusive) {
 										await writeFile(path, bytes, { flag: "wx" });
 										return;

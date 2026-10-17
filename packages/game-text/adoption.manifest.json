@@ -16,7 +16,8 @@
 		"schema": "@ue-shed/game-text/schema",
 		"rules": "@ue-shed/game-text/rules",
 		"checks": "@ue-shed/game-text/checks",
-		"labels": "@ue-shed/game-text/labels"
+		"labels": "@ue-shed/game-text/labels",
+		"workspace": "@ue-shed/game-text/workspace"
 	},
 	"packageGraph": {
 		"dependencies": {
