@@ -20,6 +20,7 @@ import {
 	lengthOutlier,
 	lengthOutlierMinimumRatio,
 	placeholderMatches,
+	placeholderMatchRanges,
 	placeholderTranslation
 } from "./localization-text-shape.js";
 
@@ -36,6 +37,8 @@ describe("localization check catalogue", () => {
 			expect(localizationCheckDefaults[id]).toBe(check.defaults);
 		}
 		expect(localizationCheckCatalogue.placeholder_text.subject).toBe("source");
+		expect(localizationCheckCatalogue.missing_translator_notes.subject).toBe("source");
+		expect(localizationCheckCatalogue.duplicate_source.subject).toBe("source");
 		expect(localizationCheckCatalogue.length_outlier.subject).toBe("localization");
 	});
 
@@ -72,6 +75,33 @@ describe("localization check catalogue", () => {
 		const words5 = { minimumLength: 3, maximumWords: 5 };
 		expect(consistentTranslationCandidate("Open the old harbour gate")).toBe(false);
 		expect(consistentTranslationCandidate("Open the old harbour gate", words5)).toBe(true);
+	});
+
+	it("matches project placeholders across Unicode scripts and literal punctuation", () => {
+		const params = {
+			markers: ["仮", "заглушка", "[WIP]", "TODO"],
+			phrases: ["à traduire", "🔧"]
+		};
+		expect(placeholderMatches("😀 仮 /заглушка/ [WIP] TODO! À TRADUIRE 🔧", params)).toEqual([
+			"仮",
+			"заглушка",
+			"[WIP]",
+			"TODO",
+			"À TRADUIRE",
+			"🔧"
+		]);
+		expect(placeholderMatchRanges("😀 [WIP] 仮", params)).toEqual([
+			{ match: "[WIP]", start: 3, end: 8 },
+			{ match: "仮", start: 9, end: 10 }
+		]);
+		expect(
+			placeholderMatches(
+				"仮名 незаглушка заглушками X[WIP]Y éTODO TODOé _TODO TODO_ TODO\u0301",
+				params
+			)
+		).toEqual([]);
+		expect(placeholderMatches("todo Заглушка", params)).toEqual([]);
+		expect(placeholderMatches("仮 [WIP]", { markers: [], phrases: [] })).toEqual([]);
 	});
 
 	it("generates the README check table", () => {

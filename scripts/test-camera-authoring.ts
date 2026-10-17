@@ -422,8 +422,8 @@ try {
 				.pipe(Effect.flatMap(Cameras.readyCameraBridge))
 		);
 		const queued = await Effect.runPromise(
-			client
-				.request({
+			Effect.gen(function* () {
+				const response = yield* client.request({
 					endpoint,
 					objectPath: "/Script/CameraMenuExample.Default__CameraMenuExampleLibrary",
 					functionName: "SubmitAction",
@@ -433,11 +433,12 @@ try {
 						ExpectedRevision: before.revision,
 						ActionJson: JSON.stringify(event)
 					}
-				})
-				.pipe(
-					Effect.flatMap(Schema.decodeUnknownEffect(Cameras.CameraBridgeResponse)),
-					Effect.flatMap(Cameras.readyCameraBridge)
-				)
+				});
+				const decoded = yield* Schema.decodeUnknownEffect(Cameras.CameraBridgeResponse)(
+					response
+				);
+				return yield* Cameras.readyCameraBridge(decoded);
+			})
 		);
 		assert.ok(queued.panelEvent);
 		const result = await Effect.runPromise(panel.tick());

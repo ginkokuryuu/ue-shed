@@ -322,15 +322,15 @@ function placeholderPatterns(params: PlaceholderTextParams): PlaceholderPatterns
 	let patterns = placeholderPatternSets.get(params);
 	if (!patterns) {
 		const words = (values: readonly string[]) => values.map(escapeRegExp).join("|");
+		// Unlike JS \b, these boundaries cover non-ASCII letters and combining marks,
+		// and allow project markers whose literal spelling begins or ends in punctuation.
+		const bounded = (values: readonly string[]) =>
+			`(?<![\\p{L}\\p{M}\\p{N}_])(?:${words(values)})(?![\\p{L}\\p{M}\\p{N}_])`;
 		const all = [...params.markers, ...params.phrases];
 		patterns = {
 			any: all.length ? new RegExp(words(all), "iu") : undefined,
-			markers: params.markers.length
-				? new RegExp(`\\b(?:${words(params.markers)})\\b`, "gu")
-				: undefined,
-			phrases: params.phrases.length
-				? new RegExp(`\\b(?:${words(params.phrases)})\\b`, "giu")
-				: undefined
+			markers: params.markers.length ? new RegExp(bounded(params.markers), "gu") : undefined,
+			phrases: params.phrases.length ? new RegExp(bounded(params.phrases), "giu") : undefined
 		};
 		placeholderPatternSets.set(params, patterns);
 	}

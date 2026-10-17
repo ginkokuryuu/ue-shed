@@ -7,10 +7,10 @@ import { RemoteControlClient, type RemoteControlClientError } from "@ue-shed/unr
 import { Context, Effect, Layer, Schedule, Schema } from "effect";
 import { movementGymScenario } from "./demo.js";
 import {
-	decodeScenarioCancelResponse,
-	decodeScenarioPrepareResponse,
-	decodeScenarioStartResponse,
-	decodeScenarioStatusResponse,
+	parseScenarioCancelResponse,
+	parseScenarioPrepareResponse,
+	parseScenarioStartResponse,
+	parseScenarioStatusResponse,
 	movementGymExecutionRequest,
 	SCENARIO_EXECUTION_CAPABILITIES,
 	type ScenarioCancelResponse,
@@ -196,21 +196,23 @@ export const ScenarioRunnerLive = Layer.effect(
 		const remote = yield* RemoteControlClient;
 		const playSession = yield* EditorPlaySession;
 
-		const call = Effect.fn("ScenarioRunner.call")(function* (options: {
-			readonly endpoint: string;
-			readonly functionName: string;
-			readonly objectPath: string;
-			readonly operation: string;
-			readonly parameters: Schema.JsonObject;
-		}) {
-			return yield* remote
-				.request(options)
-				.pipe(
+		const call = Effect.fn("ScenarioRunner.call")(
+			function* (options: {
+				readonly endpoint: string;
+				readonly functionName: string;
+				readonly objectPath: string;
+				readonly operation: string;
+				readonly parameters: Schema.JsonObject;
+			}) {
+				return yield* remote.request(options);
+			},
+			(effect, options) =>
+				effect.pipe(
 					Effect.mapError((cause) =>
 						transportError(options.endpoint, options.operation, cause)
 					)
-				);
-		});
+				)
+		);
 
 		const negotiate = Effect.fn("ScenarioRunner.negotiate")(function* (endpoint: string) {
 			const operation = "scenario.negotiate";
@@ -345,7 +347,7 @@ export const ScenarioRunnerLive = Layer.effect(
 				operation,
 				parameters: { RunId: runId }
 			});
-			return yield* decodeScenarioCancelResponse(value).pipe(
+			return yield* parseScenarioCancelResponse(value).pipe(
 				Effect.mapError((cause) => contractError(endpoint, operation, cause))
 			);
 		});
@@ -377,7 +379,7 @@ export const ScenarioRunnerLive = Layer.effect(
 				operation: prepareOperation,
 				parameters: { MapPath: document.mapPath, ScenarioId: document.id }
 			});
-			const prepared = yield* decodeScenarioPrepareResponse(preparedValue).pipe(
+			const prepared = yield* parseScenarioPrepareResponse(preparedValue).pipe(
 				Effect.mapError((cause) => contractError(endpoint, prepareOperation, cause))
 			);
 			if (prepared._tag === "Rejected") {
@@ -409,7 +411,7 @@ export const ScenarioRunnerLive = Layer.effect(
 				operation: startOperation,
 				parameters: { RequestJson: JSON.stringify(request) }
 			});
-			const started = yield* decodeScenarioStartResponse(startedValue).pipe(
+			const started = yield* parseScenarioStartResponse(startedValue).pipe(
 				Effect.mapError((cause) => contractError(endpoint, startOperation, cause))
 			);
 			if (started._tag === "Rejected") {
@@ -439,7 +441,7 @@ export const ScenarioRunnerLive = Layer.effect(
 				operation: pollOperation,
 				parameters: { RunId: handle.runId }
 			});
-			const response = yield* decodeScenarioStatusResponse(value).pipe(
+			const response = yield* parseScenarioStatusResponse(value).pipe(
 				Effect.mapError((cause) => contractError(handle.endpoint, pollOperation, cause))
 			);
 			if (response._tag === "Rejected") {

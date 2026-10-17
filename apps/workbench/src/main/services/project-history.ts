@@ -54,15 +54,13 @@ export const WorkbenchProjectHistoryLive = Layer.effect(
 		const app = yield* ElectronApp;
 		const files = yield* LocalFiles;
 		const historyPath = join(yield* app.getPath("userData"), "project-history-v1.json");
-		const initial = yield* files
-			.readFile(historyPath, { maxBytes: PROJECT_HISTORY_MAX_BYTES })
-			.pipe(
-				Effect.flatMap((bytes) =>
-					Effect.try(() => JSON.parse(new TextDecoder().decode(bytes)))
-				),
-				Effect.flatMap(decodeDocument),
-				Effect.catch(() => Effect.succeed(emptyDocument()))
-			);
+		const initial = yield* Effect.gen(function* () {
+			const bytes = yield* files.readFile(historyPath, {
+				maxBytes: PROJECT_HISTORY_MAX_BYTES
+			});
+			const json = yield* Effect.try(() => JSON.parse(new TextDecoder().decode(bytes)));
+			return yield* decodeDocument(json);
+		}).pipe(Effect.catch(() => Effect.succeed(emptyDocument())));
 		const document = yield* Ref.make(initial);
 		const writeGate = yield* Semaphore.make(1);
 

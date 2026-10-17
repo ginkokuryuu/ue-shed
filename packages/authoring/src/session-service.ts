@@ -620,36 +620,29 @@ function makeAuthoringSessionServiceEffect(): Effect.Effect<
 		const load = (
 			sessionId: string
 		): Effect.Effect<AuthoringSessionDocument, AuthoringSessionServiceError> =>
-			validateSessionId(sessionId).pipe(
-				Effect.flatMap((validId) =>
-					repository.read(validId).pipe(
-						Effect.flatMap((contents) =>
-							Effect.try({
-								try: () => JSON.parse(contents),
-								catch: (cause) => cause
-							}).pipe(
-								Effect.flatMap(Schema.decodeUnknownEffect(Schema.Json)),
-								Effect.flatMap(decodeDocument),
-								Effect.catch((cause) => repository.quarantine(validId, cause))
-							)
-						),
-						Effect.flatMap(({ document, migrated }) =>
-							document.project.id === repository.project.id
-								? migrated
-									? repository.persist(document).pipe(Effect.as(document))
-									: Effect.succeed(document)
-								: Effect.fail(
-										new AuthoringSessionStorageError({
-											message: `Session ${validId} belongs to project ${document.project.id}`,
-											operation: "verify_project",
-											recovery:
-												"Open the session through its owning project.",
-											sessionId: validId
-										})
-									)
-						)
-					)
-				),
+			Effect.gen(function* () {
+				const validId = yield* validateSessionId(sessionId);
+				const contents = yield* repository.read(validId);
+				const { document, migrated } = yield* Effect.gen(function* () {
+					const json = yield* Effect.try({
+						try: () => JSON.parse(contents),
+						catch: (cause) => cause
+					});
+					const value = yield* Schema.decodeUnknownEffect(Schema.Json)(json);
+					return yield* decodeDocument(value);
+				}).pipe(Effect.catch((cause) => repository.quarantine(validId, cause)));
+				if (document.project.id !== repository.project.id)
+					return yield* Effect.fail(
+						new AuthoringSessionStorageError({
+							message: `Session ${validId} belongs to project ${document.project.id}`,
+							operation: "verify_project",
+							recovery: "Open the session through its owning project.",
+							sessionId: validId
+						})
+					);
+				if (migrated) yield* repository.persist(document);
+				return document;
+			}).pipe(
 				Effect.withSpan("authoring.session.open", {
 					attributes: { "authoring.session.id": sessionId }
 				})
@@ -663,29 +656,24 @@ function makeAuthoringSessionServiceEffect(): Effect.Effect<
 			) => AuthoringSessionDocument
 		): Effect.Effect<AuthoringSessionDocument, AuthoringSessionServiceError> =>
 			mutex.withPermits(1)(
-				load(sessionId).pipe(
-					Effect.flatMap((document) =>
-						now.pipe(
-							Effect.flatMap((timestamp) =>
-								Effect.try({
-									try: () => transition(document, timestamp),
-									catch: (cause) =>
-										cause instanceof DraftIntentError
-											? cause
-											: new AuthoringSessionTransitionError({
-													message: String(cause),
-													recovery:
-														"Correct the rejected intent and retry the complete gesture.",
-													sessionId
-												})
-								})
-							)
-						)
-					),
-					Effect.flatMap((document) =>
-						repository.persist(document).pipe(Effect.as(document))
-					)
-				)
+				Effect.gen(function* () {
+					const current = yield* load(sessionId);
+					const timestamp = yield* now;
+					const document = yield* Effect.try({
+						try: () => transition(current, timestamp),
+						catch: (cause) =>
+							cause instanceof DraftIntentError
+								? cause
+								: new AuthoringSessionTransitionError({
+										message: String(cause),
+										recovery:
+											"Correct the rejected intent and retry the complete gesture.",
+										sessionId
+									})
+					});
+					yield* repository.persist(document);
+					return document;
+				})
 			);
 
 		const requireIdle = (document: AuthoringSessionDocument): void => {
