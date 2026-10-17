@@ -96,8 +96,11 @@ export function gameTextActionsFixtureSteps(project: string, evidence: string) {
 		stage("DuplicateAssets"),
 		stage("Branch"),
 		stage("EditBranch"),
+		stage("Slice2"),
 		operation("Gather"),
 		operation("GenerateReports"),
+		// Gather-only C++ text, into its own manifest so the asset gather above stays unchanged.
+		operation("Source"),
 		stage("Evidence", `-GameTextActionsEvidence=${evidence}`)
 	];
 }
