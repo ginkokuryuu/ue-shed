@@ -145,20 +145,19 @@ export const register = Effect.gen(function* () {
 		timeToLive: (exit) => (Exit.isSuccess(exit) ? Duration.seconds(30) : Duration.zero)
 	});
 
-	const read = Effect.fn("Workbench.BlueprintGraphs.read")(function* (assetPath: string) {
-		return yield* reader.readBlueprint(assetPath).pipe(
-			Effect.map(
-				(read): BlueprintGraphReadResult => ({
-					assetPath,
-					...read,
-					status: "ready"
-				})
-			),
-			Effect.catchTag("AssetReaderError", (error) =>
-				Effect.succeed(readerFailure(assetPath, error))
+	const read = Effect.fn("Workbench.BlueprintGraphs.read")(
+		function* (assetPath: string) {
+			const graph = yield* reader.readBlueprint(assetPath);
+			const result: BlueprintGraphReadResult = { assetPath, ...graph, status: "ready" };
+			return result;
+		},
+		(effect, assetPath) =>
+			effect.pipe(
+				Effect.catchTag("AssetReaderError", (error) =>
+					Effect.succeed(readerFailure(assetPath, error))
+				)
 			)
-		);
-	});
+	);
 
 	yield* ipc.register(invokeContracts["blueprint-graphs:read"], (...args) => read(args[0]));
 	yield* ipc.register(invokeContracts["blueprint-graphs:search"], (...args) =>

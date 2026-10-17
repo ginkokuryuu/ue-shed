@@ -245,8 +245,8 @@ export const WorkbenchMapCaptureLive = Layer.effect(
 			};
 		});
 
-		const actors = Effect.fn("Workbench.MapCapture.actors")(function* (mapPath: string) {
-			return yield* Effect.gen(function* () {
+		const actors = Effect.fn("Workbench.MapCapture.actors")(
+			function* (mapPath: string) {
 				const selectedProject = yield* project.savedProject();
 				const savedMap = selectedProject.maps.find(
 					(candidate) => savedMapPathToGameMapPath(candidate.mapPath) === mapPath
@@ -263,20 +263,19 @@ export const WorkbenchMapCaptureLive = Layer.effect(
 					projectRoot: selectedProject.projectRoot
 				});
 				return { status: "ready" as const, world };
-			}).pipe(
-				Effect.catch((cause) =>
-					Effect.succeed(
-						failure(
-							cause,
-							"Verify the saved map packages and selected project, then retry the actor overlay."
-						)
+			},
+			Effect.catch((cause) =>
+				Effect.succeed(
+					failure(
+						cause,
+						"Verify the saved map packages and selected project, then retry the actor overlay."
 					)
 				)
-			);
-		});
+			)
+		);
 
-		const choosePlan = Effect.fn("Workbench.MapCapture.choosePlan")(function* () {
-			return yield* Effect.gen(function* () {
+		const choosePlan = Effect.fn("Workbench.MapCapture.choosePlan")(
+			function* () {
 				const choice = yield* dialog.chooseFile({
 					filters: [{ extensions: ["json"], name: "Map Capture Plan" }],
 					title: "Choose a UE Shed Map Capture Plan"
@@ -284,20 +283,19 @@ export const WorkbenchMapCaptureLive = Layer.effect(
 				if (choice.status === "cancelled") return { status: "cancelled" as const };
 				const plan = yield* repository.loadPlan(choice.path);
 				return yield* readySelection({ plan, planPath: choice.path, source: "opened" });
-			}).pipe(
-				Effect.catch((cause) =>
-					Effect.succeed(
-						failure(
-							cause,
-							"Choose a valid plan and a Workbench project containing one .uproject file."
-						)
+			},
+			Effect.catch((cause) =>
+				Effect.succeed(
+					failure(
+						cause,
+						"Choose a valid plan and a Workbench project containing one .uproject file."
 					)
 				)
-			);
-		});
+			)
+		);
 
-		const newPlan = Effect.fn("Workbench.MapCapture.newPlan")(function* () {
-			return yield* Effect.gen(function* () {
+		const newPlan = Effect.fn("Workbench.MapCapture.newPlan")(
+			function* () {
 				const [selectedProject, savedProject] = yield* Effect.all([
 					project.selectedProject(),
 					project.savedProject()
@@ -310,22 +308,19 @@ export const WorkbenchMapCaptureLive = Layer.effect(
 					projectId: selectedProject.projectName
 				});
 				return yield* readySelection({ plan, source: "new" });
-			}).pipe(
-				Effect.catch((cause) =>
-					Effect.succeed(
-						failure(
-							cause,
-							"Choose a Workbench project and let its saved-map inventory finish."
-						)
+			},
+			Effect.catch((cause) =>
+				Effect.succeed(
+					failure(
+						cause,
+						"Choose a Workbench project and let its saved-map inventory finish."
 					)
 				)
-			);
-		});
+			)
+		);
 
-		const savePlan = Effect.fn("Workbench.MapCapture.savePlan")(function* (
-			intent: MapCaptureSaveIntent
-		) {
-			return yield* Effect.gen(function* () {
+		const savePlan = Effect.fn("Workbench.MapCapture.savePlan")(
+			function* (intent: MapCaptureSaveIntent) {
 				const selectedProject = yield* project.selectedProject();
 				const defaultPath = join(
 					mapCapturePlansRoot(selectedProject.projectRoot),
@@ -345,19 +340,16 @@ export const WorkbenchMapCaptureLive = Layer.effect(
 				}
 				yield* repository.savePlan(planPath, intent.plan);
 				return { plan: intent.plan, planPath, status: "saved" as const };
-			}).pipe(
-				Effect.catch((cause) =>
-					Effect.succeed(
-						failure(cause, "Choose a writable plan location and retry Save or Save As.")
-					)
+			},
+			Effect.catch((cause) =>
+				Effect.succeed(
+					failure(cause, "Choose a writable plan location and retry Save or Save As.")
 				)
-			);
-		});
+			)
+		);
 
-		const tile = Effect.fn("Workbench.MapCapture.tile")(function* (
-			intent: MapCaptureTileIntent
-		) {
-			return yield* Effect.gen(function* () {
+		const tile = Effect.fn("Workbench.MapCapture.tile")(
+			function* (intent: MapCaptureTileIntent) {
 				const selectedProject = yield* project.selectedProject();
 				const captureRoot = mapCaptureRoot(selectedProject.projectRoot);
 				const manifestPath = resolve(intent.manifestPath);
@@ -402,17 +394,16 @@ export const WorkbenchMapCaptureLive = Layer.effect(
 					);
 				}
 				return { bytes: new Uint8Array(bytes), status: "ready" as const };
-			}).pipe(
-				Effect.catch((cause) =>
-					Effect.succeed(
-						failure(
-							cause,
-							"Inspect or recapture this run; Workbench only loads manifest-owned PNG tiles."
-						)
+			},
+			Effect.catch((cause) =>
+				Effect.succeed(
+					failure(
+						cause,
+						"Inspect or recapture this run; Workbench only loads manifest-owned PNG tiles."
 					)
 				)
-			);
-		});
+			)
+		);
 
 		const capture = Effect.fn("Workbench.MapCapture.capture")(function* (
 			intent: MapCaptureExecuteIntent

@@ -512,7 +512,10 @@ export const refreshPackageTextLayer = Effect.fn("PackageText.refresh")(function
 	};
 });
 
-/** Reusable Phase 5 layer oracle adapter. Deliberately only for bounded fixture/tiny corpora. */
+/**
+ * Read the published package-text layer back as a text corpus, as a test oracle. Deliberately only
+ * for bounded fixture and tiny corpora.
+ */
 export const textCorpusFromPackageTextLayer = Effect.fn("PackageText.oracleCorpus")(function* (
 	projectRoot: string
 ) {

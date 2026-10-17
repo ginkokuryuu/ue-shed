@@ -107,34 +107,29 @@ function duplicateCultureKey(input: string): boolean {
 export function decodeGameTextRuleDocumentJson(
 	input: string
 ): Effect.Effect<GameTextRuleDocument, GameTextRuleDocumentError> {
-	return Schema.decodeUnknownEffect(Schema.fromJsonString(Schema.Json))(input).pipe(
-		Effect.mapError(() => invalid("invalid_json")),
-		Effect.flatMap((json) =>
-			Schema.decodeUnknownEffect(GameTextRuleDocument)(json).pipe(
-				Effect.mapError(() => invalid("invalid_structure"))
-			)
-		),
-		Effect.flatMap(
-			(document): Effect.Effect<GameTextRuleDocument, GameTextRuleDocumentError> => {
-				if (document.schemaVersion === 1)
-					return decodeTextQualityRuleDocument(document).pipe(
-						Effect.mapError((error) => invalid(error.code))
-					);
-				if (duplicateCultureKey(input))
-					return Effect.fail(invalid("duplicate_culture_key"));
-				const rules = [...document.rules, ...(document.localizationRules ?? [])];
-				if (rules.length === 0) return Effect.fail(invalid("invalid_structure"));
-				const roles = new Set(document.roles.map((role) => role.id));
-				if (roles.size !== document.roles.length)
-					return Effect.fail(invalid("duplicate_role_id"));
-				if (new Set(rules.map((rule) => rule.id)).size !== rules.length)
-					return Effect.fail(invalid("duplicate_rule_id"));
-				if (rules.some((rule) => !roles.has(rule.role)))
-					return Effect.fail(invalid("unknown_role_id"));
-				return Effect.succeed(document);
-			}
-		)
-	);
+	return Effect.gen(function* () {
+		const json = yield* Schema.decodeUnknownEffect(Schema.fromJsonString(Schema.Json))(
+			input
+		).pipe(Effect.mapError(() => invalid("invalid_json")));
+		const document = yield* Schema.decodeUnknownEffect(GameTextRuleDocument)(json).pipe(
+			Effect.mapError(() => invalid("invalid_structure"))
+		);
+		if (document.schemaVersion === 1)
+			return yield* decodeTextQualityRuleDocument(document).pipe(
+				Effect.mapError((error) => invalid(error.code))
+			);
+		if (duplicateCultureKey(input)) return yield* Effect.fail(invalid("duplicate_culture_key"));
+		const rules = [...document.rules, ...(document.localizationRules ?? [])];
+		if (rules.length === 0) return yield* Effect.fail(invalid("invalid_structure"));
+		const roles = new Set(document.roles.map((role) => role.id));
+		if (roles.size !== document.roles.length)
+			return yield* Effect.fail(invalid("duplicate_role_id"));
+		if (new Set(rules.map((rule) => rule.id)).size !== rules.length)
+			return yield* Effect.fail(invalid("duplicate_rule_id"));
+		if (rules.some((rule) => !roles.has(rule.role)))
+			return yield* Effect.fail(invalid("unknown_role_id"));
+		return document;
+	});
 }
 
 export const GameTextSourceQualityReport = TextQualityReport.mapFields((fields) => ({

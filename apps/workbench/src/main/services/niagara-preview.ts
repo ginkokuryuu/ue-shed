@@ -225,10 +225,8 @@ export const WorkbenchNiagaraPreviewLive = Layer.effect(
 			);
 		});
 
-		const run = Effect.fn("Workbench.NiagaraPreview.run")(function* (
-			intent: NiagaraPreviewIntent
-		) {
-			return yield* Effect.gen(function* () {
+		const run = Effect.fn("Workbench.NiagaraPreview.run")(
+			function* (intent: NiagaraPreviewIntent) {
 				const selected = yield* project.selectedProject();
 				const descriptor = yield* projectDescriptor(selected.projectRoot);
 				const plugin = yield* pluginDescriptor({
@@ -253,27 +251,24 @@ export const WorkbenchNiagaraPreviewLive = Layer.effect(
 					manifestPath: outcome.manifestPath,
 					status: "completed" as const
 				};
-			}).pipe(
-				Effect.catch((cause) =>
-					Effect.succeed(
-						failureResult(
-							cause instanceof NiagaraPreviewError
-								? cause
-								: failure(
-										"invalid_request",
-										messageOf(cause),
-										"Choose a Workbench project, verify its descriptor, and retry."
-									)
-						)
+			},
+			Effect.catch((cause) =>
+				Effect.succeed(
+					failureResult(
+						cause instanceof NiagaraPreviewError
+							? cause
+							: failure(
+									"invalid_request",
+									messageOf(cause),
+									"Choose a Workbench project, verify its descriptor, and retry."
+								)
 					)
 				)
-			);
-		});
+			)
+		);
 
-		const frame = Effect.fn("Workbench.NiagaraPreview.frame")(function* (
-			intent: NiagaraPreviewFrameIntent
-		) {
-			return yield* Effect.gen(function* () {
+		const frame = Effect.fn("Workbench.NiagaraPreview.frame")(
+			function* (intent: NiagaraPreviewFrameIntent) {
 				const selected = yield* project.selectedProject();
 				const previewRoot = resolve(selected.projectRoot, previewRootName);
 				const manifestPath = resolve(intent.manifestPath);
@@ -359,23 +354,22 @@ export const WorkbenchNiagaraPreviewLive = Layer.effect(
 					);
 				}
 				return { bytes: new Uint8Array(bytes), status: "ready" as const };
-			}).pipe(
-				Effect.catch((cause) =>
-					Effect.succeed(
-						frameFailure(
-							"code" in cause
-								? cause
-								: failure(
-										"artifact_invalid",
-										messageOf(cause),
-										"Inspect or recapture the immutable run.",
-										"publication"
-									)
-						)
+			},
+			Effect.catch((cause) =>
+				Effect.succeed(
+					frameFailure(
+						"code" in cause
+							? cause
+							: failure(
+									"artifact_invalid",
+									messageOf(cause),
+									"Inspect or recapture the immutable run.",
+									"publication"
+								)
 					)
 				)
-			);
-		});
+			)
+		);
 
 		return WorkbenchNiagaraPreview.of({ catalogue, frame, run });
 	})

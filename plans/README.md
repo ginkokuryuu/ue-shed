@@ -20,8 +20,6 @@ the status row when done.
 | [035](035-world-log-investigation-workspace.md)          | Build the World Log investigation workspace                                | P2       | XL     | 034 Map History           | IN PROGRESS — Phase 7             |
 | [041](041-execute-one-live-pie-scenario.md)              | Execute one live PIE scenario                                              | P1       | XL     | Scenario Studio prototype | IN PROGRESS — contract bootstrap  |
 | [052](052-text-identity-and-scope-tools.md)              | Text identity and scope tools for Game Text                                | P1       | L      | 051, Map History Perforce | IN PROGRESS — Phase 3 not started |
-| [053](053-game-text-review-workspace.md)                 | Game Text review workspace                                                 | P1       | XL     | 052                       | IN PROGRESS — done, PR #58 open   |
-| [054](054-check-text-before-submit.md)                   | Check a change's text before it is submitted                               | P1       | M      | 052, 053                  | IN PROGRESS — done, PR #58 open   |
 | [057](057-game-text-compact-index.md)                    | A compact, persistent Game Text index                                      | P1       | XL     | 056, 037                  | TODO                              |
 | [058](058-game-text-actions-rules-and-codebase-week.md)  | Game Text ID actions, studio-owned rules, performance and a codebase audit | P1       | XL     | #98, #99, #101            | IN PROGRESS                       |
 
@@ -30,6 +28,12 @@ one-line rationale. When a plan is `DONE`, move it into [`archive/`](archive/) a
 table and the archive index.
 
 ## Notes for active work
+
+- Plans 053 and 054 completed and are archived under
+  [`archive/053-game-text-review-workspace.md`](archive/053-game-text-review-workspace.md) and
+  [`archive/054-check-text-before-submit.md`](archive/054-check-text-before-submit.md) after
+  PR #58 merged on 2026-10-09 with the review workspace, its documentation and website pass, and
+  the pre-submit text check.
 
 - Plan 056 completed and is archived under
   [`archive/056-localization-at-real-project-scale.md`](archive/056-localization-at-real-project-scale.md)
