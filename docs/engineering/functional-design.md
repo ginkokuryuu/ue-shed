@@ -27,3 +27,15 @@ configuration, and seeded randomness from the Effect environment when behavior d
 - Prefer object arguments for non-trivial calls.
 
 Domain packages must not depend on Workbench. A test or CLI should be able to run the same behavior.
+
+## Package boundaries
+
+- A package may have a single consumer. `host` and `plugin-distribution` stay separate packages
+  even though one application uses each: the package line keeps the dependency direction, the
+  public surface and the release unit explicit, and lets a second host adopt the package without a
+  move. Do not merge a package into its consumer only because it has one.
+- Each public library entry point is a boundary. Callers can reach it from plain JavaScript, a
+  different package version or a host that skipped TypeScript, so an entry point may decode its
+  input with Effect Schema even when the parameter type already describes it. Internal modules
+  behind the entry point trust typed values and do not decode again; carry evidence in branded
+  types instead of re-validating.

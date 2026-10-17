@@ -741,26 +741,25 @@ export const pluginStoreLayer = (options: PluginStoreLayerOptions): Layer.Layer<
 						return release;
 					});
 				if (Schema.is(Schema.String)(reference)) {
-					return decodeReleaseVersion(reference).pipe(
-						Effect.flatMap((releaseVersion) => allStored(cacheRoot, releaseVersion)),
-						Effect.flatMap((releases) => {
-							if (releases.length === 1 && releases[0] !== undefined) {
-								return Effect.succeed(releases[0]);
-							}
-							return Effect.fail(
-								new PluginDistributionValidationError({
-									field: "variantIdentity",
-									message:
-										releases.length === 0
-											? `Release ${reference} has no cached variants.`
-											: `Release ${reference} has multiple cached variants.`,
-									recovery:
-										"Pass the exact releaseVersion and variantIdentity returned by install or list.",
-									retrySafe: false
-								})
-							);
-						})
-					);
+					return Effect.gen(function* () {
+						const releaseVersion = yield* decodeReleaseVersion(reference);
+						const releases = yield* allStored(cacheRoot, releaseVersion);
+						if (releases.length === 1 && releases[0] !== undefined) {
+							return releases[0];
+						}
+						return yield* Effect.fail(
+							new PluginDistributionValidationError({
+								field: "variantIdentity",
+								message:
+									releases.length === 0
+										? `Release ${reference} has no cached variants.`
+										: `Release ${reference} has multiple cached variants.`,
+								recovery:
+									"Pass the exact releaseVersion and variantIdentity returned by install or list.",
+								retrySafe: false
+							})
+						);
+					});
 				}
 				return decodeVariantReference(reference).pipe(Effect.flatMap(exactVariant));
 			});
@@ -769,61 +768,54 @@ export const pluginStoreLayer = (options: PluginStoreLayerOptions): Layer.Layer<
 				(reference: string | PluginVariantReference) => resolveReference(reference)
 			);
 
-			const find = Effect.fn("PluginStore.find")(
-				(request: {
-					readonly artifact?: PluginVariantRequest;
-					readonly expectedArtifactDigest?: string;
-					readonly expectedManifestDigest?: string;
-					readonly releaseVersion: string;
-				}) =>
-					decodeReleaseVersion(request.releaseVersion).pipe(
-						Effect.flatMap((releaseVersion) => allStored(cacheRoot, releaseVersion)),
-						Effect.flatMap((releases) => {
-							const artifact: PluginVariantRequest = request.artifact ?? {
-								kind: "source"
-							};
-							const compatible = releases.filter((release) =>
-								artifact.kind === "source"
-									? release.artifactKind === "source"
-									: pluginVariantMatches(release.manifest, artifact)
-							);
-							const selected = compatible
-								.filter(
-									(release) =>
-										(request.expectedArtifactDigest === undefined ||
-											release.artifactDigest ===
-												request.expectedArtifactDigest) &&
-										(request.expectedManifestDigest === undefined ||
-											release.manifestDigest ===
-												request.expectedManifestDigest)
-								)
-								.sort((left, right) =>
-									left.variantIdentity.localeCompare(right.variantIdentity)
-								)[0];
-							if (selected !== undefined)
-								return Effect.succeed(Option.some(selected));
-							if (
-								artifact.kind === "source" &&
-								compatible[0] !== undefined &&
-								(request.expectedArtifactDigest !== undefined ||
-									request.expectedManifestDigest !== undefined)
-							) {
-								const existing = compatible[0];
-								return Effect.fail(
-									new ImmutableVersionConflict({
-										cachePath: existing.cachePath,
-										message: `Source release ${request.releaseVersion} already exists with different immutable digests.`,
-										recovery:
-											"Use its exact pinned digests or explicitly prune this source variant.",
-										releaseVersion: request.releaseVersion,
-										retrySafe: false
-									})
-								);
-							}
-							return Effect.succeed(Option.none<StoredPluginRelease>());
-						})
+			const find = Effect.fn("PluginStore.find")(function* (request: {
+				readonly artifact?: PluginVariantRequest;
+				readonly expectedArtifactDigest?: string;
+				readonly expectedManifestDigest?: string;
+				readonly releaseVersion: string;
+			}) {
+				const releaseVersion = yield* decodeReleaseVersion(request.releaseVersion);
+				const releases = yield* allStored(cacheRoot, releaseVersion);
+				const artifact: PluginVariantRequest = request.artifact ?? {
+					kind: "source"
+				};
+				const compatible = releases.filter((release) =>
+					artifact.kind === "source"
+						? release.artifactKind === "source"
+						: pluginVariantMatches(release.manifest, artifact)
+				);
+				const selected = compatible
+					.filter(
+						(release) =>
+							(request.expectedArtifactDigest === undefined ||
+								release.artifactDigest === request.expectedArtifactDigest) &&
+							(request.expectedManifestDigest === undefined ||
+								release.manifestDigest === request.expectedManifestDigest)
 					)
-			);
+					.sort((left, right) =>
+						left.variantIdentity.localeCompare(right.variantIdentity)
+					)[0];
+				if (selected !== undefined) return Option.some(selected);
+				if (
+					artifact.kind === "source" &&
+					compatible[0] !== undefined &&
+					(request.expectedArtifactDigest !== undefined ||
+						request.expectedManifestDigest !== undefined)
+				) {
+					const existing = compatible[0];
+					return yield* Effect.fail(
+						new ImmutableVersionConflict({
+							cachePath: existing.cachePath,
+							message: `Source release ${request.releaseVersion} already exists with different immutable digests.`,
+							recovery:
+								"Use its exact pinned digests or explicitly prune this source variant.",
+							releaseVersion: request.releaseVersion,
+							retrySafe: false
+						})
+					);
+				}
+				return Option.none<StoredPluginRelease>();
+			});
 
 			const createArtifactStage = Effect.fn("PluginStore.createArtifactStage")(
 				(releaseVersion: string) =>

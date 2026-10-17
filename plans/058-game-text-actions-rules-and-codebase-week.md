@@ -64,7 +64,7 @@
 | D9   | One progress mechanism, one completeness shape | D    | TODO                 |
 | D10  | Workspace orchestration as a package           | D    | TODO                 |
 | D11  | JSDoc on public exports                        | D    | TODO                 |
-| D12  | Small cleanups                                 | D    | TODO                 |
+| D12  | Small cleanups                                 | D    | IN PROGRESS — #107   |
 | D13  | API surface of the other host-facing packages  | D    | TODO                 |
 | D14  | Native error audit                             | D    | TODO                 |
 | R    | 0.17.0 release preparation                     | —    | TODO                 |

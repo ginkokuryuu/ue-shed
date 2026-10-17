@@ -2,7 +2,7 @@
 
 > **Executor instructions**: Follow this plan in order. Before editing, read `AGENTS.md`,
 > `docs/README.md`, `docs/products/game-text.md`, the design direction in
-> [`docs/ideas/game-text-review-workspace.md`](../docs/ideas/game-text-review-workspace.md) with its
+> [`docs/ideas/game-text-review-workspace.md`](../../docs/ideas/game-text-review-workspace.md) with its
 > mockup, Plan 052 and `docs/engineering/testing.md`. Run targeted checks while iterating and
 > `pnpm check` before handoff.
 >
@@ -11,10 +11,10 @@
 
 ## Status
 
-- **State**: IN PROGRESS. Phases 1–5 are done (Phase 3 without the keyboard and saved views, which
+- **State**: DONE. Phases 1–5 are done (Phase 3 without the keyboard and saved views, which
   the owner skipped as polish the showcase does not need; Phase 4 without history; Phase 5 without
-  the `X` key), and so is the documentation and website pass. The plan stays open until PR #58
-  merges. The design is a mockup with sample data; each phase earned its part against the fixture
+  the `X` key), and so is the documentation and website pass. PR #58 merged on 2026-10-09. The
+  design is a mockup with sample data; each phase earned its part against the fixture
   and a generated large corpus.
 - **Priority**: P1
 - **Effort**: XL

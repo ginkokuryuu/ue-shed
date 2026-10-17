@@ -285,6 +285,8 @@ export const loadJoinPackages = Effect.fn("JoinedTarget.packages")(function* (
 	}
 	starts.push(occurrenceCount);
 	// SAFETY: The closed occurrenceFields tuple initializes every required field with u32s.
+	// Verified by: packages/game-text/src/index-refresh.test.ts
+	// ("retains readers across refresh steps updating selected inputs and review")
 	const occurrence = Object.fromEntries(
 		occurrenceFields.map((field) => [field, new Uint32Array(occurrenceCount)])
 	) as JoinPackages["occurrence"];

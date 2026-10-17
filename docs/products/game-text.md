@@ -265,7 +265,7 @@ The compact corpus path is governed by Plan 033:
 
 ## Reviewing text in Workbench
 
-> Status: shipped by [Plan 053](../../plans/053-game-text-review-workspace.md); the design is in
+> Status: shipped by [Plan 053](../../plans/archive/053-game-text-review-workspace.md); the design is in
 > [`ideas/game-text-review-workspace.md`](../ideas/game-text-review-workspace.md).
 
 The **Text** view is a list of lines and a page per line, built to stay usable with tens of
@@ -686,7 +686,7 @@ The first quality slice must prove:
 > Unreal processes, PO editing and review state. [Plan 052](../../plans/052-text-identity-and-scope-tools.md)
 > adds origin and changed-file filters, key-change detection with translation carry-over, and an
 > all-languages CSV; its Perforce file-list bridge is planned but not built.
-> [Plan 053](../../plans/053-game-text-review-workspace.md) reshapes the Workbench around problems,
+> [Plan 053](../../plans/archive/053-game-text-review-workspace.md) reshapes the Workbench around problems,
 > Filter, Display, picked cultures, a page per line and bulk actions (see
 > [Reviewing text in Workbench](#reviewing-text-in-workbench)). Plan 051's Phase 8 extensions remain
 > proposals.

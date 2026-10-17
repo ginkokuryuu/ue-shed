@@ -209,11 +209,12 @@ it.effect(
 							makeTextCorpusServiceTestLayer({
 								scan: () => Effect.die("unused"),
 								scanFromProjectIndex: () =>
-									Ref.update(scans, (count) => count + 1).pipe(
-										Effect.andThen(Deferred.succeed(started, undefined)),
-										Effect.andThen(Deferred.await(finish)),
-										Effect.as(emptyCorpus)
-									)
+									Effect.gen(function* () {
+										yield* Ref.update(scans, (count) => count + 1);
+										yield* Deferred.succeed(started, undefined);
+										yield* Deferred.await(finish);
+										return emptyCorpus;
+									})
 							})
 						)
 					)
