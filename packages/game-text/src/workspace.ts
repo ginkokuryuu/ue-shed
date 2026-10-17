@@ -1073,33 +1073,36 @@ export const makeGameTextWorkspace = Effect.fn("GameText.workspace.make")(functi
 			return (scan: (refreshProject: typeof project.refresh) => Effect.Effect<A>) =>
 				Effect.gen(function* () {
 					const done = yield* start.withPermit(
-						Effect.gen(function* () {
-							const key = scanKey(yield* project.current());
-							const current = yield* Ref.get(running);
-							if (current?.key === key) return current.done;
-							const next = yield* Deferred.make<A>();
-							yield* Ref.set(running, { key, done: next });
-							const refreshProject = () =>
-								Effect.gen(function* () {
-									const state = yield* project.refresh();
-									yield* Ref.update(running, (value) =>
-										value?.done === next
-											? { key: scanKey(state), done: next }
-											: value
-									);
-									return state;
-								}).pipe(start.withPermit);
-							yield* scan(refreshProject).pipe(
-								Effect.exit,
-								Effect.flatMap((exit) =>
-									Ref.update(running, (value) =>
-										value?.done === next ? undefined : value
-									).pipe(Effect.andThen(Deferred.done(next, exit)))
-								),
-								Effect.forkIn(workspaceScope)
-							);
-							return next;
-						}).pipe(Effect.uninterruptible)
+						Effect.uninterruptibleMask((restore) =>
+							Effect.gen(function* () {
+								// Host reads can suspend before a producer exists; cancellation must release admission.
+								const key = scanKey(yield* restore(project.current()));
+								const current = yield* Ref.get(running);
+								if (current?.key === key) return current.done;
+								const next = yield* Deferred.make<A>();
+								yield* Ref.set(running, { key, done: next });
+								const refreshProject = () =>
+									Effect.gen(function* () {
+										const state = yield* project.refresh();
+										yield* Ref.update(running, (value) =>
+											value?.done === next
+												? { key: scanKey(state), done: next }
+												: value
+										);
+										return state;
+									}).pipe(start.withPermit);
+								yield* scan(refreshProject).pipe(
+									Effect.exit,
+									Effect.flatMap((exit) =>
+										Ref.update(running, (value) =>
+											value?.done === next ? undefined : value
+										).pipe(Effect.andThen(Deferred.done(next, exit)))
+									),
+									Effect.forkIn(workspaceScope)
+								);
+								return next;
+							})
+						)
 					);
 					return yield* Deferred.await(done);
 				});

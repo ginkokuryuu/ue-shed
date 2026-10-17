@@ -11,6 +11,7 @@ import { GAME_TEXT_RULES_RELATIVE_PATH, STARTER_GAME_TEXT_RULES } from "@ue-shed
 import { makeLocalizationEvidenceTestLayer } from "@ue-shed/localization";
 import type { TextCorpus } from "@ue-shed/game-text/schema";
 import { Deferred, Effect, Fiber, Ref } from "effect";
+import { TestClock } from "effect/testing";
 import { expect } from "vitest";
 import { oracleGameTextIndexLayer } from "./game-text-index.test-support.js";
 
@@ -161,6 +162,60 @@ for (const full of [false, true]) {
 				})
 		);
 	}
+}
+
+for (const full of [false, true]) {
+	it.effect(
+		`cancels ${full ? "full scan" : "refresh"} during admission and releases the permit`,
+		() =>
+			Effect.gen(function* () {
+				const entered = yield* Deferred.make<void>();
+				const release = yield* Deferred.make<void>();
+				const interrupted = yield* Deferred.make<void>();
+				let reads = 0;
+				let refreshes = 0;
+				const root = "C:/Project";
+				yield* Effect.gen(function* () {
+					const workspace = yield* makeGameTextWorkspace({
+						files: memoryFiles().files,
+						project: {
+							...selected(root),
+							current: () =>
+								Effect.gen(function* () {
+									reads += 1;
+									if (reads === 1) {
+										yield* Deferred.succeed(entered, undefined);
+										yield* Deferred.await(release);
+									}
+									return ready(root, 3);
+								}),
+							refresh: () =>
+								Effect.sync(() => {
+									refreshes += 1;
+									return ready(root, 3);
+								})
+						}
+					});
+					const run = () =>
+						full ? workspace.configuredScan() : workspace.configuredRefresh();
+					const request = yield* run().pipe(Effect.forkChild);
+					yield* Deferred.await(entered);
+					yield* Fiber.interrupt(request).pipe(
+						Effect.andThen(Deferred.succeed(interrupted, undefined)),
+						Effect.forkChild
+					);
+					// Drain runnable fibers without allowing the blocked host hook to return.
+					yield* TestClock.adjust(0);
+					expect(yield* Deferred.isDone(interrupted)).toBe(true);
+					expect(yield* Deferred.isDone(release)).toBe(false);
+					expect(refreshes).toBe(0);
+					const next = yield* run().pipe(Effect.forkChild);
+					yield* TestClock.adjust(0);
+					expect(refreshes).toBe(1);
+					expect((yield* Fiber.join(next)).status).toBe("completed");
+				}).pipe(Effect.ensuring(Deferred.succeed(release, undefined)));
+			}).pipe(provideWorkspace)
+	);
 }
 
 it.effect("creates starter rules exclusively in a non-disk host store", () =>
