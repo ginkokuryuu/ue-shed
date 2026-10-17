@@ -13,6 +13,7 @@ import type { LocalizationCheckOptions } from "./localization-quality-schema.js"
 import { localizationLineFingerprint } from "./localization-review.js";
 import { SourceCheckId } from "./localization-check-ids.js";
 import {
+	BuiltInQualityFilter,
 	WorkspaceQualityFilter,
 	localizationQualityWorkspace,
 	localizationQualityWorkspaceOf,
@@ -298,7 +299,7 @@ it.live(
 					});
 					expect(hydrated).toBe(0);
 					const all = legacy.search({ target: join.target, filter: "all" });
-					for (const filter of WorkspaceQualityFilter.literals)
+					for (const filter of BuiltInQualityFilter.literals)
 						expect([filter, all.counts[filter]]).not.toEqual([filter, 0]);
 					expect(all.suggestedFixCount).toBeGreaterThan(0);
 					whitespace.push(all.counts.whitespace);
@@ -367,7 +368,7 @@ it.live(
 						);
 					}
 					for (const culture of [undefined, ...join.cultures])
-						for (const filter of WorkspaceQualityFilter.literals) {
+						for (const filter of BuiltInQualityFilter.literals) {
 							const request: WorkspaceQualityRequest = {
 								target: join.target,
 								filter,
@@ -421,7 +422,7 @@ const expectSameQuality = Effect.fn("Test.GameText.sameQuality")(function* (
 				yield* result.localizationQuality!(options, rules)
 			);
 			for (const culture of [undefined, ...join.cultures])
-				for (const filter of WorkspaceQualityFilter.literals) {
+				for (const filter of BuiltInQualityFilter.literals) {
 					const request: WorkspaceQualityRequest = {
 						target: join.target,
 						filter,
@@ -735,6 +736,89 @@ it.live("the indexed scan stores each finding's severity as the rule file rates 
 			expect(page.severityCounts.blocking).toBe(
 				page.counts.length_outlier + page.counts.character_budget
 			);
+		}).pipe(Effect.provide(fixture.layer()));
+	}).pipe(Effect.scoped)
+);
+
+it.live("custom checks scan as the in-memory checks do, past the old filter and rule bits", () =>
+	Effect.gen(function* () {
+		const fixture = yield* makeIndexRegressionFixture();
+		yield* Effect.promise(() => writeLocalization(fixture.projectRoot, keys));
+		fixture.update(gathered.map(({ key, source }, index) => occurrence(key, source, index)));
+		const migrated = migrateGameTextRuleDocument(document);
+		// More custom filters than six filter bits held, each with its own rule.
+		const lengths = Array.from({ length: 80 }, (_, index) => ({
+			id: `length.${index}`,
+			label: `Length ${index}`,
+			kind: "length",
+			subject: index % 2 ? "translation" : "source",
+			measure: "characters",
+			maximum: 4 + (index % 12),
+			severity: index % 3 ? "low" : "blocking",
+			recovery: "Shorten it.",
+			...(index % 5 === 0 ? { scope: { roles: ["menu"] } } : undefined)
+		}));
+		const custom = Schema.decodeUnknownSync(GameTextRuleDocument)({
+			...migrated,
+			customChecks: [
+				...lengths,
+				{
+					id: "no-hallo",
+					label: "No Hallo",
+					kind: "forbidden_term",
+					subject: "translation",
+					terms: ["Hallo"],
+					caseSensitive: false,
+					recovery: "Use the glossary."
+				},
+				{
+					id: "braces",
+					label: "Braces",
+					kind: "pattern",
+					subject: "source",
+					pattern: "\\{[A-Za-z]+\\}",
+					recovery: "Check the argument."
+				}
+			]
+		});
+		yield* Effect.gen(function* () {
+			const result = yield* (yield* GameTextIndexRefresh).refresh(fixture.request);
+			const join = result.localizationJoin;
+			const report = checkLocalizationTarget(
+				result.corpus,
+				join,
+				result.evidence,
+				{},
+				custom
+			);
+			const legacy = localizationQualityWorkspace(undefined, report, join);
+			const quality = yield* result.localizationQuality!({}, custom);
+			const indexed = localizationQualityWorkspaceOf(undefined, quality);
+			expect(quality.metadata.rules).toEqual(report.rules.map((rule) => rule.ruleId));
+			for (const culture of [undefined, ...join.cultures]) {
+				const request = {
+					target: join.target,
+					filter: "all" as const,
+					...(culture ? { culture } : undefined)
+				};
+				const page = indexed.search(request);
+				expect(page).toEqual(legacy.search(request));
+				expect(indexed.export(request)).toEqual(legacy.export(request));
+				expect(page.customFilters).toHaveLength(82);
+				for (const filter of [
+					"custom.length.79",
+					"custom.no-hallo",
+					"custom.braces"
+				] as const) {
+					expect(indexed.search({ ...request, filter })).toEqual(
+						legacy.search({ ...request, filter })
+					);
+				}
+			}
+			const all = indexed.search({ target: join.target, filter: "all" });
+			expect(all.counts["custom.no-hallo"]).toBeGreaterThan(0);
+			expect(all.counts["custom.braces"]).toBeGreaterThan(0);
+			expect(all.counts["custom.length.79"]).toBeGreaterThan(0);
 		}).pipe(Effect.provide(fixture.layer()));
 	}).pipe(Effect.scoped)
 );

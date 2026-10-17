@@ -1,6 +1,7 @@
 import * as stylex from "@stylexjs/stylex";
 import {
-	WorkspaceQualityFilter,
+	BuiltInQualityFilter,
+	type WorkspaceQualityFilter,
 	workspaceQualityLabel,
 	localizationCheckCatalogue,
 	parseLocalizationRuleId,
@@ -117,8 +118,8 @@ export function GameTextLocalizationQuality(props: {
 	readonly editor: GameTextRuleState;
 	readonly setup: JSX.Element;
 	readonly exports?: JSX.Element;
-	readonly filter: typeof WorkspaceQualityFilter.Type;
-	readonly onFilterChange: (filter: typeof WorkspaceQualityFilter.Type) => void;
+	readonly filter: WorkspaceQualityFilter;
+	readonly onFilterChange: (filter: WorkspaceQualityFilter) => void;
 	readonly selectedId: TextQualityFindingId | undefined;
 	readonly onSelectionChange: (id: TextQualityFindingId | undefined) => void;
 	readonly onLoadRules: () => void;
@@ -428,6 +429,13 @@ export function GameTextLocalizationQuality(props: {
 				]
 			: [];
 	};
+	/** Built-in filters, then the rule file's custom checks, as the page lists them. */
+	const filters = (): readonly WorkspaceQualityFilter[] => [
+		...BuiltInQualityFilter.literals,
+		...(page()?.customFilters ?? []).map(({ filter }) => filter)
+	];
+	const customLabels = () =>
+		new Map((page()?.customFilters ?? []).map(({ filter, label }) => [filter, label]));
 	const editorSummary = () =>
 		props.summary
 			? { ...props.summary, rules: page()?.rules ?? props.summary.rules }
@@ -437,7 +445,7 @@ export function GameTextLocalizationQuality(props: {
 			<Show when={!props.document}>{props.setup}</Show>
 			<div {...stylex.attrs(styles.bar)}>
 				<For
-					each={WorkspaceQualityFilter.literals.filter(
+					each={filters().filter(
 						(filter) =>
 							filter === "all" ||
 							filter === props.filter ||
@@ -446,7 +454,7 @@ export function GameTextLocalizationQuality(props: {
 				>
 					{(filter) => (
 						<Chip
-							label={workspaceQualityLabel(filter)}
+							label={workspaceQualityLabel(filter, customLabels())}
 							selected={props.filter === filter}
 							count={loading() ? undefined : page()?.counts[filter]}
 							onClick={() => props.onFilterChange(filter)}
@@ -697,8 +705,11 @@ export function GameTextLocalizationQuality(props: {
 										{(finding) => (
 											<>
 												<span {...stylex.attrs(styles.muted)}>
-													{workspaceQualityLabel(finding().check)} ·{" "}
-													{finding().culture}
+													{workspaceQualityLabel(
+														finding().check,
+														customLabels()
+													)}{" "}
+													· {finding().culture}
 												</span>
 												<span {...stylex.attrs(styles.muted)}>Source</span>
 												<h2 {...stylex.attrs(styles.title)}>

@@ -6,7 +6,7 @@ import { checkLocalizationTarget } from "./localization-checks.js";
 import { CheckSeverity } from "./localization-check-ids.js";
 import { evaluateGameTextSourceQuality } from "./game-text-rules.js";
 import {
-	WorkspaceQualityFilter,
+	BuiltInQualityFilter,
 	eligibleLocalizationChange,
 	localizationQualityWorkspace,
 	localizationQualityWorkspaceOf,
@@ -121,7 +121,7 @@ it.live(
 							({ summary }) =>
 								!culture || !summary.culture || summary.culture === culture
 						);
-						for (const filter of WorkspaceQualityFilter.literals) {
+						for (const filter of BuiltInQualityFilter.literals) {
 							const selected = inCulture.filter(
 								({ summary }) => filter === "all" || summary.filter === filter
 							);
@@ -162,7 +162,7 @@ it.live(
 										eligibleLocalizationChange(finding)
 									).length
 								);
-								for (const kind of WorkspaceQualityFilter.literals)
+								for (const kind of BuiltInQualityFilter.literals)
 									expect(page.counts[kind]).toBe(
 										kind === "all"
 											? inCulture.length

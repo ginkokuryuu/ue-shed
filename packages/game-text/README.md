@@ -322,6 +322,45 @@ placeholder translation instead of its length, missing tags instead of added one
 instead of a dropped and an added argument), the first check takes it only when it runs and is in
 scope for the line and culture; otherwise the second reports it.
 
+A version-3 file can define its own checks in `customChecks` (up to 512), reported beside the
+built-in ones with the same evidence, review and workspace model. Each has an `id` (its rule ID,
+unique among the file's rules and not starting with `localization.`), a `label`, an optional
+`severity` (`normal` when absent) and `scope`, a `recovery` text and a `subject`: `source` checks
+a keyed line's source once, under its source culture; `translation` checks each culture's shipped
+translation, the native culture aside. The kinds are:
+
+- `pattern`: text a JavaScript regular expression (Unicode mode; `caseSensitive: false` adds the
+  `i` flag) matches, or with `report: "no_match"` text it does not match. A pattern that does not
+  compile is an `invalid_structure` error.
+- `length`: text shorter than `minimum` or longer than `maximum` (at least one, in order), in
+  `visible` characters as `length_outlier` measures them or code point `characters`.
+- `forbidden_term`: text using one of `terms`, matched as the terminology rules match terms.
+
+```json
+{
+	"customChecks": [
+		{
+			"id": "no-wip",
+			"label": "Work in progress",
+			"kind": "pattern",
+			"subject": "source",
+			"pattern": "\\bWIP\\b",
+			"severity": "blocking",
+			"recovery": "Replace the marker with final text."
+		}
+	]
+}
+```
+
+Their findings are `LocalizationCustomFinding`s (`kind: "custom"`, with `check`, `label`,
+`subject`, `actual.text` and its `matches` or `length`). Reports list the checks in
+`customChecks` and count them in `rules`. A custom check's workspace filter is `custom.<id>`
+(`customQualityFilter(id)`); `WorkspaceQualityFilter` accepts it beside the built-in filters
+(`BuiltInQualityFilter`), pages list the file's checks in `customFilters` and count each under
+`counts["custom.<id>"]`, and `workspaceQualityLabel(filter, labels)` names one. Indexed scans keep
+each finding's rule in its own column, so the number of rules and custom checks is no longer
+limited by the packed facts.
+
 `localizationCheckCatalogue` describes every built-in check: its `basis` (`unreal` when the
 finding states what Unreal does with the text, so only its severity and whether it runs are the
 project's; `heuristic` when it is a judgment with thresholds or word lists), its `label`, its
