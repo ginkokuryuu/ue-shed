@@ -15,6 +15,8 @@ import {
 import { ApprovedPose } from "./review-schema.js";
 import type { CameraAuthoringStore } from "./camera-authoring-store.js";
 
+const isCameraArrangementError = Schema.is(CameraArrangementError);
+
 export const CameraRecoveryProposal = Schema.Struct({
 	version: Schema.Literal(1),
 	nativeCommitRevision: Schema.optionalKey(Schema.Int.check(Schema.isGreaterThanOrEqualTo(0))),
@@ -213,7 +215,7 @@ export const restoreCameraRecovery = Effect.fn("CameraAuthoring.restoreRecovery"
 						};
 					}),
 			catch: (cause) =>
-				cause instanceof CameraArrangementError
+				isCameraArrangementError(cause)
 					? cause
 					: arrangementFailure("invalid", String(cause))
 		});

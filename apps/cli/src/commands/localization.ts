@@ -1,13 +1,13 @@
 import { Effect, Option } from "effect";
 import { CliCommandError } from "../cli-runtime.js";
 import { Argument, Command, Flag } from "effect/cli";
+import { LocalizationGateCheck } from "@ue-shed/game-text/checks";
 import {
 	BuiltInCheckId,
-	LocalizationGateCheck,
 	LocalizationReviewLens,
 	LocalizationState,
 	TextOriginKind
-} from "@ue-shed/game-text/browser";
+} from "@ue-shed/game-text/schema";
 import { runLocalizationCheck } from "../workflows/localization-check.js";
 import { runLocalizationGate } from "../workflows/localization-gate.js";
 import { runLocalizationReport } from "../workflows/localization-report.js";

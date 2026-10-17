@@ -1,6 +1,6 @@
 import { Effect } from "effect";
-import { snapshotCheck, snapshotFailure, SnapshotFormatError } from "./snapshot-format.js";
-import { SnapshotStoreError } from "./snapshot-store.js";
+import { snapshotCheck, snapshotFailure, isSnapshotFormatError } from "./snapshot-format.js";
+import { isSnapshotStoreError } from "./snapshot-store.js";
 import type { JoinedTargetReader } from "./joined-target-reader.js";
 import { runJoinedQuery } from "./joined-query-node.js";
 import { concatenateJoinedChunks } from "./joined-target-reader.js";
@@ -10,15 +10,29 @@ const read = <A>(operation: string, run: () => A) =>
 	Effect.try({
 		try: run,
 		catch: (cause) =>
-			cause instanceof SnapshotFormatError || cause instanceof SnapshotStoreError
+			isSnapshotFormatError(cause) || isSnapshotStoreError(cause)
 				? cause
 				: snapshotFailure(operation, String(cause))
 	});
 
+const synchronousViews = new WeakMap<JoinedTargetReader, JoinedTargetReader>();
+
 /** The existing synchronous query API uses the same pinned handles, codecs and column cache.
- * No Effect runtime crosses an asynchronous boundary during a page or focus request.
+ * No Effect runtime crosses an asynchronous boundary during a page or focus request. Each
+ * pinned reader has one view, so its chunk and patch caches are shared by every caller.
  */
 export function synchronousJoinedTarget(joined: JoinedTargetReader): JoinedTargetReader {
+	let view = synchronousViews.get(joined);
+	if (!view) {
+		view = makeSynchronousJoinedTarget(joined);
+		synchronousViews.set(joined, view);
+		// A view of a view is itself.
+		synchronousViews.set(view, view);
+	}
+	return view;
+}
+
+function makeSynchronousJoinedTarget(joined: JoinedTargetReader): JoinedTargetReader {
 	const layerSync = joined.reader.layerSync,
 		stringsSync = joined.reader.stringsSync;
 	snapshotCheck(

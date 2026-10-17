@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { textCorpusFromExtractionEvents } from "../packages/game-text/dist/index.js";
-import { packageTextRecordsFromEvents } from "../packages/game-text/dist/index.js";
+import { packageTextRecordsFromEvents } from "../packages/game-text/dist/package-text-record.js";
 import { gameTextScaleEvents, gameTextScaleRecipe } from "./localization-scale-data.ts";
 import {
 	compareTextCorpora,

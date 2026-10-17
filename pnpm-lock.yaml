@@ -653,6 +653,9 @@ importers:
       '@ue-shed/game-text':
         specifier: workspace:*
         version: link:../../packages/game-text
+      '@ue-shed/localization':
+        specifier: workspace:*
+        version: link:../../packages/localization
       '@ue-shed/protocol':
         specifier: workspace:*
         version: link:../../packages/protocol
@@ -662,6 +665,9 @@ importers:
       '@ue-shed/ui-theme':
         specifier: workspace:*
         version: link:../../packages/ui-theme
+      '@ue-shed/unreal-assets':
+        specifier: workspace:*
+        version: link:../../packages/unreal-assets
       effect:
         specifier: 'catalog:'
         version: 4.0.4
@@ -931,9 +937,15 @@ importers:
       '@ue-shed/localization':
         specifier: workspace:0.16.2
         version: link:../localization
+      '@ue-shed/protocol':
+        specifier: workspace:0.16.2
+        version: link:../protocol
       '@ue-shed/unreal-assets':
         specifier: workspace:0.16.2
         version: link:../unreal-assets
+      '@ue-shed/unreal-connection':
+        specifier: workspace:0.16.2
+        version: link:../unreal-connection
       linebreak:
         specifier: 1.1.0
         version: 1.1.0

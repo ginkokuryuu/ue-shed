@@ -22,15 +22,12 @@ import {
 	ProjectIndex,
 	ProjectIndexCacheRoot as CacheRootSchema,
 	ProjectIndexConfig,
-	ProjectIndexCorruptCatalog,
-	ProjectIndexIncompatibleWorker,
-	ProjectIndexInvalidRequest,
 	ProjectIndexRefreshEvent,
 	ProjectIndexRefreshFailed,
-	ProjectIndexStaleGeneration,
 	ProjectIndexUnavailable,
 	decodeProjectIndexPage,
-	projectIndexConfigLayer
+	projectIndexConfigLayer,
+	isProjectIndexError
 } from "./project-index.js";
 import {
 	decodeProjectIndexWirePage,
@@ -184,20 +181,12 @@ const mapStreamFailure = (cause: unknown, sawAccepted: boolean): ProjectIndexErr
 			...(cause.exitCode === undefined ? undefined : { exitCode: cause.exitCode })
 		});
 	}
-	if (
-		cause instanceof ProjectIndexUnavailable ||
-		cause instanceof ProjectIndexInvalidRequest ||
-		cause instanceof ProjectIndexStaleGeneration ||
-		cause instanceof ProjectIndexIncompatibleWorker ||
-		cause instanceof ProjectIndexCorruptCatalog ||
-		cause instanceof ProjectIndexRefreshFailed
-	) {
-		return cause;
-	}
+	if (isProjectIndexError(cause)) return cause;
 	return new ProjectIndexRefreshFailed({
 		message: cause instanceof Error ? cause.message : String(cause),
 		recovery: "Retry the Project Index operation, or rebuild the Catalog if it persists.",
-		retrySafe: true
+		retrySafe: true,
+		nextStep: "retry"
 	});
 };
 
@@ -312,7 +301,8 @@ async function* refreshEventStream(
 				throw new ProjectIndexUnavailable({
 					message: `Unexpected Project Index result kind ${event.result.kind}.`,
 					recovery: "Upgrade to a paired uasset-io worker, then retry.",
-					retrySafe: false
+					retrySafe: false,
+					nextStep: "escalate"
 				});
 			}
 		}
@@ -323,7 +313,8 @@ async function* refreshEventStream(
 		throw new ProjectIndexRefreshFailed({
 			message: "Project Index refresh completed without a summary.",
 			recovery: "Retry the refresh, or rebuild the Catalog if it persists.",
-			retrySafe: true
+			retrySafe: true,
+			nextStep: "retry"
 		});
 	}
 	await Effect.runPromise(
@@ -389,7 +380,8 @@ async function collectStatus(
 		throw new ProjectIndexUnavailable({
 			message: "Project Index status completed without a status frame.",
 			recovery: "Retry status, or refresh the Catalog first.",
-			retrySafe: true
+			retrySafe: true,
+			nextStep: "retry"
 		});
 	}
 	return status;
@@ -444,7 +436,8 @@ async function collectQuery(
 		throw new ProjectIndexUnavailable({
 			message: "Project Index query completed without a page frame.",
 			recovery: "Retry the query against the current generation.",
-			retrySafe: true
+			retrySafe: true,
+			nextStep: "retry"
 		});
 	}
 	await Effect.runPromise(
@@ -494,7 +487,8 @@ async function collectCount(
 					throw new ProjectIndexUnavailable({
 						message: "Project Index returned an invalid count result.",
 						recovery: "Refresh the Catalog, then retry the count.",
-						retrySafe: true
+						retrySafe: true,
+						nextStep: "retry"
 					});
 				result = decoded.value;
 			}
@@ -512,7 +506,8 @@ async function collectCount(
 		throw new ProjectIndexUnavailable({
 			message: "Project Index count completed without a matching result.",
 			recovery: "Retry the count against the current generation.",
-			retrySafe: true
+			retrySafe: true,
+			nextStep: "retry"
 		});
 	await Effect.runPromise(
 		Effect.all([
@@ -595,8 +590,8 @@ function makeProcessService(
 			return yield* Effect.tryPromise({
 				try: (signal) => collectStatus(configuration, cacheRoot, target, signal),
 				catch: (cause) => mapStreamFailure(cause, true)
-			}).pipe(Effect.withSpan("unreal_assets.project_index_status"));
-		});
+			});
+		}, Effect.withSpan("unreal_assets.project_index_status"));
 
 		return { count, query, rebuild, refresh, status };
 	});

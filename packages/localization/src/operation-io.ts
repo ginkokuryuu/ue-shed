@@ -6,7 +6,8 @@ import { localizationOperationError, localizationRelativePath } from "./operatio
 import {
 	LocalizationFileChange,
 	LocalizationOperationError,
-	type LocalizationOperationPlan
+	type LocalizationOperationPlan,
+	isLocalizationOperationError
 } from "./operation-schema.js";
 
 const FileError = Schema.Struct({ code: Schema.String });
@@ -15,9 +16,7 @@ export function isLocalizationFileMissing(cause: unknown): boolean {
 	return Result.isSuccess(result) && result.success.code === "ENOENT";
 }
 export function localizationIOFailure(cause: unknown): LocalizationOperationError {
-	return cause instanceof LocalizationOperationError
-		? cause
-		: localizationOperationError("io_failed");
+	return isLocalizationOperationError(cause) ? cause : localizationOperationError("io_failed");
 }
 function contained(root: string, candidate: string): boolean {
 	const child = relative(root, candidate);

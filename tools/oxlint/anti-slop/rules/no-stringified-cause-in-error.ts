@@ -1,0 +1,79 @@
+import { defineRule } from "@oxlint/plugins";
+
+import type { ESTree } from "@oxlint/plugins";
+
+const causeNames = new Set(["cause", "error", "err", "e", "failure", "reason", "defect"]);
+
+function isStringifiedCause(node: ESTree.Node): boolean {
+	if (node.type !== "CallExpression") return false;
+	const callee = node.callee;
+	// String(cause)
+	if (callee.type === "Identifier" && callee.name === "String") {
+		const [argument] = node.arguments;
+		return argument?.type === "Identifier" && causeNames.has(argument.name);
+	}
+	// Cause.pretty(cause)
+	return (
+		callee.type === "MemberExpression" &&
+		!callee.computed &&
+		callee.object.type === "Identifier" &&
+		callee.object.name === "Cause" &&
+		callee.property.type === "Identifier" &&
+		callee.property.name === "pretty"
+	);
+}
+
+function containsStringifiedCause(node: ESTree.Node): boolean {
+	if (isStringifiedCause(node)) return true;
+	if (node.type === "TemplateLiteral") return node.expressions.some(containsStringifiedCause);
+	if (node.type === "BinaryExpression")
+		return containsStringifiedCause(node.left) || containsStringifiedCause(node.right);
+	if (node.type === "ConditionalExpression")
+		return (
+			containsStringifiedCause(node.consequent) || containsStringifiedCause(node.alternate)
+		);
+	return false;
+}
+
+function isErrorConstruction(node: ESTree.Node): boolean {
+	if (node.type !== "NewExpression") return false;
+	const callee = node.callee;
+	const name =
+		callee.type === "Identifier"
+			? callee.name
+			: callee.type === "MemberExpression" &&
+				  !callee.computed &&
+				  callee.property.type === "Identifier"
+				? callee.property.name
+				: undefined;
+	return name !== undefined && /(?:Error|Failure|Rejected|Unavailable)$/u.test(name);
+}
+
+/** Require error messages to classify a failure instead of embedding its stringified cause. */
+export const noStringifiedCauseInErrorRule = defineRule({
+	meta: {
+		type: "problem",
+		docs: {
+			description:
+				"Disallow `String(cause)` and `Cause.pretty` in the `message` of a constructed error; classify the failure and keep the cause in a `cause` field."
+		},
+		messages: {
+			stringifiedCause:
+				"Do not build an error message from a stringified cause. Write a classified message (what failed, which ids) and keep the original in the error's `cause` field."
+		}
+	},
+	createOnce(context) {
+		return {
+			Property(node) {
+				if (node.key.type !== "Identifier" || node.key.name !== "message") return;
+				const object = node.parent;
+				if (object?.type !== "ObjectExpression") return;
+				const construction = object.parent;
+				if (construction === undefined || !isErrorConstruction(construction)) return;
+				if (containsStringifiedCause(node.value)) {
+					context.report({ node: node.value, messageId: "stringifiedCause" });
+				}
+			}
+		};
+	}
+});

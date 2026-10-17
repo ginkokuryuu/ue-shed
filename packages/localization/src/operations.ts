@@ -42,7 +42,8 @@ import {
 	LocalizationRunRequest,
 	LocalizationOperationReceipt,
 	type LocalizationOperationPlan,
-	type LocalizationRunEvent
+	type LocalizationRunEvent,
+	isLocalizationOperationError
 } from "./operation-schema.js";
 
 export interface LocalizationOperationsApi {
@@ -67,7 +68,7 @@ export const LocalizationOperationsLive = Layer.effect(
 			input: LocalizationRunRequest
 		) {
 			const request = yield* Schema.decodeUnknownEffect(LocalizationRunRequest)(input).pipe(
-				Effect.mapError(() => localizationOperationError("invalid_request"))
+				Effect.mapError((cause) => localizationOperationError("invalid_request", cause))
 			);
 			const projectRoot = resolve(request.projectRoot);
 			const projectDescriptor = yield* Effect.tryPromise({
@@ -87,7 +88,9 @@ export const LocalizationOperationsLive = Layer.effect(
 			);
 			const engine = yield* Schema.decodeUnknownEffect(LocalizationEngine)(
 				`${installation.version.major}.${installation.version.minor}`
-			).pipe(Effect.mapError(() => localizationOperationError("unsupported_engine")));
+			).pipe(
+				Effect.mapError((cause) => localizationOperationError("unsupported_engine", cause))
+			);
 			const logPath = join(tmpdir(), "ue-shed-localization", randomUUID(), "Commandlet.log");
 			const plan = yield* Effect.try({
 				try: () =>
@@ -189,13 +192,15 @@ export const LocalizationOperationsLive = Layer.effect(
 							})
 							.pipe(
 								Effect.withTracerEnabled(false),
-								Effect.mapError(() => localizationOperationError("launch_failed"))
+								Effect.mapError((cause) =>
+									localizationOperationError("launch_failed", cause)
+								)
 							),
 						(handle) =>
 							handle.terminate("cancelled").pipe(
 								Effect.withTracerEnabled(false),
-								Effect.mapError(() =>
-									localizationOperationError("termination_failed")
+								Effect.mapError((cause) =>
+									localizationOperationError("termination_failed", cause)
 								),
 								Effect.orDie
 							)
@@ -256,7 +261,9 @@ export const LocalizationOperationsLive = Layer.effect(
 					const exit = yield* Effect.raceFirst(
 						handle.awaitExit.pipe(
 							Effect.withTracerEnabled(false),
-							Effect.mapError(() => localizationOperationError("commandlet_failed"))
+							Effect.mapError((cause) =>
+								localizationOperationError("commandlet_failed", cause)
+							)
 						),
 						consume().pipe(Effect.andThen(Effect.sleep("100 millis")), Effect.forever)
 					).pipe(
@@ -271,6 +278,7 @@ export const LocalizationOperationsLive = Layer.effect(
 									message: error.message,
 									recovery: error.recovery,
 									retrySafe: false,
+									nextStep: error.nextStep,
 									logExcerpt: lines.slice(-40),
 									logPath: plan.logPath
 								})
@@ -286,7 +294,9 @@ export const LocalizationOperationsLive = Layer.effect(
 					// End any owned descendants before taking the final durable-file snapshot.
 					yield* handle.terminate("cancelled").pipe(
 						Effect.withTracerEnabled(false),
-						Effect.mapError(() => localizationOperationError("termination_failed"))
+						Effect.mapError((cause) =>
+							localizationOperationError("termination_failed", cause)
+						)
 					);
 					const after = yield* Effect.tryPromise({
 						try: () => snapshotLocalizationProject(root, plan),
@@ -319,8 +329,7 @@ export const LocalizationOperationsLive = Layer.effect(
 				})
 			).pipe(
 				Effect.catchDefect((cause) =>
-					cause instanceof LocalizationOperationError &&
-					cause.code === "termination_failed"
+					isLocalizationOperationError(cause) && cause.code === "termination_failed"
 						? Effect.fail(cause)
 						: Effect.die(cause)
 				)
@@ -342,33 +351,34 @@ export const LocalizationOperationsLive = Layer.effect(
 			run: (request) =>
 				Stream.callback<LocalizationRunEvent, LocalizationOperationError>(
 					(queue) =>
-						execute(request, (event) =>
-							Queue.offer(queue, event).pipe(Effect.asVoid)
-						).pipe(
-							// Explicit failures contain private log lines. Trace only the handled boundary.
-							Effect.withTracerEnabled(false),
-							Effect.flatMap((receipt) =>
-								Effect.annotateCurrentSpan({
-									operation: receipt.operation,
-									duration_ms: receipt.durationMs,
-									configs: receipt.plan.configs.length,
-									steps: receipt.plan.steps.length,
-									planned_files: receipt.plan.files.length,
-									changed_files: receipt.changes.length,
-									diagnostics: receipt.diagnostics.length
-								}).pipe(Effect.andThen(Queue.offer(queue, receipt)))
-							),
-							Effect.andThen(Queue.end(queue)),
+						Effect.gen(function* () {
+							const receipt = yield* execute(request, (event) =>
+								Queue.offer(queue, event).pipe(Effect.asVoid)
+							).pipe(
+								// Explicit failures contain private log lines. Trace only the handled boundary.
+								Effect.withTracerEnabled(false)
+							);
+							yield* Effect.annotateCurrentSpan({
+								operation: receipt.operation,
+								duration_ms: receipt.durationMs,
+								configs: receipt.plan.configs.length,
+								steps: receipt.plan.steps.length,
+								planned_files: receipt.plan.files.length,
+								changed_files: receipt.changes.length,
+								diagnostics: receipt.diagnostics.length
+							});
+							yield* Queue.offer(queue, receipt);
+							return yield* Queue.end(queue);
+						}).pipe(
 							Effect.catch((error) =>
-								Metric.update(
-									Metric.counter("localization.operations.failures"),
-									1
-								).pipe(
-									Effect.andThen(
-										Effect.annotateCurrentSpan({ code: error.code })
-									),
-									Effect.andThen(Queue.fail(queue, error))
-								)
+								Effect.gen(function* () {
+									yield* Metric.update(
+										Metric.counter("localization.operations.failures"),
+										1
+									);
+									yield* Effect.annotateCurrentSpan({ code: error.code });
+									return yield* Queue.fail(queue, error);
+								})
 							),
 							Effect.withSpan("LocalizationOperations.run")
 						),

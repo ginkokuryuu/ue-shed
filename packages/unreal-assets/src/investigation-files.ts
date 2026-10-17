@@ -27,8 +27,11 @@ export const readInvestigationPresetJson = Effect.fn("Investigation.readPreset")
 		},
 		catch: (cause) =>
 			new InvestigationError({
-				message: `Could not read investigation preset: ${String(cause)}`,
-				recovery: "Choose a readable version-1 JSON preset smaller than 4 MiB."
+				message: "Could not read the investigation preset.",
+				cause,
+				recovery: "Choose a readable version-1 JSON preset smaller than 4 MiB.",
+				retrySafe: true,
+				nextStep: "fix_input"
 			})
 	});
 });
@@ -57,9 +60,13 @@ export const writeInvestigationFile = Effect.fn("Investigation.writeFile")(funct
 		},
 		catch: (cause) =>
 			new InvestigationError({
-				message: `Could not save investigation: ${String(cause)}`,
+				message: `Could not save the investigation to ${path}.`,
+				cause,
 				recovery:
-					"Choose a writable destination, or narrow results if the export exceeds 512 MiB."
+					"Choose a writable destination, or narrow results if the export exceeds 512 MiB.",
+				// The write goes to a temporary file that is renamed only on success.
+				retrySafe: true,
+				nextStep: "fix_input"
 			})
 	});
 });

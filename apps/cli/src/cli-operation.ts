@@ -1,7 +1,7 @@
 import { observeOperation } from "@ue-shed/observability";
 import { assetReaderLayer, AssetReaderLive } from "@ue-shed/unreal-assets";
 import { Effect, type Scope } from "effect";
-import { CliCommandError, messageOf } from "./cli-runtime.js";
+import { CliCommandError, isCliCommandError, messageOf } from "./cli-runtime.js";
 
 export function readerLayer(reader?: string) {
 	return reader === undefined ? AssetReaderLive : assetReaderLayer({ executable: reader });
@@ -17,9 +17,7 @@ export function observeCliOperation<A, E, R>(
 			attributes: { "cli.command": command }
 		}),
 		Effect.mapError((cause) =>
-			cause instanceof CliCommandError
-				? cause
-				: new CliCommandError({ message: messageOf(cause) })
+			isCliCommandError(cause) ? cause : new CliCommandError({ message: messageOf(cause) })
 		)
 	);
 }

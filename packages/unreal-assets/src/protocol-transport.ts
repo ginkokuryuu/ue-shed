@@ -24,8 +24,10 @@ import type {
 	SavedWorldProgressStore,
 	ScanProgressStore
 } from "./asset-reader.js";
+import { MAX_PROTOCOL_REQUEST_BYTES } from "./protocol-request-limit.js";
 import {
 	AssetReaderError,
+	assetReaderGuidance,
 	MAX_CAPTURED_STDERR_BYTES,
 	MAX_PROTOCOL_OUTPUT_BYTES,
 	assetReaderCacheOutcome,
@@ -53,9 +55,6 @@ export interface ProtocolSingleEvidence<A> {
 const TYPE_SIDE_VALIDATION_MIN_FRAME_CHARACTERS = 8 * 1024 * 1024;
 const PROJECT_INDEX_TYPE_SIDE_MIN_FRAME_CHARACTERS = 128 * 1024;
 const MAX_PROTOCOL_TERMINATION_WAIT_MS = 1_000;
-// Mirrors `MAX_REQUEST_BYTES` in crates/uasset-io/src/protocol_adapter.rs. The one-shot
-// `protocol` command bounds the raw stdin frame, trailing newline included.
-const MAX_PROTOCOL_REQUEST_BYTES = 4 * 1024 * 1024;
 const exactProtocolParseOptions = { onExcessProperty: "error" } as const;
 const validateProtocolEventType = Schema.decodeUnknownExit(
 	Schema.toType(UAssetIoEvent),
@@ -563,6 +562,7 @@ export function makeProtocolRequest(
 		requestId: `unreal-assets-${process.pid}-${protocolRequestCounter}`
 	};
 	// Narrow each branch to preserve the request union's operation/version correlation.
+	if (operation.kind === "game_text_index") return { ...fields, operation };
 	if (operation.kind === "extract_text_packages") return { ...fields, operation };
 	return { ...fields, operation };
 }
@@ -659,14 +659,17 @@ export function mapProtocolFailure(
 	path: string
 ): AssetReaderError {
 	if (cause instanceof ProtocolStreamFailure) {
+		const kind = cause.kind === "timeout" ? "timeout" : cause.kind;
+		const retrySafe =
+			cause.kind === "timeout" || cause.kind === "discovery" || cause.kind === "process";
 		return new AssetReaderError({
 			...(cause.protocolCode === undefined ? undefined : { code: cause.protocolCode }),
-			kind: cause.kind === "timeout" ? "timeout" : cause.kind,
+			kind,
 			operation,
 			message: cause.message,
 			path,
-			retrySafe:
-				cause.kind === "timeout" || cause.kind === "discovery" || cause.kind === "process",
+			retrySafe,
+			...assetReaderGuidance(kind, retrySafe),
 			...(cause.exitCode === undefined ? undefined : { exitCode: cause.exitCode })
 		});
 	}
@@ -675,9 +678,14 @@ export function mapProtocolFailure(
 		...(code === undefined ? undefined : { code }),
 		kind: "process",
 		operation,
-		message: cause instanceof Error ? cause.message : String(cause),
+		message:
+			code === undefined
+				? `The saved-asset reader process failed during ${operation}.`
+				: `The saved-asset reader process failed during ${operation} (${code}).`,
 		path,
-		retrySafe: false
+		retrySafe: false,
+		...assetReaderGuidance("process", false),
+		cause
 	});
 }
 
@@ -1097,7 +1105,7 @@ async function* protocolEvents(options: {
 	if (Buffer.byteLength(requestFrame, "utf8") > MAX_PROTOCOL_REQUEST_BYTES) {
 		throw new ProtocolStreamFailure(
 			"contract",
-			"Native reader request exceeds 4 MiB; split package paths into batches"
+			"Native reader request exceeds 4 MiB; split package paths with batchProtocolPaths"
 		);
 	}
 	const child = (options.processFactory ?? spawnProtocolProcess)(
@@ -1160,6 +1168,8 @@ async function* protocolEvents(options: {
 			options.request.requestId
 		);
 		// SAFETY: spawn configures stdout encoding to utf8 above, so iterator chunks are strings.
+		// Verified by: packages/unreal-assets/src/protocol-transport.test.ts
+		// ("decodes worker stdout as UTF-8 text even when a character spans two chunks")
 		for await (const chunk of child.stdout as AsyncIterable<string>) {
 			observeProtocolChunk(chunk, options.telemetry);
 			outputBudget.observe(chunk);

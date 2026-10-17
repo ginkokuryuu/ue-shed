@@ -144,6 +144,9 @@ function bundleContracts(pluginIds: ReadonlySet<string>) {
 			{ name: "unreal-authoring-actor-references", version: { major: 1, minor: 0 } }
 		);
 	}
+	if (pluginIds.has("UEShedGameText")) {
+		contracts.push({ name: "ue-shed-game-text-actions", version: { major: 1, minor: 0 } });
+	}
 	if (pluginIds.has("UEShedAutomation")) {
 		contracts.push(
 			{ name: "unreal-automation-players", version: { major: 1, minor: 0 } },

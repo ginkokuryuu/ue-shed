@@ -12,18 +12,16 @@ import {
 	unit as localizationUnit,
 	target as localizationTarget
 } from "./game-text-localization.test-support.js";
+import { makeTextCorpusServiceTestLayer, TextCorpusScanError } from "@ue-shed/game-text/index";
+import { STARTER_GAME_TEXT_RULES, GAME_TEXT_RULES_RELATIVE_PATH } from "@ue-shed/game-text/rules";
 import {
-	makeTextCorpusServiceTestLayer,
 	makeTextUnitId,
 	makeTextOccurrenceId,
 	TextUnit,
-	TextCorpusScanError,
 	TextQualityRuleId,
 	TextQualityRuleDocument,
-	TextRoleId,
-	STARTER_GAME_TEXT_RULES,
-	GAME_TEXT_RULES_RELATIVE_PATH
-} from "@ue-shed/game-text";
+	TextRoleId
+} from "@ue-shed/game-text/schema";
 import type { SavedAssetScan } from "@ue-shed/unreal-assets";
 import { Deferred, Effect, Fiber, Layer, Ref } from "effect";
 import { expect } from "vitest";
@@ -209,11 +207,12 @@ it.effect(
 							makeTextCorpusServiceTestLayer({
 								scan: () => Effect.die("unused"),
 								scanFromProjectIndex: () =>
-									Ref.update(scans, (count) => count + 1).pipe(
-										Effect.andThen(Deferred.succeed(started, undefined)),
-										Effect.andThen(Deferred.await(finish)),
-										Effect.as(emptyCorpus)
-									)
+									Effect.gen(function* () {
+										yield* Ref.update(scans, (count) => count + 1);
+										yield* Deferred.succeed(started, undefined);
+										yield* Deferred.await(finish);
+										return emptyCorpus;
+									})
 							})
 						)
 					)
@@ -905,7 +904,7 @@ it.effect(
 					code: "invalid_rules",
 					message: "The Game Text quality rule file is not valid JSON.",
 					recovery:
-						"Correct the JSON syntax and retry with a version-1 or version-2 rule document.",
+						"Correct the JSON syntax and retry with a version-1, version-2 or version-3 rule document.",
 					retrySafe: true
 				},
 				status: "failed"
@@ -1099,7 +1098,8 @@ it("exports one captured generation when the project changes during the save dia
 							Layer.mergeAll(
 								project,
 								dialog,
-								makeLocalFilesTestLayer(),
+								// Exports go through the host file hooks; this test reads them from disk.
+								LocalFilesLive,
 								makeTextCorpusServiceTestLayer({
 									scan: () => Effect.die("unused"),
 									scanFromProjectIndex: () => Effect.succeed(emptyCorpus)
@@ -1205,7 +1205,8 @@ it("exports the selected target's localization quality list as a replayable repo
 							Layer.mergeAll(
 								selectedProject,
 								dialog,
-								makeLocalFilesTestLayer(),
+								// Exports go through the host file hooks; this test reads them from disk.
+								LocalFilesLive,
 								makeTextCorpusServiceTestLayer({
 									scan: () => Effect.die("unused"),
 									scanFromProjectIndex: () => Effect.succeed(localizationCorpus())
@@ -1243,7 +1244,8 @@ it("restores embedded rules without retaining another rule file's write destinat
 		rules: validQualityDocument
 	};
 	try {
-		await writeFile(presetPath, JSON.stringify(preset));
+		// Presets are read through the same file hooks as the rules file.
+		files.set(presetPath, new TextEncoder().encode(JSON.stringify(preset)));
 		const dialog = Layer.succeed(
 			ElectronDialog,
 			ElectronDialog.of({
@@ -1272,7 +1274,7 @@ it("restores embedded rules without retaining another rule file's write destinat
 				});
 				expect(new TextDecoder().decode(files.get(qualityRulesPath))).toBe(original);
 				const { rules: _rules, ...withoutRules } = preset;
-				yield* Effect.promise(() => writeFile(presetPath, JSON.stringify(withoutRules)));
+				files.set(presetPath, new TextEncoder().encode(JSON.stringify(withoutRules)));
 				expect((yield* service.investigationOpen()).status).toBe("opened");
 				expect(yield* service.qualitySearch({ filter: "all", pageSize: 50 })).toEqual({
 					status: "not_ready"
@@ -1307,7 +1309,9 @@ it("restores embedded rules without retaining another rule file's write destinat
 				)
 			)
 		);
-		expect(JSON.parse(await readFile(outputPath, "utf8")).preset.rules).toBeUndefined();
+		expect(
+			JSON.parse(new TextDecoder().decode(files.get(outputPath))).preset.rules
+		).toBeUndefined();
 	} finally {
 		await rm(root, { recursive: true, force: true });
 	}

@@ -117,8 +117,9 @@ if (values.worker) {
 							(cause) =>
 								new module.GameTextIndexError({
 									operation: "records",
-									message: String(cause),
-									recovery: "Choose complete retained package records."
+									message: "The retained package records could not be read.",
+									recovery: "Choose complete retained package records.",
+									cause
 								})
 						)
 				})

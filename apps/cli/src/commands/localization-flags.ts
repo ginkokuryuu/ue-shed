@@ -3,7 +3,7 @@ import {
 	TextGroupBy,
 	TextOriginKind,
 	type TextWhere
-} from "@ue-shed/game-text/browser";
+} from "@ue-shed/game-text/schema";
 import { Option } from "effect";
 import { Flag } from "effect/cli";
 

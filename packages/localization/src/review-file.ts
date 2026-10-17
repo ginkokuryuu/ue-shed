@@ -2,6 +2,7 @@ import { Result, Schema } from "effect";
 import { currentLocalizationTranslation } from "./change-set-review.js";
 import {
 	CultureCode,
+	LocalizationErrorGuidanceFields as ErrorGuidanceFields,
 	LocalizationIdentity,
 	LocalizationTargetName,
 	type LocalizationTargetEvidence
@@ -86,8 +87,7 @@ export class LocalizationReviewFileError extends Schema.TaggedError<Localization
 	"LocalizationReviewFileError",
 	{
 		code: Schema.Literals(["invalid_review_file", "duplicate_review_record", "wrong_target"]),
-		message: Schema.String,
-		recovery: Schema.String
+		...ErrorGuidanceFields
 	}
 ) {}
 
@@ -135,7 +135,9 @@ export function decodeLocalizationReviewFile(
 				code: "invalid_review_file",
 				message: "The localization review file does not match version 1.",
 				recovery:
-					"Restore the file from source control, or delete it to start reviewing afresh."
+					"Restore the file from source control, or delete it to start reviewing afresh.",
+				retrySafe: true,
+				nextStep: "fix_input"
 			})
 		);
 	const file = decoded.success;
@@ -144,7 +146,9 @@ export function decodeLocalizationReviewFile(
 			new LocalizationReviewFileError({
 				code: "wrong_target",
 				message: "The review file belongs to another localization target.",
-				recovery: "Use the review file named after the selected target."
+				recovery: "Use the review file named after the selected target.",
+				retrySafe: true,
+				nextStep: "fix_input"
 			})
 		);
 	const keys = file.records.map(recordKey);
@@ -154,7 +158,9 @@ export function decodeLocalizationReviewFile(
 			new LocalizationReviewFileError({
 				code: "duplicate_review_record",
 				message: "The review file records the same line twice.",
-				recovery: "Resolve the merge so each culture and key appears once."
+				recovery: "Resolve the merge so each culture and key appears once.",
+				retrySafe: true,
+				nextStep: "fix_input"
 			})
 		);
 	return Result.succeed(file);

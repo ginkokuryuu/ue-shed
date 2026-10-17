@@ -1,6 +1,11 @@
 import { Result, Schema } from "effect";
 import { decodePOEscapes, parsePO, serializePO } from "./po.js";
-import { LocalizationIdentity, type PODocument, type POLine } from "./schema.js";
+import {
+	LocalizationErrorGuidanceFields as ErrorGuidanceFields,
+	LocalizationIdentity,
+	type PODocument,
+	type POLine
+} from "./schema.js";
 
 /** One replacement of a singular `msgstr` in an Unreal-format or Crowdin-format PO document. */
 export const POTranslationEdit = Schema.Struct({
@@ -22,8 +27,7 @@ export type POEditFailureCode = typeof POEditFailureCode.Type;
 export class POEditError extends Schema.TaggedError<POEditError>()("POEditError", {
 	code: POEditFailureCode,
 	identity: Schema.NullOr(LocalizationIdentity),
-	message: Schema.String,
-	recovery: Schema.String
+	...ErrorGuidanceFields
 }) {}
 
 const recovery = {
@@ -45,7 +49,10 @@ function editError(code: POEditFailureCode, identity: LocalizationIdentity | nul
 		code,
 		identity,
 		message: `The PO edit could not be prepared (${code}).`,
-		recovery: recovery[code]
+		recovery: recovery[code],
+		// Preparing an edit is pure; a failed round-trip is a defect the caller cannot repair.
+		retrySafe: true,
+		nextStep: code === "unverifiable_write" ? "escalate" : "fix_input"
 	});
 }
 

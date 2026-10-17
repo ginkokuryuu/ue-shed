@@ -1,8 +1,57 @@
-import { Schema } from "effect";
+import { ErrorGuidanceFields } from "@ue-shed/protocol";
+import { Effect, Schema } from "effect";
 import type { ObservedActor as ObservedActorType } from "./actor-models.js";
 import { WorldScoutResult, WorldScoutFocusResult } from "./scout-contracts.js";
-export const decodeWorldScoutResult = Schema.decodeUnknownEffect(WorldScoutResult);
-export const decodeWorldScoutFocusResult = Schema.decodeUnknownEffect(WorldScoutFocusResult);
+/**
+ * A value that does not match the World Scout contract: the two sides disagree about the contract, so
+ * repeating the same call returns the same mismatch.
+ */
+export class WorldScoutContractError extends Schema.TaggedError<WorldScoutContractError>()(
+	"WorldScoutContractError",
+	{
+		code: Schema.Literal("invalid_contract"),
+		...ErrorGuidanceFields,
+		cause: Schema.optionalKey(Schema.Defect())
+	}
+) {}
+
+/**
+ * A unary parser for one World Scout contract value: it decodes the encoded value and fails with
+ * `WorldScoutContractError` naming `subject`, keeping the schema issue as its cause.
+ */
+function worldScoutContractParser<S extends Schema.Codec<unknown, unknown>>(
+	schema: S,
+	subject: string
+) {
+	const decode = Schema.decodeUnknownEffect(schema);
+	return (
+		// oxlint-disable-next-line anti-slop/no-unknown-parameters -- This parser is the boundary: it decodes its input here.
+		encoded: unknown
+	): Effect.Effect<S["Type"], WorldScoutContractError> =>
+		decode(encoded).pipe(
+			Effect.mapError(
+				(cause) =>
+					new WorldScoutContractError({
+						code: "invalid_contract",
+						message: `The ${subject} does not match the World Scout contract.`,
+						recovery:
+							"Run the host and client from the same UE Shed version, then retry.",
+						retrySafe: false,
+						nextStep: "escalate",
+						cause
+					})
+			)
+		);
+}
+
+export const parseWorldScoutResult = worldScoutContractParser(
+	WorldScoutResult,
+	"world scout result"
+);
+export const parseWorldScoutFocusResult = worldScoutContractParser(
+	WorldScoutFocusResult,
+	"world scout focus result"
+);
 
 export interface SpatialPoint {
 	readonly actor: ObservedActorType;

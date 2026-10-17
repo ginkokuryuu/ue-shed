@@ -122,7 +122,9 @@ export async function fixtureJoinEvidence(projectRoot: string) {
 				error: new LocalizationError({
 					code: "file_missing",
 					message: "No authored localization file.",
-					recovery: "Supply a target."
+					recovery: "Supply a target.",
+					retrySafe: true,
+					nextStep: "fix_input"
 				})
 			});
 			return [

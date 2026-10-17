@@ -4,6 +4,13 @@ Completed implementation plans. Kept as execution history (intent, STOP conditio
 paths). They are not living guidance — prefer product docs, ADRs, and active plans under
 [`../`](../README.md).
 
+- [Game Text review workspace](053-game-text-review-workspace.md) — DONE; problems-first Workbench
+  Game Text surface, documentation and website pass; keyboard, saved views, history and the `X` key
+  were skipped as showcase polish. Shipped with PR #58.
+
+- [Check text before submit](054-check-text-before-submit.md) — DONE; read-only pre-submit check
+  for a change's text with project-changeable policy. Shipped with PR #58.
+
 - [Headless Blueprint package](headless-blueprints-package.md) — DONE; public graph navigation,
   search, reference layout and saved display helpers, with the Solid viewer kept in Workbench;
   full local, packed-consumer, UE 5.7/5.8 and offline showcase checks passed.

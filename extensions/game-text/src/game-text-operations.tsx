@@ -1,6 +1,6 @@
 import * as stylex from "@stylexjs/stylex";
+import { textCountLabel } from "@ue-shed/game-text/labels";
 import {
-	textCountLabel,
 	type LocalizationSelection,
 	type TextCorpusQuerySummary,
 	type WorkbenchOperationFilesResult,
@@ -9,7 +9,7 @@ import {
 	type WorkbenchOperationRequest,
 	type WorkbenchOperationResult,
 	type WorkbenchOperationState
-} from "@ue-shed/game-text/browser";
+} from "@ue-shed/game-text/schema";
 import { Button, createEffectAction, createEffectSubscription } from "@ue-shed/ui";
 import { Effect, Schedule, Stream } from "effect";
 import { For, Show, createEffect, createSignal, untrack } from "solid-js";

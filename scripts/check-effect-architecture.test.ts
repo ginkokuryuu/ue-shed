@@ -5,8 +5,13 @@ import { join } from "node:path";
 import { after, before, test } from "node:test";
 import {
 	checkCatalogUsage,
+	checkErrorGuidance,
+	checkGameTextEntryPoints,
+	checkCompositionPolicy,
+	checkDecoderExports,
 	checkLocalizationBoundaries,
 	checkSourcePolicy,
+	checkTaggedErrorMatching,
 	checkServiceStrategies,
 	checkWorkbenchBoundaries
 } from "./check-effect-architecture.ts";
@@ -15,6 +20,82 @@ let root = "";
 
 test("the localization browser entry and Config Explorer dependency are browser-safe", async () => {
 	assert.deepEqual(await checkLocalizationBoundaries(), []);
+});
+
+test("Game Text entry points are named and first-party code imports focused entry points", async () => {
+	assert.deepEqual(await checkGameTextEntryPoints(), []);
+	const fixtureRoot = await mkdtemp(join(tmpdir(), "ue-shed-game-text-entries-"));
+	try {
+		const source = join(fixtureRoot, "packages/game-text/src");
+		const consumer = join(fixtureRoot, "apps/cli/src");
+		await mkdir(source, { recursive: true });
+		await mkdir(consumer, { recursive: true });
+		await writeFile(
+			join(source, "entry-schema.ts"),
+			'/* Example only:\nexport * from "./private.js";\n*/\nexport { TextUnit } from "./schema.js";\n'
+		);
+		await writeFile(join(source, "entry-corpus.ts"), 'export * from "./query.js";\n');
+		await writeFile(
+			join(consumer, "ok.ts"),
+			'import { TextUnit } from "@ue-shed/game-text/schema";\n'
+		);
+		await writeFile(
+			join(consumer, "metadata.ts"),
+			[
+				'export const packageName = "@ue-shed/game-text";',
+				'export const browserName = "@ue-shed/game-text/browser";',
+				'export const example = `import("@ue-shed/game-text")`;',
+				'// import { TextUnit } from "@ue-shed/game-text";',
+				'/* export * from "@ue-shed/game-text/browser"; */'
+			].join("\n")
+		);
+		await writeFile(
+			join(consumer, "root.ts"),
+			'import { TextUnit } from "@ue-shed/game-text";\n'
+		);
+		await writeFile(
+			join(consumer, "browser.ts"),
+			"const load = () => import('@ue-shed/game-text/browser');\n"
+		);
+		assert.deepEqual((await checkGameTextEntryPoints(fixtureRoot)).sort(), [
+			"apps/cli/src/browser.ts: import a focused @ue-shed/game-text entry point (/schema, /rules, /checks, /labels, /corpus, /index or /workspace)",
+			"apps/cli/src/root.ts: import a focused @ue-shed/game-text entry point (/schema, /rules, /checks, /labels, /corpus, /index or /workspace)",
+			"packages/game-text/src/entry-corpus.ts: Game Text entry points use named exports only"
+		]);
+	} finally {
+		await rm(fixtureRoot, { recursive: true, force: true });
+	}
+});
+
+test("tagged errors are matched by tag, not instanceof", async () => {
+	const fixtureRoot = await mkdtemp(join(tmpdir(), "ue-shed-tagged-matching-"));
+	try {
+		const source = join(fixtureRoot, "packages/example/src");
+		await mkdir(source, { recursive: true });
+		await writeFile(
+			join(source, "errors.ts"),
+			[
+				'import { Schema } from "effect";',
+				'export class ReadError extends Schema.TaggedError<ReadError>()("ReadError", {}) {}',
+				"export class PlainError extends Error {}",
+				"export const isRead = Schema.is(ReadError);"
+			].join("\n")
+		);
+		await writeFile(
+			join(source, "use.ts"),
+			[
+				'import { ReadError, PlainError } from "./errors.js";',
+				"export const a = (cause: unknown) => cause instanceof PlainError;",
+				"export const b = (cause: unknown) => cause instanceof Error;",
+				"export const c = (cause: unknown) => cause instanceof ReadError;"
+			].join("\n")
+		);
+		assert.deepEqual(await checkTaggedErrorMatching(fixtureRoot), [
+			"packages/example/src/use.ts:4: match ReadError by tag (catchTag, Schema.is or Predicate.isTagged), not instanceof"
+		]);
+	} finally {
+		await rm(fixtureRoot, { recursive: true, force: true });
+	}
 });
 
 test("browser import scanning distinguishes module syntax from strings and comments", async () => {
@@ -361,4 +442,157 @@ test("rejects renderer IPC access outside transport adapters", async () => {
 			]);
 		}
 	);
+});
+
+test("rejects new exported raw Schema decoders outside the baseline", async () => {
+	const fixtureRoot = await mkdtemp(join(tmpdir(), "ue-shed-raw-decoders-"));
+	try {
+		const source = join(fixtureRoot, "packages/example/src");
+		await mkdir(source, { recursive: true });
+		await writeFile(
+			join(source, "schema.ts"),
+			[
+				'import { Effect, Schema } from "effect";',
+				"export const decodeKnown = Schema.decodeUnknownEffect(Known);",
+				"export const decodeNew = Schema.decodeUnknownSync(New);",
+				"export const validateNew: (input: unknown) => New =",
+				"\tSchema.validateSync(New);",
+				"const decodeLocal = Schema.decodeUnknownEffect(Local);",
+				"export const parseNew = (encoded: New) => decodeLocal(encoded).pipe(Effect.orDie);"
+			].join("\n")
+		);
+		await writeFile(
+			join(source, "schema.test.ts"),
+			"export const decodeInTest = Schema.decodeUnknownSync(New);\n"
+		);
+		assert.deepEqual(
+			await checkDecoderExports(
+				fixtureRoot,
+				new Set(["packages/example/src/schema.ts:decodeKnown"])
+			),
+			[
+				"packages/example/src/schema.ts:3: decodeNew exports a raw Schema decoder; export a domain parser",
+				"packages/example/src/schema.ts:4: validateNew exports a raw Schema decoder; export a domain parser"
+			]
+		);
+	} finally {
+		await rm(fixtureRoot, { recursive: true, force: true });
+	}
+});
+
+test("checks named, renamed and default decoder exports through their local bindings", async () => {
+	const fixtureRoot = await mkdtemp(join(tmpdir(), "ue-shed-decoder-bindings-"));
+	try {
+		const source = join(fixtureRoot, "packages/example/src");
+		await mkdir(source, { recursive: true });
+		await writeFile(
+			join(source, "schema.ts"),
+			[
+				'import { Effect, Schema } from "effect";',
+				"const decodeNamed = Schema.decodeUnknownEffect(New);",
+				"const decodeRenamed = Schema.decodeUnknownSync(New);",
+				"const decodeKnown = Schema.validateSync(Known);",
+				"const decodeLocal = Schema.decodeUnknownEffect(Local);",
+				"const parseLocal = (input: Local) => decodeLocal(input).pipe(Effect.orDie);",
+				"export { decodeNamed };",
+				"export { decodeRenamed as parseRenamed };",
+				"export { decodeKnown as parseKnown };",
+				"export type { decodeLocal };",
+				"export { parseLocal };",
+				"export default decodeLocal;",
+				"export type { decodeNamed as DecoderType };",
+				"// export const decodeComment = Schema.decodeUnknownSync(New);",
+				'export const label = "export const decodeString = Schema.decodeUnknownSync(New);";',
+				"export { decodeLater as parseLater };",
+				"const decodeLater = Schema.validateSync(New);",
+				"const decodeAlias = decodeNamed;",
+				"export { decodeAlias as parseAlias };",
+				"const decodeWrapped = (Schema.validateSync(New) satisfies (input: unknown) => New);",
+				"export { decodeWrapped };",
+				"export const decodePreviouslyKnown = Schema.decodeUnknownEffect(Known);",
+				"export { decodePreviouslyKnown as decodeCompatibilityAlias };"
+			].join("\n")
+		);
+		assert.deepEqual(
+			await checkDecoderExports(
+				fixtureRoot,
+				new Set([
+					"packages/example/src/schema.ts:parseKnown",
+					"packages/example/src/schema.ts:decodePreviouslyKnown"
+				])
+			),
+			[
+				"packages/example/src/schema.ts:7: decodeNamed exports a raw Schema decoder; export a domain parser",
+				"packages/example/src/schema.ts:8: parseRenamed exports a raw Schema decoder; export a domain parser",
+				"packages/example/src/schema.ts:12: default exports a raw Schema decoder; export a domain parser",
+				"packages/example/src/schema.ts:16: parseLater exports a raw Schema decoder; export a domain parser",
+				"packages/example/src/schema.ts:19: parseAlias exports a raw Schema decoder; export a domain parser",
+				"packages/example/src/schema.ts:21: decodeWrapped exports a raw Schema decoder; export a domain parser"
+			]
+		);
+	} finally {
+		await rm(fixtureRoot, { recursive: true, force: true });
+	}
+});
+
+test("rejects layer factories taking a Layer and make* exports only their module uses", async () => {
+	const fixtureRoot = await mkdtemp(join(tmpdir(), "ue-shed-composition-"));
+	try {
+		const source = join(fixtureRoot, "packages/example/src");
+		await mkdir(source, { recursive: true });
+		await writeFile(
+			join(source, "service.ts"),
+			[
+				'import { Layer } from "effect";',
+				"export function serviceLayer(config: string, ids: Layer.Layer<Ids>) {",
+				"\treturn ids;",
+				"}",
+				"export const viewLayer = <E>(",
+				"\tbacking: Layer.Layer<Index, E>",
+				") => backing;",
+				"export const makeUnused = () => 1;",
+				"export function makeShared() {",
+				"\treturn 2;",
+				"}",
+				"export function configuredLayer(config: string) {",
+				"\treturn config;",
+				"}"
+			].join("\n")
+		);
+		await writeFile(
+			join(source, "service.test.ts"),
+			'import { makeShared } from "./service.js";\nmakeShared();\n'
+		);
+		assert.deepEqual(await checkCompositionPolicy(fixtureRoot), [
+			"packages/example/src/service.ts:2: serviceLayer takes a Layer; require its service instead",
+			"packages/example/src/service.ts:5: viewLayer takes a Layer; require its service instead",
+			"packages/example/src/service.ts:8: makeUnused is used only in its module; do not export it"
+		]);
+	} finally {
+		await rm(fixtureRoot, { recursive: true, force: true });
+	}
+});
+
+test("tagged errors in migrated packages carry the guidance fields", async () => {
+	const fixtureRoot = await mkdtemp(join(tmpdir(), "ue-shed-error-shape-"));
+	try {
+		const source = join(fixtureRoot, "packages/unreal-connection/src");
+		await mkdir(source, { recursive: true });
+		await writeFile(
+			join(source, "errors.ts"),
+			[
+				'import { Schema } from "effect";',
+				'import { ErrorGuidanceFields } from "@ue-shed/protocol";',
+				"const Shared = { ...ErrorGuidanceFields, message: Schema.String };",
+				'export class Good extends Schema.TaggedError<Good>()("Good", { id: Schema.String, ...ErrorGuidanceFields }) {}',
+				'export class Local extends Schema.TaggedError<Local>()("Local", Shared) {}',
+				'export class Bad extends Schema.TaggedError<Bad>()("Bad", { message: Schema.String, retrySafe: Schema.Boolean }) {}'
+			].join("\n")
+		);
+		assert.deepEqual(await checkErrorGuidance(fixtureRoot), [
+			"packages/unreal-connection/src/errors.ts: Bad must carry recovery, nextStep (spread ErrorGuidanceFields from @ue-shed/protocol)"
+		]);
+	} finally {
+		await rm(fixtureRoot, { recursive: true, force: true });
+	}
 });

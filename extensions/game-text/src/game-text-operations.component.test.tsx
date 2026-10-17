@@ -2,16 +2,15 @@
 import { cleanup, render, screen, waitFor, within } from "@solidjs/testing-library";
 import { userEvent } from "@testing-library/user-event";
 import { Button, EffectRuntimeProvider } from "@ue-shed/ui";
+import { textCorpusQuery, localizationFocusPage } from "@ue-shed/game-text/corpus";
 import {
-	textCorpusQuery,
-	localizationFocusPage,
 	type WorkbenchOperationRequest,
 	type WorkbenchOperationResult,
 	type WorkbenchOperationState,
 	type WorkbenchOperationProgress,
 	type WorkbenchOperationPlan,
 	type WorkbenchOperationFilesRequest
-} from "@ue-shed/game-text/browser";
+} from "@ue-shed/game-text/schema";
 import { Deferred, Effect, Layer, ManagedRuntime, Queue, Stream } from "effect";
 import { createSignal } from "solid-js";
 import { afterAll, afterEach, beforeEach, expect, it, vi } from "vitest";

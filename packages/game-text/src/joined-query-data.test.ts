@@ -38,3 +38,25 @@ it.live("hydrates bulk line reads in pages that match single-line reads", () =>
 		}).pipe(Effect.provide(fixture.layer()));
 	}).pipe(Effect.scoped)
 );
+
+it.live("shares decoded columns between views of one pinned reader", () =>
+	Effect.gen(function* () {
+		const fixture = yield* makeIndexRegressionFixture();
+		yield* Effect.gen(function* () {
+			const refresh = yield* GameTextIndexRefresh;
+			const first = yield* refresh.refresh(fixture.request);
+			const view = new JoinedQueryData(first.joined);
+			const again = new JoinedQueryData(first.joined);
+			expect(again.column("line.source")).toBe(view.column("line.source"));
+			expect(again.projection).toBe(view.projection);
+			// An explicit projection keeps its own cache, as the host's reuse cache needs.
+			const own = new JoinedQueryData(first.joined, { columns: new Map() });
+			expect(own.projection).not.toBe(view.projection);
+			expect(own.column("line.source")).toEqual(view.column("line.source"));
+			fixture.setSource("Changed");
+			const changed = yield* refresh.refresh(fixture.request);
+			expect(changed.joined).not.toBe(first.joined);
+			expect(new JoinedQueryData(changed.joined).projection).not.toBe(view.projection);
+		}).pipe(Effect.scoped, Effect.provide(fixture.layer()));
+	}).pipe(Effect.scoped)
+);

@@ -44,6 +44,317 @@
 			"title": "int",
 			"exclusiveMinimum": 0
 		},
+		"GameTextIndexBuildOutcome": {
+			"type": "object",
+			"properties": {
+				"action": {
+					"type": "string",
+					"enum": [
+						"capabilities",
+						"begin",
+						"end",
+						"status",
+						"publish",
+						"publish_ids",
+						"intern",
+						"strings",
+						"join",
+						"compact"
+					]
+				},
+				"capabilities": {
+					"type": "array",
+					"items": {
+						"type": "string",
+						"enum": ["game_text_index_v1"]
+					}
+				},
+				"root": {
+					"anyOf": [
+						{},
+						{
+							"type": "null"
+						}
+					]
+				},
+				"records": {
+					"type": "array"
+				},
+				"ids": {
+					"type": "array",
+					"items": {
+						"type": "integer",
+						"allOf": [
+							{
+								"minimum": 0
+							},
+							{
+								"maximum": 4294967295
+							}
+						]
+					}
+				},
+				"join": {
+					"anyOf": [
+						{
+							"type": "object",
+							"properties": {
+								"rebuilt": {
+									"type": "boolean"
+								},
+								"strategy": {
+									"anyOf": [
+										{
+											"type": "string",
+											"enum": ["full", "incremental"]
+										},
+										{
+											"type": "null"
+										}
+									]
+								},
+								"key": {
+									"type": "string",
+									"allOf": [
+										{
+											"minLength": 1
+										},
+										{
+											"maxLength": 1024
+										}
+									]
+								},
+								"bytes": {
+									"type": "integer",
+									"allOf": [
+										{
+											"minimum": 0
+										}
+									]
+								},
+								"count": {
+									"anyOf": [
+										{
+											"type": "integer",
+											"allOf": [
+												{
+													"minimum": 0
+												}
+											]
+										},
+										{
+											"type": "null"
+										}
+									]
+								},
+								"keyChanges": {
+									"anyOf": [
+										{
+											"type": "integer",
+											"allOf": [
+												{
+													"minimum": 0
+												}
+											]
+										},
+										{
+											"type": "null"
+										}
+									]
+								},
+								"affectedLines": {
+									"anyOf": [
+										{
+											"type": "integer",
+											"allOf": [
+												{
+													"minimum": 0
+												}
+											]
+										},
+										{
+											"type": "null"
+										}
+									]
+								}
+							},
+							"required": [
+								"rebuilt",
+								"strategy",
+								"key",
+								"bytes",
+								"count",
+								"keyChanges",
+								"affectedLines"
+							],
+							"additionalProperties": false
+						},
+						{
+							"type": "null"
+						}
+					]
+				},
+				"compaction": {
+					"anyOf": [
+						{
+							"type": "object",
+							"properties": {
+								"compacted": {
+									"type": "boolean"
+								},
+								"deadBytes": {
+									"type": "integer",
+									"allOf": [
+										{
+											"minimum": 0
+										}
+									]
+								},
+								"totalBytes": {
+									"type": "integer",
+									"allOf": [
+										{
+											"minimum": 0
+										}
+									]
+								}
+							},
+							"required": ["compacted", "deadBytes", "totalBytes"],
+							"additionalProperties": false
+						},
+						{
+							"type": "null"
+						}
+					]
+				},
+				"stringCount": {
+					"anyOf": [
+						{
+							"type": "integer",
+							"allOf": [
+								{
+									"minimum": 0
+								}
+							]
+						},
+						{
+							"type": "null"
+						}
+					]
+				},
+				"io": {
+					"type": "object",
+					"properties": {
+						"opens": {
+							"type": "integer",
+							"allOf": [
+								{
+									"minimum": 0
+								}
+							]
+						},
+						"sectionLoads": {
+							"type": "integer",
+							"allOf": [
+								{
+									"minimum": 0
+								}
+							]
+						},
+						"storedBytes": {
+							"type": "integer",
+							"allOf": [
+								{
+									"minimum": 0
+								}
+							]
+						},
+						"rawBytes": {
+							"type": "integer",
+							"allOf": [
+								{
+									"minimum": 0
+								}
+							]
+						},
+						"fullVerifies": {
+							"type": "integer",
+							"allOf": [
+								{
+									"minimum": 0
+								}
+							]
+						},
+						"indexBytes": {
+							"type": "integer",
+							"allOf": [
+								{
+									"minimum": 0
+								}
+							]
+						},
+						"writtenBytes": {
+							"type": "integer",
+							"allOf": [
+								{
+									"minimum": 0
+								}
+							]
+						}
+					},
+					"required": [
+						"opens",
+						"sectionLoads",
+						"storedBytes",
+						"rawBytes",
+						"fullVerifies",
+						"indexBytes",
+						"writtenBytes"
+					],
+					"additionalProperties": false
+				},
+				"stageSeconds": {
+					"type": "object",
+					"additionalProperties": {
+						"anyOf": [
+							{
+								"type": "number"
+							},
+							{
+								"type": "string",
+								"enum": ["NaN"]
+							},
+							{
+								"type": "string",
+								"enum": ["Infinity"]
+							},
+							{
+								"type": "string",
+								"enum": ["-Infinity"]
+							}
+						],
+						"allOf": [
+							{
+								"minimum": 0
+							}
+						]
+					}
+				}
+			},
+			"required": [
+				"action",
+				"capabilities",
+				"root",
+				"records",
+				"ids",
+				"join",
+				"compaction",
+				"stringCount",
+				"io",
+				"stageSeconds"
+			],
+			"additionalProperties": false
+		},
 		"UAssetIoProjectIndexCountResult": {
 			"type": "object",
 			"properties": {
@@ -1756,10 +2067,7 @@
 				}
 			]
 		},
-		"SavedPropertyValue2": {
-			"$ref": "#/$defs/Union_"
-		},
-		"SavedProperty1": {
+		"SavedProperty_1": {
 			"anyOf": [
 				{
 					"type": "object",
@@ -1777,7 +2085,7 @@
 										"type": "string"
 									},
 									"value": {
-										"$ref": "#/$defs/SavedPropertyValue2"
+										"$ref": "#/$defs/SavedPropertyValue_1"
 									}
 								},
 								"required": ["name", "value"],
@@ -1817,7 +2125,7 @@
 						"value": {
 							"anyOf": [
 								{
-									"$ref": "#/$defs/SavedPropertyValue2"
+									"$ref": "#/$defs/SavedPropertyValue_1"
 								},
 								{
 									"type": "null"
@@ -2582,7 +2890,7 @@
 						"values": {
 							"type": "array",
 							"items": {
-								"$ref": "#/$defs/SavedPropertyValue2"
+								"$ref": "#/$defs/SavedPropertyValue_1"
 							}
 						},
 						"name": {
@@ -2608,10 +2916,10 @@
 								"type": "object",
 								"properties": {
 									"key": {
-										"$ref": "#/$defs/SavedPropertyValue2"
+										"$ref": "#/$defs/SavedPropertyValue_1"
 									},
 									"value": {
-										"$ref": "#/$defs/SavedPropertyValue2"
+										"$ref": "#/$defs/SavedPropertyValue_1"
 									}
 								},
 								"required": ["key", "value"],
@@ -2676,10 +2984,10 @@
 		"Arrays_1": {
 			"type": "array",
 			"items": {
-				"$ref": "#/$defs/SavedProperty1"
+				"$ref": "#/$defs/SavedProperty_1"
 			}
 		},
-		"Union_": {
+		"SavedPropertyValue_1": {
 			"anyOf": [
 				{
 					"type": "object",
@@ -2697,7 +3005,7 @@
 										"type": "string"
 									},
 									"value": {
-										"$ref": "#/$defs/SavedPropertyValue2"
+										"$ref": "#/$defs/SavedPropertyValue_1"
 									}
 								},
 								"required": ["name", "value"],
@@ -2731,7 +3039,7 @@
 						"value": {
 							"anyOf": [
 								{
-									"$ref": "#/$defs/SavedPropertyValue2"
+									"$ref": "#/$defs/SavedPropertyValue_1"
 								},
 								{
 									"type": "null"
@@ -3390,7 +3698,7 @@
 						"values": {
 							"type": "array",
 							"items": {
-								"$ref": "#/$defs/SavedPropertyValue2"
+								"$ref": "#/$defs/SavedPropertyValue_1"
 							}
 						}
 					},
@@ -3410,10 +3718,10 @@
 								"type": "object",
 								"properties": {
 									"key": {
-										"$ref": "#/$defs/SavedPropertyValue2"
+										"$ref": "#/$defs/SavedPropertyValue_1"
 									},
 									"value": {
-										"$ref": "#/$defs/SavedPropertyValue2"
+										"$ref": "#/$defs/SavedPropertyValue_1"
 									}
 								},
 								"required": ["key", "value"],
@@ -3456,12 +3764,6 @@
 					"additionalProperties": false
 				}
 			]
-		},
-		"SavedPropertyValue1": {
-			"$ref": "#/$defs/Union_"
-		},
-		"SavedPropertyValue3": {
-			"$ref": "#/$defs/Union_"
 		},
 		"SavedAssetDecodeError": {
 			"type": "object",
@@ -3741,7 +4043,7 @@
 										}
 									},
 									"native_data": {
-										"$ref": "#/$defs/SavedPropertyValue1"
+										"$ref": "#/$defs/SavedPropertyValue_1"
 									},
 									"tail_bytes": {
 										"anyOf": [
@@ -3909,7 +4211,7 @@
 										"enum": ["Skeleton"]
 									},
 									"reference_pose": {
-										"$ref": "#/$defs/SavedPropertyValue3"
+										"$ref": "#/$defs/SavedPropertyValue_1"
 									},
 									"tail_bytes": {
 										"$ref": "#/$defs/UAssetInspectionNonNegativeInt"
@@ -4131,7 +4433,7 @@
 												"properties": {
 													"type": "array",
 													"items": {
-														"$ref": "#/$defs/SavedProperty1"
+														"$ref": "#/$defs/SavedProperty_1"
 													}
 												}
 											},
@@ -4400,7 +4702,7 @@
 				"properties": {
 					"type": "array",
 					"items": {
-						"$ref": "#/$defs/SavedProperty1"
+						"$ref": "#/$defs/SavedProperty_1"
 					}
 				},
 				"pins": {
@@ -4537,7 +4839,7 @@
 				"properties": {
 					"type": "array",
 					"items": {
-						"$ref": "#/$defs/SavedProperty1"
+						"$ref": "#/$defs/SavedProperty_1"
 					},
 					"allOf": [
 						{
@@ -4557,14 +4859,11 @@
 			],
 			"additionalProperties": false
 		},
-		"SavedPropertyValue4": {
-			"$ref": "#/$defs/Union_"
-		},
 		"BlueprintSavedObject": {
 			"type": "object",
 			"properties": {
 				"native_data": {
-					"$ref": "#/$defs/SavedPropertyValue4"
+					"$ref": "#/$defs/SavedPropertyValue_1"
 				},
 				"object_path": {
 					"type": "string"
@@ -4575,7 +4874,7 @@
 				"properties": {
 					"type": "array",
 					"items": {
-						"$ref": "#/$defs/SavedProperty1"
+						"$ref": "#/$defs/SavedProperty_1"
 					},
 					"allOf": [
 						{
@@ -5821,7 +6120,7 @@
 						{
 							"type": "array",
 							"items": {
-								"$ref": "#/$defs/SavedProperty1"
+								"$ref": "#/$defs/SavedProperty_1"
 							},
 							"allOf": [
 								{
@@ -5839,7 +6138,7 @@
 						{
 							"type": "array",
 							"items": {
-								"$ref": "#/$defs/SavedProperty1"
+								"$ref": "#/$defs/SavedProperty_1"
 							},
 							"allOf": [
 								{
@@ -8210,28 +8509,6 @@
 			"required": ["namespace", "key", "source", "site"],
 			"additionalProperties": false
 		},
-		"SavedAssetBlueprintClasses": {
-			"type": "object",
-			"properties": {
-				"blueprint": {
-					"type": "string"
-				},
-				"generatedClass": {
-					"type": "string"
-				},
-				"classDefault": {
-					"type": "string"
-				},
-				"skeletonClass": {
-					"type": "string"
-				},
-				"skeletonClassDefault": {
-					"type": "string"
-				}
-			},
-			"required": ["blueprint", "generatedClass"],
-			"additionalProperties": false
-		},
 		"SavedAssetGatherCoverage": {
 			"type": "object",
 			"properties": {
@@ -8254,6 +8531,28 @@
 				}
 			},
 			"required": ["runtimeSites", "missing", "missingSamples"],
+			"additionalProperties": false
+		},
+		"SavedAssetBlueprintClasses": {
+			"type": "object",
+			"properties": {
+				"blueprint": {
+					"type": "string"
+				},
+				"generatedClass": {
+					"type": "string"
+				},
+				"classDefault": {
+					"type": "string"
+				},
+				"skeletonClass": {
+					"type": "string"
+				},
+				"skeletonClassDefault": {
+					"type": "string"
+				}
+			},
+			"required": ["blueprint", "generatedClass"],
 			"additionalProperties": false
 		},
 		"SavedAssetPackageTextRecord": {
@@ -9725,6 +10024,20 @@
 					"properties": {
 						"kind": {
 							"type": "string",
+							"enum": ["game_text_index"]
+						},
+						"outcome": {
+							"$ref": "#/$defs/GameTextIndexBuildOutcome"
+						}
+					},
+					"required": ["kind", "outcome"],
+					"additionalProperties": false
+				},
+				{
+					"type": "object",
+					"properties": {
+						"kind": {
+							"type": "string",
 							"enum": ["project_index_count"]
 						},
 						"result": {
@@ -9967,6 +10280,7 @@
 						"operation": {
 							"type": "string",
 							"enum": [
+								"game_text_index",
 								"inspect",
 								"blueprint",
 								"level_sequence",

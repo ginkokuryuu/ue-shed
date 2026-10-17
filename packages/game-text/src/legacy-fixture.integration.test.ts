@@ -15,7 +15,7 @@ import { scanTextCorpus } from "./corpus.js";
 import { typeScriptIndexBuilderLayer } from "./index-builder.js";
 import { GameTextIndexRefresh, gameTextIndexRefreshLayer } from "./index-refresh.js";
 import { gameTextIndexSourceNodeLayer } from "./index-source-node.js";
-import { GameTextRuleDocument, evaluateGameTextSourceQuality } from "./quality-rules-v2.js";
+import { GameTextRuleDocument, evaluateGameTextSourceQuality } from "./game-text-rules.js";
 import type { TextOccurrence } from "./schema.js";
 import { hasSearchableSource } from "./search.js";
 

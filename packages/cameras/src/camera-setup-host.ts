@@ -89,7 +89,9 @@ export const makeCameraSetupHost = Effect.fn("CameraSetup.makeHost")(function* <
 					new CameraBridgeError({
 						code: "unavailable",
 						message: state.message,
-						recovery: "Connect the camera setup host to the matching editor project."
+						recovery: "Connect the camera setup host to the matching editor project.",
+						retrySafe: true,
+						nextStep: "fix_input"
 					})
 				);
 			connectedBridge = bridge;
@@ -117,7 +119,9 @@ export const makeCameraSetupHost = Effect.fn("CameraSetup.makeHost")(function* <
 					new CameraBridgeError({
 						code: "stale",
 						message: acknowledged.message,
-						recovery: "Inspect the saved camera draft before starting another setup."
+						recovery: "Inspect the saved camera draft before starting another setup.",
+						retrySafe: true,
+						nextStep: "reconcile"
 					})
 				);
 		}, gate.withPermits(1))

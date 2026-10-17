@@ -1,35 +1,57 @@
 import { Schema } from "effect";
 
-const ErrorFields = {
+/**
+ * What a caller can do next after an expected failure. Same names and literal set as
+ * `ErrorNextStep` in `@ue-shed/protocol`, defined locally because this package stays independent
+ * of it:
+ *
+ * - `fix_input`: the request, configuration or release is wrong; change it and try again.
+ * - `retry`: the same request may succeed later without changes. Only valid when `retrySafe` is true.
+ * - `reconcile`: state changed underneath the caller; re-read it, then decide whether to retry.
+ * - `escalate`: the caller cannot fix this; report it with the error's context.
+ */
+export const PluginErrorNextStep = Schema.Literals(["fix_input", "retry", "reconcile", "escalate"]);
+export type PluginErrorNextStep = typeof PluginErrorNextStep.Type;
+
+/**
+ * Guidance fields every plugin-distribution tagged error carries, matching `ErrorGuidanceFields`
+ * in `@ue-shed/protocol`. `retrySafe` states whether repeating the same operation is idempotent;
+ * it must be true whenever `nextStep` is `retry`.
+ */
+export const PluginErrorGuidanceFields = {
 	message: Schema.String,
 	recovery: Schema.String,
-	retrySafe: Schema.Boolean
+	retrySafe: Schema.Boolean,
+	nextStep: PluginErrorNextStep
 };
+
+/** The original failure behind a classified error; diagnostic evidence, not text to branch on. */
+const CauseFields = { cause: Schema.optionalKey(Schema.Defect()) };
 
 export class ReleaseUnavailable extends Schema.TaggedError<ReleaseUnavailable>()(
 	"ReleaseUnavailable",
-	{ ...ErrorFields, releaseVersion: Schema.String }
+	{ ...PluginErrorGuidanceFields, releaseVersion: Schema.String, ...CauseFields }
 ) {}
 
 export class OfflineCacheMiss extends Schema.TaggedError<OfflineCacheMiss>()("OfflineCacheMiss", {
-	...ErrorFields,
+	...PluginErrorGuidanceFields,
 	releaseVersion: Schema.String
 }) {}
 
 export class UnsupportedManifestVersion extends Schema.TaggedError<UnsupportedManifestVersion>()(
 	"UnsupportedManifestVersion",
-	{ ...ErrorFields, releaseVersion: Schema.String }
+	{ ...PluginErrorGuidanceFields, releaseVersion: Schema.String }
 ) {}
 
 export class IncompatibleUnrealVersion extends Schema.TaggedError<IncompatibleUnrealVersion>()(
 	"IncompatibleUnrealVersion",
-	{ ...ErrorFields, releaseVersion: Schema.String, unrealVersion: Schema.String }
+	{ ...PluginErrorGuidanceFields, releaseVersion: Schema.String, unrealVersion: Schema.String }
 ) {}
 
 export class CompatiblePluginBuildUnavailable extends Schema.TaggedError<CompatiblePluginBuildUnavailable>()(
 	"CompatiblePluginBuildUnavailable",
 	{
-		...ErrorFields,
+		...PluginErrorGuidanceFields,
 		architecture: Schema.String,
 		configuration: Schema.String,
 		engineBuildId: Schema.String,
@@ -43,7 +65,7 @@ export class CompatiblePluginBuildUnavailable extends Schema.TaggedError<Compati
 export class ManifestDigestMismatch extends Schema.TaggedError<ManifestDigestMismatch>()(
 	"ManifestDigestMismatch",
 	{
-		...ErrorFields,
+		...PluginErrorGuidanceFields,
 		actual: Schema.String,
 		expected: Schema.String,
 		releaseVersion: Schema.String
@@ -53,7 +75,7 @@ export class ManifestDigestMismatch extends Schema.TaggedError<ManifestDigestMis
 export class ArtifactDigestMismatch extends Schema.TaggedError<ArtifactDigestMismatch>()(
 	"ArtifactDigestMismatch",
 	{
-		...ErrorFields,
+		...PluginErrorGuidanceFields,
 		actual: Schema.String,
 		expected: Schema.String,
 		releaseVersion: Schema.String
@@ -62,48 +84,63 @@ export class ArtifactDigestMismatch extends Schema.TaggedError<ArtifactDigestMis
 
 export class MalformedOrUnsafeArchive extends Schema.TaggedError<MalformedOrUnsafeArchive>()(
 	"MalformedOrUnsafeArchive",
-	{ ...ErrorFields, entry: Schema.optional(Schema.String), releaseVersion: Schema.String }
+	{
+		...PluginErrorGuidanceFields,
+		entry: Schema.optional(Schema.String),
+		releaseVersion: Schema.String
+	}
 ) {}
 
 export class CorruptCacheEntry extends Schema.TaggedError<CorruptCacheEntry>()(
 	"CorruptCacheEntry",
-	{ ...ErrorFields, cachePath: Schema.String, releaseVersion: Schema.String }
+	{
+		...PluginErrorGuidanceFields,
+		cachePath: Schema.String,
+		releaseVersion: Schema.String,
+		...CauseFields
+	}
 ) {}
 
 export class ImmutableVersionConflict extends Schema.TaggedError<ImmutableVersionConflict>()(
 	"ImmutableVersionConflict",
-	{ ...ErrorFields, cachePath: Schema.String, releaseVersion: Schema.String }
+	{ ...PluginErrorGuidanceFields, cachePath: Schema.String, releaseVersion: Schema.String }
 ) {}
 
 export class PluginInstallCancelled extends Schema.TaggedError<PluginInstallCancelled>()(
 	"PluginInstallCancelled",
-	{ ...ErrorFields, releaseVersion: Schema.String, stage: Schema.String }
+	{ ...PluginErrorGuidanceFields, releaseVersion: Schema.String, stage: Schema.String }
 ) {}
 
 export class ActiveLeasePreventsPrune extends Schema.TaggedError<ActiveLeasePreventsPrune>()(
 	"ActiveLeasePreventsPrune",
-	{ ...ErrorFields, activeLeases: Schema.Int, releaseVersion: Schema.String }
+	{ ...PluginErrorGuidanceFields, activeLeases: Schema.Int, releaseVersion: Schema.String }
 ) {}
 
 export class TransportFailure extends Schema.TaggedError<TransportFailure>()("TransportFailure", {
-	...ErrorFields,
+	...PluginErrorGuidanceFields,
 	operation: Schema.String,
-	releaseVersion: Schema.String
+	releaseVersion: Schema.String,
+	...CauseFields
 }) {}
 
 export class PluginStorageFailure extends Schema.TaggedError<PluginStorageFailure>()(
 	"PluginStorageFailure",
-	{ ...ErrorFields, operation: Schema.String, releaseVersion: Schema.String }
+	{
+		...PluginErrorGuidanceFields,
+		operation: Schema.String,
+		releaseVersion: Schema.String,
+		...CauseFields
+	}
 ) {}
 
 export class PluginDistributionValidationError extends Schema.TaggedError<PluginDistributionValidationError>()(
 	"PluginDistributionValidationError",
-	{ ...ErrorFields, field: Schema.String }
+	{ ...PluginErrorGuidanceFields, field: Schema.String, ...CauseFields }
 ) {}
 
 export class InternalInvariantFailure extends Schema.TaggedError<InternalInvariantFailure>()(
 	"InternalInvariantFailure",
-	{ ...ErrorFields, operation: Schema.String }
+	{ ...PluginErrorGuidanceFields, operation: Schema.String }
 ) {}
 
 export const PluginDistributionError = Schema.Union([

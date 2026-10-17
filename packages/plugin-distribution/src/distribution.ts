@@ -3,7 +3,6 @@ import { resolve } from "node:path";
 import { Context, Effect, Fiber, Layer, Option, Schema, Semaphore, type Scope } from "effect";
 import {
 	PluginInstallCancelled,
-	ReleaseUnavailable,
 	ArtifactDigestMismatch,
 	CompatiblePluginBuildUnavailable,
 	IncompatibleUnrealVersion,
@@ -84,7 +83,8 @@ function decodeFailure() {
 		field: "request",
 		message: "Plugin install request is invalid.",
 		recovery: "Provide one exact SemVer release and between 1 and 64 valid plugin IDs.",
-		retrySafe: false
+		retrySafe: true,
+		nextStep: "fix_input"
 	});
 }
 
@@ -98,7 +98,8 @@ function mapManifestError(
 			message: error.message,
 			recovery: error.recovery,
 			releaseVersion,
-			retrySafe: false
+			retrySafe: error.retrySafe,
+			nextStep: error.nextStep
 		});
 	}
 	if (error.code === "unsupported_unreal") {
@@ -106,7 +107,8 @@ function mapManifestError(
 			message: error.message,
 			recovery: error.recovery,
 			releaseVersion,
-			retrySafe: false,
+			retrySafe: error.retrySafe,
+			nextStep: error.nextStep,
 			unrealVersion: unrealVersion ?? "unknown"
 		});
 	}
@@ -114,7 +116,8 @@ function mapManifestError(
 		field: "manifest",
 		message: error.message,
 		recovery: error.recovery,
-		retrySafe: false
+		retrySafe: error.retrySafe,
+		nextStep: error.nextStep
 	});
 }
 
@@ -152,7 +155,8 @@ function validateRequestedManifest(
 							"The selected manifest is compiled, but the caller explicitly requested source.",
 						recovery:
 							"Select a source manifest asset; source requests never use binary artifacts.",
-						retrySafe: false
+						retrySafe: true,
+						nextStep: "fix_input"
 					})
 				);
 			}
@@ -181,7 +185,8 @@ function compatibleBuildUnavailable(
 		recovery:
 			"Build or select a compiled artifact for the exact engine, platform, architecture, target, and configuration.",
 		releaseVersion,
-		retrySafe: false,
+		retrySafe: true,
+		nextStep: "fix_input",
 		target: request.target,
 		unrealVersion: request.unrealVersion
 	});
@@ -209,6 +214,7 @@ function abortEffect(releaseVersion: string, signal: AbortSignal) {
 						recovery: "Retry installing the exact release when the host is ready.",
 						releaseVersion,
 						retrySafe: true,
+						nextStep: "retry",
 						stage: "install"
 					})
 				)
@@ -270,7 +276,8 @@ export const pluginDistributionLayer = (
 						recovery:
 							"Allow an online install once or pre-populate this caller-owned cache.",
 						releaseVersion: request.releaseVersion,
-						retrySafe: true
+						retrySafe: true,
+						nextStep: "fix_input"
 					});
 				}
 				const artifactRequest = requestedArtifact(request);
@@ -283,7 +290,7 @@ export const pluginDistributionLayer = (
 					.pipe(
 						Effect.mapError((error) =>
 							artifactRequest.kind === "compiled" &&
-							error instanceof ReleaseUnavailable
+							error._tag === "ReleaseUnavailable"
 								? compatibleBuildUnavailable(
 										artifactRequest,
 										request.releaseVersion,
@@ -303,7 +310,8 @@ export const pluginDistributionLayer = (
 						message: `Manifest digest ${manifestDigest} does not match the pinned digest.`,
 						recovery: "Use the exact manifest selected by the host policy.",
 						releaseVersion: request.releaseVersion,
-						retrySafe: false
+						retrySafe: true,
+						nextStep: "escalate"
 					});
 				}
 				const manifest = yield* validateRequestedManifest(document.manifest, request);
@@ -312,7 +320,8 @@ export const pluginDistributionLayer = (
 						field: "releaseVersion",
 						message: `Manifest release ${manifest.releaseVersion} does not match requested ${request.releaseVersion}.`,
 						recovery: "Select the manifest asset for the exact requested release.",
-						retrySafe: false
+						retrySafe: true,
+						nextStep: "fix_input"
 					});
 				}
 				if (
@@ -327,7 +336,8 @@ export const pluginDistributionLayer = (
 						recovery:
 							"Use the exact release manifest and artifact selected by host policy.",
 						releaseVersion: request.releaseVersion,
-						retrySafe: false
+						retrySafe: true,
+						nextStep: "escalate"
 					});
 				}
 				return yield* Effect.scoped(
@@ -430,7 +440,8 @@ export const pluginDistributionLayer = (
 									field: "pluginIds",
 									message: error.message,
 									recovery: error.recovery,
-									retrySafe: false
+									retrySafe: error.retrySafe,
+									nextStep: error.nextStep
 								})
 						)
 					);

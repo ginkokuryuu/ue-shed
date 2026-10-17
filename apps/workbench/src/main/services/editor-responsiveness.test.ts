@@ -44,7 +44,8 @@ function fakeEngine() {
 								endpoint,
 								operation: "acquire",
 								reason: current.failWith,
-								retryable: current.failWith === "transport",
+								retrySafe: current.failWith === "transport",
+								nextStep: current.failWith === "transport" ? "retry" : "fix_input",
 								message: "The editor said no.",
 								recovery: "Update UE Shed Core."
 							});

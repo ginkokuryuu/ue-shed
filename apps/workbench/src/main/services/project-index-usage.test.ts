@@ -37,7 +37,8 @@ it.effect("supports Workbench selection progress and an explicit retry without U
 									new ProjectIndexRefreshFailed({
 										message: "The worker reached its output limit.",
 										recovery: "Upgrade the paired worker, then retry.",
-										retrySafe: true
+										retrySafe: true,
+										nextStep: "retry"
 									})
 								);
 							}

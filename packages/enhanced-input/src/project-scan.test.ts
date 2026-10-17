@@ -247,7 +247,9 @@ it.effect("maps a reader asset limit onto scan_limit_exceeded", () =>
 					operation: "scan",
 					message: "Scan found 22 packages, above the limit of 2.",
 					path: options.projectRoot,
-					retrySafe: false
+					retrySafe: false,
+					recovery: "Test double: narrow the request.",
+					nextStep: "escalate"
 				})
 			)
 		);

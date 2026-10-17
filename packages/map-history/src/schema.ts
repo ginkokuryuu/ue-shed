@@ -1,5 +1,6 @@
+import { ErrorGuidanceFields } from "@ue-shed/protocol";
 import { SavedWorldActor, SavedWorldTransform, SavedWorldVector } from "@ue-shed/protocol";
-import { DateTime, Schema } from "effect";
+import { DateTime, Effect, Schema } from "effect";
 
 const PositiveInt = Schema.Int.check(Schema.isGreaterThan(0));
 const NonNegativeInt = Schema.Int.check(Schema.isGreaterThanOrEqualTo(0));
@@ -369,11 +370,66 @@ export const MapHistoryProgress = Schema.Struct({
 });
 export type MapHistoryProgress = Schema.Schema.Type<typeof MapHistoryProgress>;
 
-export const decodePerforceMapHistoryQuery = Schema.decodeUnknownEffect(PerforceMapHistoryQuery);
-export const decodePerforceMapHistory = Schema.decodeUnknownEffect(PerforceMapHistory);
-export const decodePerforceFastMapHistoryQuery = Schema.decodeUnknownEffect(
-	PerforceFastMapHistoryQuery
+/**
+ * A value that does not match the map history contract: the two sides disagree about the contract, so
+ * repeating the same call returns the same mismatch.
+ */
+export class MapHistoryContractError extends Schema.TaggedError<MapHistoryContractError>()(
+	"MapHistoryContractError",
+	{
+		code: Schema.Literal("invalid_contract"),
+		...ErrorGuidanceFields,
+		cause: Schema.optionalKey(Schema.Defect())
+	}
+) {}
+
+/**
+ * A unary parser for one map history contract value: it decodes the encoded value and fails with
+ * `MapHistoryContractError` naming `subject`, keeping the schema issue as its cause.
+ */
+function mapHistoryContractParser<S extends Schema.Codec<unknown, unknown>>(
+	schema: S,
+	subject: string
+) {
+	const decode = Schema.decodeUnknownEffect(schema);
+	return (
+		// oxlint-disable-next-line anti-slop/no-unknown-parameters -- This parser is the boundary: it decodes its input here.
+		encoded: unknown
+	): Effect.Effect<S["Type"], MapHistoryContractError> =>
+		decode(encoded).pipe(
+			Effect.mapError(
+				(cause) =>
+					new MapHistoryContractError({
+						code: "invalid_contract",
+						message: `The ${subject} does not match the map history contract.`,
+						recovery:
+							"Run the host and client from the same UE Shed version, then retry.",
+						retrySafe: false,
+						nextStep: "escalate",
+						cause
+					})
+			)
+		);
+}
+
+export const parsePerforceMapHistoryQuery = mapHistoryContractParser(
+	PerforceMapHistoryQuery,
+	"perforce map history query"
 );
-export const decodePerforceFastMapHistory = Schema.decodeUnknownEffect(PerforceFastMapHistory);
-export const decodeMapHistoryQuery = Schema.decodeUnknownEffect(MapHistoryQuery);
-export const decodeMapHistoryResult = Schema.decodeUnknownEffect(MapHistoryResult);
+export const parsePerforceMapHistory = mapHistoryContractParser(
+	PerforceMapHistory,
+	"perforce map history"
+);
+export const parsePerforceFastMapHistoryQuery = mapHistoryContractParser(
+	PerforceFastMapHistoryQuery,
+	"perforce fast map history query"
+);
+export const parsePerforceFastMapHistory = mapHistoryContractParser(
+	PerforceFastMapHistory,
+	"perforce fast map history"
+);
+export const parseMapHistoryQuery = mapHistoryContractParser(MapHistoryQuery, "map history query");
+export const parseMapHistoryResult = mapHistoryContractParser(
+	MapHistoryResult,
+	"map history result"
+);

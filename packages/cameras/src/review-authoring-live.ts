@@ -6,6 +6,8 @@ import {
 	RemoteControlClientError,
 	type RemoteControlClientApi
 } from "@ue-shed/unreal-connection";
+import { ErrorCauseFields, ErrorGuidanceFields } from "@ue-shed/protocol";
+import { fileFailureReason } from "./file-failure.js";
 import { Context, Effect, Layer, Schema } from "effect";
 import { captureReviewView } from "./review-live.js";
 import {
@@ -38,25 +40,39 @@ function pureStagingPath(
 export class ReviewAuthoringConnectionError extends Schema.TaggedError<ReviewAuthoringConnectionError>()(
 	"ReviewAuthoringConnectionError",
 	{
+		...ErrorGuidanceFields,
+		...ErrorCauseFields,
 		endpoint: Schema.String,
-		message: Schema.String,
-		operation: Schema.Literals(["inspect_selection", "inspect_subject", "preview_candidate"]),
-		recovery: Schema.String,
-		retrySafe: Schema.Boolean
+		operation: Schema.Literals(["inspect_selection", "inspect_subject", "preview_candidate"])
 	}
 ) {}
+
+const isRemoteControlClientError = Schema.is(RemoteControlClientError);
 
 function reviewConnectionError(
 	endpoint: string,
 	operation: "inspect_selection" | "inspect_subject" | "preview_candidate",
 	cause: RemoteControlClientError | unknown
 ): ReviewAuthoringConnectionError {
+	if (isRemoteControlClientError(cause)) {
+		return new ReviewAuthoringConnectionError({
+			endpoint,
+			message: cause.message,
+			nextStep: cause.nextStep,
+			operation,
+			recovery: cause.recovery,
+			retrySafe: cause.retrySafe,
+			cause
+		});
+	}
 	return new ReviewAuthoringConnectionError({
 		endpoint,
-		message: cause instanceof RemoteControlClientError ? cause.message : String(cause),
+		message: `Map Review ${operation} at ${endpoint} failed unexpectedly.`,
+		nextStep: "escalate",
 		operation,
 		recovery: "Verify the Map Review editor capability and retry the operation.",
-		retrySafe: cause instanceof RemoteControlClientError ? cause.retrySafe : false
+		retrySafe: false,
+		cause
 	});
 }
 
@@ -137,10 +153,12 @@ export const ReviewAuthoringLive = Layer.effect(
 					(cause) =>
 						new ReviewAuthoringConnectionError({
 							endpoint,
-							message: String(cause),
+							message: `The editor at ${endpoint} returned a selection inspection response that does not match the Map Review contract.`,
 							operation: "inspect_selection",
 							recovery: "Verify the Map Review editor capability contract.",
-							retrySafe: false
+							retrySafe: true,
+							nextStep: "escalate",
+							cause
 						})
 				),
 				Effect.withSpan("camera.review.authoring.selection.inspect")
@@ -156,11 +174,14 @@ export const ReviewAuthoringLive = Layer.effect(
 					(cause) =>
 						new ReviewAuthoringConnectionError({
 							endpoint: args.endpoint,
-							message: `Invalid persisted subject locator: ${String(cause)}`,
+							message:
+								"The persisted subject locator does not match the subject locator contract.",
 							operation: "inspect_subject",
 							recovery:
 								"Discard the malformed authoring session and create a new one.",
-							retrySafe: false
+							retrySafe: true,
+							nextStep: "fix_input",
+							cause
 						})
 				)
 			);
@@ -181,11 +202,13 @@ export const ReviewAuthoringLive = Layer.effect(
 					(cause) =>
 						new ReviewAuthoringConnectionError({
 							endpoint: args.endpoint,
-							message: String(cause),
+							message: `The editor at ${args.endpoint} returned a subject inspection response for ${subject.kind === "actor_guid" ? `actor ${subject.actorGuid}` : subject.actorPath} that does not match the Map Review contract.`,
 							operation: "inspect_subject",
 							recovery:
 								"Verify the persisted subject and Map Review editor capability.",
-							retrySafe: false
+							retrySafe: true,
+							nextStep: "escalate",
+							cause
 						})
 				),
 				Effect.withSpan("camera.review.authoring.subject.inspect")
@@ -229,7 +252,9 @@ export const ReviewAuthoringLive = Layer.effect(
 							operation: "preview_candidate",
 							recovery:
 								"Verify the Map Review editor capability and retry the preview.",
-							retrySafe: cause.retrySafe
+							retrySafe: cause.retrySafe,
+							nextStep: cause.nextStep,
+							cause
 						})
 				)
 			);
@@ -239,7 +264,8 @@ export const ReviewAuthoringLive = Layer.effect(
 					message: response.message,
 					operation: "preview_candidate",
 					recovery: response.recovery,
-					retrySafe: response.retrySafe
+					retrySafe: response.retrySafe,
+					nextStep: response.retrySafe ? "retry" : "reconcile"
 				});
 			}
 			if (!response.subjectProjection) {
@@ -250,7 +276,8 @@ export const ReviewAuthoringLive = Layer.effect(
 					operation: "preview_candidate",
 					recovery:
 						"Load the subject to assess authoring framing, or capture its independent approved camera without actor assessment.",
-					retrySafe: false
+					retrySafe: false,
+					nextStep: "fix_input"
 				});
 			}
 			const projection = response.subjectProjection;
@@ -275,10 +302,12 @@ export const ReviewAuthoringLive = Layer.effect(
 				catch: (cause) =>
 					new ReviewAuthoringConnectionError({
 						endpoint: args.endpoint,
-						message: String(cause),
+						message: `Could not read the staged preview for candidate ${args.candidate.id} because ${fileFailureReason(cause)}.`,
 						operation: "preview_candidate",
 						recovery: "Check the Unreal staging directory and retry the preview.",
-						retrySafe: true
+						retrySafe: true,
+						nextStep: "retry",
+						cause
 					})
 			}).pipe(
 				Effect.withSpan("camera.review.authoring.candidate.preview", {
@@ -291,19 +320,11 @@ export const ReviewAuthoringLive = Layer.effect(
 	})
 );
 
+/** A test layer over a complete fake; the test decides every operation. */
 export function makeReviewAuthoringTestLayer(
-	service: Omit<ReviewAuthoringApi, "inspectSubject"> &
-		Partial<Pick<ReviewAuthoringApi, "inspectSubject">>
+	service: ReviewAuthoringApi
 ): Layer.Layer<ReviewAuthoring> {
-	return Layer.succeed(
-		ReviewAuthoring,
-		ReviewAuthoring.of({
-			...service,
-			inspectSubject:
-				service.inspectSubject ??
-				(() => Effect.die("ReviewAuthoring test stub did not define inspectSubject"))
-		})
-	);
+	return Layer.succeed(ReviewAuthoring, ReviewAuthoring.of(service));
 }
 
 /** Compatibility accessors until Plans 012–014 compose ReviewAuthoring layers directly. */

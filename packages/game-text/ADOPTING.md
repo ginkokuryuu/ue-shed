@@ -35,6 +35,33 @@ Workbench unless a named verification failure leaves the public package contract
 - Do not add `@ue-shed/uasset` as a hidden dependency of Game Text. The host deliberately selects
   the default launcher or an explicit compatible executable.
 
+## Interactive workspace
+
+Use `makeGameTextWorkspace(host)` from `@ue-shed/game-text/workspace` for scanning, search,
+quality rules, localization, edits, review, reports and investigations without copying Workbench.
+Compose the same index steps and localization evidence layers described below. Build the workspace
+inside the host's long-lived scope; individual requests may disconnect while its scan continues. Keep
+`LocalizationEvidence` in the workspace context alongside `GameTextIndexSteps`, for example by
+using `Layer.provideMerge(LocalizationEvidenceNodeLive)` when composing the steps layer.
+A reconnect observing the scan's refreshed project generation joins that producer. Closing the
+workspace scope releases its scans, readers and workers.
+
+The host supplies its current selected project, refresh and candidate inventory. It retains sole
+project-selection authority. Supply file hooks for dialogs or fixed paths, bounded reads and writes.
+`writeFile` must create parent directories as needed and honor `exclusive: true`: starter creation
+must never replace existing rules. A refusal is returned without bypassing the host's store.
+Set `rulesRelativePath` to choose the project-relative rules location, and `recoveryCopy` to preserve
+previous bytes before Save. A failed read or recovery copy stops the overwrite. `localizationFiles`
+controls PO/review writes separately; `reviewer` and `changeAuthor` supply attribution policy.
+
+`makeGameTextOperations(host)` adds plan/run/cancel and changed-file operations. Supply the workspace,
+selected-project state, explicit engine-root policy and progress notification hook, plus the
+`LocalizationOperations` service. Unreal remains a separately enabled capability.
+
+The underlying pipeline uses `GameTextIndexProgressReporter` for each operation; `workspace.progress()`
+returns the host/workspace's latest presentation state. Prove scan/search/focus through the adopter's
+real transport, a non-disk rules store, refused/recovery writes and disconnect/rejoin behavior.
+
 ## Required and optional capabilities
 
 For a desktop host using the compact index, compose
@@ -49,6 +76,13 @@ the import to `buildTarget`. These handles stay in the trusted process. The adop
 ordering, requested views, progress presentation, and cancellation; the package owns per-step
 leases, cache validity, immutable publication, and query reader resources.
 `gameTextIndexRefreshLayer` remains a compatible convenience workflow and also exposes the steps.
+
+For opt-in native preparation, replace `typeScriptIndexBuilderLayer` with
+`nativeIndexBuilderLayer(readerConfiguration)` and supply a reader supporting uasset-io protocol
+1.13. Keep the same source, evidence and query layers. Verify cold preparation, an incremental
+edit, failure recovery and pinned-reader queries in the adopting host. See the
+[native preparation guide](../../docs/engineering/native-game-text-index.md) for limits and
+supported incremental cases.
 
 A localization index also supplies the complete raw source query and corpus. Prepare the chosen
 target first when both views are needed, and use that model for requests without `localization` as

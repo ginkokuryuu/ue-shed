@@ -7,11 +7,48 @@ import {
 	LocalizationPlanningRequest,
 	LocalizationOperation,
 	type LocalizationPlannedFile,
-	type LocalizationStepKind
+	type LocalizationStepKind,
+	isLocalizationOperationError
 } from "./operation-schema.js";
 
-export function localizationOperationError(
+/**
+ * Unreal may have written partial output once a commandlet ran or the project changed underneath
+ * the plan; those failures need a fresh plan. Every other code needs a corrected request, engine
+ * or project.
+ */
+export function localizationOperationNextStep(
 	code: LocalizationOperationError["code"]
+): LocalizationOperationError["nextStep"] {
+	switch (code) {
+		case "project_locked":
+		case "config_changed":
+		case "commandlet_failed":
+		case "timeout":
+		case "cancelled":
+		case "termination_failed":
+		case "io_failed":
+			return "reconcile";
+		case "invalid_request":
+		case "unsupported_engine":
+		case "engine_not_found":
+		case "engine_ambiguous":
+		case "missing_config":
+		case "unsupported_operation":
+		case "unsupported_config":
+		case "unsafe_path":
+		case "project_missing":
+		case "project_ambiguous":
+		case "commandlet_missing":
+		case "launch_failed":
+		case "limit_exceeded":
+		case "target_not_found":
+			return "fix_input";
+	}
+}
+
+export function localizationOperationError(
+	code: LocalizationOperationError["code"],
+	cause?: unknown
 ): LocalizationOperationError {
 	const recovery = {
 		missing_config:
@@ -63,7 +100,9 @@ export function localizationOperationError(
 			"io_failed",
 			"limit_exceeded"
 		].includes(code),
-		logExcerpt: []
+		nextStep: localizationOperationNextStep(code),
+		logExcerpt: [],
+		...(cause === undefined ? undefined : { cause })
 	});
 }
 
@@ -348,7 +387,7 @@ export function availableLocalizationOperations(
 			});
 			return true;
 		} catch (error) {
-			if (error instanceof LocalizationOperationError) return false;
+			if (isLocalizationOperationError(error)) return false;
 			throw error;
 		}
 	});

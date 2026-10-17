@@ -223,14 +223,12 @@ export const editorResponsivenessPreferenceFile = Effect.gen(function* () {
 	const files = yield* LocalFiles;
 	const path = join(yield* app.getPath("userData"), "editor-responsiveness-v1.json");
 	return {
-		load: files.readFile(path, { maxBytes: PREFERENCE_MAX_BYTES }).pipe(
-			Effect.flatMap((bytes) =>
-				Effect.try(() => JSON.parse(new TextDecoder().decode(bytes)))
-			),
-			Effect.flatMap(Schema.decodeUnknownEffect(PreferenceDocument)),
-			Effect.map((document) => document.keepUnrealResponsive),
-			Effect.catch(() => Effect.succeed(true))
-		),
+		load: Effect.gen(function* () {
+			const bytes = yield* files.readFile(path, { maxBytes: PREFERENCE_MAX_BYTES });
+			const json = yield* Effect.try(() => JSON.parse(new TextDecoder().decode(bytes)));
+			const document = yield* Schema.decodeUnknownEffect(PreferenceDocument)(json);
+			return document.keepUnrealResponsive;
+		}).pipe(Effect.catch(() => Effect.succeed(true))),
 		save: (keepUnrealResponsive: boolean) =>
 			files.writeFile(
 				path,

@@ -6,13 +6,14 @@ import { expect, it } from "vitest";
 import {
 	makeAssetReaderTestLayer,
 	makeProjectIndexTestLayer,
+	MAX_PROTOCOL_PATH_BYTES,
 	ProjectIdentity,
 	ProjectIndexGeneration,
 	ProjectIndexRefreshEvent,
 	type ProjectIndexSummary
 } from "@ue-shed/unreal-assets";
 import { GameTextIndexSource } from "./index-refresh.js";
-import { gameTextIndexSourceNodeLayer } from "./index-source-node.js";
+import { gameTextIndexSourceNodeLayer, packageTextReadBatches } from "./index-source-node.js";
 import { emptyPackageTextRecord } from "./package-text-record.js";
 
 it.each(["before", "during"] as const)(
@@ -200,3 +201,20 @@ it.each([true, false])(
 		}
 	}
 );
+
+it("batches a whole project so each reader request fits the frame limit", () => {
+	const entries = Array.from({ length: 100_000 }, (_, row) => ({
+		path: `Content/Generated/Package_${String(row).padStart(8, "0")}.uasset`,
+		signature: "[]"
+	}));
+	const batches = packageTextReadBatches(entries);
+
+	expect(batches.length).toBeGreaterThan(1);
+	expect(batches.flat()).toEqual(entries);
+	for (const batch of batches)
+		expect(
+			Buffer.byteLength(JSON.stringify(batch.map((item) => item.path)), "utf8")
+		).toBeLessThan(MAX_PROTOCOL_PATH_BYTES + 2);
+	expect(packageTextReadBatches(entries.slice(0, 3))).toEqual([entries.slice(0, 3)]);
+	expect(packageTextReadBatches([])).toEqual([]);
+});

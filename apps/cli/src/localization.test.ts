@@ -4,7 +4,7 @@ import { it } from "@effect/vitest";
 import { Effect, Layer, Ref, Schema } from "effect";
 import { LocalizationTargetsReport } from "@ue-shed/localization/browser";
 import { LocalizationEvidenceNodeLive } from "@ue-shed/localization";
-import { GameTextIndexRefresh, GameTextIndexError } from "@ue-shed/game-text";
+import { GameTextIndexRefresh, GameTextIndexError } from "@ue-shed/game-text/index";
 import { LocalizationError } from "@ue-shed/localization";
 import { expect } from "vitest";
 import { useSavedFixtureProject } from "../../../fixtures/unreal-project/saved-project.test-support.js";
@@ -92,7 +92,9 @@ it.effect("a manifest over the byte limit keeps its cause and recovery before sc
 								message:
 									"Localization evidence could not be read (limit_exceeded).",
 								recovery:
-									"Reduce the input or explicitly increase the localization reader limits."
+									"Reduce the input or explicitly increase the localization reader limits.",
+								retrySafe: true,
+								nextStep: "fix_input"
 							})
 						})
 					)

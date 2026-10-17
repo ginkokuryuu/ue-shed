@@ -19,7 +19,10 @@ function invalidProject(message: string): ConfigFileAccessError {
 	return new ConfigFileAccessError({
 		operation: "stat",
 		message,
-		retrySafe: false
+		recovery:
+			"Select a .uproject or a project root with one descriptor and a valid platform chain.",
+		retrySafe: false,
+		nextStep: "fix_input"
 	});
 }
 

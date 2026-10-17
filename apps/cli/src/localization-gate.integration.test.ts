@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join, relative } from "node:path";
 import { Effect, Layer, Ref, Schema } from "effect";
 import { describe, expect } from "vitest";
-import { LocalizationGateResult } from "@ue-shed/game-text/browser";
+import { LocalizationGateResult } from "@ue-shed/game-text/checks";
 import { useSavedFixtureProject } from "../../../fixtures/unreal-project/saved-project.test-support.js";
 import { CliRuntime } from "./cli-runtime.js";
 import { runCli } from "./command.js";
@@ -86,11 +86,11 @@ describe.skipIf(!executable)("loc gate with the real reader", () => {
 				const before = yield* gate("--files", table);
 				expect(before.text).not.toContain("not_checked");
 				const unchanged = yield* verdict(before.text);
-				// Checking every target checks both gathered targets: FixtureGame and the Game
-				// target's problem cases.
+				// Check the authoring, problem-case and Game Text action fixture targets.
 				expect(unchanged.targets.map((target) => target.target)).toEqual([
 					"FixtureGame",
-					"Game"
+					"Game",
+					"GameTextActions"
 				]);
 				expect(unchanged.skipped).toEqual([]);
 				expect(unchanged.targets[0]?.checks.key_changed).toBe(0);

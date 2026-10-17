@@ -43,6 +43,7 @@ import { prepareJoinedSourceCache } from "./joined-source-cache.js";
 import { joinedPhysicalChunkName } from "./joined-column-chunks.js";
 import { StringArena, sortPackedStringsByLocaleSteps } from "./shared-string-codec.js";
 import { HostSliceClock, runHostSteps, sortRowsInSlices } from "./host-slices.js";
+import { StageClock } from "./stage-clock.js";
 
 const noteMetadata = Schema.decodeUnknownOption(
 	Schema.fromJsonString(
@@ -103,6 +104,7 @@ function compareUnit(c: JoinPackages["occurrence"], a: number, b: number, empty:
 export const refreshJoinedTarget = Effect.fn("JoinedTarget.refresh")(function* (
 	input: JoinedTargetInput
 ) {
+	const stages = new StageClock();
 	const store = yield* SharedIndex,
 		writer = yield* store.writer(),
 		root = writer.manifest();
@@ -184,6 +186,7 @@ export const refreshJoinedTarget = Effect.fn("JoinedTarget.refresh")(function* (
 		);
 	}
 	const packages = yield* loadJoinPackages(reader, strings, input.projectRoot, input.target);
+	stages.mark("inputs");
 	const c = packages.occurrence,
 		occurrenceCount = c.source.length;
 	// The native projection emits sorted package paths and preserves traversal order
@@ -341,6 +344,7 @@ export const refreshJoinedTarget = Effect.fn("JoinedTarget.refresh")(function* (
 		(a, b) => rawCompare(a, b) || emissionOrder(a, b),
 		clock
 	);
+	stages.mark("order");
 	const unit = new Uint32Array(occurrenceCount),
 		next = new Uint32Array(occurrenceCount).fill(absent);
 	const visibleOccurrence = new Uint8Array(occurrenceCount);
@@ -896,9 +900,11 @@ export const refreshJoinedTarget = Effect.fn("JoinedTarget.refresh")(function* (
 		if (clock.step()) yield* Effect.yieldNow;
 	}
 	yield* flushSources();
+	stages.mark("lines");
 	const duplicates = yield* runHostSteps(
 		joinedDuplicateSourcesSteps(packages, line, order, empty)
 	);
+	stages.mark("duplicates");
 	const { duplicate } = duplicates;
 	const unitFirstLine = new Uint32Array(occurrenceCount).fill(absent);
 	for (let row = 0; row < count; row++) {
@@ -927,7 +933,9 @@ export const refreshJoinedTarget = Effect.fn("JoinedTarget.refresh")(function* (
 		folderRows.subarray(0, folderCount),
 		(id) => folderIds[id]!
 	);
+	stages.mark("folders");
 	const marks = yield* finishJoinedTarget(input, columns, reader, writer);
+	stages.mark("marks");
 	yield* strings.need([c.namespace, c.key]);
 	const queryColumns = yield* runHostSteps(
 		joinedQueryColumns({
@@ -942,6 +950,7 @@ export const refreshJoinedTarget = Effect.fn("JoinedTarget.refresh")(function* (
 			empty
 		})
 	);
+	stages.mark("query_columns");
 	const lineIds = new StringArena(256 * 1024, count);
 	const rawIdStarts = queryColumns["query.raw.id_starts"]!;
 	const rawIdValues = queryColumns["query.raw.id_utf8"]!;
@@ -980,6 +989,7 @@ export const refreshJoinedTarget = Effect.fn("JoinedTarget.refresh")(function* (
 	queryColumns["query.line.order"] = yield* runHostSteps(
 		sortPackedStringsByLocaleSteps(packedLineIds, undefined, 1024, clock)
 	);
+	stages.mark("line_ids");
 	// The emission order above already sorts package rows by path bytes.
 	queryColumns["query.package.order"] = Uint32Array.from(pathOrder);
 	const sourceColumns: SnapshotSourceColumn[] = [];
@@ -994,6 +1004,7 @@ export const refreshJoinedTarget = Effect.fn("JoinedTarget.refresh")(function* (
 			fileRows.subarray(0, fileCount)
 		)
 	);
+	stages.mark("query_places");
 	const aliases: Record<string, string> = {};
 	const chunks: Record<string, string[]> = {};
 	const identical = new Map<string, { name: string; bytes: Buffer }[]>();
@@ -1081,11 +1092,13 @@ export const refreshJoinedTarget = Effect.fn("JoinedTarget.refresh")(function* (
 		),
 		"paths"
 	);
+	stages.mark("columns");
 	const sourceCache = yield* prepareJoinedSourceCache(writer, strings, [
 		line.source!,
 		queryColumns["query.raw.sources"]!
 	]);
 	if (sourceCache) sourceColumns.push(...sourceCache.columns);
+	stages.mark("source_cache");
 	const meta = new TextEncoder().encode(
 		JSON.stringify({
 			version: 3,
@@ -1114,10 +1127,12 @@ export const refreshJoinedTarget = Effect.fn("JoinedTarget.refresh")(function* (
 		{},
 		["joined-base"]
 	);
+	stages.mark("publish");
 	yield* Effect.annotateCurrentSpan({
 		"join.lines": count,
 		"join.keyChanges": marks.pairs.length,
-		"join.rebuilt": true
+		"join.rebuilt": true,
+		...stages.attributes("join.stage_ms")
 	});
 	return {
 		rebuilt: true,

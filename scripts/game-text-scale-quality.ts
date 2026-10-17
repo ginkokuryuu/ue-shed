@@ -1,19 +1,19 @@
 import { join } from "node:path";
 import { performance } from "node:perf_hooks";
-import { Context, Effect, Exit, Layer, Schema, Scope, Stream } from "effect";
+import { Context, Effect, Exit, Layer, Schema, Scope, Stream, type Tracer } from "effect";
 import {
 	GameTextIndexError,
 	GameTextIndexRefresh,
 	GameTextIndexSource,
 	GameTextRuleDocument,
-	PackageTextStored,
 	evaluateGameTextSourceQuality,
 	gameTextIndexRefreshLayer,
-	packageTextShard,
 	textQualityQuery,
 	typeScriptIndexBuilderLayer,
 	type GameTextIndexRefreshResult
 } from "../packages/game-text/dist/index.js";
+import { PackageTextStored } from "../packages/game-text/dist/package-text-columns.js";
+import { packageTextShard } from "../packages/game-text/dist/package-text-layer.js";
 import { LocalizationEvidenceNodeLive } from "../packages/localization/dist/index.js";
 import { packageTextJsonLines } from "../packages/game-text/src/package-text-ndjson.ts";
 import { readGeneratedPackageInventory } from "./package-text-generated.ts";
@@ -26,8 +26,9 @@ function retainedPackageSource(records: string) {
 	const readFailure = (cause: unknown) =>
 		new GameTextIndexError({
 			operation: "read",
-			message: String(cause),
-			recovery: "Convert the generated project's package records again."
+			message: "The generated project's package records could not be read.",
+			recovery: "Convert the generated project's package records again.",
+			cause
 		});
 	return Layer.succeed(
 		GameTextIndexSource,
@@ -63,8 +64,17 @@ function retainedPackageSource(records: string) {
 	);
 }
 
+/** Runs `effect` with `tracer` when one records the run's stages. */
+const traced = <A, E>(effect: Effect.Effect<A, E>, tracer: Tracer.Tracer | undefined) =>
+	tracer ? Effect.withTracer(effect, tracer) : effect;
+
 /** Opens (or builds, in an empty cache) the generated target's index the way hosts do. */
-export async function openScaleIndex(project: string, cache: string, records: string) {
+export async function openScaleIndex(
+	project: string,
+	cache: string,
+	records: string,
+	tracer?: Tracer.Tracer
+) {
 	const scope = await Effect.runPromise(Scope.make());
 	try {
 		const context = await Effect.runPromise(
@@ -78,9 +88,12 @@ export async function openScaleIndex(project: string, cache: string, records: st
 			)
 		);
 		const result = await Effect.runPromise(
-			Context.get(context, GameTextIndexRefresh)
-				.refresh({ projectRoot: project, targetName: "Generated" })
-				.pipe(Effect.provideService(Scope.Scope, scope))
+			traced(
+				Context.get(context, GameTextIndexRefresh)
+					.refresh({ projectRoot: project, targetName: "Generated" })
+					.pipe(Effect.provideService(Scope.Scope, scope)),
+				tracer
+			)
 		);
 		return {
 			result,
@@ -136,13 +149,13 @@ export function eventLoopGaps(intervalMs = stallIntervalMs) {
 }
 
 /** Runs the opened index's localization quality scan with Workbench's options. */
-export async function scaleQuality(result: GameTextIndexRefreshResult) {
+export async function scaleQuality(result: GameTextIndexRefreshResult, tracer?: Tracer.Tracer) {
 	if (!result.localizationQuality)
 		throw new Error("The opened index does not offer localization quality.");
 	const stalls = eventLoopGaps();
 	try {
 		const quality = await Effect.runPromise(
-			result.localizationQuality({ review: result.review.file })
+			traced(result.localizationQuality(undefined, { review: result.review.file }), tracer)
 		);
 		const measured = stalls();
 		// Findings by check, from the finding columns; no line is read.
@@ -266,7 +279,7 @@ export async function scaleSourceQuality(
 	try {
 		const query =
 			mode === "indexed"
-				? await Effect.runPromise(result.sourceQuality!(scaleSourceRules))
+				? await Effect.runPromise(result.sourceQuality(scaleSourceRules))
 				: textQualityQuery(evaluateGameTextSourceQuality(result.corpus, scaleSourceRules));
 		const measured = stalls();
 		const summary = query.summary();

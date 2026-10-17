@@ -1,6 +1,7 @@
 import { spawn } from "node:child_process";
 import { access, readFile, readdir } from "node:fs/promises";
 import { basename, dirname, join, resolve } from "node:path";
+import { ErrorCauseFields, ErrorGuidanceFields, type ErrorNextStep } from "@ue-shed/protocol";
 import { Context, Effect, Layer, Schema } from "effect";
 import { unrealRemoteControlPermissions } from "./remote-control-permissions.js";
 import {
@@ -57,7 +58,6 @@ export class UnrealProjectLaunchError extends Schema.TaggedError<UnrealProjectLa
 			"engine_plugins_stale",
 			"spawn_failed"
 		]),
-		message: Schema.String,
 		details: Schema.optionalKey(Schema.String),
 		enginePlugins: Schema.optionalKey(
 			Schema.Struct({
@@ -66,10 +66,11 @@ export class UnrealProjectLaunchError extends Schema.TaggedError<UnrealProjectLa
 				buildable: Schema.Boolean
 			})
 		),
-		recovery: Schema.String,
-		retrySafe: Schema.Boolean
+		...ErrorGuidanceFields,
+		...ErrorCauseFields
 	}
 ) {}
+const isUnrealProjectLaunchError = Schema.is(UnrealProjectLaunchError);
 
 export interface UnrealProjectProcessLaunchOptions {
 	readonly args: readonly string[];
@@ -103,13 +104,28 @@ function launchError(
 	code: UnrealProjectLaunchError["code"],
 	message: string,
 	recovery: string,
-	retrySafe = false
+	retrySafe = false,
+	nextStep: ErrorNextStep = "fix_input",
+	cause?: unknown
 ): UnrealProjectLaunchError {
-	return new UnrealProjectLaunchError({ code, message, recovery, retrySafe });
+	return new UnrealProjectLaunchError({
+		code,
+		message,
+		recovery,
+		retrySafe,
+		nextStep,
+		...(cause === undefined ? undefined : { cause })
+	});
 }
 
 function fromEngineDiscovery(cause: EngineInstallationError): UnrealProjectLaunchError {
-	return launchError("engine_discovery_failed", cause.message, cause.recovery, cause.retrySafe);
+	return launchError(
+		"engine_discovery_failed",
+		cause.message,
+		cause.recovery,
+		cause.retrySafe,
+		cause.nextStep
+	);
 }
 
 const ModuleBuild = Schema.Struct({ BuildId: Schema.String });
@@ -163,7 +179,8 @@ export const validateUnrealProjectBuildId = Effect.fn("UnrealProjectLauncher.val
 				recovery:
 					"Close Unreal, build this project's Editor target using its associated engine, then launch again. Rebuild the project first; a full engine rebuild may not be necessary.",
 				details: `Project: ${projectDescriptor}\nEngine: ${engineRoot}\nProject build ID: ${project.BuildId}\nEngine build ID: ${engine.BuildId}`,
-				retrySafe: false
+				retrySafe: false,
+				nextStep: "fix_input"
 			});
 	}
 );
@@ -296,7 +313,8 @@ export const validateUnrealRemoteControlBuild = Effect.fn(
 							"Close editors and builds using this engine, then rebuild the stale plugins with this project's Editor target.",
 						details: `Engine: ${engineRoot}\n${issues.join("\n")}`,
 						enginePlugins: { engineRoot, stalePlugins, buildable },
-						retrySafe: true
+						retrySafe: true,
+						nextStep: "fix_input"
 					});
 				throw new UnrealProjectLaunchError({
 					code: "plugin_unavailable",
@@ -305,12 +323,13 @@ export const validateUnrealRemoteControlBuild = Effect.fn(
 					recovery:
 						"Build this project's Editor target with Remote Control enabled (-EnablePlugin=RemoteControl), then launch again.",
 					details: `Engine: ${engineRoot}\n${issues.join("\n")}`,
-					retrySafe: false
+					retrySafe: false,
+					nextStep: "fix_input"
 				});
 			}
 		},
 		catch: (cause) =>
-			cause instanceof UnrealProjectLaunchError
+			isUnrealProjectLaunchError(cause)
 				? cause
 				: new UnrealProjectLaunchError({
 						code: "plugin_unavailable",
@@ -318,7 +337,8 @@ export const validateUnrealRemoteControlBuild = Effect.fn(
 						recovery:
 							"Repair the selected engine's Remote Control plugin and its dependencies before launching.",
 						details: String(cause),
-						retrySafe: false
+						retrySafe: false,
+						nextStep: "fix_input"
 					})
 	})
 );
@@ -414,7 +434,9 @@ export const UnrealProjectProcessLive = Layer.succeed(
 									launchError(
 										"spawn_failed",
 										"Unreal Editor started without a process identity.",
-										"Check the operating-system process limits and retry."
+										"An editor may have started anyway. Check for a running Unreal Editor and the operating-system process limits before launching again.",
+										false,
+										"reconcile"
 									)
 								)
 							: Effect.succeed(pid)
@@ -451,11 +473,14 @@ export const UnrealProjectLauncherLive = Layer.effect(
 			const request = yield* Schema.decodeUnknownEffect(UnrealProjectLaunchRequest)(
 				input
 			).pipe(
-				Effect.mapError(() =>
+				Effect.mapError((cause) =>
 					launchError(
 						"invalid_request",
 						"The Unreal project launch request is invalid.",
-						"Choose one .uproject descriptor and valid plugin descriptors."
+						"Choose one .uproject descriptor and valid plugin descriptors.",
+						false,
+						"fix_input",
+						cause
 					)
 				)
 			);

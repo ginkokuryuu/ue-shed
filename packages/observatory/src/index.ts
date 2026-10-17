@@ -3,6 +3,7 @@ import {
 	EditorWindowActivationLive,
 	EditorForegroundPermissionLive
 } from "@ue-shed/engine";
+import { ErrorCauseFields, ErrorGuidanceFields } from "@ue-shed/protocol";
 import { RemoteControlClient, RemoteControlClientError } from "@ue-shed/unreal-connection";
 import { Context, Effect, Layer, Schema, type Stream } from "effect";
 import { WorldActorSnapshot, type ActorId as ActorIdType } from "./actor-models.js";
@@ -44,11 +45,10 @@ const ObservationCadenceResponse = Schema.Union([
 export class ObservatoryConnectionError extends Schema.TaggedError<ObservatoryConnectionError>()(
 	"ObservatoryConnectionError",
 	{
-		message: Schema.String,
 		operation: Schema.String,
-		recovery: Schema.String,
-		retrySafe: Schema.Boolean,
-		/** The plugin's code when it reported the failure. */
+		...ErrorGuidanceFields,
+		...ErrorCauseFields,
+		/** Stable native category, when the Observatory plugin supplies one. */
 		code: Schema.optionalKey(Schema.String)
 	}
 ) {}
@@ -89,17 +89,22 @@ export class Observatory extends Context.Service<Observatory, ObservatoryApi>()(
 ) {}
 
 const objectPath = "/Script/UEShedObservatoryEditor.Default__UEShedObservatoryLibrary";
+const isRemoteControlClientError = Schema.is(RemoteControlClientError);
 
 function connectionError(
 	operation: string,
 	cause: RemoteControlClientError | unknown
 ): ObservatoryConnectionError {
 	return new ObservatoryConnectionError({
-		message: cause instanceof RemoteControlClientError ? cause.message : String(cause),
+		message: isRemoteControlClientError(cause)
+			? cause.message
+			: `The observatory ${operation} response does not match the observatory contract.`,
 		operation,
 		recovery:
 			"Open an editor world with UEShedObservatory enabled, then retry the live world scan.",
-		retrySafe: cause instanceof RemoteControlClientError ? cause.retrySafe : false
+		retrySafe: isRemoteControlClientError(cause) ? cause.retrySafe : false,
+		nextStep: isRemoteControlClientError(cause) ? cause.nextStep : "fix_input",
+		cause
 	});
 }
 
@@ -121,6 +126,7 @@ export const ObservatoryLive = Layer.effect(
 				.request({
 					endpoint,
 					functionName: "GetActorSnapshot",
+					idempotent: true,
 					objectPath,
 					operation: "observatory.actor_snapshot",
 					parameters: {}
@@ -135,7 +141,8 @@ export const ObservatoryLive = Layer.effect(
 						message: response.message,
 						operation: "actor_snapshot",
 						recovery: response.recovery,
-						retrySafe: true
+						retrySafe: true,
+						nextStep: "retry"
 					})
 				);
 			}
@@ -197,16 +204,16 @@ export const ObservatoryLive = Layer.effect(
 				)
 			);
 			if (response.status === "ready") return response.cadenceHz;
-			const fields = {
-				message: response.message,
-				operation: "set_actor_observation_cadence",
-				recovery: response.recovery,
-				retrySafe: response.retrySafe ?? true
-			};
+			const retrySafe = response.retrySafe ?? true;
 			return yield* Effect.fail(
-				new ObservatoryConnectionError(
-					response.code === undefined ? fields : { ...fields, code: response.code }
-				)
+				new ObservatoryConnectionError({
+					message: response.message,
+					operation: "set_actor_observation_cadence",
+					recovery: response.recovery,
+					retrySafe,
+					nextStep: retrySafe ? "retry" : "fix_input",
+					...(response.code === undefined ? undefined : { code: response.code })
+				})
 			);
 		});
 

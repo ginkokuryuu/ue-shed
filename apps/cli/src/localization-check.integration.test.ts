@@ -4,7 +4,7 @@ import { it } from "@effect/vitest";
 import { Effect, FileSystem, Layer, Ref, Schema } from "effect";
 import { describe, expect } from "vitest";
 import { LocalizationChangeSet } from "@ue-shed/localization/browser";
-import { LocalizationQualityReport } from "@ue-shed/game-text/browser";
+import { LocalizationQualityReport } from "@ue-shed/game-text/schema";
 import { useSavedFixtureProject } from "../../../fixtures/unreal-project/saved-project.test-support.js";
 import { CliRuntime } from "./cli-runtime.js";
 import { runCli } from "./command.js";

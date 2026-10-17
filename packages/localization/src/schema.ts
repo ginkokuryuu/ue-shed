@@ -37,14 +37,48 @@ export const LocalizationErrorCode = Schema.Literals([
 	"file_changed",
 	"file_unwritable"
 ]);
+/**
+ * What a caller can do next after a localization failure. Same codes as `ErrorNextStep` in
+ * `@ue-shed/protocol`, which this package does not depend on: `retry` only when `retrySafe` is
+ * true, `reconcile` when state changed underneath (re-read first), `escalate` when the caller
+ * cannot fix it.
+ */
+export const LocalizationErrorNextStep = Schema.Literals([
+	"fix_input",
+	"retry",
+	"reconcile",
+	"escalate"
+]);
+export type LocalizationErrorNextStep = typeof LocalizationErrorNextStep.Type;
+
+/** The guidance fields every localization tagged error carries, named as in `@ue-shed/protocol`. */
+export const LocalizationErrorGuidanceFields = {
+	message: Schema.String,
+	recovery: Schema.String,
+	retrySafe: Schema.Boolean,
+	nextStep: LocalizationErrorNextStep
+};
+
 export class LocalizationError extends Schema.TaggedError<LocalizationError>()(
 	"LocalizationError",
 	{
 		code: LocalizationErrorCode,
-		message: Schema.String,
-		recovery: Schema.String
+		...LocalizationErrorGuidanceFields
 	}
 ) {}
+
+/**
+ * Evidence reads repeat safely, and writes replace one file atomically behind a content-hash
+ * guard, so repeating any failed localization file operation is safe. A changed file needs a
+ * fresh read; every other code needs a corrected project, path or file.
+ */
+export function localizationErrorGuidance(
+	code: LocalizationError["code"]
+): Pick<LocalizationError, "retrySafe" | "nextStep"> {
+	return { retrySafe: true, nextStep: code === "file_changed" ? "reconcile" : "fix_input" };
+}
+/** Tag guard for localization failures; match by tag, not `instanceof`. */
+export const isLocalizationError = Schema.is(LocalizationError);
 
 export const LocalizationLimits = Schema.Struct({
 	maxFileBytes: Schema.Int.check(Schema.isGreaterThan(0)),

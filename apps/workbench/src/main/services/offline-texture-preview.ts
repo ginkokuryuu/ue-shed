@@ -45,6 +45,8 @@ export class OfflineTexturePreviewError extends Schema.TaggedError<OfflineTextur
 	}
 ) {}
 
+const isOfflineTexturePreviewError = Schema.is(OfflineTexturePreviewError);
+
 export interface OfflineTexturePreviewInput {
 	readonly maxDimension?: number;
 	readonly objectPath: string;
@@ -213,30 +215,33 @@ function readPreview(
 	host: OfflineTexturePreviewHostApi,
 	path: string
 ): Effect.Effect<TexturePreviewResult, OfflineTexturePreviewError> {
-	return host.readFile(path, maximumPreviewResultBytes).pipe(
-		Effect.mapError((cause) =>
-			previewError(
-				"cache_failure",
-				`Could not read the saved texture preview: ${cause.message}`,
-				"Regenerate the saved preview.",
-				true
-			)
-		),
-		Effect.flatMap((bytes) =>
-			Effect.try({
-				try: () => JSON.parse(new TextDecoder().decode(bytes)),
-				catch: (cause) =>
+	return Effect.gen(function* () {
+		const bytes = yield* host
+			.readFile(path, maximumPreviewResultBytes)
+			.pipe(
+				Effect.mapError((cause) =>
 					previewError(
-						"contract_failure",
-						`Saved texture preview was not JSON: ${String(cause)}`,
+						"cache_failure",
+						`Could not read the saved texture preview: ${cause.message}`,
 						"Regenerate the saved preview.",
 						true
 					)
-			})
-		),
-		Effect.flatMap(decodeTexturePreviewResult),
+				)
+			);
+		const json = yield* Effect.try({
+			try: () => JSON.parse(new TextDecoder().decode(bytes)),
+			catch: (cause) =>
+				previewError(
+					"contract_failure",
+					`Saved texture preview was not JSON: ${String(cause)}`,
+					"Regenerate the saved preview.",
+					true
+				)
+		});
+		return yield* decodeTexturePreviewResult(json);
+	}).pipe(
 		Effect.mapError((cause) =>
-			cause instanceof OfflineTexturePreviewError
+			isOfflineTexturePreviewError(cause)
 				? cause
 				: previewError(
 						"contract_failure",

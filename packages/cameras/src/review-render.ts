@@ -24,6 +24,8 @@ import {
 	decodeReviewCaptureResponse
 } from "./review-schema.js";
 
+const isCameraRenderError = Schema.is(CameraRenderError);
+
 export const ReviewRenderStageContract = Schema.Struct({
 	name: Schema.Literal("ue-shed-review-render-stages"),
 	version: Schema.Struct({ major: Schema.Literal(1), minor: Schema.Literal(0) })
@@ -218,7 +220,7 @@ export const captureRenderedReviewView = Effect.fn("ReviewRenderer.capture")(fun
 	if (
 		!Cause.hasDies(outcome.cause) &&
 		Option.isSome(failure) &&
-		failure.value instanceof CameraRenderError &&
+		isCameraRenderError(failure.value) &&
 		isEditorOwnershipRejection(failure.value)
 	)
 		return editorOwnershipFailure(request, failure.value);
@@ -226,7 +228,10 @@ export const captureRenderedReviewView = Effect.fn("ReviewRenderer.capture")(fun
 		code: "review_render_or_restoration_failed",
 		operation: "capture",
 		sessionId: request.operationId,
-		message: Cause.pretty(outcome.cause),
-		recovery: "Inspect rendering and restoration errors before retrying this Review View."
+		message: `Review View ${request.viewId} (operation ${request.operationId}) failed during rendering or restoration; editor state is unknown.`,
+		recovery: "Inspect rendering and restoration errors before retrying this Review View.",
+		retrySafe: false,
+		nextStep: "escalate",
+		cause: outcome.cause
 	});
 });
