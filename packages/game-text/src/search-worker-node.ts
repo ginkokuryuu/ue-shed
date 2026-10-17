@@ -1,10 +1,5 @@
 import { existsSync } from "node:fs";
-import {
-	MessageChannel,
-	Worker,
-	receiveMessageOnPort,
-	type MessagePort
-} from "node:worker_threads";
+import { MessageChannel, Worker, type MessagePort } from "node:worker_threads";
 import { performance } from "node:perf_hooks";
 import { Effect, Metric, Schema } from "effect";
 import {
@@ -22,6 +17,7 @@ import {
 	type TextCorpusSearchRequest
 } from "./schema.js";
 import type { ColumnarTextCorpusQuery } from "./columnar-query.js";
+import { receiveSyncReply, type SyncCallChannel } from "./worker-calls.js";
 import type { SnapshotFormatError } from "./snapshot-format.js";
 import { SnapshotStoreError } from "./snapshot-store.js";
 
@@ -39,10 +35,7 @@ type Pending = {
 	readonly resolve: (page: TextCorpusSearchPage) => void;
 	readonly reject: (cause: Failure) => void;
 };
-interface Calls {
-	readonly port: MessagePort;
-	readonly signal: Int32Array;
-}
+type Calls = SyncCallChannel;
 function launch(input: SearchWorkerInput, calls: MessagePort, signal: SharedArrayBuffer) {
 	const options = { workerData: { input, calls, signal }, transferList: [calls] };
 	const compiled = new URL("./search-worker.js", import.meta.url);
@@ -77,22 +70,16 @@ function callSync<S extends Schema.ConstraintDecoder<unknown>>(
 	const broken = failed();
 	if (broken) throw broken;
 	calls.port.postMessage(Schema.encodeSync(SearchWorkerCall)(call));
-	const deadline = performance.now() + callTimeoutMs;
-	for (;;) {
-		// Read the counter before looking for the reply, so a reply posted in between moves it.
-		const seen = Atomics.load(calls.signal, 0);
-		const received = receiveMessageOnPort(calls.port);
-		if (received) {
-			const reply = Schema.decodeUnknownSync(SearchWorkerCallReply)(received.message);
-			// A reply to an earlier call that timed out; its caller has already failed.
-			if (reply.id !== call.id) continue;
-			if (reply.kind === "failed") throw reply.error;
-			return Schema.decodeUnknownSync(value)(reply.value);
-		}
-		const remaining = deadline - performance.now();
-		if (remaining <= 0) throw callFailure("The Game Text query worker did not answer.");
-		Atomics.wait(calls.signal, 0, seen, remaining);
-	}
+	const reply = receiveSyncReply(
+		calls,
+		SearchWorkerCallReply,
+		(reply) => reply.id,
+		call.id,
+		callTimeoutMs,
+		() => callFailure("The Game Text query worker did not answer.")
+	);
+	if (reply.kind === "failed") throw reply.error;
+	return Schema.decodeUnknownSync(value)(reply.value);
 }
 
 /** The worker's prepared query, borrowed through synchronous calls. */

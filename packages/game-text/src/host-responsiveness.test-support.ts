@@ -213,6 +213,7 @@ export const makeSyntheticHostFixture = Effect.fn("Test.GameText.hostFixture")(f
 	const cacheRoot = join(projectRoot, "cache");
 	const layer = gameTextIndexRefreshLayer(cacheRoot, {
 		searchWorker: true,
+		qualityWorker: true,
 		latestSearchOnly: true
 	}).pipe(
 		Layer.provide(

@@ -46,6 +46,7 @@ import { reuseJoinedQueryProjection, type JoinedQueryProjection } from "./joined
 import { instrumentIndexQuery } from "./index-query.js";
 import { columnarTextCorpusQuery, type ColumnarTextCorpusQuery } from "./columnar-query.js";
 import { makeGameTextSearchWorkerResource } from "./search-worker-node.js";
+import { makeGameTextQualityWorkerResource } from "./quality-worker-node.js";
 import { SearchWorkerInput } from "./search-worker-protocol.js";
 import {
 	indexedTextCorpus,
@@ -219,6 +220,29 @@ const savedTarget = Schema.decodeUnknownSync(LocalizationTarget)({
 	collapseMode: "IdenticalTextIdAndSource"
 });
 
+/** Starts a quality worker in `scope` on first use, and again after one fails. */
+const qualityWorkerSlot = (input: SearchWorkerInput, scope: Scope.Scope) =>
+	Effect.gen(function* () {
+		const lock = yield* Semaphore.make(1);
+		let current:
+			| Effect.Success<ReturnType<typeof makeGameTextQualityWorkerResource>>
+			| undefined;
+		return lock.withPermits(1)(
+			Effect.suspend(() =>
+				current?.healthy()
+					? Effect.succeed(current)
+					: makeGameTextQualityWorkerResource(input).pipe(
+							Effect.provideService(Scope.Scope, scope),
+							Effect.tap((worker) =>
+								Effect.sync(() => {
+									current = worker;
+								})
+							)
+						)
+			)
+		);
+	});
+
 /**
  * The worker's prepared query. If the worker has died, the model stays usable: its first later
  * call prepares the same immutable generation's query on this thread, once.
@@ -244,9 +268,22 @@ function borrowWorkerQuery(
 	};
 }
 
+/** How the index steps place their work. */
+export interface GameTextIndexStepsOptions {
+	/** Prepare each generation's query in a worker and search there. */
+	readonly searchWorker?: boolean;
+	/** With a search worker, cancel replaced pages and older selections. */
+	readonly latestSearchOnly?: boolean;
+	/**
+	 * Run localization quality scans in a worker per opened model. The host keeps the findings'
+	 * facts and reads lines from the worker; a failed worker falls back to scanning on the host.
+	 */
+	readonly qualityWorker?: boolean;
+}
+
 export const makeGameTextIndexSteps = (
 	cacheRoot: string,
-	options: { readonly searchWorker?: boolean; readonly latestSearchOnly?: boolean } = {}
+	options: GameTextIndexStepsOptions = {}
 ) =>
 	Effect.gen(function* () {
 		const source = yield* GameTextIndexSource;
@@ -729,6 +766,10 @@ export const makeGameTextIndexSteps = (
 						}))
 					);
 			const query = instrumentIndexQuery(columnar);
+			// One quality worker per model, started by its first scan and replaced if it fails.
+			const qualityWorker = options.qualityWorker
+				? yield* qualityWorkerSlot(workerInput, yield* Effect.scope)
+				: undefined;
 			reportProgress({ phase: "ready", completed: 0, total: 0 });
 			const corpus = indexedTextCorpus(joined, query);
 			return {
@@ -746,17 +787,40 @@ export const makeGameTextIndexSteps = (
 				corpus,
 				localizationJoin: indexedLocalizationJoin(joined, query),
 				// The scan checks exactly the join's lines, read as rows in the join's order.
-				localizationQuality: (options, ruleDocument) =>
-					Effect.suspend(() =>
+				localizationQuality: (scanOptions, ruleDocument) => {
+					const onHost = Effect.suspend(() =>
 						indexedLocalizationQuality(
 							joined,
 							corpus,
 							indexedEvidence,
 							columnar.localizationRows(indexedLocalizationLinesRequest(joined)),
-							options,
+							scanOptions,
 							ruleDocument
 						)
-					),
+					);
+					return qualityWorker
+						? qualityWorker.pipe(
+								Effect.flatMap((worker) =>
+									worker.scan({
+										corpus,
+										rows: columnar.localizationRows(
+											indexedLocalizationLinesRequest(joined)
+										),
+										options: scanOptions,
+										ruleDocument
+									})
+								),
+								Effect.catch((cause) =>
+									Effect.logWarning(
+										"The quality worker failed; scanning on the host instead."
+									).pipe(
+										Effect.annotateLogs({ cause: cause.message }),
+										Effect.andThen(onHost)
+									)
+								)
+							)
+						: onHost;
+				},
 				sourceQuality: (ruleDocument, options) =>
 					Effect.suspend(() =>
 						indexedSourceQuality(joined, corpus, ruleDocument, options)
@@ -818,5 +882,5 @@ export class GameTextIndexSteps extends Context.Service<
 
 export const gameTextIndexStepsLayer = (
 	cacheRoot: string,
-	options: { readonly searchWorker?: boolean; readonly latestSearchOnly?: boolean } = {}
+	options: GameTextIndexStepsOptions = {}
 ) => Layer.effect(GameTextIndexSteps, makeGameTextIndexSteps(cacheRoot, options));
