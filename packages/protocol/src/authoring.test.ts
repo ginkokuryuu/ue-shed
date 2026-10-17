@@ -270,3 +270,59 @@ describe("authoring wire contract", () => {
 		expect(Schema.is(AuthoringApplyResult)(refusal)).toBe(false);
 	});
 });
+
+describe("save 1.2 package failure codes", () => {
+	const result = (packages: readonly object[]) => ({
+		contract: { name: "unreal-authoring-save", version: { major: 1, minor: 2 } },
+		requestId: "save-1",
+		status: "partial",
+		packages
+	});
+	it("names why each package failed and still reads a 1.1 result without codes", () => {
+		const decode = Schema.decodeUnknownSync(AuthoringSaveResult);
+		const coded = decode(
+			result([
+				{
+					objectPath: "/Game/A.A",
+					packageName: "/Game/A",
+					retrySafe: true,
+					status: "saved"
+				},
+				{
+					objectPath: "/Game/B.B",
+					packageName: "",
+					retrySafe: true,
+					status: "failed",
+					code: "table_not_found",
+					message: "DataTable could not be loaded"
+				}
+			])
+		);
+		expect(coded.packages[1]?.code).toBe("table_not_found");
+		const legacy = decode(
+			result([
+				{
+					objectPath: "/Game/B.B",
+					packageName: "/Game/B",
+					retrySafe: true,
+					status: "failed",
+					message: "Unreal failed to save the package"
+				}
+			])
+		);
+		expect(legacy.packages[0]?.code).toBeUndefined();
+		expect(() =>
+			decode(
+				result([
+					{
+						objectPath: "/Game/B.B",
+						packageName: "/Game/B",
+						retrySafe: true,
+						status: "failed",
+						code: "disk_full"
+					}
+				])
+			)
+		).toThrow();
+	});
+});

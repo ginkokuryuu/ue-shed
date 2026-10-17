@@ -18,6 +18,9 @@ existing entry; generated text (formatted, numeric, and other derived histories)
 defaults containing it stay `unknown`. Apply 1.1 requests compare and write display strings only,
 and rewriting an unchanged display string leaves the existing text identity in place.
 
+Save 1.2 reports each package that failed with a `code`: `table_not_found` when the DataTable
+could not be loaded, `save_failed` when Unreal could not save the package.
+
 The table fingerprint leaves text identity out, so Apply 1.1 clients still match it. Apply 1.2
 checks identity per command instead:
 

@@ -1291,7 +1291,7 @@ TSharedRef<FJsonObject> OperationContract(const TCHAR* Name, int32 Minor)
 }
 
 constexpr int32 ApplyContractMinor = 2;
-constexpr int32 SaveContractMinor = 1;
+constexpr int32 SaveContractMinor = 2;
 
 int32 ContractMinor(const TSharedPtr<FJsonObject>& Request)
 {
@@ -1830,6 +1830,7 @@ void UUEShedAuthoringLibrary::Save(const FString& RequestJson, FString& ResultJs
 		{
 			PackageResult->SetStringField(TEXT("packageName"), FString());
 			PackageResult->SetStringField(TEXT("status"), TEXT("failed"));
+			PackageResult->SetStringField(TEXT("code"), TEXT("table_not_found"));
 			PackageResult->SetStringField(TEXT("message"), TEXT("DataTable could not be loaded"));
 			Packages.Add(MakeShared<FJsonValueObject>(PackageResult));
 			continue;
@@ -1850,6 +1851,7 @@ void UUEShedAuthoringLibrary::Save(const FString& RequestJson, FString& ResultJs
 		else
 		{
 			PackageResult->SetStringField(TEXT("status"), TEXT("failed"));
+			PackageResult->SetStringField(TEXT("code"), TEXT("save_failed"));
 			PackageResult->SetStringField(TEXT("message"), TEXT("Unreal failed to save the package"));
 		}
 		Packages.Add(MakeShared<FJsonValueObject>(PackageResult));

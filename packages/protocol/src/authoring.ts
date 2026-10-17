@@ -567,6 +567,8 @@ export const AuthoringSaveResult = Schema.Struct({
 	contract: SaveContract,
 	packages: Schema.Array(
 		Schema.Struct({
+			/** Save 1.2: why a package failed (`table_not_found` or `save_failed`). */
+			code: Schema.optionalKey(Schema.Literals(["table_not_found", "save_failed"])),
 			message: Schema.optionalKey(Schema.String),
 			objectPath: Schema.String,
 			packageName: Schema.String,
