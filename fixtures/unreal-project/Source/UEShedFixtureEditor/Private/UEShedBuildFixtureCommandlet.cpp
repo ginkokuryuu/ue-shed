@@ -2,6 +2,7 @@
 #include "UEShedSavedReviewFixture.h"
 #include "UEShedWorldPartitionFixture.h"
 #include "UEShedLocalizationFixture.h"
+#include "UEShedGameTextActionsFixture.h"
 #include "UEShedGameTextProblemsFixture.h"
 #include "Misc/EngineVersionComparison.h"
 
@@ -3354,6 +3355,8 @@ int32 UUEShedBuildFixtureCommandlet::Main(const FString& Params)
 		return RunLocalizationFixture(Params) ? 0 : 1;
 	if (FParse::Param(*Params, TEXT("GameTextProblemsOnly")))
 		return RunGameTextProblemsFixture(Params) ? 0 : 1;
+	if (FParse::Param(*Params, TEXT("GameTextActionsOnly")))
+		return RunGameTextActionsFixture(Params) ? 0 : 1;
 	if (FParse::Param(*Params, TEXT("WorldPartitionOnly")))
 		return BuildWorldPartitionStressFixture(FParse::Param(*Params, TEXT("VerifyOnly"))) ? 0 : 1;
 	const TArray<FFixtureTableDefinition> Definitions = GetTableDefinitions();

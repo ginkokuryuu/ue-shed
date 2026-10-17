@@ -117,7 +117,7 @@ is needed.
 
 Saved-scan completeness is limited to the selected package inventory and supported decoders; it
 does not certify parity with a fresh Unreal gather. New C++/INI and code/CSV String Table text,
-reflected metadata, compiled Blueprint bytecode, custom gather callbacks and content outside the
+reflected metadata, custom gather callbacks and content outside the
 default project inventory can be missing even without a reported decoder gap. A readable manifest
 can supply previously gathered evidence from those sources. See
 [coverage compared with Unreal gather](../engineering/game-text-gather-coverage.md) for the precise
@@ -205,6 +205,7 @@ element(s) of the property path, ignoring container indexes; "in" matches any el
 | `data_table`                      | player   | `player_asset`     | DataTable cell                                    | Game data                           |
 | `user_defined_enum_display_name`  | player   | `player_asset`     | class `UserDefinedEnum` and leaf `DisplayNameMap` | Blueprint enum display names        |
 | `widget_tree`                     | player   | `player_asset`     | object `WidgetTree` in the outer chain            | Widget designer tree                |
+| `script_bytecode`                 | player   | `player_asset`     | property `ScriptBytecode`                         | Compiled Blueprint text literals    |
 
 The table is studio-agnostic. Project conventions, such as debug or demo folders, belong in the
 project's rules, not here. The compact index stores each occurrence's audience; the policy table

@@ -234,13 +234,16 @@ describe.skipIf(!executable)("Game Text problem cases in the saved fixture", () 
 
 						// Signals: one key with several texts, stale compiled copies, scope, key
 						// changes and partly read packages.
-						// Exactly these keys have several texts.
+						// Exactly these keys have several texts. The identity cases' own collisions belong to
+						// their target.
 						expect(
 							memoryJoin.lines
-								.filter((line) =>
-									line.cultures.some((culture) =>
-										culture.unknownReasons.includes("conflicting_source")
-									)
+								.filter(
+									(line) =>
+										line.identity?.namespace.startsWith(NAMESPACE_PREFIX) &&
+										line.cultures.some((culture) =>
+											culture.unknownReasons.includes("conflicting_source")
+										)
 								)
 								.map((line) => line.identity!)
 								.sort((a, b) =>
