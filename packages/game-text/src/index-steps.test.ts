@@ -1,5 +1,5 @@
 import { it } from "@effect/vitest";
-import { Deferred, Effect, Exit, Fiber, Layer, Metric, Scope } from "effect";
+import { Deferred, Effect, Exit, Fiber, Layer, Metric, Schema, Scope } from "effect";
 import { expect, vi } from "vitest";
 import { Worker } from "node:worker_threads";
 import { unlink, writeFile } from "node:fs/promises";
@@ -10,6 +10,10 @@ import { typeScriptIndexBuilderLayer } from "./index-builder.js";
 import { SharedIndex, sharedIndexNodeLayer } from "./shared-index.js";
 import { makeRetainedGameTextIndex } from "./index-retained.js";
 import { makeIndexRegressionFixture } from "./index-refresh-regressions.test-support.js";
+import { TextUnitId } from "./identifiers.js";
+import { GameTextIndexProgressReporter, type GameTextIndexProgress } from "./index-progress.js";
+import { HostSliceScheduler } from "./host-slices.js";
+import { performance } from "node:perf_hooks";
 
 it.live(
 	"replaces a dead worker on unchanged rescan without evicting its healthy replacement",
@@ -68,6 +72,71 @@ it.live(
 			}).pipe(Effect.provide(fixture.layer(true)));
 		}).pipe(Effect.scoped, Effect.ensuring(Effect.sync(() => messages.mockRestore())));
 	},
+	// Worker threads start slowly when the whole suite runs in parallel.
+	30_000
+);
+
+it.live(
+	"prepares the query once in the worker and serves the host's synchronous query from it",
+	() =>
+		Effect.gen(function* () {
+			const fixture = yield* makeIndexRegressionFixture();
+			const preparations = Metric.counter("game_text.index.host_query_preparations");
+			const open = (worker: boolean) =>
+				Effect.gen(function* () {
+					const steps = yield* GameTextIndexSteps;
+					const project = yield* steps.refreshProject(fixture.request);
+					const target = yield* steps.buildTarget(
+						project,
+						yield* steps.importTarget(project, fixture.request)
+					);
+					const before = (yield* Metric.value(preparations)).count;
+					const model = yield* steps.openTarget(target);
+					const prepared = (yield* Metric.value(preparations)).count - before;
+					const target_ = fixture.request.targetName;
+					const search = { query: "", capability: "all" as const, pageSize: 10 };
+					const unpaged = { query: "", capability: "all" as const };
+					const localized = { ...unpaged, localization: { target: target_ } };
+					const page = model.query.search(search);
+					const lines = model.query.localizationLines(localized);
+					const unit = page.units[0]!;
+					return {
+						prepared,
+						summary: model.query.summary(),
+						page,
+						lines,
+						export: model.query.export(unpaged),
+						focus: model.query.focus({ id: unit.id, pageSize: 10 }),
+						missingFocus: model.query.focus({
+							id: Schema.decodeUnknownSync(TextUnitId)(`${unit.id}-absent`),
+							pageSize: 10
+						}),
+						lineFocus: model.query.localizationFocus(lines[0]!.id),
+						invalid: yield* Effect.flip(
+							Effect.try({
+								try: () => model.query.localizationLines(unpaged),
+								catch: (cause) => cause
+							})
+						)
+					};
+				}).pipe(Effect.scoped, Effect.provide(fixture.layer(worker)));
+			const host = yield* open(false);
+			const worker = yield* open(true);
+			expect(host.prepared).toBe(1);
+			// The worker's preparation is the only one: the host borrows it.
+			expect(worker.prepared).toBe(0);
+			expect(host.lines.length).toBeGreaterThan(0);
+			expect(host.focus).toBeDefined();
+			expect(host.missingFocus).toBeUndefined();
+			expect(worker.invalid).toMatchObject({
+				_tag: "GameTextLocalizationError",
+				code: "invalid_selection"
+			});
+			const { prepared: _host, invalid: hostInvalid, ...hostResults } = host;
+			const { prepared: _worker, invalid: workerInvalid, ...workerResults } = worker;
+			expect(workerInvalid).toEqual(hostInvalid);
+			expect(workerResults).toEqual(hostResults);
+		}),
 	// Worker threads start slowly when the whole suite runs in parallel.
 	30_000
 );
@@ -413,6 +482,58 @@ it.live("cancellation releases the project writer so a queued refresh can comple
 			).toBe(1);
 		}).pipe(Effect.provide(fixture.layer()));
 	}).pipe(Effect.scoped)
+);
+
+it.live(
+	"cancels a join at a host-slice yield with an old reader pinned and a second writer queued",
+	() =>
+		Effect.gen(function* () {
+			const fixture = yield* makeIndexRegressionFixture();
+			const joining = Deferred.makeUnsafe<void>();
+			let holdSlice = false;
+			const report = (event: GameTextIndexProgress) => {
+				if (!holdSlice || event.phase !== "joining") return;
+				holdSlice = false;
+				// Spend the host slice so the scheduler suspends the join at its next yield point.
+				const until = performance.now() + 2 * new HostSliceScheduler().budgetMs;
+				while (performance.now() < until);
+				Deferred.doneUnsafe(joining, Effect.void);
+			};
+			yield* Effect.gen(function* () {
+				const steps = yield* GameTextIndexSteps;
+				const build = Effect.gen(function* () {
+					const project = yield* steps.refreshProject(fixture.request);
+					return yield* steps.buildTarget(
+						project,
+						yield* steps.importTarget(project, fixture.request)
+					);
+				});
+				const search = { query: "Source", capability: "all" as const, pageSize: 10 };
+				// The old model pins its generation's reader and worker for the whole test.
+				const old = yield* steps.openTarget(yield* build);
+				const before = old.query.search(search);
+				expect(before.total).toBe(1);
+				fixture.setSource("Updated");
+				holdSlice = true;
+				const cancelled = yield* Effect.forkChild(build);
+				yield* Deferred.await(joining);
+				// Queued behind the cancelled build's project writer.
+				const queued = yield* Effect.forkChild(build);
+				yield* Fiber.interrupt(cancelled);
+				expect(Exit.hasInterrupts(yield* Fiber.await(cancelled))).toBe(true);
+				const next = yield* steps.openTarget(yield* Fiber.join(queued));
+				expect(next.join.rebuilt).toBe(true);
+				expect(next.query.search({ ...search, query: "Updated" }).total).toBe(1);
+				expect(next.query.search(search).total).toBe(0);
+				expect(old.query.search(search)).toEqual(before);
+				expect(yield* old.search(search)).toEqual(before);
+			}).pipe(
+				Effect.provideService(GameTextIndexProgressReporter, report),
+				Effect.provide(fixture.layer(true))
+			);
+		}).pipe(Effect.scoped),
+	// Worker threads start slowly when the whole suite runs in parallel.
+	30_000
 );
 
 it.live("rejects an import superseded by another localization publication", () =>
