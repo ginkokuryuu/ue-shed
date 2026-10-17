@@ -1,7 +1,7 @@
 import { readdir, readFile } from "node:fs/promises";
 import { execFile } from "node:child_process";
 import { basename, dirname, extname, join, resolve } from "node:path";
-import { ErrorGuidanceFields } from "@ue-shed/protocol";
+import { ErrorCauseFields, ErrorGuidanceFields } from "@ue-shed/protocol";
 import { Config, Context, Effect, Layer, Schema } from "effect";
 
 export const EngineVersion = Schema.Struct({
@@ -52,6 +52,7 @@ export class EngineInstallationError extends Schema.TaggedError<EngineInstallati
 			"engine_ambiguous"
 		]),
 		...ErrorGuidanceFields,
+		...ErrorCauseFields,
 		candidates: Schema.optionalKey(Schema.Array(Schema.String))
 	}
 ) {}
@@ -72,7 +73,8 @@ function failure(
 	message: string,
 	recovery: string,
 	retrySafe = true,
-	candidates?: readonly string[]
+	candidates?: readonly string[],
+	cause?: unknown
 ): EngineInstallationError {
 	return new EngineInstallationError({
 		code,
@@ -81,7 +83,8 @@ function failure(
 		retrySafe,
 		// Every discovery failure is fixed by choosing another descriptor or engine root.
 		nextStep: "fix_input",
-		...(candidates === undefined ? undefined : { candidates: [...candidates] })
+		...(candidates === undefined ? undefined : { candidates: [...candidates] }),
+		...(cause === undefined ? undefined : { cause })
 	});
 }
 
@@ -188,12 +191,14 @@ function installationAt(root: string): Effect.Effect<EngineInstallation, EngineI
 			"invalid_engine_root"
 		).pipe(
 			Effect.flatMap(Schema.decodeUnknownEffect(EngineBuildVersion)),
-			Effect.mapError(() =>
+			Effect.mapError((cause) =>
 				failure(
 					"invalid_engine_root",
 					"The selected Unreal Build.version has an invalid version contract.",
 					"Choose a complete Unreal installation root.",
-					false
+					false,
+					undefined,
+					cause
 				)
 			)
 		);

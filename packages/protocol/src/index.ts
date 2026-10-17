@@ -1,5 +1,5 @@
 import { Effect, Schema } from "effect";
-import { ErrorGuidanceFields } from "./error-guidance.js";
+import { ErrorCauseFields, ErrorGuidanceFields } from "./error-guidance.js";
 
 export const IdentifierKind = Schema.Literals([
 	"actor",
@@ -15,7 +15,8 @@ export class IdentifierValidationError extends Schema.TaggedError<IdentifierVali
 	{
 		kind: IdentifierKind,
 		input: Schema.String,
-		...ErrorGuidanceFields
+		...ErrorGuidanceFields,
+		...ErrorCauseFields
 	}
 ) {}
 
@@ -36,10 +37,15 @@ export type SessionId = Schema.Schema.Type<typeof SessionId>;
 export const WorldId = IdentifierString.pipe(Schema.brand("WorldId"));
 export type WorldId = Schema.Schema.Type<typeof WorldId>;
 
-function identifierError(kind: IdentifierKind, input: string): IdentifierValidationError {
+function identifierError(
+	kind: IdentifierKind,
+	input: string,
+	cause?: unknown
+): IdentifierValidationError {
 	return new IdentifierValidationError({
 		kind,
 		input,
+		...(cause === undefined ? undefined : { cause }),
 		message: `The ${kind} identifier is empty or whitespace.`,
 		recovery: `Provide a non-empty ${kind} identifier.`,
 		retrySafe: true,
@@ -53,7 +59,7 @@ function decodeIdentifier<S extends Schema.ConstraintDecoder<string>>(
 	input: string
 ): Effect.Effect<S["Type"], IdentifierValidationError, S["DecodingServices"]> {
 	return Schema.decodeUnknownEffect(schema)(input).pipe(
-		Effect.mapError(() => identifierError(kind, input))
+		Effect.mapError((cause) => identifierError(kind, input, cause))
 	);
 }
 

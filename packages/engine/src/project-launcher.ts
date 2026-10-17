@@ -1,7 +1,7 @@
 import { spawn } from "node:child_process";
 import { access, readFile, readdir } from "node:fs/promises";
 import { basename, dirname, join, resolve } from "node:path";
-import { ErrorGuidanceFields, type ErrorNextStep } from "@ue-shed/protocol";
+import { ErrorCauseFields, ErrorGuidanceFields, type ErrorNextStep } from "@ue-shed/protocol";
 import { Context, Effect, Layer, Schema } from "effect";
 import { unrealRemoteControlPermissions } from "./remote-control-permissions.js";
 import {
@@ -66,7 +66,8 @@ export class UnrealProjectLaunchError extends Schema.TaggedError<UnrealProjectLa
 				buildable: Schema.Boolean
 			})
 		),
-		...ErrorGuidanceFields
+		...ErrorGuidanceFields,
+		...ErrorCauseFields
 	}
 ) {}
 const isUnrealProjectLaunchError = Schema.is(UnrealProjectLaunchError);
@@ -104,9 +105,17 @@ function launchError(
 	message: string,
 	recovery: string,
 	retrySafe = false,
-	nextStep: ErrorNextStep = "fix_input"
+	nextStep: ErrorNextStep = "fix_input",
+	cause?: unknown
 ): UnrealProjectLaunchError {
-	return new UnrealProjectLaunchError({ code, message, recovery, retrySafe, nextStep });
+	return new UnrealProjectLaunchError({
+		code,
+		message,
+		recovery,
+		retrySafe,
+		nextStep,
+		...(cause === undefined ? undefined : { cause })
+	});
 }
 
 function fromEngineDiscovery(cause: EngineInstallationError): UnrealProjectLaunchError {
@@ -464,11 +473,14 @@ export const UnrealProjectLauncherLive = Layer.effect(
 			const request = yield* Schema.decodeUnknownEffect(UnrealProjectLaunchRequest)(
 				input
 			).pipe(
-				Effect.mapError(() =>
+				Effect.mapError((cause) =>
 					launchError(
 						"invalid_request",
 						"The Unreal project launch request is invalid.",
-						"Choose one .uproject descriptor and valid plugin descriptors."
+						"Choose one .uproject descriptor and valid plugin descriptors.",
+						false,
+						"fix_input",
+						cause
 					)
 				)
 			);

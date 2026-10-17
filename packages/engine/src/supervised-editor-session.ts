@@ -3,6 +3,7 @@ import { createRequire } from "node:module";
 import { access, readFile, readdir } from "node:fs/promises";
 import { dirname, isAbsolute, join, resolve } from "node:path";
 import {
+	ErrorCauseFields,
 	ErrorGuidanceFields,
 	type CompanionCapabilityManifest,
 	type ErrorNextStep
@@ -91,6 +92,7 @@ export class SupervisedEditorSessionError extends Schema.TaggedError<SupervisedE
 			"termination_failed"
 		]),
 		...ErrorGuidanceFields,
+		...ErrorCauseFields,
 		stage: Schema.Literals(["validation", "launch", "readiness", "operation", "termination"])
 	}
 ) {}
@@ -170,7 +172,8 @@ function sessionError(
 	message: string,
 	recovery: string,
 	retrySafe = false,
-	nextStep: ErrorNextStep = sessionNextStep[code]
+	nextStep: ErrorNextStep = sessionNextStep[code],
+	cause?: unknown
 ): SupervisedEditorSessionError {
 	return new SupervisedEditorSessionError({
 		code,
@@ -178,6 +181,7 @@ function sessionError(
 		recovery,
 		retrySafe,
 		nextStep,
+		...(cause === undefined ? undefined : { cause }),
 		stage
 	});
 }
@@ -644,12 +648,15 @@ export const SupervisedEditorSessionLive = Layer.effect(
 			const request = yield* Schema.decodeUnknownEffect(SupervisedEditorSessionRequest)(
 				input
 			).pipe(
-				Effect.mapError(() =>
+				Effect.mapError((cause) =>
 					sessionError(
 						"invalid_request",
 						"validation",
 						"The supervised editor session request is invalid.",
-						"Provide bounded readiness settings, one project descriptor, and valid plugin descriptors."
+						"Provide bounded readiness settings, one project descriptor, and valid plugin descriptors.",
+						false,
+						sessionNextStep.invalid_request,
+						cause
 					)
 				)
 			);

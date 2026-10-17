@@ -148,8 +148,14 @@ export interface GameTextIndexModel extends GameTextIndexRefreshResult {
 const queryRevisionFor = (project: GameTextProject, generation: string, joinedKey: string) =>
 	JSON.stringify([project.cacheRoot, project.projectRoot, generation, joinedKey]);
 
-const failure = (operation: string, message: string, recovery: string) =>
-	new GameTextIndexError({ operation, message, recovery, retrySafe: true });
+const failure = (operation: string, message: string, recovery: string, cause?: unknown) =>
+	new GameTextIndexError({
+		operation,
+		message,
+		recovery,
+		retrySafe: true,
+		...(cause === undefined ? undefined : { cause })
+	});
 const stale = (operation: string) =>
 	failure(
 		operation,
@@ -296,11 +302,12 @@ export const makeGameTextIndexSteps = (
 						writers,
 						sharedIndexDirectory(configuration)
 					).pipe(
-						Effect.mapError(() =>
+						Effect.mapError((cause) =>
 							failure(
 								"writer",
 								"Too many project writers are active.",
-								"Wait for a project operation to finish and retry."
+								"Wait for a project operation to finish and retry.",
+								cause
 							)
 						)
 					);
