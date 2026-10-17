@@ -232,26 +232,8 @@ pub(crate) fn finish(
         .and_then(Value::as_array)
         .filter(|pairs| !pairs.is_empty())
     {
-        fn scalar_views(value: &mut Value) {
-            match value {
-                Value::String(text) => *text = crate::wtf8::Wtf8Buf::from_utf8(text).to_view(),
-                Value::Array(values) => {
-                    for value in values {
-                        scalar_views(value);
-                    }
-                }
-                Value::Object(values) => {
-                    for value in values.values_mut() {
-                        scalar_views(value);
-                    }
-                }
-                _ => {}
-            }
-        }
-        let mut external = external.clone();
-        for pair in &mut external {
-            scalar_views(pair);
-        }
+        // expand_policy already converted these strings into reversible scalar views.
+        let external = external.clone();
         let mut used = HashSet::new();
         pairs.extend(external);
         pairs.retain(|pair| {
@@ -309,9 +291,8 @@ pub(crate) fn finish(
             .iter()
             .flat_map(|r| {
                 [
-                    crate::wtf8::Wtf8Buf::from_utf8(r["namespace"].as_str().unwrap_or(""))
-                        .to_view(),
-                    crate::wtf8::Wtf8Buf::from_utf8(r["key"].as_str().unwrap_or("")).to_view(),
+                    r["namespace"].as_str().unwrap_or("").to_owned(),
+                    r["key"].as_str().unwrap_or("").to_owned(),
                 ]
             })
             .collect::<Vec<_>>();

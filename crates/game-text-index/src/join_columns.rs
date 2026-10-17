@@ -75,6 +75,11 @@ impl FileColumns {
             has_source: false,
             prefix: String::new(),
         };
+        // An active layer can belong to an earlier successful import. A current failure
+        // must hide that evidence without deleting snapshots pinned by older readers.
+        if failure.is_some() {
+            return Ok(result);
+        }
         if let Some((mut reader, record)) = layer(store, &result.name)? {
             let meta: Value = serde_json::from_slice(&section(&mut reader, "file.meta")?)?;
             let count = meta["count"].as_u64().ok_or("file count absent")? as usize;
