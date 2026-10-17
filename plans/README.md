@@ -23,7 +23,7 @@ the status row when done.
 | [053](053-game-text-review-workspace.md)                 | Game Text review workspace                                                 | P1       | XL     | 052                       | IN PROGRESS — done, PR #58 open   |
 | [054](054-check-text-before-submit.md)                   | Check a change's text before it is submitted                               | P1       | M      | 052, 053                  | IN PROGRESS — done, PR #58 open   |
 | [057](057-game-text-compact-index.md)                    | A compact, persistent Game Text index                                      | P1       | XL     | 056, 037                  | TODO                              |
-| [058](058-game-text-actions-rules-and-codebase-week.md)  | Game Text ID actions, studio-owned rules, performance and a codebase audit | P1       | XL     | #98, #99                  | TODO                              |
+| [058](058-game-text-actions-rules-and-codebase-week.md)  | Game Text ID actions, studio-owned rules, performance and a codebase audit | P1       | XL     | #98, #99, #101            | TODO                              |
 
 Status values: `TODO`, `IN PROGRESS`, `DONE`, `BLOCKED` with a one-line reason, or `REJECTED` with a
 one-line rationale. When a plan is `DONE`, move it into [`archive/`](archive/) and update both this

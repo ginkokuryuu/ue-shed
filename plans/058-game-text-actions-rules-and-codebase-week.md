@@ -23,47 +23,51 @@
   contain breaking API changes. All of it ships together as 0.17.0 with migration notes.
 - **Depends on**: PR #99 (Game Text identity fixture and Blueprint bytecode text) and PR #98
   (external actor text headers) merged. Lane A cannot start without #99.
+- **Engines**: the executing machine has UE 5.7 only (decision 11). Lane A runs and verifies on
+  5.7; 5.8 verification is recorded as a gap per item, and A5 is `BLOCKED`.
+- **PR #101** (draft, opt-in native index builder) merges before the items that change behaviour
+  it duplicates (decision 12): A1, A2, B5, B7, B8 and C5.
 - **Category**: direction
 - **Planned at**: `docs/plan-058-ue-shed-week`, 2026-10-17
 
-| Item | Title                                          | Lane | State |
-| ---- | ---------------------------------------------- | ---- | ----- |
-| A1   | Name packages by file location                 | A    | TODO  |
-| A2   | Graph pin text as Game Text places             | A    | TODO  |
-| A3   | Game Text actions: editor plugin and API       | A    | TODO  |
-| A4   | Identity fixture, slice 2                      | A    | TODO  |
-| A5   | UE 4.27 identity slice                         | A    | TODO  |
-| A6   | Stretch: text diff of two package versions     | A    | TODO  |
-| B1   | Check catalogue                                | B    | TODO  |
-| B2   | Rules file v3                                  | B    | TODO  |
-| B3   | Parameterised, scoped checks                   | B    | TODO  |
-| B4   | Severity stored per finding                    | B    | TODO  |
-| B5   | Host-supplied policies                         | B    | TODO  |
-| B6   | Studio-defined checks                          | B    | TODO  |
-| B7   | Intended marks                                 | B    | TODO  |
-| B8   | Scans keyed on the resolved rules              | B    | TODO  |
-| C1   | Stage breakdown on real projects               | C    | TODO  |
-| C2   | Prepare the query once, off the main thread    | C    | TODO  |
-| C3   | Quality scan in a worker                       | C    | TODO  |
-| C4   | Column cache per reader                        | C    | TODO  |
-| C5   | Spike: binary package-text output              | C    | TODO  |
-| C6   | Electron vs Node build time                    | C    | TODO  |
-| C7   | Bytecode reader cost                           | C    | TODO  |
-| D1   | `game-text` entry points                       | D    | TODO  |
-| D2   | Reader batching inside the index source        | D    | TODO  |
-| D3   | Unreal path module                             | D    | TODO  |
-| D4   | One error shape                                | D    | TODO  |
-| D5   | Classified causes instead of prose             | D    | TODO  |
-| D6   | Deliberate error translation                   | D    | TODO  |
-| D7   | Domain parsers instead of raw decoders         | D    | TODO  |
-| D8   | Layers and test layers                         | D    | TODO  |
-| D9   | One progress mechanism, one completeness shape | D    | TODO  |
-| D10  | Workspace orchestration as a package           | D    | TODO  |
-| D11  | JSDoc on public exports                        | D    | TODO  |
-| D12  | Small cleanups                                 | D    | TODO  |
-| D13  | API surface of the other host-facing packages  | D    | TODO  |
-| D14  | Native error audit                             | D    | TODO  |
-| R    | 0.17.0 release preparation                     | —    | TODO  |
+| Item | Title                                          | Lane | State                |
+| ---- | ---------------------------------------------- | ---- | -------------------- |
+| A1   | Name packages by file location                 | A    | BLOCKED — waits #101 |
+| A2   | Graph pin text as Game Text places             | A    | BLOCKED — waits #101 |
+| A3   | Game Text actions: editor plugin and API       | A    | TODO                 |
+| A4   | Identity fixture, slice 2                      | A    | TODO                 |
+| A5   | UE 4.27 identity slice                         | A    | BLOCKED — no UE 4.27 |
+| A6   | Stretch: text diff of two package versions     | A    | TODO                 |
+| B1   | Check catalogue                                | B    | TODO                 |
+| B2   | Rules file v3                                  | B    | TODO                 |
+| B3   | Parameterised, scoped checks                   | B    | TODO                 |
+| B4   | Severity stored per finding                    | B    | TODO                 |
+| B5   | Host-supplied policies                         | B    | BLOCKED — waits #101 |
+| B6   | Studio-defined checks                          | B    | TODO                 |
+| B7   | Intended marks                                 | B    | BLOCKED — waits #101 |
+| B8   | Scans keyed on the resolved rules              | B    | BLOCKED — waits #101 |
+| C1   | Stage breakdown on real projects               | C    | TODO                 |
+| C2   | Prepare the query once, off the main thread    | C    | TODO                 |
+| C3   | Quality scan in a worker                       | C    | TODO                 |
+| C4   | Column cache per reader                        | C    | TODO                 |
+| C5   | Spike: binary package-text output              | C    | BLOCKED — waits #101 |
+| C6   | Electron vs Node build time                    | C    | TODO                 |
+| C7   | Bytecode reader cost                           | C    | TODO                 |
+| D1   | `game-text` entry points                       | D    | TODO                 |
+| D2   | Reader batching inside the index source        | D    | TODO                 |
+| D3   | Unreal path module                             | D    | TODO                 |
+| D4   | One error shape                                | D    | TODO                 |
+| D5   | Classified causes instead of prose             | D    | TODO                 |
+| D6   | Deliberate error translation                   | D    | TODO                 |
+| D7   | Domain parsers instead of raw decoders         | D    | TODO                 |
+| D8   | Layers and test layers                         | D    | TODO                 |
+| D9   | One progress mechanism, one completeness shape | D    | TODO                 |
+| D10  | Workspace orchestration as a package           | D    | TODO                 |
+| D11  | JSDoc on public exports                        | D    | TODO                 |
+| D12  | Small cleanups                                 | D    | TODO                 |
+| D13  | API surface of the other host-facing packages  | D    | TODO                 |
+| D14  | Native error audit                             | D    | TODO                 |
+| R    | 0.17.0 release preparation                     | —    | TODO                 |
 
 ## Context
 
@@ -104,6 +108,13 @@ downstream host, and an audit against an external Effect coding standard and err
   flag, 126 keep no `cause`; messages are built from `String(cause)` (72) and `Cause.pretty` (47);
   134 `instanceof` checks on tagged errors; 13 catch-alls in `packages/host/src/authoring.ts`; 83%
   of exports have no JSDoc.
+- **Native index builder (PR #101, draft).** Adds an opt-in Rust `GameTextIndexBuilder`
+  (`nativeIndexBuilderLayer`, new crate `crates/game-text-index`, uasset-io protocol 1.13
+  `game_text_index` operations). TypeScript stays the default and queries stay in JavaScript. The
+  crate re-implements part of the TypeScript policy in Rust (`join_policy.rs`: "mirrored from
+  localization.ts, text-origin.ts and review-file.ts"): gather rules, text origin, `/Game/` ↔
+  `Content/` package mapping, place keys and review marks. The Quality checks are not ported. Any
+  item that changes one of those behaviours has to change both builders while #101 exists.
 
 ## Decisions (owner, 2026-10-17)
 
@@ -129,15 +140,23 @@ downstream host, and an audit against an external Effect coding standard and err
    `docs/engineering/functional-design.md`.
 10. **ID actions run through an editor plugin over Remote Control**, like authoring, with a
     commandlet entry for headless batches.
+11. **Lane A runs on UE 5.7 only.** The executing machine has no UE 5.8 or UE 4.27. Build and
+    verify every lane A item on 5.7; do not install engines. Per `testing.md`, a 5.7 pass does not
+    complete verification, so each lane A PR states "5.8: not run (no engine)" and the item's state
+    becomes `DONE (5.7) — 5.8 pending` instead of `DONE`. 5.8 verification is a follow-up on a
+    machine that has it. A5 stays `BLOCKED`.
+12. **PR #101 merges first.** Items that change behaviour the native builder duplicates (A1, A2,
+    B5, B7, B8, C5; see "Two index builders") wait for #101 to merge and then change both builders.
+    Other items do not wait.
 
 ## Machine prerequisites
 
 - Windows, Node 26+, pnpm 11, Rust (CI pins 1.98.1 with rustfmt and clippy), wasm-pack 0.14,
   git and an authenticated `gh`.
-- **Lane A** additionally needs UE 5.7 and UE 5.8 with engine source, and Visual Studio 2022 with
-  the Unreal C++ workload; A5 needs UE 4.27 (see the MSVC toolset note in `testing.md`). Discover
-  engines from the registry or `UE_SHED_UNREAL_57_ROOT`, `UE_SHED_UNREAL_58_ROOT`,
-  `UE_SHED_UNREAL_427_ROOT`; never commit a machine path.
+- **Lane A** additionally needs UE 5.7 with engine source and Visual Studio 2022 with the Unreal
+  C++ workload (decision 11: 5.8 and 4.27 are not available). Discover the engine from the
+  registry or `UE_SHED_UNREAL_57_ROOT`; registry entries can outlive an uninstalled engine, so
+  confirm the folder exists. Never commit a machine path.
 - **Lane C's real-project measurements** need read-only local copies of a large UE 4.27 project
   with a localization target and a large UE 5 World Partition project, provided by the owner. If
   they are absent, use the generated scale harness (`scripts/game-text-scale.md`) and record that
@@ -147,20 +166,31 @@ downstream host, and an audit against an external Effect coding standard and err
 
 ## Working method
 
-- **One lane per worktree and branch** (`feat/058-a1-package-file-names`, …). One PR per item, with
-  a changeset. Stack PRs within a lane when an item depends on an unmerged one; never stack across
-  lanes.
+- **One lane per worktree and branch** (`feat/058-a-game-text-actions`, …). Keep PRs few: a lane
+  adds its items as commits to its open PR, one commit and one changeset per item. Open a separate
+  PR only when an item needs its own review (a breaking API change, an ADR) or the lane PR has
+  grown too large to review. Never stack across lanes.
 - **Only lane A runs Unreal, and only one engine process at a time.** Before any engine task, check
-  `tasklist /FI "IMAGENAME eq UnrealEditor*"`; if an editor the plan did not start is open, STOP and
-  ask the owner.
+  both editor process families, `tasklist /FI "IMAGENAME eq UnrealEditor*"` and
+  `tasklist /FI "IMAGENAME eq UE4Editor*"` (the names `scripts/unreal-plugin-host.ts` selects);
+  if an editor the plan did not start is open, STOP and ask the owner.
 - Measurements run alone, never while a build, an engine task or another lane's tests run.
 - Run targeted checks while iterating, `pnpm run check:precommit` before each push, and `pnpm check`
-  before asking for review. Parser, fixture and Unreal-integration PRs pass on UE 5.7 and UE 5.8,
-  reported separately (`pnpm test:uasset-engine-matrix`). CI must be green.
+  before asking for review. Parser, fixture and Unreal-integration PRs pass on UE 5.7: the
+  relevant `fixture:*` commands, `test:uasset-conformance`, `check:unreal`, and
+  `test:unreal-plugins` / `test:unreal-authoring` with `UE_SHED_UNREAL_ENGINE_ROOT` set to 5.7. Do
+  not run `pnpm test:uasset-engine-matrix`; it requires 5.8 and fails at startup. List in the PR
+  body which 5.8 checks the change needs, so the follow-up knows what to run. CI must be green.
 - PR bodies say what changed, why, how it was verified (per engine where relevant), what is
   breaking, and the migration note. Link the item ID.
 - **Merging is the owner's**, unless the owner has explicitly authorised merging in the running
   session; then merge each green PR in lane order.
+- **Two index builders** (decision 12). An item that changes package naming, place kinds or keys,
+  gather or origin rules, review marks or the joined layout starts only after PR #101 has merged.
+  It changes `crates/game-text-index` in the same PR and extends #101's differential tests
+  (`native-index-builder.integration.test.ts`, `scripts/native-game-text-join.test.ts`) so both
+  builders agree. While #101 is open, mark those items `BLOCKED — waits for #101` and work on the
+  others. Bump the `joined-native-v1:` key namespace whenever the native joined layout changes.
 - Do not add hardcoded studio policy. UE Shed ships Unreal's facts, engines and extension points;
   any preset is optional and host-replaceable.
 - The audit counts below are a baseline, not a target to game. Re-measure with a TypeScript AST scan
@@ -184,7 +214,7 @@ Stop and ask the owner when:
 
 Goal: a host can regenerate a text's key, adopt another id's key (merge), change its source,
 recompile the owning Blueprint and confirm the new ids by re-reading, for every place the identity
-fixture covers, on UE 5.7 and 5.8.
+fixture covers, on UE 5.7 (decision 11; 5.8 follows on another machine).
 
 First PR of the lane: add a short "Asset key fixes" note to Plan 052's out-of-scope section pointing
 to this plan.
@@ -200,21 +230,32 @@ to this plan.
   `asset-reader.ts:369,441`), maps (`saved_world.rs:282`, `project_io.rs:2180-2196`,
   `level_sequence.rs:547`), inspection (`generic.rs`, `generic/json.rs`, `saved_inspection.rs`) and
   Game Text (`corpus.ts:186-215`, `representation-copies.ts:82-120`).
+- With PR #101: `join_policy.rs` `manifest_package`, `file_label` and `relative_package` know only
+  `/Game/` ↔ `Content/`; they need the same mount-root mapping (plugin content included).
 - Bump any persisted index or snapshot format that stores object paths so old caches rebuild.
 - **Accept when** the identity fixture's `Branched/` packages report `Branched/` object paths, the
-  4.27 legacy fixture reports full paths, PR #99's reader test no longer derives the package from
-  `packageFile`, and the engine matrix passes on 5.7 and 5.8.
+  committed 4.27 legacy fixture reports full paths (saved bytes; no engine run needed), PR #99's
+  reader test no longer derives the package from `packageFile`, and the 5.7 checks pass.
 
 ### A2. Graph pin text as Game Text places
 
 - Project pin `DefaultTextValue` as an authoring place (location kind for a graph pin with
   Blueprint, graph, node GUID and pin name), editable through the A3 API.
 - Fold the compiled bytecode literal (`ScriptBytecode` place from PR #99) under the pin it came
-  from; when the compiled literal and the pin differ, report a stale-compile problem.
+  from only when that is provable. PR #99 deduplicates `(identity, source)` per function and
+  reports one `ScriptBytecode` path with no node or pin provenance
+  (`crates/uasset-inspection/src/projection.rs`, `DecodedAsset::Function`). Fold when exactly one
+  pin in the function has that identity; otherwise keep the compiled literal as its own place,
+  marked ambiguous, and do not give any pin a stale state from it. Report stale-compile only
+  when the fold is unique and the compiled literal and the pin differ. Per-pin provenance from
+  bytecode is out of scope.
 - Replace "UE 5.7" wording in graph comments and errors with the real version range.
+- With PR #101: the native place keys (`package_evidence.rs` `places`, keyed on location codes
+  0–2) and `join_places.rs` need the new pin location kind.
 - **Accept when** the identity fixture's Print Text pins appear as pin places with the same key and
   source Unreal gathers, compiled copies fold under them, and a deliberately uncompiled edit shows as
-  stale. 5.7 and 5.8.
+  stale, on 5.7. Include two pins in one function sharing an id and source, with an uncompiled
+  edit of only one of them: the compiled literal stays ambiguous and neither pin is marked stale.
 
 ### A3. Game Text actions: editor plugin and API
 
@@ -225,24 +266,26 @@ to this plan.
   save, re-read. Places: DataAsset properties, Blueprint CDO variables, SCS components, widget tree,
   graph pins; DataTables keep using `UEShedAuthoring`.
 - Use `TextNamespaceUtil::GetTextIdForEdit` and `FText::ChangeKey` as the fixture does; verify each
-  API in 5.7 and 5.8 source.
+  API in 5.7 source, and list the APIs for the 5.8 follow-up to check.
 - `@ue-shed/game-text` actions API: typed requests, dry run, apply, re-read and compare against the
   expected result. Errors follow lane D's shape.
 - **Accept when** tests drive every applicable case in
   `fixtures/unreal-project/FixtureSource/GameTextActions/expected-cases.json` through the API on 5.7
-  and 5.8 and the re-read ids match Unreal's gather.
+  and the re-read ids match Unreal's gather.
 
 ### A4. Identity fixture, slice 2
 
-Add cases, each checked against Unreal's gather: compiled text literals of every saved type on
-both engines (culture-invariant text, a String Table reference and, on 5.8, text with translator
-notes, since 5.8 renumbered the saved literal types; PR #99 covers these only with synthetic bytes);
+Add cases, each checked against Unreal's 5.7 gather: compiled text literals of every saved type
+(culture-invariant text, a String Table reference). 5.8's renumbered literal types, including text
+with translator notes, stay covered only by PR #99's synthetic bytes; record that as a 5.8 gap;
 String Table references; a child Blueprint that
 inherits a parent's text and one that overrides it; level actor text; World Partition external
 actor text; C++ `LOCTEXT` (gather-only, documented as such). Extend `expected-cases.json` and the
 integration test.
 
 ### A5. UE 4.27 identity slice
+
+`BLOCKED` (decision 11): no UE 4.27 on the executing machine. Kept for a machine that has it.
 
 A 4.27 identity fixture; bytecode literals checked against 4.27 evidence (4.27 support so far comes
 only from reading engine source); pins on 4.27 (version gate and pin-type custom-version minimums
@@ -276,8 +319,12 @@ optional preset reference. Migrate `disabledLocalizationChecks`, `segmentSeparat
 ### B3. Parameterised, scoped checks
 
 Text-shape helpers become functions of parameters. Apply scope after a finding is produced so units
-stay lazy. Keep "one check switches another off" correct when one is disabled
-(`localization-checks.ts:1121-1140`, `:1163-1231`, `:1283-1285`).
+stay lazy, except for suppression: "one check switches another off"
+(`localization-checks.ts:1121-1140`, `:1163-1231`, `:1283-1292`) must ask whether the suppressing
+check is enabled **and in scope** for the unit, so an out-of-scope check never hides an in-scope
+one. Regression case: a long source with translation `skip`, `placeholder_translation` scoped to
+another culture and `length_outlier` scoped to this one; the length finding survives (extend
+`localization-checks-shape.test.ts:384-400`).
 
 ### B4. Severity stored per finding
 
@@ -290,7 +337,9 @@ touches the same scan.
 `AudiencePolicy` with today's `TEXT_AUDIENCE_POLICY` (`text-audience.ts:80-95`) as the exported
 default preset; the `/debug/i` exclusion and placeholder word list move into the preset; gate
 default failures become opt-in (`localization-gate.ts:42,101`); no implicit `segment_separator`
-disable (`localization-checks.ts:425`). Policy is hashed into cache keys.
+disable (`localization-checks.ts:425`). Policy is hashed into cache keys. With PR #101, policy
+that the native join uses (gather rules, origin) is passed in the join input, not re-hardcoded in
+Rust, and the policy hash is part of the native joined key.
 
 ### B6. Studio-defined checks
 
@@ -301,7 +350,9 @@ role, culture and path.
 ### B7. Intended marks
 
 Fix: an acceptance saved with `culture: null` is looked up as `""` and never matches
-(`localization-review.ts:134`). Allow keyless findings such as `culture_invariant_text` (`:139`).
+(`localization-review.ts:134`). PR #101's `join_marks.rs` requires a string culture
+(`ok_or("review culture")`), so a `null` culture fails the native build; fix both. Allow keyless
+findings such as `culture_invariant_text` (`:139`).
 Decide and document whether a parameter change voids a mark.
 
 ### B8. Scans keyed on the resolved rules
@@ -316,7 +367,9 @@ processes, verified result hashes, never summed worker time as wall time.
 
 - **C1. Stage breakdown on real projects.** Instrument the build and Quality scan by stage on the
   large UE 4.27 project and the large UE 5 project; record results in
-  `docs/engineering/game-text-shared-index-measurements.md` without naming the projects.
+  `docs/engineering/game-text-shared-index-measurements.md` without naming the projects. If PR
+  #101 is available, measure both builders and say which one each number is for; #101's own
+  numbers are prototype figures that exclude discovery, extraction and UI work.
 - **C2. Prepare the query once, off the main thread.** Build the query model in the search worker
   and give the main thread a proxy, removing the ~1.15 s block in `openTarget` and the duplicate
   build. Port the responsiveness test from the `perf/game-text-event-loop-probe` branch on origin
@@ -331,7 +384,9 @@ processes, verified result hashes, never summed worker time as wall time.
 - **C5. Spike: binary package-text output.** The reader's ~3 GB of JSON on the large project is
   decoded in Node, re-written as NDJSON and decoded again in workers
   (`package-text-layer.ts:303-312`, `package-text-worker.ts:17`). Measure a binary or native-written
-  layer before adopting it.
+  layer before adopting it. PR #101 already has the reader process write the shared index, but
+  still receives the TypeScript producers' layers as staged JSON; build the spike on its protocol
+  and writer lease rather than a second native path.
 - **C6. Electron vs Node.** One control run took 122.6 s in Electron and 70.5 s in Node on the same
   input. Find the cause or record why it couldn't be found.
 - **C7. Bytecode reader cost.** Text extraction on the large UE 4.27 project got 9% slower with PR
@@ -352,7 +407,9 @@ decoders (D7). Every fix lands with a lint or `check-effect-architecture` rule s
   and ids), `./rules`, `./checks`, `./index` (Node: steps, layers, retained model, errors,
   progress), `./corpus`, `./labels`; named exports only. Snapshot, shared-index, joined,
   package-text, cold-pool and worker modules become private. Stop re-exporting other packages'
-  types (`investigation.ts:275`, `localization-review.ts:12`).
+  types (`investigation.ts:275`, `localization-review.ts:12`). With PR #101,
+  `nativeIndexBuilderLayer` goes in `./index`, and its newly exported `SharedIndexManifestSchema`
+  becomes private again.
 - **D2. Reader batching inside `gameTextIndexSourceNodeLayer`**, and export the request limit from
   `unreal-assets` (`protocol-transport.ts:58`), so hosts stop batching themselves.
 - **D3. Unreal path module** (breaking brands), paired with A1: branded `PackageName`, `ObjectPath`,
@@ -367,7 +424,9 @@ decoders (D7). Every fix lands with a lint or `check-effect-architecture` rule s
   `Cause.pretty` messages with classified codes plus `cause`. Split `artifact_invalid`
   (`cameras/src/camera-render.ts:505-557`) and `scan_limit_exceeded` (`game-text/src/corpus.ts:1066-1075`,
   which also labels a missing root). Rewrite `snapshot-store.ts:74-81` `failure()`, which turns any
-  error into "unavailable, retry". Lint against `String(cause)` in error constructors.
+  error into "unavailable, retry". PR #101's `native-index-builder.ts` does the same for every
+  native failure (`nativeFailure`, `unavailable(...)` into `SnapshotStoreError`); classify those too.
+  Lint against `String(cause)` in error constructors.
 - **D6. Deliberate error translation.** Replace the catch-alls in `packages/host/src/authoring.ts`
   and `cameras/src/review-schema.ts:2333-2365` with `catchTags`; stop exposing `_tag` as a public
   code. Replace the 134 `instanceof` checks on tagged errors and the message-text branches (for
@@ -399,13 +458,16 @@ decoders (D7). Every fix lands with a lint or `check-effect-architecture` rule s
   merged on 2026-10-09).
 - **D13. API surface of the other host-facing packages.** Repeat D1's review for `protocol`,
   `unreal-connection`, `localization`, `unreal-assets`, `engine`, `cameras` and `host`: which exports a
-  host uses, which are internal, and entry points with named exports. Measure first (an AST scan of
-  each package's exports against its uses in `apps/` and other packages), then cut.
+  host uses, which are internal, and entry points with named exports. Include PR #101's protocol
+  1.13 `game_text_index` types and `unreal-assets` `game-text-index-client`. Measure first (an
+  AST scan of each package's exports against its uses in `apps/` and other packages), then cut.
 - **D14. Native error audit.** Apply the error checklist to the Rust crates and the C++ editor
   plugins where their failures reach a host: `AssetError` kinds and messages (what failed, the path
   and byte offset, a way forward) as they appear in CLI and protocol output; `unwrap`/`expect`/panics
   in non-test decoder code (a malformed package must be a typed error, never a crash); and
-  `UEShed*` plugin results over Remote Control (stable codes, no prose-only failures). Add
+  `UEShed*` plugin results over Remote Control (stable codes, no prose-only failures). Include
+  PR #101's `crates/game-text-index` if it has merged: it returns string errors (for example
+  `ok_or("review culture")`) and has about 30 `unwrap`/`expect` calls outside tests. Add
   `clippy::unwrap_used`/`expect_used` for non-test code where it holds.
 
 ## R. 0.17.0 release preparation
@@ -423,5 +485,5 @@ approves and publishes.
 | 3   | A1, A3 | B3, B7 | C2     | D5, D6           |
 | 4   | A3     | B4, B8 | C3     | D3 (with A1), D7 |
 | 5   | A3, A4 | B5     | C4, C6 | D8, D9           |
-| 6   | A4, A5 | B6     | C5     | D10, D13         |
-| 7   | A5     | —      | C7     | D11, D12, D14, R |
+| 6   | A4, A6 | B6     | C5     | D10, D13         |
+| 7   | A6     | —      | C7     | D11, D12, D14, R |
