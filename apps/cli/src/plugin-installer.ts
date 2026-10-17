@@ -14,7 +14,6 @@ import {
 import { tmpdir } from "node:os";
 import { dirname, extname, join, relative, resolve, sep } from "node:path";
 import {
-	ArtifactDigestMismatch,
 	PluginBundleManifest,
 	PluginBundleManifestValidationError,
 	defaultPluginDistributionLimits,
@@ -93,6 +92,7 @@ const sha256Pattern = /^[a-f0-9]{64}$/u;
 const generatedPluginDirectories = new Set(["binaries", "intermediate"]);
 const JsonObject = Schema.Record(Schema.String, Schema.Json);
 const decodeJson = Schema.decodeUnknownSync(Schema.Json);
+const isPluginBundleManifestValidationError = Schema.is(PluginBundleManifestValidationError);
 const OwnershipRecordDocument = Schema.Struct({
 	artifactSha256: Schema.String,
 	files: Schema.Record(Schema.String, Schema.String),
@@ -141,7 +141,7 @@ function parseManifest(value: Schema.Json): PluginReleaseManifest {
 	try {
 		return Effect.runSync(validatePluginBundleManifest(value));
 	} catch (cause) {
-		if (cause instanceof PluginBundleManifestValidationError) {
+		if (isPluginBundleManifestValidationError(cause)) {
 			fail(`${cause.message} Recovery: ${cause.recovery}`);
 		}
 		fail("Plugin manifest does not match the plugin bundle manifest schema.", cause);
@@ -360,7 +360,7 @@ async function verifyArtifact(
 		);
 	} catch (cause) {
 		fail(
-			`Plugin artifact ${cause instanceof ArtifactDigestMismatch ? "checksum mismatch" : "verification failed"}: ${artifact}.${recoverySuffix(cause)}`,
+			`Plugin artifact ${Predicate.isTagged(cause, "ArtifactDigestMismatch") ? "checksum mismatch" : "verification failed"}: ${artifact}.${recoverySuffix(cause)}`,
 			cause
 		);
 	}

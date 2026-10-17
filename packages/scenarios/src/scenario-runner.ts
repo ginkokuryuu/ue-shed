@@ -77,6 +77,7 @@ export class ScenarioRunner extends Context.Service<ScenarioRunner, ScenarioRunn
 class PollPending extends Schema.TaggedError<PollPending>()("ScenarioRunner.PollPending", {
 	operation: Schema.String
 }) {}
+const isPollPending = Schema.is(PollPending);
 
 function endpointOf(configured: string): string {
 	return configured.replace(/\/+$/, "");
@@ -318,10 +319,10 @@ export const ScenarioRunnerLive = Layer.effect(
 					schedule: Schedule.spaced("50 millis").pipe(
 						Schedule.upTo({ duration: "15 seconds" })
 					),
-					while: (error) => error instanceof PollPending
+					while: isPollPending
 				}),
 				Effect.mapError((error) =>
-					error instanceof PollPending
+					isPollPending(error)
 						? new ScenarioRunnerError({
 								code: "pie_unavailable",
 								endpoint,
@@ -490,10 +491,10 @@ export const ScenarioRunnerLive = Layer.effect(
 					schedule: Schedule.spaced("50 millis").pipe(
 						Schedule.upTo({ duration: "45 seconds" })
 					),
-					while: (error) => error instanceof PollPending
+					while: isPollPending
 				}),
 				Effect.mapError((error) =>
-					error instanceof PollPending
+					isPollPending(error)
 						? new ScenarioRunnerError({
 								code: "poll_timeout",
 								endpoint: handle.endpoint,

@@ -396,12 +396,14 @@ const SnapshotResponse = Schema.Union([
 	})
 ]);
 
+const isRemoteControlClientError = Schema.is(RemoteControlClientError);
+
 function controlError(
 	endpoint: string,
 	operation: "start" | "stop" | "status",
 	cause: RemoteControlClientError | unknown
 ): ActorObservationControlError {
-	if (cause instanceof RemoteControlClientError) {
+	if (isRemoteControlClientError(cause)) {
 		return new ActorObservationControlError({
 			endpoint: cause.endpoint,
 			message: cause.message,

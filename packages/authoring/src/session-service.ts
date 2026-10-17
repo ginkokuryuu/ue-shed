@@ -44,6 +44,7 @@ import {
 	type AuthoringTableChange
 } from "./review.js";
 
+const isDraftIntentError = Schema.is(DraftIntentError);
 const SessionIdPattern = /^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/;
 
 const PendingOperation = Schema.Union([
@@ -742,7 +743,7 @@ function makeAuthoringSessionServiceEffect(): Effect.Effect<
 								Effect.try({
 									try: () => transition(document, timestamp),
 									catch: (cause) =>
-										cause instanceof DraftIntentError
+										isDraftIntentError(cause)
 											? cause
 											: new AuthoringSessionTransitionError({
 													cause,

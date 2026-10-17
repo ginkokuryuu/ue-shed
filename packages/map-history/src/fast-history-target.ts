@@ -1,7 +1,7 @@
 import { resolve } from "node:path";
 import type { AssetReader } from "@ue-shed/unreal-assets";
 import type { SavedWorld, SavedWorldActor } from "@ue-shed/protocol";
-import { Effect } from "effect";
+import { Effect, Schema } from "effect";
 import { actorIdentityKey, actorIdentityOf } from "./diff.js";
 import { MapHistoryError } from "./errors.js";
 import { PerforceHistorySource } from "./perforce.js";
@@ -18,6 +18,8 @@ import type {
 	PerforceFastMapHistoryQuery
 } from "./schema.js";
 import { PerforceDepotPath } from "./schema.js";
+
+const isMapHistoryError = Schema.is(MapHistoryError);
 
 const ZERO_GUID = /^0{8}-0{8}-0{8}-0{8}$/;
 
@@ -179,7 +181,7 @@ export function proveFastHistoryActorClassTargets(options: {
 			identity: actorIdentityOf(actor),
 			scope: options.scope
 		});
-		if (target instanceof MapHistoryError) return target;
+		if (isMapHistoryError(target)) return target;
 		proven.push(target);
 	}
 	return proven;
@@ -288,14 +290,14 @@ export function resolvePerforceFastMapScope(
 							target: query.target,
 							world
 						});
-						return proven instanceof MapHistoryError ? proven : [proven];
+						return isMapHistoryError(proven) ? proven : [proven];
 					})()
 				: proveFastHistoryActorClassTargets({
 						scope: mapScope,
 						target: query.target,
 						world
 					});
-		if (provenTargets instanceof MapHistoryError) return yield* Effect.fail(provenTargets);
+		if (isMapHistoryError(provenTargets)) return yield* Effect.fail(provenTargets);
 		const proven = provenTargets[0];
 		if (proven === undefined) {
 			return yield* Effect.fail(

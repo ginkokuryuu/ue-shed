@@ -32,6 +32,8 @@ export class GameTextIndexError extends Schema.TaggedError<GameTextIndexError>()
 		cause: Schema.optionalKey(Schema.Defect())
 	}
 ) {}
+/** Tag guard for Game Text index failures; match by tag, not `instanceof`. */
+export const isGameTextIndexError = Schema.is(GameTextIndexError);
 
 export interface GameTextIndexSourceRequest {
 	readonly projectRoot: string;

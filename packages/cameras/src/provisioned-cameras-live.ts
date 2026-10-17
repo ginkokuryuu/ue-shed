@@ -11,6 +11,7 @@ import {
 } from "./review-schema.js";
 import { MapCapturePlanId } from "./map-tile-schema.js";
 
+const isRemoteControlClientError = Schema.is(RemoteControlClientError);
 const cameraLibraryPath = "/Script/UEShedCameras.Default__UEShedCameraLibrary";
 const positiveWidth = Schema.Int.check(Schema.isBetween({ minimum: 64, maximum: 2560 }));
 const positiveHeight = Schema.Int.check(Schema.isBetween({ minimum: 64, maximum: 1440 }));
@@ -208,7 +209,7 @@ function provisionedCameraError(
 	/** Which side of the exchange failed to decode: the caller's request or the editor's response. */
 	subject: "request" | "response" = "response"
 ): ProvisionedCameraError {
-	if (cause instanceof RemoteControlClientError) {
+	if (isRemoteControlClientError(cause)) {
 		return new ProvisionedCameraError({
 			message: cause.message,
 			nextStep: cause.nextStep,

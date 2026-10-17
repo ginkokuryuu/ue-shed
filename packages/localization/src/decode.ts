@@ -1,5 +1,10 @@
 import { Predicate, Result, Schema } from "effect";
-import { defaultLocalizationLimits, LocalizationError, LocalizationLimits } from "./schema.js";
+import {
+	defaultLocalizationLimits,
+	LocalizationError,
+	isLocalizationError,
+	LocalizationLimits
+} from "./schema.js";
 import { validateUnrealJsonEscapes } from "./unreal-json.js";
 
 export function localizationError(code: LocalizationError["code"]): LocalizationError {
@@ -46,7 +51,7 @@ export function parseResult<A>(parse: () => A): Result.Result<A, LocalizationErr
 		return Result.succeed(parse());
 	} catch (cause) {
 		return Result.fail(
-			cause instanceof LocalizationError ? cause : localizationError("invalid_schema")
+			isLocalizationError(cause) ? cause : localizationError("invalid_schema")
 		);
 	}
 }

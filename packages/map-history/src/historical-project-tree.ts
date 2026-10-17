@@ -4,6 +4,8 @@ import { tmpdir } from "node:os";
 import { Effect, Predicate, Schema, Scope } from "effect";
 import { MapHistoryError } from "./errors.js";
 
+const isMapHistoryError = Schema.is(MapHistoryError);
+
 const TEMPORARY_PROJECT_PREFIX = "ue-shed-map-history-";
 
 export const HistoricalFileMutation = Schema.Union([
@@ -122,7 +124,7 @@ function makeHistoricalProjectTree(operationRoot: string): HistoricalProjectTree
 		const validated = yield* Effect.try({
 			try: () => validateMutations(projectRoot, mutations),
 			catch: (cause) =>
-				cause instanceof MapHistoryError
+				isMapHistoryError(cause)
 					? cause
 					: invalidTarget("", `Historical revision targets are invalid: ${String(cause)}`)
 		});

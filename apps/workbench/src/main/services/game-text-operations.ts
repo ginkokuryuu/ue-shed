@@ -40,6 +40,8 @@ import { WorkbenchConfiguration } from "../workbench-config.js";
 import { WorkbenchProject } from "./project-workspace.js";
 import { WorkbenchGameText } from "./game-text.js";
 
+const isLocalizationOperationError = Schema.is(LocalizationOperationError);
+
 export interface WorkbenchGameTextOperationsApi {
 	readonly state: (target: LocalizationTargetName) => Effect.Effect<WorkbenchOperationState>;
 	readonly plan: (
@@ -398,7 +400,7 @@ export const WorkbenchGameTextOperationsLive = Layer.effect(
 								const terminationError =
 									stopped &&
 									Result.isSuccess(stopped) &&
-									stopped.success instanceof LocalizationOperationError
+									isLocalizationOperationError(stopped.success)
 										? stopped.success
 										: undefined;
 								const result: WorkbenchOperationResult = Exit.isSuccess(exit)

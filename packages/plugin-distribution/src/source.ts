@@ -21,6 +21,8 @@ import type {
 import type { PluginVariantRequest } from "./variant.js";
 
 const COPY_CHUNK_BYTES = 64 * 1024;
+const isPluginDistributionValidationError = Schema.is(PluginDistributionValidationError);
+const isReleaseUnavailable = Schema.is(ReleaseUnavailable);
 
 export interface PluginReleaseDocument {
 	readonly bytes: Uint8Array;
@@ -238,7 +240,7 @@ export const localPluginReleaseSourceLayer = (
 						};
 					},
 					catch: (cause) =>
-						cause instanceof PluginDistributionValidationError
+						isPluginDistributionValidationError(cause)
 							? transport(request.releaseVersion, "Decode local manifest", cause)
 							: unavailable(
 									request.releaseVersion,
@@ -406,7 +408,7 @@ export const httpPluginReleaseSourceLayer = (
 						};
 					},
 					catch: (cause) => {
-						if (cause instanceof ReleaseUnavailable) return cause;
+						if (isReleaseUnavailable(cause)) return cause;
 						if (cause instanceof DOMException && cause.name === "AbortError") {
 							return cancelled(request.releaseVersion, "manifest download");
 						}
@@ -470,7 +472,7 @@ export const httpPluginReleaseSourceLayer = (
 						return provenance(url.toString());
 					},
 					catch: (cause) => {
-						if (cause instanceof ReleaseUnavailable) return cause;
+						if (isReleaseUnavailable(cause)) return cause;
 						if (cause instanceof DOMException && cause.name === "AbortError") {
 							return cancelled(request.manifest.releaseVersion, "download");
 						}

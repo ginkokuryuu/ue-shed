@@ -9,7 +9,14 @@ import {
 	type SavedAssetScan
 } from "@ue-shed/unreal-assets";
 import { Effect, Result } from "effect";
-import { CliCommandError, CliRuntime, errnoCode, messageOf, printJson } from "./cli-runtime.js";
+import {
+	CliCommandError,
+	CliRuntime,
+	errnoCode,
+	isCliCommandError,
+	messageOf,
+	printJson
+} from "./cli-runtime.js";
 import { observeCliOperation, readerLayer } from "./cli-operation.js";
 import type { CliCommand } from "./command-model.js";
 import { LocalizationEvidenceNodeLive } from "@ue-shed/localization";
@@ -243,7 +250,7 @@ export const runInputInspect = Effect.fn("Cli.workflow.input_inspect")(
 					Effect.provide(EnhancedInputServiceLive),
 					Effect.provide(readerLayer(command.reader)),
 					Effect.mapError((error) =>
-						error instanceof CliCommandError
+						isCliCommandError(error)
 							? error
 							: new CliCommandError({ message: messageOf(error) })
 					)

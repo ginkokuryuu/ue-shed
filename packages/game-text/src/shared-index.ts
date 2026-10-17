@@ -9,6 +9,7 @@ import {
 	decodeStringBlock,
 	snapshotCheck,
 	SnapshotFormatError,
+	isSnapshotFormatError,
 	snapshotFailure
 } from "./snapshot-format.js";
 import {
@@ -21,6 +22,7 @@ import {
 import {
 	SnapshotStore,
 	SnapshotStoreError,
+	isSnapshotStoreError,
 	snapshotStoreFailure,
 	snapshotStoreNodeLayer,
 	snapshotStoreDirectory,
@@ -63,7 +65,7 @@ const boundary = <A>(operation: string, run: () => Promise<A>) =>
 	Effect.tryPromise({
 		try: run,
 		catch: (cause): Failure =>
-			cause instanceof SnapshotFormatError || cause instanceof SnapshotStoreError
+			isSnapshotFormatError(cause) || isSnapshotStoreError(cause)
 				? cause
 				: snapshotStoreFailure(
 						operation,
@@ -397,8 +399,8 @@ function makeSharedIndexNodeLayer(options: SharedIndexOptions) {
 					// Retirement can race the interval between reading the root and opening every handle.
 					if (
 						attempt >= 2 ||
-						!(result.failure instanceof SnapshotStoreError) ||
-						!result.failure.message.includes("ENOENT")
+						!isSnapshotStoreError(result.failure) ||
+						result.failure.code !== "missing"
 					)
 						return yield* Effect.fail(result.failure);
 				}
@@ -408,8 +410,7 @@ function makeSharedIndexNodeLayer(options: SharedIndexOptions) {
 				const opened = yield* read().pipe(Effect.result);
 				if (
 					Result.isFailure(opened) &&
-					(!(opened.failure instanceof SnapshotStoreError) ||
-						opened.failure.code !== "missing")
+					(!isSnapshotStoreError(opened.failure) || opened.failure.code !== "missing")
 				)
 					return yield* Effect.fail(opened.failure);
 				let manifest = Result.isSuccess(opened) ? opened.success : initial();

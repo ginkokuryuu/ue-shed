@@ -200,6 +200,18 @@ export class ProjectIndexRefreshFailed extends Schema.TaggedError<ProjectIndexRe
 	ErrorFields
 ) {}
 
+/** Tag guard for every Project Index failure; match by tag, not `instanceof`. */
+export const isProjectIndexError = Schema.is(
+	Schema.Union([
+		ProjectIndexUnavailable,
+		ProjectIndexInvalidRequest,
+		ProjectIndexStaleGeneration,
+		ProjectIndexIncompatibleWorker,
+		ProjectIndexCorruptCatalog,
+		ProjectIndexRefreshFailed
+	])
+);
+
 export type ProjectIndexError =
 	| ProjectIndexUnavailable
 	| ProjectIndexInvalidRequest

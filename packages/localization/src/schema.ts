@@ -45,6 +45,8 @@ export class LocalizationError extends Schema.TaggedError<LocalizationError>()(
 		recovery: Schema.String
 	}
 ) {}
+/** Tag guard for localization failures; match by tag, not `instanceof`. */
+export const isLocalizationError = Schema.is(LocalizationError);
 
 export const LocalizationLimits = Schema.Struct({
 	maxFileBytes: Schema.Int.check(Schema.isGreaterThan(0)),

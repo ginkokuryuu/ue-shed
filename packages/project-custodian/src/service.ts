@@ -33,6 +33,7 @@ export class CustodianError extends Schema.TaggedError<CustodianError>()("Projec
 	retrySafe: Schema.Boolean,
 	cause: Schema.Defect()
 }) {}
+const isCustodianError = Schema.is(CustodianError);
 
 export interface CustodianApi {
 	readonly scan: (
@@ -202,7 +203,7 @@ export const CustodianNodeLive = Layer.effect(
 			}).pipe(
 				Effect.flatMap(decodeCustodianReceipt),
 				Effect.mapError((cause) =>
-					cause instanceof CustodianError
+					isCustodianError(cause)
 						? cause
 						: new CustodianError({
 								code: "execution_failed",

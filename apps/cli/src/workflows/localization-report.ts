@@ -12,6 +12,8 @@ import { CliRuntime, printJson } from "../cli-runtime.js";
 import type { CliCommand } from "../command-model.js";
 import { loadLocalizationContext } from "./localization.js";
 
+const isLocalizationReportError = Schema.is(LocalizationReportError);
+
 export class LocalizationBaselineIOError extends Schema.TaggedError<LocalizationBaselineIOError>()(
 	"LocalizationBaselineIOError",
 	{
@@ -94,7 +96,7 @@ export const runLocalizationReport = Effect.fn("Cli.workflow.localization_report
 					const report = yield* Effect.try({
 						try: () => localizationProgressReport(corpus, join, evidence, baseline),
 						catch: (error) =>
-							error instanceof LocalizationReportError
+							isLocalizationReportError(error)
 								? error
 								: new LocalizationReportError({
 										code: "invalid_report_context",
@@ -113,7 +115,7 @@ export const runLocalizationReport = Effect.fn("Cli.workflow.localization_report
 									new Date(now).toISOString()
 								),
 							catch: (error) =>
-								error instanceof LocalizationReportError
+								isLocalizationReportError(error)
 									? error
 									: new LocalizationReportError({
 											code: "invalid_baseline",

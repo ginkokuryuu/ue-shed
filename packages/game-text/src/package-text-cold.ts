@@ -6,7 +6,7 @@ import { availableParallelism } from "node:os";
 import { Effect, Schema } from "effect";
 import { SharedIndex } from "./shared-index.js";
 import { openSnapshotFile, type SnapshotFileReader } from "./snapshot-file.js";
-import { SnapshotStoreError, snapshotStoreFailure } from "./snapshot-store.js";
+import { snapshotStoreFailure } from "./snapshot-store.js";
 import { packageTextSelection, type PackageTextInventoryEntry } from "./package-text-layer.js";
 import { PreparedColdStrings, type ColdLayerSource } from "./shared-string-sort.js";
 

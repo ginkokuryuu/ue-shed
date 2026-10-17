@@ -483,7 +483,7 @@ describe("ue-shed CLI process", () => {
 		]);
 		expect(malformed.status).toBe(2);
 		expect(malformed.stdout).toBe("");
-		expect(malformed.stderr).toContain("ue-shed: Invalid value JSON");
+		expect(malformed.stderr).toContain("ue-shed: Authoring value is not valid JSON.");
 
 		const remote = runCli(["authoring", "live", "tables", "http://127.0.0.1:1"]);
 		expect(remote.status).toBe(2);

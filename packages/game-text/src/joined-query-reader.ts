@@ -1,6 +1,6 @@
 import { Effect } from "effect";
-import { snapshotCheck, snapshotFailure, SnapshotFormatError } from "./snapshot-format.js";
-import { SnapshotStoreError } from "./snapshot-store.js";
+import { snapshotCheck, snapshotFailure, isSnapshotFormatError } from "./snapshot-format.js";
+import { isSnapshotStoreError } from "./snapshot-store.js";
 import type { JoinedTargetReader } from "./joined-target-reader.js";
 import { runJoinedQuery } from "./joined-query-node.js";
 import { concatenateJoinedChunks } from "./joined-target-reader.js";
@@ -10,7 +10,7 @@ const read = <A>(operation: string, run: () => A) =>
 	Effect.try({
 		try: run,
 		catch: (cause) =>
-			cause instanceof SnapshotFormatError || cause instanceof SnapshotStoreError
+			isSnapshotFormatError(cause) || isSnapshotStoreError(cause)
 				? cause
 				: snapshotFailure(operation, String(cause))
 	});

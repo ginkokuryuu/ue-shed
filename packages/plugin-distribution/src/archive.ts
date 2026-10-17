@@ -18,6 +18,10 @@ import {
 } from "./manifest.js";
 import type { PluginDistributionLimits, PluginInstallProgress } from "./model.js";
 
+const isPluginInstallCancelled = Schema.is(PluginInstallCancelled);
+const isArtifactDigestMismatch = Schema.is(ArtifactDigestMismatch);
+const isMalformedOrUnsafeArchive = Schema.is(MalformedOrUnsafeArchive);
+
 const TAR_BLOCK_BYTES = 512;
 const COPY_CHUNK_BYTES = 64 * 1024;
 const WINDOWS_DEVICE_NAME = /^(?:con|prn|aux|nul|com[1-9]|lpt[1-9])(?:\..*)?$/iu;
@@ -270,10 +274,7 @@ export const verifyPluginArtifact = (options: {
 			return { bytes: details.size, digest, path: resolve(options.artifactPath) };
 		},
 		catch: (cause) => {
-			if (
-				cause instanceof PluginInstallCancelled ||
-				cause instanceof ArtifactDigestMismatch
-			) {
+			if (isPluginInstallCancelled(cause) || isArtifactDigestMismatch(cause)) {
 				return cause;
 			}
 			return (
@@ -541,7 +542,7 @@ export async function extractPluginArchiveToDirectory(
 		}
 		return { extractedBytes, fileCount, files };
 	} catch (cause) {
-		if (cause instanceof PluginInstallCancelled) throw cause;
+		if (isPluginInstallCancelled(cause)) throw cause;
 		throw (
 			abortError(options.signal, options.manifest.releaseVersion, "extraction") ??
 			archiveFailure(
@@ -559,7 +560,7 @@ export const extractPluginArchive = (
 	Effect.tryPromise({
 		try: () => extractPluginArchiveToDirectory(options),
 		catch: (cause) =>
-			cause instanceof PluginInstallCancelled || cause instanceof MalformedOrUnsafeArchive
+			isPluginInstallCancelled(cause) || isMalformedOrUnsafeArchive(cause)
 				? cause
 				: archiveFailure(
 						options.manifest.releaseVersion,

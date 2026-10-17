@@ -26,6 +26,8 @@ import {
 	type MapTilePyramidManifest as MapTilePyramidManifestValue
 } from "./map-tile-schema.js";
 
+const isCaptureArtifactSourceRejected = Schema.is(CaptureArtifactSourceRejected);
+
 export const DEFAULT_MAP_CAPTURE_ROOT = ".ue-shed/map-capture";
 
 export class MapCaptureStorageError extends Schema.TaggedError<MapCaptureStorageError>()(
@@ -245,7 +247,7 @@ function mapCaptureDestination(filesystem: FilesystemCaptureDestination): MapCap
 					attempt.storeArtifact(input).pipe(
 						Effect.map((stored) => stored.bytes),
 						Effect.mapError((cause) =>
-							cause instanceof CaptureArtifactSourceRejected
+							isCaptureArtifactSourceRejected(cause)
 								? new MapCaptureArtifactSourceRejected({
 										message: cause.message,
 										nextStep: cause.nextStep,

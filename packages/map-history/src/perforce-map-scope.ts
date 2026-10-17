@@ -1,11 +1,13 @@
 import { isAbsolute, relative, resolve, win32 } from "node:path";
 import { AssetReader, type AssetReaderError } from "@ue-shed/unreal-assets";
 import type { SavedWorld } from "@ue-shed/protocol";
-import { Effect } from "effect";
+import { Effect, Schema } from "effect";
 import { MapHistoryError } from "./errors.js";
 import { PerforceHistorySource, type PerforceMapMove } from "./perforce.js";
 import type { ScopedPerforceFile } from "./revision-plan.js";
 import type { PerforceMapHistoryQuery } from "./schema.js";
+
+const isMapHistoryError = Schema.is(MapHistoryError);
 
 export interface ResolvedPerforceMapScope {
 	/**
@@ -263,7 +265,7 @@ export function resolvePerforceMapLineage(options: {
 			const mapProjectRelativePath = yield* Effect.try({
 				try: () => projectRelativePath(options.projectRoot, location.localPath),
 				catch: (cause) =>
-					cause instanceof MapHistoryError
+					isMapHistoryError(cause)
 						? cause
 						: invalidScope(
 								`Could not resolve historical map location ${location.localPath} beneath the selected project.`
@@ -339,7 +341,7 @@ export function resolvePresentDayMapScope(query: {
 		const mapProjectRelativePath = yield* Effect.try({
 			try: () => projectRelativePath(query.projectRoot, mapLocalPath),
 			catch: (cause) =>
-				cause instanceof MapHistoryError
+				isMapHistoryError(cause)
 					? cause
 					: invalidScope(
 							`Could not resolve ${query.mapPath} beneath the selected project.`
@@ -374,7 +376,7 @@ export function resolvePresentDayMapScope(query: {
 		const externalActorProjectRoot = yield* Effect.try({
 			try: () => projectRelativePath(query.projectRoot, externalActorRoot),
 			catch: (cause) =>
-				cause instanceof MapHistoryError
+				isMapHistoryError(cause)
 					? cause
 					: invalidScope("Could not resolve the external-actor root beneath the project.")
 		});

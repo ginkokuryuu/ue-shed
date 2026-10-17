@@ -445,12 +445,14 @@ export class CameraControlError extends Schema.TaggedError<CameraControlError>()
 	}
 ) {}
 
+const isRemoteControlClientError = Schema.is(RemoteControlClientError);
+
 function cameraControlError(
 	endpoint: string,
 	operation: "configure" | "status",
 	cause: RemoteControlClientError | unknown
 ): CameraControlError {
-	if (cause instanceof RemoteControlClientError) {
+	if (isRemoteControlClientError(cause)) {
 		return new CameraControlError({
 			endpoint: cause.endpoint,
 			message: cause.message,

@@ -58,6 +58,7 @@ import {
 	type MapTilePyramidManifest as MapTilePyramidManifestValue
 } from "./map-tile-schema.js";
 
+const isMapCaptureArtifactSourceRejected = Schema.is(MapCaptureArtifactSourceRejected);
 const mapTileReviewLibraryPath = "/Script/UEShedCamerasEditor.Default__UEShedCameraReviewLibrary";
 const maximumTilesPerRequest = 64;
 const litCameraTilesPerBatch = 4;
@@ -743,7 +744,7 @@ function runMapCaptureWith(args: {
 											Effect.succeed(cause)
 									)
 								);
-							if (stored instanceof MapCaptureArtifactSourceRejected) {
+							if (isMapCaptureArtifactSourceRejected(stored)) {
 								failures.push({
 									failure: captureFailure({
 										code: "write_failed",

@@ -6,6 +6,9 @@ export class CliCommandError extends Schema.TaggedError<CliCommandError>()("CliC
 	...ErrorCauseFields
 }) {}
 
+/** Matches a {@link CliCommandError} by its tag and schema, never by `instanceof`. */
+export const isCliCommandError = Schema.is(CliCommandError);
+
 /** Node errno code of a filesystem failure, when the cause carries one. */
 export function errnoCode(cause: unknown): string | undefined {
 	return cause instanceof Object && "code" in cause && Predicate.isString(cause.code)

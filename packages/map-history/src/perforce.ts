@@ -19,6 +19,8 @@ import { tmpdir } from "node:os";
 import { join, resolve, win32 } from "node:path";
 import { MapHistoryError } from "./errors.js";
 
+const isMapHistoryError = Schema.is(MapHistoryError);
+
 export interface PerforceChangedFile {
 	readonly action: string;
 	readonly depotPath: string;
@@ -730,7 +732,7 @@ export function perforceHistorySourceLayer(
 								selectedDepotPath: request.depotPath
 							}),
 						catch: (cause) =>
-							cause instanceof MapHistoryError
+							isMapHistoryError(cause)
 								? cause
 								: mapLineageError(
 										"ambiguous_map_lineage",

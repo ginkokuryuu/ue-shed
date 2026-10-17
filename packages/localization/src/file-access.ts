@@ -14,7 +14,12 @@ import { dirname, isAbsolute, relative, resolve, sep } from "node:path";
 import { Context, Effect, Layer, Result, Schema } from "effect";
 import { localizationError, validate } from "./decode.js";
 import { resolveLocalizationGatherPath } from "./gather-path.js";
-import { FileProvenance, LocalizationError, type LocalizationLimits } from "./schema.js";
+import {
+	FileProvenance,
+	LocalizationError,
+	isLocalizationError,
+	type LocalizationLimits
+} from "./schema.js";
 
 export const LocalizationFileRead = Schema.Struct({
 	bytes: Schema.Uint8Array,
@@ -61,11 +66,11 @@ const FileSystemFailure = Schema.Struct({ code: Schema.String });
 const sha256 = (bytes: Uint8Array) => createHash("sha256").update(bytes).digest("hex");
 
 function writeError(cause: unknown): LocalizationError {
-	return cause instanceof LocalizationError ? cause : localizationError("file_unwritable");
+	return isLocalizationError(cause) ? cause : localizationError("file_unwritable");
 }
 
 function fileError(cause: unknown): LocalizationError {
-	if (cause instanceof LocalizationError) return cause;
+	if (isLocalizationError(cause)) return cause;
 	const decoded = Schema.decodeUnknownResult(FileSystemFailure)(cause);
 	return localizationError(
 		Result.isSuccess(decoded) && decoded.success.code === "ENOENT"

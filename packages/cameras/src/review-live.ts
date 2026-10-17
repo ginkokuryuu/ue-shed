@@ -13,6 +13,8 @@ import {
 	type ReviewCaptureResponse
 } from "./review-schema.js";
 
+const isCameraRenderError = Schema.is(CameraRenderError);
+const isRemoteControlClientError = Schema.is(RemoteControlClientError);
 const reviewLibraryPath = "/Script/UEShedCamerasEditor.Default__UEShedCameraReviewLibrary";
 
 export class ReviewCaptureConnectionError extends Schema.TaggedError<ReviewCaptureConnectionError>()(
@@ -25,7 +27,7 @@ function connectionError(
 	cause: RemoteControlClientError | unknown
 ): ReviewCaptureConnectionError {
 	// These already carry a classified message and truthful guidance; keep both.
-	if (cause instanceof RemoteControlClientError || cause instanceof CameraRenderError) {
+	if (isRemoteControlClientError(cause) || isCameraRenderError(cause)) {
 		return new ReviewCaptureConnectionError({
 			endpoint,
 			message: cause.message,

@@ -11,6 +11,7 @@ export class ScenarioDocumentFileError extends Schema.TaggedError<ScenarioDocume
 	"ScenarioDocumentFileError",
 	{ message: Schema.String, path: Schema.String, recovery: Schema.String, ...ErrorCauseFields }
 ) {}
+const isScenarioDocumentFileError = Schema.is(ScenarioDocumentFileError);
 
 class DocumentTooLarge extends Error {
 	constructor() {
@@ -41,7 +42,7 @@ const failureMessage = (operation: "read" | "save", path: string, cause: unknown
 };
 
 const failure = (operation: "read" | "save", path: string, cause: unknown) =>
-	cause instanceof ScenarioDocumentFileError
+	isScenarioDocumentFileError(cause)
 		? cause
 		: new ScenarioDocumentFileError({
 				path,

@@ -6,6 +6,7 @@ import * as zlib from "node:zlib";
 import { Context, Effect, Layer, Metric, Predicate, Schema, Semaphore, type Scope } from "effect";
 import {
 	SnapshotFormatError,
+	isSnapshotFormatError,
 	snapshotFailure,
 	SNAPSHOT_VERSION,
 	type SnapshotDirectory
@@ -71,6 +72,8 @@ export class SnapshotStoreError extends Schema.TaggedError<SnapshotStoreError>()
 		cause: Schema.optionalKey(Schema.Defect())
 	}
 ) {}
+/** Tag guard for snapshot store failures; match by tag, not `instanceof`. */
+export const isSnapshotStoreError = Schema.is(SnapshotStoreError);
 type StoreFailure = SnapshotStoreError | SnapshotFormatError;
 const errnoCode = (cause: unknown) =>
 	cause instanceof Error && "code" in cause && Predicate.isString(cause.code)
@@ -86,7 +89,7 @@ export function snapshotStoreFailure(
 	cause: unknown,
 	fallbackRecovery: string
 ): StoreFailure {
-	if (cause instanceof SnapshotStoreError || cause instanceof SnapshotFormatError) return cause;
+	if (isSnapshotStoreError(cause) || isSnapshotFormatError(cause)) return cause;
 	const code = errnoCode(cause);
 	switch (code) {
 		case "ENOENT":
@@ -526,7 +529,7 @@ function makeNodeLayer(options: SnapshotStoreOptions): Layer.Layer<SnapshotStore
 							}
 						}
 					} catch (cause) {
-						if (!(cause instanceof SnapshotFormatError)) throw cause;
+						if (!isSnapshotFormatError(cause)) throw cause;
 						await quarantine();
 						quarantined = true;
 						current = null;

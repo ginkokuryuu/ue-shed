@@ -3,6 +3,12 @@ import {
 	authoringSessionServiceLayer,
 	makeAuthoringSessionService,
 	AuthoringSessionLiveError,
+	type AuthoringSessionStorageError,
+	type AuthoringSessionTransitionError,
+	type DraftIntentError,
+	type InvalidSessionIdError,
+	type SessionCorruptError,
+	type SessionNotFoundError,
 	fingerprintTable,
 	reviewAuthoringSession,
 	workingTable,
@@ -33,7 +39,19 @@ import {
 	type UnrealCapabilityError,
 	type UnrealConnectionError
 } from "@ue-shed/unreal-connection";
-import { Cache, Context, Data, Duration, Effect, Exit, Layer, Option, Ref, Result } from "effect";
+import {
+	Cache,
+	Context,
+	Data,
+	Duration,
+	Effect,
+	Exit,
+	Layer,
+	Option,
+	Predicate,
+	Ref,
+	Result
+} from "effect";
 import { ShedHostConfiguration, type ConfiguredProject } from "./configuration.js";
 import { AuthoringFilePicker } from "./file-picker.js";
 import { SavedTableIndex } from "./saved-table-index.js";
@@ -135,21 +153,69 @@ function documentView(document: AuthoringSessionDocument): AuthoringSessionResul
 	return { status: "ready", view: sessionView(document, objectPath) };
 }
 
-function sessionFailure(cause: {
-	readonly _tag?: string;
-	readonly message: string;
-	readonly recovery?: string;
-}): AuthoringSessionFailure {
+/** Every expected session failure. A new failure type in a session pipe is a compile error. */
+type SessionFailureCause =
+	| AuthoringSessionLiveError
+	| AuthoringSessionStorageError
+	| AuthoringSessionTransitionError
+	| DraftIntentError
+	| InvalidSessionIdError
+	| SessionCorruptError
+	| SessionNotFoundError
+	| UnrealCapabilityError
+	| UnrealConnectionError;
+
+/**
+ * Public session failure codes. Internal error tags are translated here on purpose, so renaming an
+ * error class never changes what hosts receive.
+ */
+function sessionFailureCode(cause: SessionFailureCause): string {
+	switch (cause._tag) {
+		case "AuthoringSessionLiveError":
+			return "session_live_failed";
+		case "AuthoringSessionStorageError":
+			return "session_storage_failed";
+		case "AuthoringSessionTransitionError":
+			return "session_transition_refused";
+		case "DraftIntentError":
+			return "draft_intent_rejected";
+		case "InvalidSessionIdError":
+			return "invalid_session_id";
+		case "SessionCorruptError":
+			return "session_corrupt";
+		case "SessionNotFoundError":
+			return "session_not_found";
+		case "UnrealCapabilityError":
+			return "editor_capability_missing";
+		case "UnrealConnectionError":
+			return "editor_connection_failed";
+	}
+}
+
+function sessionFailure(
+	cause: SessionFailureCause | { readonly message: string }
+): AuthoringSessionFailure {
+	const tagged = "_tag" in cause ? cause : undefined;
 	return {
 		error: {
-			code: cause._tag ?? "authoring_session_failure",
+			code: tagged === undefined ? "authoring_session_failure" : sessionFailureCode(tagged),
 			message: cause.message,
-			recovery: cause.recovery ?? "Retry the operation or create a new draft session.",
-			retrySafe: cause._tag === "AuthoringSessionStorageError"
+			recovery:
+				tagged !== undefined && "recovery" in tagged
+					? tagged.recovery
+					: "Retry the operation or create a new draft session.",
+			retrySafe:
+				tagged?._tag === "AuthoringSessionStorageError" ||
+				((tagged?._tag === "AuthoringSessionLiveError" ||
+					tagged?._tag === "UnrealConnectionError") &&
+					tagged.retrySafe)
 		},
 		status: "failed"
 	};
 }
+
+/** Translate an expected session failure into the public result. */
+const toSessionFailure = (cause: SessionFailureCause) => Effect.succeed(sessionFailure(cause));
 
 function readerFailure(message: string, recovery: string, retrySafe = true): AuthoringLoadResult {
 	return {
@@ -211,7 +277,7 @@ const makeShedAuthoring = Effect.gen(function* () {
 	});
 
 	const invalidateConnectionOnLiveFailure = (cause: unknown) =>
-		cause instanceof AuthoringSessionLiveError
+		Predicate.isTagged(cause, "AuthoringSessionLiveError")
 			? configurationService
 					.remoteControlEndpoint()
 					.pipe(Effect.flatMap((endpoint) => Cache.invalidate(connectionCache, endpoint)))
@@ -462,7 +528,7 @@ const makeShedAuthoring = Effect.gen(function* () {
 			}
 			const document = yield* service.create([snapshot]);
 			return { status: "ready" as const, view: sessionView(document, objectPath) };
-		}).pipe(Effect.catch((cause) => Effect.succeed(sessionFailure(cause))));
+		}).pipe(Effect.catch(toSessionFailure));
 	});
 
 	const listSessions = Effect.fn("ShedAuthoring.listSessions")(function* () {
@@ -477,7 +543,7 @@ const makeShedAuthoring = Effect.gen(function* () {
 				),
 				status: "ready" as const
 			})),
-			Effect.catch((cause) => Effect.succeed(sessionFailure(cause)))
+			Effect.catch(toSessionFailure)
 		);
 	});
 
@@ -493,7 +559,7 @@ const makeShedAuthoring = Effect.gen(function* () {
 					: Effect.succeed(document)
 			),
 			Effect.map(documentView),
-			Effect.catch((cause) => Effect.succeed(sessionFailure(cause)))
+			Effect.catch(toSessionFailure)
 		);
 	});
 
@@ -503,7 +569,7 @@ const makeShedAuthoring = Effect.gen(function* () {
 		}
 		return yield* sessions.value.discard(sessionId).pipe(
 			Effect.flatMap(() => listSessions()),
-			Effect.catch((cause) => Effect.succeed(sessionFailure(cause)))
+			Effect.catch(toSessionFailure)
 		);
 	});
 
@@ -563,7 +629,7 @@ const makeShedAuthoring = Effect.gen(function* () {
 				status: "ready" as const,
 				view: sessionView(document, intent.tableObjectPath)
 			})),
-			Effect.catch((cause) => Effect.succeed(sessionFailure(cause)))
+			Effect.catch(toSessionFailure)
 		);
 	});
 
@@ -573,7 +639,7 @@ const makeShedAuthoring = Effect.gen(function* () {
 		}
 		return yield* sessions.value.review(sessionId).pipe(
 			Effect.map((review) => ({ review, status: "ready" as const })),
-			Effect.catch((cause) => Effect.succeed(sessionFailure(cause)))
+			Effect.catch(toSessionFailure)
 		);
 	});
 
@@ -581,20 +647,18 @@ const makeShedAuthoring = Effect.gen(function* () {
 		if (Option.isNone(sessions)) {
 			return sessionFailure({ message: "UE_SHED_PROJECT_ROOT is not configured" });
 		}
-		return yield* sessions.value.undo(sessionId).pipe(
-			Effect.map(documentView),
-			Effect.catch((cause) => Effect.succeed(sessionFailure(cause)))
-		);
+		return yield* sessions.value
+			.undo(sessionId)
+			.pipe(Effect.map(documentView), Effect.catch(toSessionFailure));
 	});
 
 	const redoSession = Effect.fn("ShedAuthoring.redoSession")(function* (sessionId: string) {
 		if (Option.isNone(sessions)) {
 			return sessionFailure({ message: "UE_SHED_PROJECT_ROOT is not configured" });
 		}
-		return yield* sessions.value.redo(sessionId).pipe(
-			Effect.map(documentView),
-			Effect.catch((cause) => Effect.succeed(sessionFailure(cause)))
-		);
+		return yield* sessions.value
+			.redo(sessionId)
+			.pipe(Effect.map(documentView), Effect.catch(toSessionFailure));
 	});
 
 	const requireLiveConnection = (): Effect.Effect<
@@ -625,7 +689,7 @@ const makeShedAuthoring = Effect.gen(function* () {
 					Effect.map(documentView)
 				);
 		}).pipe(
-			Effect.catch((cause) =>
+			Effect.catch((cause: SessionFailureCause) =>
 				invalidateConnectionOnLiveFailure(cause).pipe(Effect.as(sessionFailure(cause)))
 			)
 		);
@@ -647,7 +711,7 @@ const makeShedAuthoring = Effect.gen(function* () {
 					Effect.map(documentView)
 				);
 		}).pipe(
-			Effect.catch((cause) =>
+			Effect.catch((cause: SessionFailureCause) =>
 				invalidateConnectionOnLiveFailure(cause).pipe(Effect.as(sessionFailure(cause)))
 			)
 		);
@@ -667,7 +731,7 @@ const makeShedAuthoring = Effect.gen(function* () {
 					Effect.map(documentView)
 				);
 		}).pipe(
-			Effect.catch((cause) =>
+			Effect.catch((cause: SessionFailureCause) =>
 				invalidateConnectionOnLiveFailure(cause).pipe(Effect.as(sessionFailure(cause)))
 			)
 		);

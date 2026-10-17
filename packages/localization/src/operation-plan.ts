@@ -7,7 +7,8 @@ import {
 	LocalizationPlanningRequest,
 	LocalizationOperation,
 	type LocalizationPlannedFile,
-	type LocalizationStepKind
+	type LocalizationStepKind,
+	isLocalizationOperationError
 } from "./operation-schema.js";
 
 export function localizationOperationError(
@@ -348,7 +349,7 @@ export function availableLocalizationOperations(
 			});
 			return true;
 		} catch (error) {
-			if (error instanceof LocalizationOperationError) return false;
+			if (isLocalizationOperationError(error)) return false;
 			throw error;
 		}
 	});

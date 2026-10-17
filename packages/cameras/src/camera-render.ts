@@ -115,6 +115,7 @@ export class CameraRenderError extends Schema.TaggedError<CameraRenderError>()(
 		nativeFailure: Schema.optionalKey(CameraRenderFailure)
 	}
 ) {}
+const isCameraRenderError = Schema.is(CameraRenderError);
 
 /**
  * Open was refused because another owner holds the editor: a camera set (`authoring_open`) or
@@ -130,7 +131,7 @@ function renderError(
 	sessionId: string,
 	cause: unknown
 ): CameraRenderError {
-	if (cause instanceof CameraRenderError) return cause;
+	if (isCameraRenderError(cause)) return cause;
 	// Capability and preflight reads hold no editor state; later operations may have acquired it.
 	const readOnly = operation === "capabilities" || operation === "preflight";
 	if (Schema.isSchemaError(cause))

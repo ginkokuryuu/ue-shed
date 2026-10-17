@@ -35,6 +35,8 @@ import {
 	type ViewResult
 } from "./review-schema.js";
 
+const isReviewArtifactSourceRejected = Schema.is(ReviewArtifactSourceRejected);
+
 export class ReviewCaptureRunError extends Schema.TaggedError<ReviewCaptureRunError>()(
 	"ReviewCaptureRunError",
 	{
@@ -445,7 +447,7 @@ function captureOneView(args: {
 				Effect.succeed(cause)
 			)
 		);
-		if (artifacts instanceof ReviewArtifactSourceRejected) {
+		if (isReviewArtifactSourceRejected(artifacts)) {
 			return {
 				code: "capture_staging_path_rejected",
 				message: artifacts.message,

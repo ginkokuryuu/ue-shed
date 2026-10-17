@@ -70,6 +70,7 @@ export class UnrealProjectLaunchError extends Schema.TaggedError<UnrealProjectLa
 		retrySafe: Schema.Boolean
 	}
 ) {}
+const isUnrealProjectLaunchError = Schema.is(UnrealProjectLaunchError);
 
 export interface UnrealProjectProcessLaunchOptions {
 	readonly args: readonly string[];
@@ -310,7 +311,7 @@ export const validateUnrealRemoteControlBuild = Effect.fn(
 			}
 		},
 		catch: (cause) =>
-			cause instanceof UnrealProjectLaunchError
+			isUnrealProjectLaunchError(cause)
 				? cause
 				: new UnrealProjectLaunchError({
 						code: "plugin_unavailable",

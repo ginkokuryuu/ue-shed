@@ -3,7 +3,6 @@ import { resolve } from "node:path";
 import { Context, Effect, Fiber, Layer, Option, Schema, Semaphore, type Scope } from "effect";
 import {
 	PluginInstallCancelled,
-	ReleaseUnavailable,
 	ArtifactDigestMismatch,
 	CompatiblePluginBuildUnavailable,
 	IncompatibleUnrealVersion,
@@ -283,7 +282,7 @@ export const pluginDistributionLayer = (
 					.pipe(
 						Effect.mapError((error) =>
 							artifactRequest.kind === "compiled" &&
-							error instanceof ReleaseUnavailable
+							error._tag === "ReleaseUnavailable"
 								? compatibleBuildUnavailable(
 										artifactRequest,
 										request.releaseVersion,

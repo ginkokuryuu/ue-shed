@@ -30,6 +30,8 @@ import {
 import { CameraArrangementRecipe } from "./camera-arrangement.js";
 import { fileFailureReason, isMalformedDocument } from "./file-failure.js";
 
+const isCameraArrangementError = Schema.is(CameraArrangementError);
+
 const Outcome = Schema.Struct({
 	operationId: CameraOperationId,
 	fingerprint: Schema.String,
@@ -263,7 +265,7 @@ async function exclusive<A>(path: string, operation: () => Promise<A>): Promise<
 const storageError =
 	(subject: string) =>
 	(cause: unknown): CameraArrangementError => {
-		if (cause instanceof CameraArrangementError) return cause;
+		if (isCameraArrangementError(cause)) return cause;
 		const message = `Could not use ${subject} because ${fileFailureReason(cause)}.`;
 		return isMalformedDocument(cause)
 			? new CameraArrangementError({

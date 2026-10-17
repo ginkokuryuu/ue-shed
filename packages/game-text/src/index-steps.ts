@@ -34,13 +34,14 @@ import { GameTextIndexBuilder, type GameTextIndexBuildSessionRequest } from "./i
 import { GameTextIndexProgressReporter } from "./index-progress.js";
 import {
 	GameTextIndexError,
+	isGameTextIndexError,
 	GameTextIndexSource,
 	GameTextIndexRefreshRequest,
 	type GameTextIndexRefreshResult,
 	type IndexFailure
 } from "./index-contract.js";
-import { SnapshotStoreError } from "./snapshot-store.js";
-import { SnapshotFormatError } from "./snapshot-format.js";
+import { isSnapshotStoreError } from "./snapshot-store.js";
+import { isSnapshotFormatError } from "./snapshot-format.js";
 import { reuseJoinedQueryProjection, type JoinedQueryProjection } from "./joined-query-data.js";
 import { instrumentIndexQuery } from "./index-query.js";
 import { columnarTextCorpusQuery } from "./columnar-query.js";
@@ -185,9 +186,9 @@ const checkProject = (project: GameTextProjectIndex, manifest: SharedIndexManife
 const normalizeFailure = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
 	effect.pipe(
 		Effect.mapError((cause) =>
-			cause instanceof GameTextIndexError ||
-			cause instanceof SnapshotStoreError ||
-			cause instanceof SnapshotFormatError
+			isGameTextIndexError(cause) ||
+			isSnapshotStoreError(cause) ||
+			isSnapshotFormatError(cause)
 				? cause
 				: failure("index", String(cause), "Refresh the Game Text index and retry.")
 		)
@@ -262,7 +263,7 @@ export const makeGameTextIndexSteps = (
 				const worker = yield* RcMap.get(workers, JSON.stringify({ input, instance })).pipe(
 					Effect.provideService(Scope.Scope, pin),
 					Effect.tapError((cause) =>
-						cause instanceof SnapshotStoreError || cause instanceof SnapshotFormatError
+						isSnapshotStoreError(cause) || isSnapshotFormatError(cause)
 							? rotate(instance)
 							: Effect.void
 					),
@@ -652,9 +653,9 @@ export const makeGameTextIndexSteps = (
 			const search = options.searchWorker
 				? yield* acquireWorker(workerInput).pipe(
 						Effect.mapError((cause) =>
-							cause instanceof GameTextIndexError ||
-							cause instanceof SnapshotStoreError ||
-							cause instanceof SnapshotFormatError
+							isGameTextIndexError(cause) ||
+							isSnapshotStoreError(cause) ||
+							isSnapshotFormatError(cause)
 								? cause
 								: failure(
 										"search-worker",

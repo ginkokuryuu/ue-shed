@@ -92,6 +92,7 @@ export class SupervisedEditorSessionError extends Schema.TaggedError<SupervisedE
 		stage: Schema.Literals(["validation", "launch", "readiness", "operation", "termination"])
 	}
 ) {}
+const isSupervisedEditorSessionError = Schema.is(SupervisedEditorSessionError);
 
 export interface OwnedProcessTreeLaunchOptions {
 	readonly args: ReadonlyArray<string>;
@@ -550,7 +551,7 @@ export const OwnedProcessTreeLive = Layer.succeed(
 						} catch (cause) {
 							resume(
 								Effect.fail(
-									cause instanceof SupervisedEditorSessionError
+									isSupervisedEditorSessionError(cause)
 										? cause
 										: sessionError(
 												"spawn_failed",

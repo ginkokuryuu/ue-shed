@@ -1,6 +1,12 @@
 import { readFile } from "node:fs/promises";
 import { Effect, Layer, Schema } from "effect";
-import { CliCommandError, CliRuntime, jsonInputFileMessage, printJson } from "../cli-runtime.js";
+import {
+	CliCommandError,
+	CliRuntime,
+	isCliCommandError,
+	jsonInputFileMessage,
+	printJson
+} from "../cli-runtime.js";
 import { observeCliOperation } from "../cli-operation.js";
 import type { CliCommand } from "../command-model.js";
 
@@ -60,7 +66,7 @@ function readJsonDocument(path: string): Effect.Effect<unknown, CliCommandError>
 /** Classify a schema rejection of a JSON input document without copying the issue into prose. */
 function invalidDocument(label: string, path: string) {
 	return (cause: unknown) =>
-		cause instanceof CliCommandError
+		isCliCommandError(cause)
 			? cause
 			: new CliCommandError({
 					message: `${label} ${path} does not match the ${label} schema.`,

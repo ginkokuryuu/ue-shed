@@ -27,6 +27,8 @@ import {
 } from "./camera-arrangement.js";
 import type { CameraAuthoringStore } from "./camera-authoring-store.js";
 
+const isCameraArrangementError = Schema.is(CameraArrangementError);
+
 const Version = Schema.Literal(1);
 const Counter = Schema.Int.check(
 	Schema.isBetween({ minimum: 0, maximum: Number.MAX_SAFE_INTEGER })
@@ -490,7 +492,7 @@ export const synchronizeArrangementCamera = Effect.fn("CameraAuthoring.synchroni
 						};
 					}),
 				catch: (cause) =>
-					cause instanceof CameraArrangementError
+					isCameraArrangementError(cause)
 						? cause
 						: arrangementFailure("invalid", String(cause))
 			});

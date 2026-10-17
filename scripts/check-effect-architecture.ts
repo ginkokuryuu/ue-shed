@@ -917,6 +917,46 @@ export async function checkErrorGuidance(root: string = repositoryRoot) {
 	return failures;
 }
 
+/** Files owned by open Plan 058 lane B and C branches; those branches convert their matches. */
+const taggedErrorMatchingPending = new Set([
+	"packages/game-text/src/localization-cold-import.ts",
+	"packages/game-text/src/localization-import.ts",
+	"packages/game-text/src/search-worker-node.ts",
+	"packages/game-text/src/search-worker-protocol.ts"
+]);
+
+/**
+ * Tagged errors are matched by tag (`Effect.catchTag`/`catchTags`, `Schema.is(ErrorClass)` or
+ * `Predicate.isTagged`), never with `instanceof`, which fails across package copies and after a
+ * schema round trip.
+ */
+export async function checkTaggedErrorMatching(root: string = repositoryRoot) {
+	const failures: string[] = [];
+	const sources: { readonly label: string; readonly text: string }[] = [];
+	const tagged = new Set<string>();
+	for (const directory of sourceRoots) {
+		for (const path of await filesUnder(root, directory)) {
+			if (!/\.tsx?$/u.test(path) || testSourcePattern.test(path)) continue;
+			const text = await readFile(path, "utf8");
+			sources.push({ label: relative(root, path).replaceAll("\\", "/"), text });
+			for (const match of text.matchAll(/class\s+(\w+)\s+extends\s+Schema\.TaggedError\b/gu))
+				if (match[1] !== undefined) tagged.add(match[1]);
+		}
+	}
+	for (const { label, text } of sources) {
+		if (taggedErrorMatchingPending.has(label)) continue;
+		for (const match of text.matchAll(/\binstanceof\s+(?:\w+\.)?(\w+)/gu)) {
+			const name = match[1];
+			if (name === undefined || !tagged.has(name)) continue;
+			const line = text.slice(0, match.index).split("\n").length;
+			failures.push(
+				`${label}:${line}: match ${name} by tag (catchTag, Schema.is or Predicate.isTagged), not instanceof`
+			);
+		}
+	}
+	return failures;
+}
+
 export async function checkArchitecture(root: string = repositoryRoot) {
 	return [
 		...(await checkCatalogUsage(root)),
@@ -925,6 +965,7 @@ export async function checkArchitecture(root: string = repositoryRoot) {
 		...(await checkDomainServices(root)),
 		...(await checkLocalizationBoundaries(root)),
 		...(await checkErrorGuidance(root)),
+		...(await checkTaggedErrorMatching(root)),
 		...(await checkWorkbenchBoundaries(root))
 	];
 }

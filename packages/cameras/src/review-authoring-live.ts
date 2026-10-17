@@ -47,12 +47,14 @@ export class ReviewAuthoringConnectionError extends Schema.TaggedError<ReviewAut
 	}
 ) {}
 
+const isRemoteControlClientError = Schema.is(RemoteControlClientError);
+
 function reviewConnectionError(
 	endpoint: string,
 	operation: "inspect_selection" | "inspect_subject" | "preview_candidate",
 	cause: RemoteControlClientError | unknown
 ): ReviewAuthoringConnectionError {
-	if (cause instanceof RemoteControlClientError) {
+	if (isRemoteControlClientError(cause)) {
 		return new ReviewAuthoringConnectionError({
 			endpoint,
 			message: cause.message,

@@ -86,6 +86,9 @@ export class CompiledPluginBuildCancelled extends Schema.TaggedError<CompiledPlu
 	BuildErrorFields
 ) {}
 
+const isCompiledPluginBuildCancelled = Schema.is(CompiledPluginBuildCancelled);
+const isPluginInstallCancelled = Schema.is(PluginInstallCancelled);
+
 export const CompiledPluginBuilderError = Schema.Union([
 	InvalidCompiledPluginBuild,
 	CompiledPluginBuildFailed,
@@ -167,7 +170,7 @@ function pluginArtifactBuildError(
 	stage: "source-extraction" | "source-verification" | "validation",
 	cause: PluginInstallCancelled | { readonly message: string; readonly recovery: string }
 ) {
-	return cause instanceof PluginInstallCancelled
+	return isPluginInstallCancelled(cause)
 		? cancelled(stage)
 		: invalid(stage, cause.message, cause.recovery);
 }
@@ -784,7 +787,7 @@ export const compiledPluginBuilderLayer = (): Layer.Layer<
 														);
 											return awaited.pipe(
 												Effect.mapError((cause) =>
-													cause instanceof CompiledPluginBuildCancelled
+													isCompiledPluginBuildCancelled(cause)
 														? cause
 														: invalid(
 																"build",
@@ -861,7 +864,7 @@ export const compiledPluginBuilderLayer = (): Layer.Layer<
 												signal: buildSignal
 											}),
 										catch: (cause) =>
-											cause instanceof CompiledPluginBuildCancelled ||
+											isCompiledPluginBuildCancelled(cause) ||
 											buildSignal.aborted
 												? cancelled("archive")
 												: invalid(

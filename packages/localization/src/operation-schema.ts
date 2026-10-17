@@ -120,6 +120,8 @@ export class LocalizationOperationError extends Schema.TaggedError<LocalizationO
 		exitCode: Schema.optionalKey(Schema.NullOr(Schema.Int))
 	}
 ) {}
+/** Tag guard for localization operation failures; match by tag, not `instanceof`. */
+export const isLocalizationOperationError = Schema.is(LocalizationOperationError);
 export const LocalizationProgress = Schema.Struct({
 	schemaVersion: Schema.Literal(1),
 	type: Schema.Literal("progress"),

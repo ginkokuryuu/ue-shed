@@ -53,6 +53,11 @@ const metadataFile = ".ue-shed-distribution.json";
 const manifestFile = "plugins.manifest.json";
 const artifactFile = "plugins.tar.gz";
 const leaseRecordVersion = 1;
+const isActiveLeasePreventsPrune = Schema.is(ActiveLeasePreventsPrune);
+const isCorruptCacheEntry = Schema.is(CorruptCacheEntry);
+const isImmutableVersionConflict = Schema.is(ImmutableVersionConflict);
+const isMalformedOrUnsafeArchive = Schema.is(MalformedOrUnsafeArchive);
+const isPluginInstallCancelled = Schema.is(PluginInstallCancelled);
 
 const StoredMetadataV1 = Schema.Struct({
 	artifactBytes: Schema.Int.check(Schema.isGreaterThan(0)),
@@ -438,7 +443,7 @@ function verifyStored(cacheRoot: string, releaseVersion: string, root: string) {
 	return Effect.tryPromise({
 		try: () => readStoredBasic(cacheRoot, releaseVersion, root),
 		catch: (cause) =>
-			cause instanceof CorruptCacheEntry
+			isCorruptCacheEntry(cause)
 				? cause
 				: corrupt(releaseVersion, root, "Cached release cannot be verified.", cause)
 	}).pipe(
@@ -463,7 +468,7 @@ function verifyStoredVariantIdentity(cacheRoot: string, releaseVersion: string, 
 	return Effect.tryPromise({
 		try: () => readStoredManifest(cacheRoot, releaseVersion, root),
 		catch: (cause) =>
-			cause instanceof CorruptCacheEntry
+			isCorruptCacheEntry(cause)
 				? cause
 				: corrupt(
 						releaseVersion,
@@ -923,7 +928,7 @@ export const pluginStoreLayer = (options: PluginStoreLayerOptions): Layer.Layer<
 											retrySafe: false
 										});
 									} catch (cause) {
-										if (cause instanceof ImmutableVersionConflict) throw cause;
+										if (isImmutableVersionConflict(cause)) throw cause;
 									}
 									const stage = await mkdtemp(join(cacheRoot, ".publish-"));
 									try {
@@ -1006,10 +1011,10 @@ export const pluginStoreLayer = (options: PluginStoreLayerOptions): Layer.Layer<
 					},
 					catch: (cause) => {
 						if (
-							cause instanceof PluginInstallCancelled ||
-							cause instanceof CorruptCacheEntry ||
-							cause instanceof ImmutableVersionConflict ||
-							cause instanceof MalformedOrUnsafeArchive
+							isPluginInstallCancelled(cause) ||
+							isCorruptCacheEntry(cause) ||
+							isImmutableVersionConflict(cause) ||
+							isMalformedOrUnsafeArchive(cause)
 						) {
 							return cause;
 						}
@@ -1196,8 +1201,7 @@ export const pluginStoreLayer = (options: PluginStoreLayerOptions): Layer.Layer<
 										}
 									),
 								catch: (cause) =>
-									cause instanceof ActiveLeasePreventsPrune ||
-									cause instanceof CorruptCacheEntry
+									isActiveLeasePreventsPrune(cause) || isCorruptCacheEntry(cause)
 										? cause
 										: storageError(
 												release.releaseVersion,

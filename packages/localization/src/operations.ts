@@ -42,7 +42,8 @@ import {
 	LocalizationRunRequest,
 	LocalizationOperationReceipt,
 	type LocalizationOperationPlan,
-	type LocalizationRunEvent
+	type LocalizationRunEvent,
+	isLocalizationOperationError
 } from "./operation-schema.js";
 
 export interface LocalizationOperationsApi {
@@ -319,8 +320,7 @@ export const LocalizationOperationsLive = Layer.effect(
 				})
 			).pipe(
 				Effect.catchDefect((cause) =>
-					cause instanceof LocalizationOperationError &&
-					cause.code === "termination_failed"
+					isLocalizationOperationError(cause) && cause.code === "termination_failed"
 						? Effect.fail(cause)
 						: Effect.die(cause)
 				)

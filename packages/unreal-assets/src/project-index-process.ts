@@ -22,15 +22,12 @@ import {
 	ProjectIndex,
 	ProjectIndexCacheRoot as CacheRootSchema,
 	ProjectIndexConfig,
-	ProjectIndexCorruptCatalog,
-	ProjectIndexIncompatibleWorker,
-	ProjectIndexInvalidRequest,
 	ProjectIndexRefreshEvent,
 	ProjectIndexRefreshFailed,
-	ProjectIndexStaleGeneration,
 	ProjectIndexUnavailable,
 	decodeProjectIndexPage,
-	projectIndexConfigLayer
+	projectIndexConfigLayer,
+	isProjectIndexError
 } from "./project-index.js";
 import {
 	decodeProjectIndexWirePage,
@@ -184,16 +181,7 @@ const mapStreamFailure = (cause: unknown, sawAccepted: boolean): ProjectIndexErr
 			...(cause.exitCode === undefined ? undefined : { exitCode: cause.exitCode })
 		});
 	}
-	if (
-		cause instanceof ProjectIndexUnavailable ||
-		cause instanceof ProjectIndexInvalidRequest ||
-		cause instanceof ProjectIndexStaleGeneration ||
-		cause instanceof ProjectIndexIncompatibleWorker ||
-		cause instanceof ProjectIndexCorruptCatalog ||
-		cause instanceof ProjectIndexRefreshFailed
-	) {
-		return cause;
-	}
+	if (isProjectIndexError(cause)) return cause;
 	return new ProjectIndexRefreshFailed({
 		message: cause instanceof Error ? cause.message : String(cause),
 		recovery: "Retry the Project Index operation, or rebuild the Catalog if it persists.",

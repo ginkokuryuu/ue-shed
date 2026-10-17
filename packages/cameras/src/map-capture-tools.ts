@@ -11,10 +11,12 @@ export class MapCaptureInspectionError extends Schema.TaggedError<MapCaptureInsp
 	"MapCaptureInspectionError",
 	{ ...ErrorGuidanceFields, ...ErrorCauseFields }
 ) {}
+const isMapCaptureInspectionError = Schema.is(MapCaptureInspectionError);
+const isRemoteControlClientError = Schema.is(RemoteControlClientError);
 const failure = (cause: unknown) =>
-	cause instanceof MapCaptureInspectionError
+	isMapCaptureInspectionError(cause)
 		? cause
-		: cause instanceof RemoteControlClientError
+		: isRemoteControlClientError(cause)
 			? new MapCaptureInspectionError({
 					message: cause.message,
 					nextStep: cause.nextStep,

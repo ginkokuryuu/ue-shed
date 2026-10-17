@@ -85,20 +85,20 @@ export class Observatory extends Context.Service<Observatory, ObservatoryApi>()(
 ) {}
 
 const objectPath = "/Script/UEShedObservatoryEditor.Default__UEShedObservatoryLibrary";
+const isRemoteControlClientError = Schema.is(RemoteControlClientError);
 
 function connectionError(
 	operation: string,
 	cause: RemoteControlClientError | unknown
 ): ObservatoryConnectionError {
 	return new ObservatoryConnectionError({
-		message:
-			cause instanceof RemoteControlClientError
-				? cause.message
-				: `The observatory ${operation} response does not match the observatory contract.`,
+		message: isRemoteControlClientError(cause)
+			? cause.message
+			: `The observatory ${operation} response does not match the observatory contract.`,
 		operation,
 		recovery:
 			"Open an editor world with UEShedObservatory enabled, then retry the live world scan.",
-		retrySafe: cause instanceof RemoteControlClientError ? cause.retrySafe : false,
+		retrySafe: isRemoteControlClientError(cause) ? cause.retrySafe : false,
 		cause
 	});
 }

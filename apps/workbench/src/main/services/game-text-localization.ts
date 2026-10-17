@@ -63,9 +63,11 @@ import {
 	type LocalizationTargetEvidence,
 	type LocalizationTarget
 } from "@ue-shed/localization";
-import { Cause, Effect, Exit, Fiber, Ref, Result, Semaphore, type Scope } from "effect";
+import { Cause, Effect, Exit, Fiber, Ref, Result, Schema, Semaphore, type Scope } from "effect";
 import type { ElectronDialogApi } from "../adapters/electron-dialog.js";
 import type { LocalFilesApi } from "../adapters/local-files.js";
+
+const isLocalizationReportError = Schema.is(LocalizationReportError);
 
 function failure(code: string) {
 	return {
@@ -520,7 +522,7 @@ export const makeGameTextLocalization = Effect.fn("Workbench.GameText.localizati
 				)
 			}),
 			catch: (cause) =>
-				cause instanceof LocalizationReportError
+				isLocalizationReportError(cause)
 					? cause
 					: new LocalizationReportError({
 							code: "invalid_report_context",
@@ -578,7 +580,7 @@ export const makeGameTextLocalization = Effect.fn("Workbench.GameText.localizati
 							decoded.success
 						),
 					catch: (cause) =>
-						cause instanceof LocalizationReportError
+						isLocalizationReportError(cause)
 							? cause
 							: new LocalizationReportError({
 									code: "invalid_baseline",
@@ -632,7 +634,7 @@ export const makeGameTextLocalization = Effect.fn("Workbench.GameText.localizati
 					return localizationReportCsv(rows, previous !== undefined);
 				},
 				catch: (cause) =>
-					cause instanceof LocalizationReportError
+					isLocalizationReportError(cause)
 						? cause
 						: new LocalizationReportError({
 								code: "invalid_report_context",
@@ -657,14 +659,12 @@ export const makeGameTextLocalization = Effect.fn("Workbench.GameText.localizati
 			Effect.catch((error) =>
 				Effect.succeed({
 					status: "failed" as const,
-					message:
-						error instanceof LocalizationReportError
-							? error.message
-							: "The file operation failed.",
-					recovery:
-						error instanceof LocalizationReportError
-							? error.recovery
-							: "Choose a new destination for a baseline; existing files are never overwritten. Check permissions and try again."
+					message: isLocalizationReportError(error)
+						? error.message
+						: "The file operation failed.",
+					recovery: isLocalizationReportError(error)
+						? error.recovery
+						: "Choose a new destination for a baseline; existing files are never overwritten. Check permissions and try again."
 				})
 			)
 		);

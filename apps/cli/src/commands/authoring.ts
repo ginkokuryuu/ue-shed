@@ -1,7 +1,7 @@
 import { AuthoringValue } from "@ue-shed/protocol";
 import { Argument, Command, Flag } from "effect/cli";
 import { Effect, Schema } from "effect";
-import { CliCommandError } from "../cli-runtime.js";
+import { CliCommandError, isCliCommandError } from "../cli-runtime.js";
 import {
 	runAuthoringAnalyze,
 	runAuthoringCatalog,
@@ -24,7 +24,7 @@ function parseJsonFlag<A>(label: string, value: string, schema: Schema.Decoder<A
 	}).pipe(
 		Effect.flatMap(Schema.decodeUnknownEffect(schema)),
 		Effect.mapError((cause) =>
-			cause instanceof CliCommandError
+			isCliCommandError(cause)
 				? cause
 				: new CliCommandError({ message: `${label} does not match its schema.`, cause })
 		)
