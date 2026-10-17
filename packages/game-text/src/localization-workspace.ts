@@ -40,7 +40,8 @@ import {
 } from "./localization-status.js";
 import { textCountLabel } from "./csv.js";
 import { textAssetName, spreadsheetCsv } from "./csv.js";
-import { CheckSeverity, checkSeverity } from "./localization-check-ids.js";
+import { CheckSeverity } from "./localization-check-ids.js";
+import { localizationCheckCatalogue, projectRuleKinds } from "./localization-check-catalogue.js";
 
 const Count = Schema.Int.check(Schema.isGreaterThanOrEqualTo(0));
 const Offset = Schema.optionalKey(Count);
@@ -76,41 +77,20 @@ export const WorkspaceQualityFilter = Schema.Literals([
 	"placeholder_translation"
 ]);
 export type WorkspaceQualityFilter = typeof WorkspaceQualityFilter.Type;
-export const workspaceQualityLabels = {
-	all: "All findings",
-	character_budget: "Character limits",
-	terminology: "Terminology",
-	format_arguments: "Format arguments",
-	argument_modifiers: "Plural and gender forms",
-	rich_text: "Rich text tags",
-	po_escape_safety: "Unsafe escapes",
-	whitespace: "Whitespace",
-	empty_translation: "Empty translation",
-	missing_translator_notes: "No translator notes",
-	duplicate_source: "Same text, different keys",
-	format_argument_renamed: "Renamed format arguments",
-	rich_text_tags: "Missing tags",
-	rich_text_tag_case: "Tag case changed",
-	line_breaks: "Line breaks",
-	segment_separator: "Segment separators",
-	length_outlier: "Unusual length",
-	outdated_translation: "Translated from older text",
-	inconsistent_translation: "Translated inconsistently",
-	culture_invariant_text: "Won't be translated",
-	placeholder_text: "Placeholder text",
-	source_whitespace: "Source whitespace",
-	source_markup: "Unbalanced source markup",
-	number_only_text: "Number-only text",
-	string_table_key_collision: "String Table key collision",
-	rich_text_tags_added: "Extra tags",
-	source_line_endings_changed: "Source line endings changed",
-	placeholder_translation: "Placeholder translation"
-} satisfies Record<WorkspaceQualityFilter, string>;
-/** A check's severity; every finding of a check shares it. */
+/** A filter's name in lists: the check's catalogue label, or the project rule kind's. */
+export function workspaceQualityLabel(filter: WorkspaceQualityFilter): string {
+	if (filter === "all") return "All findings";
+	if (filter === "character_budget" || filter === "terminology")
+		return projectRuleKinds[filter].label;
+	return localizationCheckCatalogue[filter].label;
+}
+/** A check's default severity, from the catalogue; every finding of a check shares it. */
 export function workspaceQualitySeverity(
 	filter: Exclude<WorkspaceQualityFilter, "all">
 ): CheckSeverity {
-	return checkSeverity[filter];
+	if (filter === "character_budget" || filter === "terminology")
+		return projectRuleKinds[filter].severity;
+	return localizationCheckCatalogue[filter].severity;
 }
 const Selection = { target: LocalizationTargetName, culture: Schema.optionalKey(CultureCode) };
 export const WorkspaceQualityRequest = Schema.Struct({
@@ -513,7 +493,7 @@ export function workspaceQualityItem(
 				line?.identity?.key ??
 				(location?.kind === "string_table_entry" ? location.entryKey : finding.ruleId))) +
 		" · " +
-		workspaceQualityLabels[workspaceQualityFilterOf(finding)] +
+		workspaceQualityLabel(workspaceQualityFilterOf(finding)) +
 		" · " +
 		textCountLabel(finding.affectedOccurrences.length, "location");
 	const filter = workspaceQualityFilterOf(finding);
@@ -521,7 +501,7 @@ export function workspaceQualityItem(
 	const summary: WorkspaceFinding = {
 		id,
 		filter,
-		severity: workspaceQualitySeverity(filter),
+		severity: localized ? finding.severity : workspaceQualitySeverity(filter),
 		source: (localized ? findingSource(finding, line) : finding.actual.source).slice(0, 512),
 		...(variants
 			? { sourceVariants: variants.slice(0, 16).map((variant) => variant.slice(0, 512)) }
@@ -609,6 +589,8 @@ function ranges(text: string, finding: Finding, side: "source" | "translation") 
 export interface LocalizationFindingGroup {
 	readonly culture: CultureCode;
 	readonly filter: WorkspaceQualityFilter;
+	/** The severity the scan stored for these findings. */
+	readonly severity: CheckSeverity;
 	readonly ruleId: RuleId;
 	readonly eligible: boolean;
 	readonly reportedBySource: boolean;
@@ -623,6 +605,8 @@ export interface LocalizationFindingList {
 	readonly groups?: readonly LocalizationFindingGroup[];
 	culture(position: number): CultureCode;
 	filter(position: number): WorkspaceQualityFilter;
+	/** The severity the finding was reported with, as the rule file rated its check or rule. */
+	severity(position: number): CheckSeverity;
 	ruleId(position: number): RuleId;
 	eligible(position: number): boolean;
 	/**
@@ -693,6 +677,12 @@ export function localizationQuality(
 				return ("culture" in finding ? finding.culture : undefined)!;
 			},
 			filter: (position) => workspaceQualityFilterOf(report.findings[position]!),
+			severity: (position) => {
+				const finding = report.findings[position]!;
+				return "culture" in finding
+					? finding.severity
+					: workspaceQualitySeverity(workspaceQualityFilterOf(finding));
+			},
 			ruleId: (position) => report.findings[position]!.ruleId,
 			eligible: (position) =>
 				eligibleLocalizationChange(report.findings[position]!) !== undefined,
@@ -830,7 +820,9 @@ export function localizationQualityWorkspaceOf(
 		position < sourceCount
 			? workspaceQualityFilterOf(sourceFindings[position]!)
 			: list.filter(position - sourceCount);
-	const severityAt = (position: number) => {
+	/** Source findings have their rule kind's severity; localization findings their stored one. */
+	const severityAt = (position: number): CheckSeverity => {
+		if (position >= sourceCount) return list.severity(position - sourceCount);
 		const filter = filterAt(position);
 		return filter === "all" ? "normal" : workspaceQualitySeverity(filter);
 	};
@@ -890,11 +882,11 @@ export function localizationQualityWorkspaceOf(
 			suggestedFixCount = 0;
 		const record = (
 			filter: WorkspaceQualityFilter,
+			severity: CheckSeverity,
 			rule: RuleId,
 			count: number,
 			eligible: number
 		) => {
-			const severity = filter === "all" ? "normal" : workspaceQualitySeverity(filter);
 			cultureCount += count;
 			typeCounts.set(filter, (typeCounts.get(filter) ?? 0) + count);
 			ruleCounts.set(rule, (ruleCounts.get(rule) ?? 0) + count);
@@ -909,7 +901,7 @@ export function localizationQualityWorkspaceOf(
 			const filter = filterAt(position),
 				rule = ruleAt(position),
 				severity = severityAt(position);
-			if (record(filter, rule, 1, eligibleAt(position) ? 1 : 0))
+			if (record(filter, severity, rule, 1, eligibleAt(position) ? 1 : 0))
 				matchedBySeverity[severity].push(position);
 		}
 		const runs: SeverityBuckets<{ positions: Uint32Array; base: number }> = {
@@ -924,12 +916,14 @@ export function localizationQualityWorkspaceOf(
 					base: 0
 				});
 		if (list.groups)
-			for (const group of groupedSource())
-				if (record(group.filter, group.ruleId, group.positions.length, 0))
-					runs[workspaceQualitySeverity(group.filter)].push({
+			for (const group of groupedSource()) {
+				const severity = workspaceQualitySeverity(group.filter);
+				if (record(group.filter, severity, group.ruleId, group.positions.length, 0))
+					runs[severity].push({
 						positions: group.positions,
 						base: 0
 					});
+			}
 		for (const group of list.groups ?? []) {
 			if (
 				(source && group.reportedBySource) ||
@@ -939,14 +933,13 @@ export function localizationQualityWorkspaceOf(
 			if (
 				record(
 					group.filter,
+					group.severity,
 					group.ruleId,
 					group.positions.length,
 					group.eligible ? group.positions.length : 0
 				)
 			)
-				runs[
-					group.filter === "all" ? "normal" : workspaceQualitySeverity(group.filter)
-				].push({
+				runs[group.severity].push({
 					positions: group.positions,
 					base: sourceCount
 				});
@@ -1383,7 +1376,7 @@ export function workspaceQualityCsv(report: WorkspaceQualityReport): string {
 			report.target,
 			finding.culture ?? "Source",
 			finding.severity,
-			workspaceQualityLabels[finding.filter],
+			workspaceQualityLabel(finding.filter),
 			finding.source,
 			finding.problem,
 			finding.context,

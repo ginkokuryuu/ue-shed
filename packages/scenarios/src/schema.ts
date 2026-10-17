@@ -1,4 +1,4 @@
-import { Schema } from "effect";
+import { Effect, Schema } from "effect";
 
 const NonNegativeInt = Schema.Int.check(Schema.isGreaterThanOrEqualTo(0));
 const PositiveInt = Schema.Int.check(Schema.isGreaterThan(0));
@@ -300,5 +300,48 @@ export const ScenarioRun = Schema.Struct({
 });
 export type ScenarioRun = Schema.Schema.Type<typeof ScenarioRun>;
 
-export const decodeScenarioDocument = Schema.decodeUnknownEffect(ScenarioDocument);
-export const decodeScenarioRun = Schema.decodeUnknownEffect(ScenarioRun);
+/**
+ * A value that does not match the scenario contract: the two sides disagree about the contract, so
+ * repeating the same call returns the same mismatch.
+ */
+export class ScenarioContractError extends Schema.TaggedError<ScenarioContractError>()(
+	"ScenarioContractError",
+	{
+		code: Schema.Literal("invalid_contract"),
+		message: Schema.String,
+		recovery: Schema.String,
+		retrySafe: Schema.Boolean,
+		cause: Schema.optionalKey(Schema.Defect())
+	}
+) {}
+
+/**
+ * A unary parser for one scenario contract value: it decodes the encoded value and fails with
+ * `ScenarioContractError` naming `subject`, keeping the schema issue as its cause.
+ */
+export function scenarioContractParser<S extends Schema.Codec<unknown, unknown>>(
+	schema: S,
+	subject: string
+) {
+	const decode = Schema.decodeUnknownEffect(schema);
+	return (
+		// oxlint-disable-next-line anti-slop/no-unknown-parameters -- This parser is the boundary: it decodes its input here.
+		encoded: unknown
+	): Effect.Effect<S["Type"], ScenarioContractError> =>
+		decode(encoded).pipe(
+			Effect.mapError(
+				(cause) =>
+					new ScenarioContractError({
+						code: "invalid_contract",
+						message: `The ${subject} does not match the scenario contract.`,
+						recovery:
+							"Run the host and client from the same UE Shed version, then retry.",
+						retrySafe: false,
+						cause
+					})
+			)
+		);
+}
+
+export const parseScenarioDocument = scenarioContractParser(ScenarioDocument, "scenario document");
+export const parseScenarioRun = scenarioContractParser(ScenarioRun, "scenario run");

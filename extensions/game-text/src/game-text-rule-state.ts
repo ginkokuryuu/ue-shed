@@ -198,7 +198,7 @@ export function draftProblems(
 	const problems: RuleDraftProblem[] = [];
 	const rules = [
 		...document.rules,
-		...(document.schemaVersion === 2 ? (document.localizationRules ?? []) : [])
+		...(document.schemaVersion !== 1 ? (document.localizationRules ?? []) : [])
 	];
 	for (const rule of rules) {
 		const add = (field: string, message: string) =>

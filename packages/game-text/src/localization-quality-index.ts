@@ -53,12 +53,18 @@ import { JoinedQueryData } from "./joined-query-data.js";
 import { u32 } from "./joined-target-input.js";
 import { runJoinedQuery } from "./joined-query-node.js";
 import type { JoinedTargetReader } from "./joined-target-reader.js";
-import type { GameTextRuleDocument } from "./quality-rules-v2.js";
-import { TextQualityRuleId } from "./quality-schema.js";
+import type { GameTextRuleDocument } from "./game-text-rules.js";
+import type { TextQualityRuleId } from "./quality-schema.js";
+import { CheckSeverity } from "./localization-check-ids.js";
+import {
+	localizationRuleId,
+	type InconsistentTranslationParams
+} from "./localization-check-catalogue.js";
 import type { TextCorpus, TextUnit, TextUnitId } from "./schema.js";
 import { snapshotCheck } from "./snapshot-format.js";
 import { decodeTextAudience } from "./text-audience.js";
 import { encodeWtf8 } from "./wtf8.js";
+import { StageClock } from "./stage-clock.js";
 
 /**
  * Lines hydrated and checked per scan page; the scan yields after each. Measured on 583,507
@@ -415,10 +421,11 @@ const translationVariants = Effect.fn("GameText.localizationQuality.translations
 	data: JoinedQueryData,
 	shared: Parameters<typeof localizationTranslationVariants>[0],
 	rows: readonly number[],
-	rowSources: readonly string[]
+	rowSources: readonly string[],
+	params: InconsistentTranslationParams
 ) {
 	const target = data.joined.meta.input.target;
-	const variants = localizationTranslationVariants(shared, target.nativeCulture);
+	const variants = localizationTranslationVariants(shared, target.nativeCulture, params);
 	const outside = localizationStates.indexOf("outside_target"),
 		notSynced = 1 << localizationStates.indexOf("not_synced");
 	const cultures = target.cultures.flatMap((culture, index) =>
@@ -447,7 +454,7 @@ const translationVariants = Effect.fn("GameText.localizationQuality.translations
 		) {
 			const row = rows[index]!,
 				source = rowSources[index]!;
-			if (!consistentTranslationCandidate(source)) continue;
+			if (!consistentTranslationCandidate(source, params)) continue;
 			for (const culture of cultures) {
 				if (culture.state[row] === outside) continue;
 				const pending = (culture.facts[row]! & notSynced) !== 0,
@@ -616,6 +623,7 @@ export const indexedLocalizationQuality = Effect.fn("GameText.localizationQualit
 	ruleDocument?: GameTextRuleDocument
 ) {
 	options.onProgress?.({ checkedLines: 0, totalLines: joinRows.length, findings: 0 });
+	const stages = new StageClock();
 	const data = new JoinedQueryData(joined);
 	const target = data.joined.meta.input.target;
 	const join = {
@@ -625,7 +633,7 @@ export const indexedLocalizationQuality = Effect.fn("GameText.localizationQualit
 	};
 	const enabled = enabledLocalizationChecks(join, evidence, options, ruleDocument);
 	const policy =
-		ruleDocument?.schemaVersion === 2
+		ruleDocument !== undefined && ruleDocument.schemaVersion !== 1
 			? localizationPolicyRules(target.cultures, ruleDocument)
 			: undefined;
 	const keep = acceptedFindingFilter(options.review);
@@ -635,6 +643,7 @@ export const indexedLocalizationQuality = Effect.fn("GameText.localizationQualit
 	for (let position = 0; position < lineCount; position++)
 		joinPosition[joinRows[position]!] = position;
 	const duplicates = yield* duplicateSources(data, target.cultures, joinPosition);
+	const ruleContext = localizationRuleContext(ruleDocument);
 	const context: LocalizationLineCheckContext = {
 		target: target.name,
 		nativeCulture: target.nativeCulture,
@@ -646,10 +655,11 @@ export const indexedLocalizationQuality = Effect.fn("GameText.localizationQualit
 					data,
 					duplicates.shared,
 					duplicates.rows,
-					duplicates.rowSources
+					duplicates.rowSources,
+					ruleContext.checks.inconsistent_translation.params
 				)
 			: new Map(),
-		...localizationRuleContext(ruleDocument),
+		...ruleContext,
 		localizableProperties: enabled.includes("culture_invariant_text")
 			? yield* localizableProperties(data)
 			: new Set(),
@@ -657,8 +667,10 @@ export const indexedLocalizationQuality = Effect.fn("GameText.localizationQualit
 		occurrenceNotes: (line) => units.occurrenceNotes(line),
 		stringTables: (line) => units.stringTables(line)
 	};
+	stages.mark("prepare");
 	const units = unitIndex(data);
 	yield* Effect.yieldNow;
+	stages.mark("units");
 
 	// Report order is line ID order, ties in join order. Decoding every line ID takes about 0.7 s
 	// at 583,507 lines, so it yields per page; the unit index above and the sort below take about
@@ -696,6 +708,7 @@ export const indexedLocalizationQuality = Effect.fn("GameText.localizationQualit
 	sorted.length = 0;
 	const rankOf = new Uint32Array(count);
 	for (let rank = 0; rank < lineCount; rank++) rankOf[order[rank]!] = rank;
+	stages.mark("order");
 	const blockEnd = (first: number) => {
 		let end = first + 1;
 		while (end < lineCount && tied[end]) end++;
@@ -750,6 +763,9 @@ export const indexedLocalizationQuality = Effect.fn("GameText.localizationQualit
 	};
 
 	const cultureIndex = new Map(target.cultures.map((culture, index) => [culture, index]));
+	const severityIndex = new Map(
+		CheckSeverity.literals.map((severity, index) => [severity, index])
+	);
 	const filterIndex = new Map(
 		WorkspaceQualityFilter.literals.map((filter, index) => [filter, index])
 	);
@@ -807,6 +823,8 @@ export const indexedLocalizationQuality = Effect.fn("GameText.localizationQualit
 		});
 	};
 	const storedFacts = u32Builder(),
+		/** Each finding's severity, as its index in `CheckSeverity.literals`. */
+		storedSeverity = u32Builder(),
 		storedFirst = u32Builder(),
 		storedSecond = u32Builder(),
 		/** Stored findings the rule file's source terminology reports in full, ascending. */
@@ -816,11 +834,15 @@ export const indexedLocalizationQuality = Effect.fn("GameText.localizationQualit
 	let checkedLines = 0;
 	/** Checks one page of blocks, then reports progress. */
 	const checkBlocks = (firsts: readonly number[]) => {
+		const hydrating = performance.now();
 		const blocks = blockLines(firsts);
+		stages.add("scan.hydrate", performance.now() - hydrating);
 		for (let block = 0; block < firsts.length; block++) {
 			const lines = blocks[block]!,
 				rank = firsts[block]!;
+			const checking = performance.now();
 			const { findings, diagnostics } = check(lines);
+			stages.add("scan.check", performance.now() - checking);
 			blockStart[rank] = storedFacts.length;
 			blockSize[rank] = findings.length;
 			for (const finding of findings) {
@@ -828,6 +850,7 @@ export const indexedLocalizationQuality = Effect.fn("GameText.localizationQualit
 				if (finding.kind === "placeholder_text" && finding.unreportedMatches?.length === 0)
 					storedReported.push(storedFacts.length);
 				storedFacts.push(pack(finding));
+				storedSeverity.push(severityIndex.get(finding.severity)!);
 				storedFirst.push(first);
 				storedSecond.push(second);
 			}
@@ -875,10 +898,13 @@ export const indexedLocalizationQuality = Effect.fn("GameText.localizationQualit
 	}
 	if (page.length) checkBlocks(page);
 	units.releaseMemos();
+	// The whole scan, including its yields; scan.hydrate and scan.check are parts of it.
+	stages.mark("scan");
 	page = [];
 
 	const total = storedFacts.length;
 	const facts = new Uint32Array(total),
+		severities = new Uint8Array(total),
 		first = new Uint32Array(total),
 		second = new Uint32Array(total),
 		blockOf = new Uint32Array(total),
@@ -889,6 +915,9 @@ export const indexedLocalizationQuality = Effect.fn("GameText.localizationQualit
 		storedIsReported![storedReported.at(index)] = 1;
 	const reportedBySource = storedIsReported && new Uint8Array(total);
 	const groupSizes = new Map<number, number>();
+	/** Facts, severity and whether the source reports it, in one exact integer below 2^36. */
+	const groupKey = (position: number) =>
+		(facts[position]! * 3 + severities[position]!) * 2 + (reportedBySource?.[position] ?? 0);
 	let position = 0;
 	for (let rank = 0; rank < lineCount; rank++) {
 		if (tied[rank]) continue;
@@ -896,11 +925,12 @@ export const indexedLocalizationQuality = Effect.fn("GameText.localizationQualit
 		const end = blockStart[rank]! + blockSize[rank]!;
 		for (let stored = blockStart[rank]!; stored < end; stored++, position++) {
 			facts[position] = storedFacts.at(stored);
+			severities[position] = storedSeverity.at(stored);
 			first[position] = storedFirst.at(stored);
 			second[position] = storedSecond.at(stored);
 			blockOf[position] = rank;
 			if (reportedBySource) reportedBySource[position] = storedIsReported![stored]!;
-			const key = facts[position]! * 2 + (reportedBySource?.[position] ?? 0);
+			const key = groupKey(position);
 			groupSizes.set(key, (groupSizes.get(key) ?? 0) + 1);
 			if ((position & 0xffff) === 0xffff) yield* Effect.yieldNow;
 		}
@@ -910,11 +940,12 @@ export const indexedLocalizationQuality = Effect.fn("GameText.localizationQualit
 	const groups: LocalizationFindingGroup[] = [];
 	const groupByKey = new Map<number, { positions: Uint32Array; next: number }>();
 	for (const [key, size] of groupSizes) {
-		const fact = Math.floor(key / 2);
+		const fact = Math.floor(key / 6);
 		const positions = new Uint32Array(size);
 		groups.push({
 			culture: target.cultures[fact & 0xfff]!,
 			filter: WorkspaceQualityFilter.literals[(fact >>> 12) & 0x3f]!,
+			severity: CheckSeverity.literals[Math.floor(key / 2) % 3]!,
 			ruleId: ruleIds[fact >>> 19]!,
 			eligible: ((fact >>> 18) & 1) === 1,
 			reportedBySource: key % 2 === 1,
@@ -924,11 +955,16 @@ export const indexedLocalizationQuality = Effect.fn("GameText.localizationQualit
 		if ((groups.length & 0x7ff) === 0) yield* Effect.yieldNow;
 	}
 	for (let position = 0; position < total; position++) {
-		const key = facts[position]! * 2 + (reportedBySource?.[position] ?? 0);
-		const group = groupByKey.get(key)!;
+		const group = groupByKey.get(groupKey(position))!;
 		group.positions[group.next++] = position;
 		if ((position & 0xffff) === 0xffff) yield* Effect.yieldNow;
 	}
+	stages.mark("columns");
+	yield* Effect.annotateCurrentSpan({
+		"game_text.quality.lines": lineCount,
+		"game_text.quality.findings": total,
+		...stages.attributes("game_text.quality.stage_ms")
+	});
 	const limits = new Map(
 		[...limitCounts].map(([scope, codes]) => [
 			scope,
@@ -997,6 +1033,7 @@ export const indexedLocalizationQuality = Effect.fn("GameText.localizationQualit
 		groups,
 		culture: (position) => target.cultures[facts[position]! & 0xfff]!,
 		filter: (position) => WorkspaceQualityFilter.literals[(facts[position]! >>> 12) & 0x3f]!,
+		severity: (position) => CheckSeverity.literals[severities[position]!]!,
 		ruleId: (position) => ruleIds[facts[position]! >>> 19]!,
 		eligible: (position) => ((facts[position]! >>> 18) & 1) === 1,
 		reportedBySource: (position) => reportedBySource?.[position] === 1,
@@ -1027,10 +1064,10 @@ export const indexedLocalizationQuality = Effect.fn("GameText.localizationQualit
 		metadata: {
 			join,
 			rules: [
-				...(ruleDocument?.schemaVersion === 2
+				...(ruleDocument !== undefined && ruleDocument.schemaVersion !== 1
 					? (ruleDocument.localizationRules ?? []).map((rule) => rule.id)
 					: []),
-				...enabled.map((id) => TextQualityRuleId.make(`localization.${id}`))
+				...enabled.map(localizationRuleId)
 			],
 			unsupportedRuleCultures: policy?.diagnostics.length ?? 0,
 			status: corpus.status,

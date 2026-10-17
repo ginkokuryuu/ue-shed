@@ -95,6 +95,9 @@ const adaptHandler = <Contract extends InvokeContract, HandlerError, Requirement
 			);
 			// SAFETY: every InvokeContract is constructed with a tuple args schema; successful
 			// decoding therefore yields the exact argument tuple owned by this contract.
+			// Verified by: apps/workbench/src/main/ipc-contracts.test.ts ("decodes valid arguments
+			// for every invoke channel"); apps/workbench/src/main/ipc/register.test.ts ("dispatches
+			// Project Custodian scans and guarded cleanup through the service")
 			const decodedArgs = decoded as InvokeHandlerArguments<Contract>;
 			const result = yield* handler(...decodedArgs);
 			return yield* encodeInvokeResult(contract)(result).pipe(
@@ -110,6 +113,10 @@ const adaptHandler = <Contract extends InvokeContract, HandlerError, Requirement
 		});
 		// SAFETY: the Electron layer captures the complete Workbench runtime Context before
 		// registration, so all handler requirements are supplied when this program is executed.
+		// Verified by: apps/workbench/src/main/ipc/register.test.ts ("dispatches Project Custodian
+		// scans and guarded cleanup through the service");
+		// apps/workbench/src/main/adapters/adapters.test.ts
+		// ("ElectronIpc interrupts an in-flight handler when its owning scope closes")
 		return runPromise(
 			program as Effect.Effect<Contract["result"]["Encoded"], ElectronIpcError | HandlerError>
 		);

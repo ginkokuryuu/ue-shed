@@ -1,7 +1,9 @@
 import * as stylex from "@stylexjs/stylex";
 import {
 	WorkspaceQualityFilter,
-	workspaceQualityLabels,
+	workspaceQualityLabel,
+	localizationCheckCatalogue,
+	parseLocalizationRuleId,
 	textCountLabel,
 	textLocationLabel,
 	type WorkspaceQualityPage,
@@ -18,6 +20,12 @@ import { Button, Chip, createEffectAction } from "@ue-shed/ui";
 import { Effect } from "effect";
 import { For, Show, createEffect, createSignal, untrack } from "solid-js";
 import type { JSX } from "@solidjs/web";
+
+/** A built-in check's catalogue label; a project rule keeps its own ID. */
+function ruleLabel(ruleId: string): string {
+	const check = parseLocalizationRuleId(ruleId);
+	return check ? localizationCheckCatalogue[check].label : ruleId;
+}
 import type { GameTextClientApi } from "./game-text-client.js";
 import type { GameTextLocalizationState } from "./game-text-localization-state.js";
 import type { GameTextRuleState } from "./game-text-rule-state.js";
@@ -438,7 +446,7 @@ export function GameTextLocalizationQuality(props: {
 				>
 					{(filter) => (
 						<Chip
-							label={workspaceQualityLabels[filter]}
+							label={workspaceQualityLabel(filter)}
 							selected={props.filter === filter}
 							count={loading() ? undefined : page()?.counts[filter]}
 							onClick={() => props.onFilterChange(filter)}
@@ -630,20 +638,7 @@ export function GameTextLocalizationQuality(props: {
 														{(rule) => (
 															<tr>
 																<td title={rule.ruleId}>
-																	{rule.ruleId.startsWith(
-																		"localization."
-																	)
-																		? workspaceQualityLabels[
-																				WorkspaceQualityFilter.literals.find(
-																					(filter) =>
-																						filter ===
-																						rule.ruleId.slice(
-																							"localization."
-																								.length
-																						)
-																				) ?? "all"
-																			]
-																		: rule.ruleId}
+																	{ruleLabel(rule.ruleId)}
 																</td>
 																<td>{rule.findingCount}</td>
 															</tr>
@@ -702,7 +697,7 @@ export function GameTextLocalizationQuality(props: {
 										{(finding) => (
 											<>
 												<span {...stylex.attrs(styles.muted)}>
-													{workspaceQualityLabels[finding().check]} ·{" "}
+													{workspaceQualityLabel(finding().check)} ·{" "}
 													{finding().culture}
 												</span>
 												<span {...stylex.attrs(styles.muted)}>Source</span>

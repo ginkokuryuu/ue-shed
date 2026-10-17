@@ -5,7 +5,7 @@ import { it } from "@effect/vitest";
 import { Effect } from "effect";
 import { expect } from "vitest";
 import {
-	decodeTextQualityReport,
+	parseTextQualityReport,
 	decodeTextQualityRuleDocument,
 	decodeTextQualityRuleDocumentJson,
 	TextQualityRuleDocumentError
@@ -222,7 +222,7 @@ it.effect(
 				{ discouragedTerm: "press", kind: "preferred_term", preferredTerm: "select" },
 				{ discouragedTerm: "click", kind: "preferred_term", preferredTerm: "select" }
 			]);
-			yield* decodeTextQualityReport(first);
+			yield* parseTextQualityReport(first);
 		})
 );
 

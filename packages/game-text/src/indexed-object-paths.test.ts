@@ -13,7 +13,7 @@ import {
 	localizationQualityWorkspace,
 	localizationQualityWorkspaceOf
 } from "./localization-workspace.js";
-import { GameTextRuleDocument, evaluateGameTextSourceQuality } from "./quality-rules-v2.js";
+import { GameTextRuleDocument, evaluateGameTextSourceQuality } from "./game-text-rules.js";
 import type { TextCorpus, TextLocation } from "./schema.js";
 
 type Occurrence = SavedAssetPackageTextRecord["occurrences"][number];

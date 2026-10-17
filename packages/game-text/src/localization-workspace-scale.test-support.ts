@@ -3,7 +3,7 @@ import { resolve, join } from "node:path";
 import { Effect, Layer, Schema, Stream } from "effect";
 import { LocalizationTarget } from "@ue-shed/localization";
 import { makeIndexRegressionFixture } from "./index-refresh-regressions.test-support.js";
-import { GameTextRuleDocument } from "./quality-rules-v2.js";
+import { GameTextRuleDocument } from "./game-text-rules.js";
 import { GameTextIndexSource } from "./index-refresh.js";
 import { emptyPackageTextRecord } from "./package-text-record.js";
 import type { SavedAssetPackageTextRecord } from "@ue-shed/unreal-assets";
