@@ -83,6 +83,19 @@ function transportError(request: RemoteControlRequest, cause: unknown): RemoteCo
 		});
 	}
 
+	if (cause.kind === "decode") {
+		return clientError(request, {
+			message: `Invalid Remote Control HTTP JSON: ${cause.message}`,
+			recovery:
+				request.idempotent === true
+					? malformedResponseRecovery
+					: `The editor may have applied this request. Reconcile its state before sending it again. ${malformedResponseRecovery}`,
+			retrySafe: request.idempotent === true,
+			nextStep: request.idempotent === true ? "escalate" : "reconcile",
+			...(cause.statusCode === undefined ? undefined : { status: cause.statusCode })
+		});
+	}
+
 	const status = cause.statusCode;
 	const transient =
 		cause.kind === "connect" ||
