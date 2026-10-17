@@ -270,7 +270,7 @@ it.live("audience is stored, filtered, faceted and grouped the same through the 
 			);
 			const indexed = localizationQualityWorkspaceOf(
 				undefined,
-				yield* result.localizationQuality!()
+				yield* result.localizationQuality()
 			);
 			const all = { target: fixture.target.name, filter: "all" } as const;
 			expect(indexed.export(all)).toEqual(legacy.export(all));

@@ -13,6 +13,7 @@ import { LocalizationLine } from "./localization-schema.js";
 import { GameTextRuleDocument } from "./quality-rules-v2.js";
 import { WorkspaceFinding, WorkspaceQualityFilter } from "./localization-workspace.js";
 import { SearchWorkerInput } from "./search-worker-protocol.js";
+import { GameTextIndexProgress } from "./index-progress.js";
 import { SnapshotStoreError } from "./snapshot-store.js";
 import { SnapshotFormatError } from "./snapshot-format.js";
 
@@ -92,7 +93,7 @@ export const QualityWorkerReply = Schema.Union([
 	Schema.Struct({
 		kind: Schema.Literal("progress"),
 		id: Count,
-		progress: Schema.Struct({ checkedLines: Count, totalLines: Count, findings: Count })
+		progress: GameTextIndexProgress
 	}),
 	Schema.Struct({ kind: Schema.Literal("done"), id: Count, findings: QualityWorkerFindings }),
 	Schema.Struct({ kind: Schema.Literal("cancelled"), id: Count }),

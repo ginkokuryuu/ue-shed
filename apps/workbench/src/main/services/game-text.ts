@@ -231,16 +231,11 @@ export const WorkbenchGameTextLive = Layer.effect(
 				})
 			);
 		const retainedCorpus = (index: RetainedGameTextIndexResult) => index.corpus;
-		/** Source rules over the index page by page, or over the corpus where there is no index. */
+		/** Source rules over the index, page by page. */
 		const sourceQualityModel = (
 			index: RetainedGameTextIndexResult,
 			rules: GameTextRuleDocument
-		) =>
-			index.sourceQuality
-				? index.sourceQuality(rules)
-				: Effect.sync(() =>
-						textQualityQuery(evaluateGameTextSourceQuality(index.corpus, rules))
-					);
+		) => index.sourceQuality(rules);
 		const queryModel = (index: RetainedGameTextIndexResult) => index.query;
 		const querySearch = (index: RetainedGameTextIndexResult) => index.search;
 		const qualityModel = yield* Ref.make<TextQualityQuery | undefined>(undefined);
@@ -260,7 +255,10 @@ export const WorkbenchGameTextLive = Layer.effect(
 					localization: "Reading localization files",
 					packages: "Checking saved packages for text",
 					joining: "Building text index",
-					opening: "Opening text index"
+					opening: "Opening text index",
+					corpus: "Reading saved packages",
+					localization_quality: "Checking localization quality",
+					source_quality: "Checking source text"
 				};
 				return {
 					completed: current.completed,

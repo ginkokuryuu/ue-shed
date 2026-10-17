@@ -59,6 +59,7 @@ import type { TextCorpus, TextUnit, TextUnitId } from "./schema.js";
 import { snapshotCheck } from "./snapshot-format.js";
 import { decodeTextAudience } from "./text-audience.js";
 import { encodeWtf8 } from "./wtf8.js";
+import { GameTextIndexProgressReporter } from "./index-progress.js";
 
 /**
  * Lines hydrated and checked per scan page; the scan yields after each. Measured on 583,507
@@ -87,24 +88,13 @@ const ITEM_BATCH = 2048;
 
 type Finding = LocalizationQualityFinding | LocalizationPolicyFinding;
 
-/** How far an indexed quality scan has got. */
-export interface LocalizationQualityProgress {
-	/** The join's lines checked so far. */
-	readonly checkedLines: number;
-	/** The join's lines the scan checks, known from the first call. */
-	readonly totalLines: number;
-	/** Findings so far, accepted findings left out; the last call has the scan's count. */
-	readonly findings: number;
-}
-
-/** Check options of an indexed quality scan. */
-export interface IndexedLocalizationQualityOptions extends LocalizationCheckOptions {
-	/**
-	 * Called once before the scan with no lines checked, then after each page of lines, the last
-	 * call with every line checked. It runs inside the scan, so it must be cheap and must not throw.
-	 */
-	readonly onProgress?: ((progress: LocalizationQualityProgress) => void) | undefined;
-}
+/**
+ * Check options of an indexed quality scan. Progress goes to `GameTextIndexProgressReporter`:
+ * a `localization_quality` event before the scan with no lines checked, then after each page of
+ * lines, the last with every line checked and the scan's finding count (accepted findings left
+ * out).
+ */
+export type IndexedLocalizationQualityOptions = LocalizationCheckOptions;
 
 /** Growable u32 column; scans append, then trim. */
 function u32Builder() {
@@ -612,10 +602,18 @@ export const indexedLocalizationQuality = Effect.fn("GameText.localizationQualit
 	corpus: Pick<TextCorpus, "status" | "coverage">,
 	evidence: LocalizationTargetEvidence,
 	joinRows: Uint32Array,
-	options: IndexedLocalizationQualityOptions = {},
-	ruleDocument?: GameTextRuleDocument
+	ruleDocument?: GameTextRuleDocument,
+	options: IndexedLocalizationQualityOptions = {}
 ) {
-	options.onProgress?.({ checkedLines: 0, totalLines: joinRows.length, findings: 0 });
+	const reportProgress = yield* GameTextIndexProgressReporter;
+	const report = (completed: number, findings: number) =>
+		reportProgress({
+			phase: "localization_quality",
+			completed,
+			total: joinRows.length,
+			findings
+		});
+	report(0, 0);
 	const data = new JoinedQueryData(joined);
 	const target = data.joined.meta.input.target;
 	const join = {
@@ -840,11 +838,7 @@ export const indexedLocalizationQuality = Effect.fn("GameText.localizationQualit
 				}
 			checkedLines += lines.length;
 		}
-		options.onProgress?.({
-			checkedLines,
-			totalLines: lineCount,
-			findings: storedFacts.length
-		});
+		report(checkedLines, storedFacts.length);
 	};
 	// One-line blocks in storage order, so each page hydrates adjacent rows. Which page a line
 	// is checked in does not change its findings or their order.

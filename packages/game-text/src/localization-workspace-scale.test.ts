@@ -87,7 +87,7 @@ it.live(
 					{},
 					workspaceScaleRules
 				);
-				const quality = yield* result.localizationQuality!({}, workspaceScaleRules);
+				const quality = yield* result.localizationQuality(workspaceScaleRules);
 				for (const rules of [source, undefined]) {
 					const expected = eagerItems(rules, report, join);
 					const memory = localizationQualityWorkspace(rules, report, join);

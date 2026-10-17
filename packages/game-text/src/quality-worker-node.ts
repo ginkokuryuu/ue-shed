@@ -18,6 +18,7 @@ import type { IndexedLocalizationQualityOptions } from "./localization-quality-i
 import type { GameTextRuleDocument } from "./quality-rules-v2.js";
 import type { TextCorpus } from "./schema.js";
 import { receiveSyncReply, type SyncCallChannel } from "./worker-calls.js";
+import { GameTextIndexProgressReporter, type GameTextIndexProgress } from "./index-progress.js";
 
 const started = Metric.counter("game_text.index.quality_workers_started");
 const scans = Metric.counter("game_text.index.worker_quality_scans_completed");
@@ -131,7 +132,7 @@ function hostQuality(
 }
 
 type Pending = {
-	readonly onProgress: IndexedLocalizationQualityOptions["onProgress"];
+	readonly onProgress: (progress: GameTextIndexProgress) => void;
 	readonly resolve: (findings: QualityWorkerFindings) => void;
 	readonly reject: (cause: QualityWorkerFailure) => void;
 };
@@ -209,7 +210,7 @@ export const makeGameTextQualityWorkerResource = Effect.fn("GameTextIndex.qualit
 				const scan = pending.get(reply.id);
 				if (!scan) return;
 				if (reply.kind === "progress") {
-					scan.onProgress?.(reply.progress);
+					scan.onProgress(reply.progress);
 					return;
 				}
 				pending.delete(reply.id);
@@ -230,7 +231,9 @@ export const makeGameTextQualityWorkerResource = Effect.fn("GameTextIndex.qualit
 			request: QualityWorkerScanRequest
 		) {
 			const id = ++sequence;
-			const { onProgress, ...options } = request.options ?? {};
+			const options = request.options ?? {};
+			// The scan reports through the caller's reporter, as a scan on this thread would.
+			const onProgress = yield* GameTextIndexProgressReporter;
 			const scanned = performance.now();
 			const findings = yield* Effect.callback<QualityWorkerFindings, QualityWorkerFailure>(
 				(resume) => {

@@ -113,7 +113,7 @@ it.live("does not pair a re-keyed place with its gathered or saved previous iden
 					checks: ["duplicate_source"]
 				});
 				expect(report.findings).toEqual([]);
-				const quality = yield* indexed.localizationQuality!({
+				const quality = yield* indexed.localizationQuality(undefined, {
 					checks: ["duplicate_source"]
 				});
 				expect(quality.findings.length).toBe(0);
@@ -166,7 +166,7 @@ it.live("keeps distinct-place duplicates and excludes old keys through source ov
 				}
 				const options = { checks: ["duplicate_source" as const] };
 				const report = checkLocalizationTarget(corpus, join, indexed.evidence, options);
-				const quality = yield* indexed.localizationQuality!(options);
+				const quality = yield* indexed.localizationQuality(undefined, options);
 				expect(quality.findings.length).toBe(expected ? 1 : 0);
 				expect(report.findings).toHaveLength(quality.findings.length);
 				if (source.startsWith("B")) expect(indexed.joined.meta.version).toBe(4);

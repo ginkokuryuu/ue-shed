@@ -34,7 +34,7 @@ export const expectSameSourceQuality = Effect.fn("Test.GameText.sameSourceQualit
 	const report = evaluateGameTextSourceQuality(result.corpus, document);
 	if (memory) expect(evaluateGameTextSourceQuality(memory, document)).toEqual(report);
 	const legacy = textQualityQuery(report);
-	const indexed = yield* result.sourceQuality!(document);
+	const indexed = yield* result.sourceQuality(document);
 	expect(indexed.summary()).toEqual(legacy.summary());
 	for (const filter of TextQualityFilter.literals) {
 		expect(indexed.export(filter)).toEqual(legacy.export(filter));

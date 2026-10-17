@@ -328,7 +328,7 @@ it.live("object path, class path and row roles match through the index and in me
 				checkLocalizationTarget(memory, memoryJoin, evidence, {}, document),
 				memoryJoin
 			);
-			const quality = yield* result.localizationQuality!({}, document);
+			const quality = yield* result.localizationQuality(document);
 			const translated = quality.findings
 				.items(Array.from({ length: quality.findings.length }, (_, position) => position))
 				.flatMap(({ finding }) =>

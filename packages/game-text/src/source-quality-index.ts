@@ -19,6 +19,7 @@ import type { GameTextRuleDocument } from "./quality-rules-v2.js";
 import type { TextQualityAffectedOccurrence, TextQualityFinding } from "./quality-schema.js";
 import type { TextCorpus, TextLocation } from "./schema.js";
 import { snapshotCheck } from "./snapshot-format.js";
+import { GameTextIndexProgressReporter } from "./index-progress.js";
 
 /**
  * Text units checked per scan page; the scan yields after each. A page also ends once its units
@@ -26,25 +27,6 @@ import { snapshotCheck } from "./snapshot-format.js";
  */
 const SCAN_PAGE_UNITS = 256;
 const SCAN_PAGE_OCCURRENCES = 1024;
-
-/** How far an indexed source quality scan has got. */
-export interface SourceQualityProgress {
-	/** Text units with source checked so far. */
-	readonly checkedTextUnits: number;
-	/** Text units with source the scan checks, known from the first call. */
-	readonly totalTextUnits: number;
-	/** Findings so far; the last call has the scan's count. */
-	readonly findings: number;
-}
-
-/** Options of an indexed source quality scan. */
-export interface IndexedSourceQualityOptions {
-	/**
-	 * Called once before the scan with no units checked, then after each page of units, the last
-	 * call with every unit checked. It runs inside the scan, so it must be cheap and must not throw.
-	 */
-	readonly onProgress?: ((progress: SourceQualityProgress) => void) | undefined;
-}
 
 /** Growable u32 column; the scan appends, then reads by position. */
 function u32Builder() {
@@ -160,9 +142,11 @@ function occurrenceReader(data: JoinedQueryData) {
 export const indexedSourceQuality = Effect.fn("GameText.sourceQuality")(function* (
 	joined: JoinedTargetReader,
 	corpus: Pick<TextCorpus, "status" | "coverage">,
-	document: GameTextRuleDocument,
-	options: IndexedSourceQualityOptions = {}
+	document: GameTextRuleDocument
 ) {
+	// Progress goes to the reporter: a `source_quality` event before the scan with no units
+	// checked, then after each page of units, the last with every unit and the finding count.
+	const reportProgress = yield* GameTextIndexProgressReporter;
 	const data = new JoinedQueryData(joined);
 	const order = data.column("query.raw.order"),
 		visible = data.column("query.raw.visible"),
@@ -173,7 +157,7 @@ export const indexedSourceQuality = Effect.fn("GameText.sourceQuality")(function
 	// Units in report order, `query.raw.order` being ID order; rules check units with source.
 	let totalTextUnits = 0;
 	for (const row of order) if (visible[row]) totalTextUnits++;
-	options.onProgress?.({ checkedTextUnits: 0, totalTextUnits, findings: 0 });
+	reportProgress({ phase: "source_quality", completed: 0, total: totalTextUnits, findings: 0 });
 
 	const roles = [...document.roles].sort((left, right) => left.id.localeCompare(right.id));
 	const rules = [...document.rules].sort((left, right) => left.id.localeCompare(right.id));
@@ -278,9 +262,10 @@ export const indexedSourceQuality = Effect.fn("GameText.sourceQuality")(function
 			}
 		}
 		checkedTextUnits += ranks.length;
-		options.onProgress?.({
-			checkedTextUnits,
-			totalTextUnits,
+		reportProgress({
+			phase: "source_quality",
+			completed: checkedTextUnits,
+			total: totalTextUnits,
 			findings: storedRule.length
 		});
 	};

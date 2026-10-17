@@ -142,7 +142,7 @@ export async function scaleQuality(result: GameTextIndexRefreshResult) {
 	const stalls = eventLoopGaps();
 	try {
 		const quality = await Effect.runPromise(
-			result.localizationQuality({ review: result.review.file })
+			result.localizationQuality(undefined, { review: result.review.file })
 		);
 		const measured = stalls();
 		// Findings by check, from the finding columns; no line is read.
@@ -266,7 +266,7 @@ export async function scaleSourceQuality(
 	try {
 		const query =
 			mode === "indexed"
-				? await Effect.runPromise(result.sourceQuality!(scaleSourceRules))
+				? await Effect.runPromise(result.sourceQuality(scaleSourceRules))
 				: textQualityQuery(evaluateGameTextSourceQuality(result.corpus, scaleSourceRules));
 		const measured = stalls();
 		const summary = query.summary();

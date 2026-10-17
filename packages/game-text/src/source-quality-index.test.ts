@@ -7,7 +7,7 @@ import type { SavedAssetPackageTextRecord } from "@ue-shed/unreal-assets";
 import { GameTextIndexRefresh } from "./index-refresh.js";
 import { makeIndexRegressionFixture } from "./index-refresh-regressions.test-support.js";
 import { GameTextRuleDocument, decodeGameTextRuleDocumentJson } from "./quality-rules-v2.js";
-import type { SourceQualityProgress } from "./source-quality-index.js";
+import { GameTextIndexProgressReporter, type GameTextIndexProgress } from "./index-progress.js";
 import { expectSameSourceQuality } from "./source-quality-index.test-support.js";
 
 type Occurrence = SavedAssetPackageTextRecord["occurrences"][number];
@@ -373,59 +373,51 @@ it.live(
 			yield* Effect.gen(function* () {
 				const result = yield* (yield* GameTextIndexRefresh).refresh(fixture.request);
 				yield* expectSameSourceQuality(result, fixture.raw(), documents.everything);
-				const calls: SourceQualityProgress[] = [];
+				const calls: GameTextIndexProgress[] = [];
 				// A fiber that counts while the scan runs: it advances only when the scan yields.
 				let ticks = 0;
 				const ticked: number[] = [];
 				const counter = yield* Effect.forkChild(
 					Effect.forever(Effect.sync(() => ticks++).pipe(Effect.andThen(Effect.yieldNow)))
 				);
-				const indexed = yield* result.sourceQuality!(documents.everything, {
-					onProgress: (progress) => {
+				const indexed = yield* result.sourceQuality(documents.everything).pipe(
+					Effect.provideService(GameTextIndexProgressReporter, (progress) => {
 						calls.push(progress);
 						ticked.push(ticks);
-					}
-				});
+					})
+				);
 				yield* Fiber.interrupt(counter);
 				// The generated keys, the shared key, the conflicting key and the invariant text.
 				const total = 700 + 1 + 1 + 1;
-				expect(calls[0]).toEqual({
-					checkedTextUnits: 0,
-					totalTextUnits: total,
-					findings: 0
-				});
+				const phase = "source_quality";
+				expect(calls[0]).toEqual({ phase, completed: 0, total, findings: 0 });
 				expect(calls.length).toBeGreaterThanOrEqual(4);
 				expect(calls.at(-1)).toEqual({
-					checkedTextUnits: total,
-					totalTextUnits: total,
+					phase,
+					completed: total,
+					total,
 					findings: indexed.summary().findingCount
 				});
 				for (let index = 1; index < calls.length; index++) {
-					expect(calls[index]!.totalTextUnits).toBe(total);
-					expect(calls[index]!.checkedTextUnits).toBeGreaterThan(
-						calls[index - 1]!.checkedTextUnits
-					);
-					expect(calls[index]!.findings).toBeGreaterThanOrEqual(
-						calls[index - 1]!.findings
+					expect(calls[index]!.total).toBe(total);
+					expect(calls[index]!.completed).toBeGreaterThan(calls[index - 1]!.completed);
+					expect(calls[index]!.findings!).toBeGreaterThanOrEqual(
+						calls[index - 1]!.findings!
 					);
 				}
 				// The counter ran between pages.
 				expect(ticked.at(-1)!).toBeGreaterThan(ticked[1]!);
 				// No rule reads nothing: progress still starts and ends.
-				const empty: SourceQualityProgress[] = [];
-				yield* result.sourceQuality!(documents.none, {
-					onProgress: (progress) => empty.push(progress)
-				});
-				expect(empty[0]).toEqual({
-					checkedTextUnits: 0,
-					totalTextUnits: total,
-					findings: 0
-				});
-				expect(empty.at(-1)).toEqual({
-					checkedTextUnits: total,
-					totalTextUnits: total,
-					findings: 0
-				});
+				const empty: GameTextIndexProgress[] = [];
+				yield* result
+					.sourceQuality(documents.none)
+					.pipe(
+						Effect.provideService(GameTextIndexProgressReporter, (progress) =>
+							empty.push(progress)
+						)
+					);
+				expect(empty[0]).toEqual({ phase, completed: 0, total, findings: 0 });
+				expect(empty.at(-1)).toEqual({ phase, completed: total, total, findings: 0 });
 			}).pipe(Effect.provide(fixture.layer()));
 		}).pipe(Effect.scoped),
 	120_000
