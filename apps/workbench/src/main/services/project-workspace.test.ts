@@ -14,13 +14,73 @@ import {
 	ProjectIndexSummary,
 	type SavedAssetScan
 } from "@ue-shed/unreal-assets";
-import { Deferred, Effect, Fiber, Layer, Stream } from "effect";
+import { Deferred, Effect, Fiber, Layer, Ref, Stream } from "effect";
 import { expect } from "vitest";
 import { ElectronDialog } from "../adapters/electron-dialog.js";
 import { makeWorkbenchProjectHistoryTestLayer } from "./project-history.js";
-import { WorkbenchProject, WorkbenchProjectLive } from "./project-workspace.js";
+import {
+	WorkbenchProject,
+	WorkbenchProjectLive,
+	makeWorkbenchProjectTestLayer
+} from "./project-workspace.js";
 
 const projectRoot = "C:/Projects/Selected";
+
+it.effect(
+	"recent-project test hosts require an explicit transition and never report the old root",
+	() =>
+		Effect.gen(function* () {
+			const a = {
+				projectRoot: "C:/Projects/A",
+				projectName: "A",
+				inputAtlas: "deferred" as const,
+				mapCount: 0,
+				packageCount: 0
+			};
+			const b = { ...a, projectRoot: "C:/Projects/B", projectName: "B" };
+			const selected = yield* Ref.make(a);
+			const current = () =>
+				Ref.get(selected).pipe(
+					Effect.map((project) => ({ status: "ready" as const, project }))
+				);
+			const service = {
+				choose: current,
+				current,
+				recent: () => Effect.succeed([b]),
+				savedProject: () =>
+					Ref.get(selected).pipe(
+						Effect.map(({ projectRoot }) => ({ projectRoot, maps: [] }))
+					),
+				inputAtlas: () => Effect.die("Selection-only tests must not scan input assets."),
+				savedTables: () => Effect.die("Selection-only tests must not scan tables.")
+			};
+			// @ts-expect-error A recent list requires its own openRecent transition.
+			const missingTransition = makeWorkbenchProjectTestLayer(service);
+			yield* Effect.gen(function* () {
+				const project = yield* WorkbenchProject;
+				expect((yield* project.openRecent(b.projectRoot)).status).toBe("failed");
+				expect((yield* project.selectedProject()).projectRoot).toBe(a.projectRoot);
+			}).pipe(Effect.provide(missingTransition));
+			const complete = makeWorkbenchProjectTestLayer({
+				...service,
+				openRecent: (root) =>
+					Effect.gen(function* () {
+						expect(root).toBe(b.projectRoot);
+						yield* Ref.set(selected, b);
+						return yield* current();
+					})
+			});
+			yield* Effect.gen(function* () {
+				const project = yield* WorkbenchProject;
+				expect(yield* project.openRecent(b.projectRoot)).toEqual({
+					status: "ready",
+					project: b
+				});
+				expect((yield* project.selectedProject()).projectRoot).toBe(b.projectRoot);
+				expect(yield* project.current()).toEqual({ status: "ready", project: b });
+			}).pipe(Effect.provide(complete));
+		})
+);
 
 const configuredProject = makeWorkbenchConfigurationLayer({
 	authoringAsset: { status: "not_configured" },
@@ -121,7 +181,8 @@ it.effect(
 							return yield* new ProjectIndexRefreshFailed({
 								message: "Disk temporarily unavailable",
 								recovery: "Retry refresh",
-								retrySafe: true
+								retrySafe: true,
+								nextStep: "retry"
 							});
 						return ProjectIndexRefreshEvent.cases.Completed.make({
 							summary: {
@@ -479,7 +540,8 @@ it.effect("recovers a candidate query when the committed generation changes", ()
 							message:
 								"The Project Index generation changed since this query started.",
 							recovery: "Retry against the current generation.",
-							retrySafe: true
+							retrySafe: true,
+							nextStep: "reconcile"
 						})
 					);
 				}

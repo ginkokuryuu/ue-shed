@@ -23,7 +23,7 @@ import {
 	type ProjectIndexSummary,
 	type SavedAssetScan
 } from "@ue-shed/unreal-assets";
-import { STRING_TABLE_CLASS, TEXT_PROPERTY_NAME } from "@ue-shed/game-text";
+import { STRING_TABLE_CLASS, TEXT_PROPERTY_NAME } from "@ue-shed/game-text/index";
 import { TEXTURE_CLASS } from "@ue-shed/asset-audits";
 import {
 	ENHANCED_INPUT_CLASS_NAME_SUFFIXES,

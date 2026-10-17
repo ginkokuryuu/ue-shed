@@ -2330,7 +2330,7 @@ export type CaptureRun = Schema.Schema.Type<typeof CaptureRun>;
 export function decodeCaptureRunWithMigration<Input>(input: Input) {
 	return Schema.decodeUnknownEffect(CaptureRunCurrent)(input).pipe(
 		Effect.map((run) => ({ migrated: false as const, run })),
-		Effect.catch(() =>
+		Effect.catchTag("SchemaError", () =>
 			Schema.decodeUnknownEffect(PreviousClearCaptureRun)(input).pipe(
 				Effect.map((run) => ({
 					migrated: true as const,
@@ -2338,7 +2338,7 @@ export function decodeCaptureRunWithMigration<Input>(input: Input) {
 				}))
 			)
 		),
-		Effect.catch(() =>
+		Effect.catchTag("SchemaError", () =>
 			Schema.decodeUnknownEffect(PreviousCurrentCaptureRun)(input).pipe(
 				Effect.map((run) => ({
 					migrated: true as const,
@@ -2346,7 +2346,7 @@ export function decodeCaptureRunWithMigration<Input>(input: Input) {
 				}))
 			)
 		),
-		Effect.catch(() =>
+		Effect.catchTag("SchemaError", () =>
 			Schema.decodeUnknownEffect(PreviousCaptureRun)(input).pipe(
 				Effect.map((run) => ({
 					migrated: true as const,
@@ -2354,7 +2354,7 @@ export function decodeCaptureRunWithMigration<Input>(input: Input) {
 				}))
 			)
 		),
-		Effect.catch(() =>
+		Effect.catchTag("SchemaError", () =>
 			Schema.decodeUnknownEffect(PreviousLegacyCaptureRun)(input).pipe(
 				Effect.map((run) => ({
 					migrated: true as const,
@@ -2362,7 +2362,7 @@ export function decodeCaptureRunWithMigration<Input>(input: Input) {
 				}))
 			)
 		),
-		Effect.catch(() =>
+		Effect.catchTag("SchemaError", () =>
 			Schema.decodeUnknownEffect(LegacyCaptureRun)(input).pipe(
 				Effect.map((run) => ({
 					migrated: true as const,

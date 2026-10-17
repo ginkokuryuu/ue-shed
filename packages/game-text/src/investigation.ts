@@ -2,7 +2,7 @@ import {
 	GameTextRuleDocument,
 	decodeGameTextRuleDocumentJson,
 	evaluateGameTextSourceQuality
-} from "./quality-rules-v2.js";
+} from "./game-text-rules.js";
 import { Effect, Schema } from "effect";
 import {
 	InvestigationSource,
@@ -119,15 +119,21 @@ export function exportGameTextInvestigation(
 				new InvestigationError({
 					message: `This export filters by the localization target ${target}, which is not loaded.`,
 					recovery:
-						"Select the target in Game Text, or remove its translation and problem filters."
+						"Select the target in Game Text, or remove its translation and problem filters.",
+					retrySafe: true,
+					nextStep: "fix_input"
 				})
 			);
 		return yield* Effect.try({
 			try: () => (localized ?? textCorpusQuery(corpus)).export(preset.query),
 			catch: (error) =>
 				new InvestigationError({
-					message: error instanceof Error ? error.message : String(error),
-					recovery: "Select a localization target, or remove its translation filters."
+					message:
+						"This export filters by localization state, which needs a loaded target.",
+					recovery: "Select a localization target, or remove its translation filters.",
+					cause: error,
+					retrySafe: true,
+					nextStep: "fix_input"
 				})
 		});
 	});
@@ -136,7 +142,9 @@ export function exportGameTextInvestigation(
 			return yield* Effect.fail(
 				new InvestigationError({
 					message: "Localization quality presets require schemaVersion 2.",
-					recovery: "Save this localization quality selection as a version-2 preset."
+					recovery: "Save this localization quality selection as a version-2 preset.",
+					retrySafe: true,
+					nextStep: "fix_input"
 				})
 			);
 		if (
@@ -147,7 +155,9 @@ export function exportGameTextInvestigation(
 			return yield* Effect.fail(
 				new InvestigationError({
 					message: "Quality exports require a rule document.",
-					recovery: "Load quality rules before exporting findings."
+					recovery: "Load quality rules before exporting findings.",
+					retrySafe: true,
+					nextStep: "fix_input"
 				})
 			);
 		if (preset.query.workspaceFilter !== undefined && !workspace)
@@ -155,7 +165,9 @@ export function exportGameTextInvestigation(
 				new InvestigationError({
 					message: "The localization quality workspace is unavailable.",
 					recovery:
-						"Check that the preset's localization target is gathered in the project, then retry the export."
+						"Check that the preset's localization target is gathered in the project, then retry the export.",
+					retrySafe: true,
+					nextStep: "fix_input"
 				})
 			);
 		if (
@@ -168,7 +180,9 @@ export function exportGameTextInvestigation(
 			return yield* Effect.fail(
 				new InvestigationError({
 					message: "The quality report does not match this preset's selection.",
-					recovery: "Reevaluate the target, culture and finding filter before exporting."
+					recovery: "Reevaluate the target, culture and finding filter before exporting.",
+					retrySafe: true,
+					nextStep: "reconcile"
 				})
 			);
 		const rules =
@@ -179,7 +193,9 @@ export function exportGameTextInvestigation(
 							(error) =>
 								new InvestigationError({
 									message: error.message,
-									recovery: error.recovery
+									recovery: error.recovery,
+									retrySafe: true,
+									nextStep: "fix_input"
 								})
 						)
 					);

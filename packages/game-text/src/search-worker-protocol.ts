@@ -1,5 +1,17 @@
-import { Schema } from "effect";
-import { TextCorpusSearchRequest, TextCorpusSearchPage } from "./schema.js";
+import { Schema, Struct } from "effect";
+import {
+	TextCorpus,
+	TextCorpusFocus,
+	TextCorpusFocusRequest,
+	TextCorpusQuerySummary,
+	TextCorpusSearchRequest,
+	TextCorpusSearchPage
+} from "./schema.js";
+import {
+	GameTextLocalizationError,
+	LocalizationLine,
+	LocalizationLineId
+} from "./localization-schema.js";
 import { SnapshotStoreError } from "./snapshot-store.js";
 import { SnapshotFormatError } from "./snapshot-format.js";
 
@@ -29,7 +41,8 @@ export const SearchWorkerTask = Schema.Struct({
 	cancelled: Schema.instanceOf(SharedArrayBuffer)
 });
 export const SearchWorkerReply = Schema.Union([
-	Schema.Struct({ kind: Schema.Literal("ready") }),
+	/** The worker prepared its query; the summary it computed while preparing comes along. */
+	Schema.Struct({ kind: Schema.Literal("ready"), summary: TextCorpusQuerySummary }),
 	Schema.Struct({ kind: Schema.Literal("result"), id: Id, page: TextCorpusSearchPage }),
 	Schema.Struct({ kind: Schema.Literal("cancelled"), id: Id }),
 	Schema.Struct({
@@ -39,13 +52,60 @@ export const SearchWorkerReply = Schema.Union([
 	})
 ]);
 export type SearchWorkerReply = typeof SearchWorkerReply.Type;
+
+/** Requests over the whole matching set: a search request without its page. */
+export const SearchWorkerUnpagedRequest = Schema.Struct(
+	Struct.omit(TextCorpusSearchRequest.fields, ["cursor", "pageSize"])
+);
+/**
+ * The synchronous query calls a host makes on the worker's prepared model. The host blocks on a
+ * shared flag until the worker answers; the worker serves them between searches.
+ */
+export const SearchWorkerCall = Schema.Union([
+	Schema.Struct({ id: Id, method: Schema.Literal("search"), request: TextCorpusSearchRequest }),
+	Schema.Struct({ id: Id, method: Schema.Literal("focus"), request: TextCorpusFocusRequest }),
+	Schema.Struct({
+		id: Id,
+		method: Schema.Literal("localizationFocus"),
+		lineId: LocalizationLineId
+	}),
+	Schema.Struct({
+		id: Id,
+		method: Schema.Literals(["localizationLines", "localizationRows", "export"]),
+		request: SearchWorkerUnpagedRequest
+	})
+]);
+export type SearchWorkerCall = typeof SearchWorkerCall.Type;
+export const SearchWorkerCallFailure = Schema.Union([
+	SnapshotStoreError,
+	SnapshotFormatError,
+	GameTextLocalizationError
+]);
+export type SearchWorkerCallFailure = typeof SearchWorkerCallFailure.Type;
+/** Each value is encoded by its method's schema; the host decodes it with the same schema. */
+export const SearchWorkerCallReply = Schema.Union([
+	Schema.Struct({ kind: Schema.Literal("value"), id: Id, value: Schema.Unknown }),
+	Schema.Struct({ kind: Schema.Literal("failed"), id: Id, error: SearchWorkerCallFailure })
+]);
+export type SearchWorkerCallReply = typeof SearchWorkerCallReply.Type;
+/** The schema of each call's value. */
+export const searchWorkerCallValues = {
+	search: TextCorpusSearchPage,
+	focus: Schema.UndefinedOr(TextCorpusFocus),
+	localizationFocus: Schema.UndefinedOr(LocalizationLine),
+	localizationLines: Schema.Array(LocalizationLine),
+	localizationRows: Schema.instanceOf(Uint32Array),
+	export: TextCorpus
+} as const;
+
 export function searchWorkerFailure(operation: string, cause: unknown) {
-	return cause instanceof SnapshotStoreError || cause instanceof SnapshotFormatError
+	return Schema.is(SnapshotStoreError)(cause) || Schema.is(SnapshotFormatError)(cause)
 		? cause
 		: new SnapshotStoreError({
 				operation,
 				code: "unavailable",
-				message: String(cause),
+				message: `The Game Text search worker could not complete ${operation}.`,
+				cause,
 				recovery: "Refresh the Game Text index and retry the search."
 			});
 }

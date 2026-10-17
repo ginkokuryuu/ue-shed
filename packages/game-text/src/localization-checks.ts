@@ -5,7 +5,12 @@ import type {
 	LocalizationIdentity,
 	LocalizationTargetEvidence
 } from "@ue-shed/localization/browser";
-import { BuiltInCheckId, checkSeverity } from "./localization-check-ids.js";
+import { BuiltInCheckId } from "./localization-check-ids.js";
+import {
+	localizationCheckDefaults,
+	localizationRuleId,
+	type InconsistentTranslationParams
+} from "./localization-check-catalogue.js";
 import { localizationManifestNotes } from "./localization.js";
 import { localizationLineUnits } from "./gathered-text.js";
 import {
@@ -23,24 +28,33 @@ import {
 	LocalizationQualityReport,
 	type LocalizationQualityFinding,
 	type LocalizationPolicyFinding,
+	type LocalizationCustomFinding,
 	type LocalizationCheckOptions,
 	type LocalizationCheckDiagnostic
 } from "./localization-quality-schema.js";
 import { localizationEvidenceFileStatuses } from "./localization-status.js";
-import { TextQualityRuleId, type TextQualityAffectedOccurrence } from "./quality-schema.js";
-import type { GameTextRuleDocument } from "./quality-rules-v2.js";
+import type { TextQualityAffectedOccurrence } from "./quality-schema.js";
+import {
+	resolveLocalizationChecks,
+	type GameTextRuleDocument,
+	type ResolvedLocalizationChecks
+} from "./game-text-rules.js";
 import { matchesTextRole, prepareTextQualityRules, termMatches } from "./quality.js";
 import type { TextRole } from "./quality-schema.js";
 import { evaluateLocalizationPolicy } from "./localization-policy.js";
 import { localizationShippedTranslation } from "./localization-shipped-translation.js";
 import { withoutAcceptedFindings } from "./localization-review.js";
+import { localizationCheckInScope } from "./localization-check-scope.js";
+import {
+	customLocalizationChecks,
+	localizationLineCustomFindings
+} from "./localization-custom-checks.js";
 export {
 	localizationShippedTranslation,
 	LocalizationShippedTranslation
 } from "./localization-shipped-translation.js";
 import type { TextCorpus, TextOccurrence, TextUnit } from "./schema.js";
 import {
-	LENGTH_OUTLIER,
 	compareRichTextTags,
 	consistentTranslationCandidate,
 	countOccurrences,
@@ -156,12 +170,12 @@ export interface LocalizationLineCheckContext {
 		string,
 		ReadonlyMap<CultureCode, LocalizationTranslationVariants>
 	>;
-	/** The rule file's `segmentSeparator`, when it has one. */
-	readonly segmentSeparator?: string | undefined;
-	/** The rule file's `optionalTags`, lower-cased. */
-	readonly optionalTags: ReadonlySet<string>;
-	/** The rule file's `optionalArguments`. */
-	readonly optionalArguments: ReadonlySet<string>;
+	/** Each built-in check's settings under the rule file: severity and parameters. */
+	readonly checks: ResolvedLocalizationChecks;
+	/** The checks' tag and argument lists as sets, prepared once from `checks`. */
+	readonly lists: LocalizationCheckLists;
+	/** The rule file's roles by ID, for check scopes. */
+	readonly roles: ReadonlyMap<string, TextRole>;
 	/** The rule file's source terminology rules: each role and the terms it discourages. */
 	readonly sourceTerminology: readonly SourceTerminology[];
 
@@ -337,12 +351,53 @@ interface SourceTerminology {
 	readonly terms: readonly string[];
 }
 
+/** Optional tag (lower-cased) and argument names of the checks that take them, as sets. */
+export interface LocalizationCheckLists {
+	readonly formatArguments: ReadonlySet<string>;
+	readonly renamedArguments: ReadonlySet<string>;
+	readonly tagCaseArguments: ReadonlySet<string>;
+	readonly richTextTags: {
+		readonly tags: ReadonlySet<string>;
+		readonly arguments: ReadonlySet<string>;
+	};
+	readonly richTextTagsAdded: {
+		readonly tags: ReadonlySet<string>;
+		readonly arguments: ReadonlySet<string>;
+	};
+}
+
+function localizationCheckLists(checks: ResolvedLocalizationChecks): LocalizationCheckLists {
+	// Equal lists share one set, so the tag comparison runs once when the checks agree.
+	const sets = new Map<string, ReadonlySet<string>>();
+	const set = (values: readonly string[]) => {
+		const key = values.join("\0");
+		let value = sets.get(key);
+		if (!value) sets.set(key, (value = new Set(values)));
+		return value;
+	};
+	const lower = (values: readonly string[]) => set(values.map((value) => value.toLowerCase()));
+	return {
+		formatArguments: set(checks.format_arguments.params.optionalArguments),
+		renamedArguments: set(checks.format_argument_renamed.params.optionalArguments),
+		tagCaseArguments: set(checks.rich_text_tag_case.params.optionalArguments),
+		richTextTags: {
+			tags: lower(checks.rich_text_tags.params.optionalTags),
+			arguments: set(checks.rich_text_tags.params.optionalArguments)
+		},
+		richTextTagsAdded: {
+			tags: lower(checks.rich_text_tags_added.params.optionalTags),
+			arguments: set(checks.rich_text_tags_added.params.optionalArguments)
+		}
+	};
+}
+
 /** The rule file's settings the line checks read. */
 export function localizationRuleContext(ruleDocument: GameTextRuleDocument | undefined) {
+	const checks = resolveLocalizationChecks(ruleDocument);
 	return {
-		segmentSeparator: ruleDocument?.segmentSeparator,
-		optionalTags: new Set((ruleDocument?.optionalTags ?? []).map((tag) => tag.toLowerCase())),
-		optionalArguments: new Set(ruleDocument?.optionalArguments ?? []),
+		checks,
+		lists: localizationCheckLists(checks),
+		roles: new Map((ruleDocument?.roles ?? []).map((role) => [role.id, role])),
 		sourceTerminology: (ruleDocument ? prepareTextQualityRules(ruleDocument) : []).flatMap(
 			({ rule, role, terms }): SourceTerminology[] =>
 				rule.kind === "terminology"
@@ -417,14 +472,13 @@ export function enabledLocalizationChecks(
 			message: "The localization check selection is invalid.",
 			recovery: "Choose a loaded target and one of its listed cultures."
 		});
-	const disabled = new Set([
-		...(options.disabledChecks ?? []),
-		...(ruleDocument?.disabledLocalizationChecks ?? [])
-	]);
-	// The separator check has nothing to compare until the rule file names a separator.
-	if (ruleDocument?.segmentSeparator === undefined) disabled.add("segment_separator");
+	const disabled = new Set(options.disabledChecks ?? []);
+	const checks = resolveLocalizationChecks(ruleDocument);
 	return BuiltInCheckId.literals.filter(
-		(id) => !disabled.has(id) && (!options.checks || options.checks.includes(id))
+		(id) =>
+			checks[id].enabled &&
+			!disabled.has(id) &&
+			(!options.checks || options.checks.includes(id))
 	);
 }
 
@@ -559,7 +613,8 @@ const byCodeUnit = (a: string, b: string) => (a < b ? -1 : a > b ? 1 : 0);
  */
 export function localizationTranslationVariants(
 	shared: ReadonlyMap<string, DuplicateSourceActual>,
-	nativeCulture: CultureCode | null
+	nativeCulture: CultureCode | null,
+	params: InconsistentTranslationParams = localizationCheckDefaults.inconsistent_translation
 ) {
 	/** Per source and culture: lines and first spelling by group key. */
 	const groups = new Map<
@@ -584,7 +639,7 @@ export function localizationTranslationVariants(
 	return {
 		/** A hydrated line: counted when it is a candidate, for each culture in the target. */
 		add(line: LocalizationLine) {
-			if (!localizationTranslationCandidate(line, shared)) return;
+			if (!localizationTranslationCandidate(line, shared, params)) return;
 			for (const culture of line.cultures) {
 				if (culture.state === "outside_target") continue;
 				const translation = localizationShippedTranslation(culture).value;
@@ -639,12 +694,13 @@ export function localizationTranslationVariants(
 /** A line whose translations `inconsistent_translation` compares with its shared source's. */
 function localizationTranslationCandidate(
 	line: LocalizationLine,
-	shared: ReadonlyMap<string, DuplicateSourceActual>
+	shared: ReadonlyMap<string, DuplicateSourceActual>,
+	params: InconsistentTranslationParams
 ): boolean {
 	return (
 		(shared.get(line.source)?.identityCount ?? 0) > 1 &&
 		localizationDuplicateCandidate(line) &&
-		consistentTranslationCandidate(line.source)
+		consistentTranslationCandidate(line.source, params)
 	);
 }
 
@@ -663,8 +719,8 @@ export function compareLocalizationFindings(
 
 /** Report order once policy findings join the built-ins. */
 export function compareReportedLocalizationFindings(
-	a: LocalizationQualityFinding | LocalizationPolicyFinding,
-	b: LocalizationQualityFinding | LocalizationPolicyFinding
+	a: LocalizationQualityFinding | LocalizationPolicyFinding | LocalizationCustomFinding,
+	b: LocalizationQualityFinding | LocalizationPolicyFinding | LocalizationCustomFinding
 ) {
 	return (
 		a.lineId.localeCompare(b.lineId) ||
@@ -696,7 +752,7 @@ function conflictingSourceVariants(
 	return sources.size > 1 ? [...sources].sort(byCodeUnit) : undefined;
 }
 
-const ruleIdOf = (id: BuiltInCheckId) => TextQualityRuleId.make(`localization.${id}`);
+const ruleIdOf = localizationRuleId;
 const sameIdentity = (a: LocalizationIdentity | undefined, b: LocalizationIdentity) =>
 	a !== undefined && a.namespace === b.namespace && a.key === b.key;
 const affectedOf = (lineUnits: readonly TextUnit[]): TextQualityAffectedOccurrence[] =>
@@ -719,10 +775,11 @@ function sourceTextFindings(
 		readonly bytecode: boolean;
 		readonly terminology: readonly SourceTerminology[];
 		readonly units: () => readonly TextUnit[];
+		readonly checks: ResolvedLocalizationChecks;
 	},
 	add: (finding: UnratedFinding) => void
 ) {
-	const placeholders = placeholderMatchRanges(text);
+	const placeholders = placeholderMatchRanges(text, line.checks.placeholder_text.params);
 	if (placeholders.length) {
 		const unreported = unreportedPlaceholders(text, placeholders, line.terminology, line.units);
 		add({
@@ -812,15 +869,25 @@ export function checkLocalizationLine(
 	let lineUnits: readonly TextUnit[] | undefined,
 		affected: TextQualityAffectedOccurrence[] | undefined;
 	const unitsOnce = () => (lineUnits ??= units());
+	const savedPlaces = () => unitsOnce().flatMap((unit) => unit.occurrences);
+	/**
+	 * Whether a check runs and its scope holds for this line in `culture`. Scope is asked after a
+	 * check has something to report, so a line's units are built only for a scoped finding.
+	 */
+	const active = (id: BuiltInCheckId, culture: CultureCode) =>
+		enabled.includes(id) &&
+		localizationCheckInScope(context.checks[id].scope, culture, savedPlaces, context.roles);
 	const add = (finding: UnratedFinding) => {
-		if (enabled.includes(finding.kind))
-			// SAFETY: `finding` is one member of the union without its severity, and the severity
-			// added is the one `checkSeverity` gives that member's kind.
-			findings.push({
-				...finding,
-				affectedOccurrences: (affected ??= affectedOf(unitsOnce())),
-				severity: checkSeverity[finding.kind]
-			} as LocalizationQualityFinding);
+		if (!active(finding.kind, finding.culture)) return false;
+		// SAFETY: `finding` is one member of the union without its severity, and the severity
+		// added is the one the rule file gives that member's kind.
+		// Verified by: localization-check-settings.test.ts — applies enabled, preset, severity and parameters.
+		findings.push({
+			...finding,
+			affectedOccurrences: (affected ??= affectedOf(unitsOnce())),
+			severity: context.checks[finding.kind].severity
+		} as LocalizationQualityFinding);
+		return true;
 	};
 	const sourceCulture = localizationSourceCulture(line, context.nativeCulture);
 	if (!line.identity) {
@@ -879,7 +946,8 @@ export function checkLocalizationLine(
 		gathered: line.manifest.length > 0,
 		bytecode,
 		terminology: enabled.includes("placeholder_text") ? context.sourceTerminology : [],
-		units: unitsOnce
+		units: unitsOnce,
+		checks: context.checks
 	};
 	/** The source's visible length, measured once for every culture. */
 	let sourceLength: number | undefined;
@@ -1109,41 +1177,67 @@ export function checkLocalizationLine(
 				recovery:
 					"Balance opening rich-text tags with </>, retaining intentional source imbalance."
 			});
-		const tags = translated
-			? compareRichTextTags(
-					withoutOptionalArgumentTags(source, context.optionalArguments),
-					withoutOptionalArgumentTags(translation, context.optionalArguments)
-				)
-			: undefined;
-		const required = (name: string) => !context.optionalTags.has(name.toLowerCase());
+		// Each tag check leaves out its own optional arguments; equal lists compare once.
+		const tagComparisons = new Map<
+			ReadonlySet<string>,
+			ReturnType<typeof compareRichTextTags>
+		>();
+		const tagsWithout = (optional: ReadonlySet<string>) => {
+			if (!translated) return undefined;
+			if (!tagComparisons.has(optional))
+				tagComparisons.set(
+					optional,
+					compareRichTextTags(
+						withoutOptionalArgumentTags(source, optional),
+						withoutOptionalArgumentTags(translation, optional)
+					)
+				);
+			return tagComparisons.get(optional);
+		};
+		const { richTextTags, richTextTagsAdded } = context.lists;
+		const tags = tagsWithout(richTextTags.arguments);
+		const required = (name: string) => !richTextTags.tags.has(name.toLowerCase());
 		const missingTags = tags?.missing.filter(required) ?? [],
 			addedTags = tags?.added.filter(required) ?? [];
+		const addedOnly = tagsWithout(richTextTagsAdded.arguments);
+		let reportedTagAdditions: readonly string[] = [];
 		if (tags && missingTags.length)
-			add({
-				...base,
-				ruleId: ruleIdOf("rich_text_tags"),
-				kind: "rich_text_tags",
-				actual: { tags: tags.translationTags, missing: missingTags, added: addedTags },
-				expectation: { tags: tags.sourceTags },
-				recovery:
-					"Keep the source's rich-text tags, such as <b>…</> and <img/>, around the matching words; don't add or drop any."
-			});
-		else if (tags && addedTags.length)
+			if (
+				add({
+					...base,
+					ruleId: ruleIdOf("rich_text_tags"),
+					kind: "rich_text_tags",
+					actual: { tags: tags.translationTags, missing: missingTags, added: addedTags },
+					expectation: { tags: tags.sourceTags },
+					recovery:
+						"Keep the source's rich-text tags, such as <b>…</> and <img/>, around the matching words; don't add or drop any."
+				})
+			)
+				reportedTagAdditions = addedTags;
+		const reportedTags = new Set(reportedTagAdditions.map((name) => name.toLowerCase()));
+		const addedOnlyTags =
+			addedOnly?.added.filter(
+				(name) =>
+					!richTextTagsAdded.tags.has(name.toLowerCase()) &&
+					!reportedTags.has(name.toLowerCase())
+			) ?? [];
+		if (addedOnly && addedOnlyTags.length)
 			add({
 				...base,
 				ruleId: ruleIdOf("rich_text_tags_added"),
 				kind: "rich_text_tags_added",
-				actual: { tags: tags.translationTags, added: addedTags },
-				expectation: { tags: tags.sourceTags },
+				actual: { tags: addedOnly.translationTags, added: addedOnlyTags },
+				expectation: { tags: addedOnly.sourceTags },
 				recovery:
 					"Style the same words as the source; list a tag a culture may add in the rule file's optionalTags."
 			});
-		if (tags?.changed.length)
+		const caseTags = tagsWithout(context.lists.tagCaseArguments);
+		if (caseTags?.changed.length)
 			add({
 				...base,
 				ruleId: ruleIdOf("rich_text_tag_case"),
 				kind: "rich_text_tag_case",
-				actual: { changed: tags.changed },
+				actual: { changed: caseTags.changed },
 				expectation: { sameCase: true },
 				recovery: "Spell rich-text tag names exactly as the source does."
 			});
@@ -1155,12 +1249,19 @@ export function checkLocalizationLine(
 		const missing = translated
 			? argumentOrder(sourcePattern).filter((name) => !actualArgs.includes(name))
 			: [];
-		// The game always supplies an optional argument, so a translation may add it.
-		const added = argumentOrder(translationPattern).filter(
-			(name) => !expectedArgs.includes(name) && !context.optionalArguments.has(name)
-		);
+		// The game always supplies an optional argument, so a translation may add it. Each check
+		// leaves out its own optional arguments.
+		const addedArguments = (optional: ReadonlySet<string>) =>
+			argumentOrder(translationPattern).filter(
+				(name) => !expectedArgs.includes(name) && !optional.has(name)
+			);
+		const added = addedArguments(context.lists.renamedArguments);
 		// A dropped and an added name pair up, in order of appearance, as a rename.
-		const pairs = Math.min(missing.length, added.length);
+		const pairs =
+			missing.length && added.length && active("format_argument_renamed", culture.culture)
+				? Math.min(missing.length, added.length)
+				: 0;
+		let reportedPairs = 0;
 		if (canComparePattern && pairs > 0) {
 			const finding: Unrated<
 				Extract<LocalizationQualityFinding, { kind: "format_argument_renamed" }>
@@ -1215,10 +1316,13 @@ export function checkLocalizationLine(
 					changes.push(change);
 				}
 			}
-			add(finding);
+			if (add(finding)) reportedPairs = pairs;
 		}
-		const dropped = missing.slice(pairs).sort(),
-			extra = added.slice(pairs).sort();
+		const renamedFrom = new Set(added.slice(0, reportedPairs));
+		const dropped = missing.slice(reportedPairs).sort(),
+			extra = addedArguments(context.lists.formatArguments)
+				.filter((name) => !renamedFrom.has(name))
+				.sort();
 		if (canComparePattern && (dropped.length || extra.length))
 			add({
 				...base,
@@ -1250,7 +1354,7 @@ export function checkLocalizationLine(
 				recovery:
 					"Repair modifier syntax and culture-required forms; preserve the source's argument modifiers."
 			});
-		const separator = context.segmentSeparator;
+		const separator = context.checks.segment_separator.params.separator;
 		if (separator !== undefined && translated) {
 			const expected = countOccurrences(source, separator),
 				actual = countOccurrences(translation, separator);
@@ -1266,7 +1370,12 @@ export function checkLocalizationLine(
 		}
 		const placeholder =
 			translated && culture.culture !== context.nativeCulture
-				? placeholderTranslation(source, translation)
+				? placeholderTranslation(
+						source,
+						translation,
+						context.checks.placeholder_translation.params,
+						context.checks.placeholder_text.params
+					)
 				: undefined;
 		if (placeholder !== undefined)
 			add({
@@ -1278,16 +1387,18 @@ export function checkLocalizationLine(
 				recovery:
 					"Translate the line; the culture ships this placeholder to players in place of the text."
 			});
-		const minimumRatio = lengthOutlierMinimumRatio(culture.culture);
-		// A placeholder is placeholder_translation's finding, when that check runs.
+		const lengthParams = context.checks.length_outlier.params;
+		const minimumRatio = lengthOutlierMinimumRatio(culture.culture, lengthParams);
+		// A placeholder is placeholder_translation's finding, when that check runs here.
 		const outlier =
 			translated &&
-			(placeholder === undefined || !enabled.includes("placeholder_translation"))
+			(placeholder === undefined || !active("placeholder_translation", culture.culture))
 				? lengthOutlier(
 						source,
 						translation,
 						(sourceLength ??= visibleTextLength(source)),
-						minimumRatio
+						minimumRatio,
+						lengthParams
 					)
 				: undefined;
 		if (outlier)
@@ -1299,7 +1410,7 @@ export function checkLocalizationLine(
 				expectation: {
 					sourceLength: outlier.sourceLength,
 					minimumRatio: Math.round(minimumRatio * 100) / 100,
-					maximumRatio: LENGTH_OUTLIER.maximumRatio
+					maximumRatio: lengthParams.maximumRatio
 				},
 				recovery:
 					"Check that the translation belongs to this line and is complete; a translation this much shorter or longer is often another line's text."
@@ -1358,7 +1469,12 @@ export function checkLocalizationTarget(
 				)
 			);
 	const { shared } = duplicates.finish();
-	const translations = localizationTranslationVariants(shared, join.nativeCulture);
+	const ruleContext = localizationRuleContext(ruleDocument);
+	const translations = localizationTranslationVariants(
+		shared,
+		join.nativeCulture,
+		ruleContext.checks.inconsistent_translation.params
+	);
 	if (enabled.includes("inconsistent_translation"))
 		for (const line of join.lines) translations.add(line);
 	const context: LocalizationLineCheckContext = {
@@ -1368,7 +1484,7 @@ export function checkLocalizationTarget(
 		enabled,
 		duplicates: shared,
 		translations: translations.finish(),
-		...localizationRuleContext(ruleDocument),
+		...ruleContext,
 		localizableProperties: enabled.includes("culture_invariant_text")
 			? localizationLocalizableProperties(corpus.units)
 			: new Set()
@@ -1382,12 +1498,33 @@ export function checkLocalizationTarget(
 	findings.sort(compareLocalizationFindings);
 	const files = localizationEvidenceFileStatuses(evidence);
 	const policy =
-		ruleDocument?.schemaVersion === 2
+		ruleDocument !== undefined && ruleDocument.schemaVersion !== 1
 			? evaluateLocalizationPolicy(corpus, join, ruleDocument, options)
 			: { findings: [], diagnostics: [] };
+	const customChecks = customLocalizationChecks(ruleDocument);
+	const custom: LocalizationCustomFinding[] = [];
+	if (customChecks.length) {
+		const customContext = {
+			target: join.target,
+			nativeCulture: join.nativeCulture,
+			options,
+			roles: context.roles
+		};
+		const lines = [...join.lines].sort((a, b) => a.id.localeCompare(b.id));
+		for (const check of customChecks)
+			for (const line of lines)
+				localizationLineCustomFindings(
+					line,
+					() => localizationLineUnits(line, byUnit),
+					check,
+					localizationSourceCulture(line, join.nativeCulture),
+					customContext,
+					custom
+				);
+	}
 	const visible = withoutAcceptedFindings(
 		join,
-		[...findings, ...policy.findings],
+		[...findings, ...policy.findings, ...custom],
 		options.review
 	);
 	const combined = [...visible.findings].sort(compareReportedLocalizationFindings);
@@ -1403,7 +1540,7 @@ export function checkLocalizationTarget(
 		checkDiagnostics,
 		roles: [],
 		rules: [
-			...(ruleDocument?.schemaVersion === 2
+			...(ruleDocument !== undefined && ruleDocument.schemaVersion !== 1
 				? (ruleDocument.localizationRules ?? []).map((rule) => ({
 						ruleId: rule.id,
 						findingCount: visible.findings.filter(
@@ -1414,6 +1551,11 @@ export function checkLocalizationTarget(
 			...enabled.map((id) => ({
 				ruleId: ruleIdOf(id),
 				findingCount: visible.findings.filter((finding) => finding.kind === id).length
+			})),
+			...customChecks.map((check) => ({
+				ruleId: check.id,
+				findingCount: visible.findings.filter((finding) => finding.ruleId === check.id)
+					.length
 			}))
 		],
 		changes: {
@@ -1425,8 +1567,12 @@ export function checkLocalizationTarget(
 			changes
 		}
 	});
-	if (ruleDocument?.schemaVersion === 2)
+	if (ruleDocument !== undefined && ruleDocument.schemaVersion !== 1)
 		Object.assign(report, { ruleDiagnostics: policy.diagnostics });
 	if (options.review) Object.assign(report, { acceptedFindings: visible.accepted });
+	if (customChecks.length)
+		Object.assign(report, {
+			customChecks: customChecks.map(({ id, label }) => ({ ruleId: id, label }))
+		});
 	return report;
 }

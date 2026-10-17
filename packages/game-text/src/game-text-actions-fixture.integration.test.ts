@@ -59,6 +59,7 @@ const Evidence = Schema.Struct({
 					namespace: Schema.String,
 					key: Schema.String,
 					source: Schema.String,
+					devNotes: Schema.optionalKey(Schema.String),
 					editorOnly: Schema.Boolean
 				})
 			)
@@ -67,7 +68,11 @@ const Evidence = Schema.Struct({
 });
 type Evidence = typeof Evidence.Type;
 
-const fixture = useSavedFixtureProject();
+const generatedRoot = process.env.UE_SHED_GAME_TEXT_ACTIONS_FIXTURE_ROOT;
+const fixture = generatedRoot === undefined ? useSavedFixtureProject() : { root: generatedRoot };
+const fixtureEngine = Schema.decodeUnknownSync(Schema.Literals(ENGINES))(
+	process.env.UE_SHED_GAME_TEXT_ACTIONS_FIXTURE_ENGINE ?? "5.7"
+);
 const executable = process.env.UE_SHED_UASSET_EXECUTABLE;
 
 const readCases = async () =>
@@ -220,7 +225,7 @@ describe("Game Text identity cases in the saved fixture", () => {
 
 	it("matches Unreal's conflict report: one id, different text, only across branch copies", async () => {
 		const cases = await readCases();
-		const evidence = await readEvidence("5.7");
+		const evidence = await readEvidence(fixtureEngine);
 		const report = await readFile(
 			join(
 				fixture.root,
@@ -242,7 +247,7 @@ describe("Game Text identity cases in the saved fixture", () => {
 		"reads the id and source Unreal gathers from every place an action edits",
 		async () => {
 			const cases = await readCases();
-			const evidence = await readEvidence("5.7");
+			const evidence = await readEvidence(fixtureEngine);
 			const corpus = textCorpusFromExtractionEvents({
 				projectRoot: fixture.root,
 				events: await Effect.runPromise(
@@ -281,6 +286,26 @@ describe("Game Text identity cases in the saved fixture", () => {
 			);
 			const key = (item: typeof Place.Type) => JSON.stringify([item.site, item.source]);
 			expect([...new Set(missing.map(key))].sort()).toEqual(cases.readerGaps.map(key).sort());
+			if (fixtureEngine === "5.8") {
+				const notes = evidence.packages.flatMap((entry) =>
+					entry.texts.filter((text) => text.source === "Lamp lit" && !text.editorOnly)
+				);
+				expect(notes.length).toBeGreaterThan(0);
+				expect(
+					notes.every((text) => text.devNotes === "A lit lantern, not a command")
+				).toBe(true);
+				expect(
+					corpus.units
+						.flatMap((unit) => unit.occurrences)
+						.some(
+							(occurrence) =>
+								occurrence.source === "Lamp lit" &&
+								occurrence.devNotes === "A lit lantern, not a command" &&
+								occurrence.location.kind === "asset_property" &&
+								occurrence.location.propertyPath.startsWith("ScriptBytecode")
+						)
+				).toBe(true);
+			}
 
 			// Nor does the reader give a place Unreal leaves ungathered a localized id of its own:
 			// any localized text it reads there with that source carries an id Unreal gathered.
@@ -290,7 +315,7 @@ describe("Game Text identity cases in the saved fixture", () => {
 				)
 			);
 			const invented = cases.notGathered
-				.filter((item) => item.slice <= cases.evidenceSlices["5.7"])
+				.filter((item) => item.slice <= cases.evidenceSlices[fixtureEngine])
 				.filter((item) => {
 					const packageName = ROOT + item.site.slice(0, item.site.indexOf("."));
 					return [...fromReader].some((entry) => {

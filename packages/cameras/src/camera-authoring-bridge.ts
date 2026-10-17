@@ -1,6 +1,10 @@
 import { Effect, Schema } from "effect";
 import { CameraSetupRequest, CameraSetupState } from "./camera-setup-schema.js";
-import { decodeCompanionCapabilityManifest } from "@ue-shed/protocol";
+import {
+	decodeCompanionCapabilityManifest,
+	ErrorCauseFields,
+	ErrorGuidanceFields
+} from "@ue-shed/protocol";
 import type { RemoteControlClientApi } from "@ue-shed/unreal-connection";
 import { ApprovedPose } from "./review-schema.js";
 import {
@@ -22,6 +26,8 @@ import {
 	arrangementFailure
 } from "./camera-arrangement.js";
 import type { CameraAuthoringStore } from "./camera-authoring-store.js";
+
+const isCameraArrangementError = Schema.is(CameraArrangementError);
 
 const Version = Schema.Literal(1);
 const Counter = Schema.Int.check(
@@ -194,14 +200,16 @@ export class CameraBridgeError extends Schema.TaggedError<CameraBridgeError>()(
 		code: Schema.Literals([
 			"missing_plugin",
 			"disconnected",
-			"protocol",
+			"invalid_request",
+			"manifest_invalid",
+			"response_invalid",
 			"busy",
 			"stale",
 			"unavailable",
 			"invalid"
 		]),
-		message: Schema.String,
-		recovery: Schema.String
+		...ErrorGuidanceFields,
+		...ErrorCauseFields
 	}
 ) {}
 export interface CameraAuthoringBridge {
@@ -222,9 +230,13 @@ export function makeCameraAuthoringBridge(
 				Effect.mapError(
 					(cause) =>
 						new CameraBridgeError({
-							code: "protocol",
-							message: String(cause),
-							recovery: "Use the camera-authoring v1 request contract."
+							code: "invalid_request",
+							message:
+								"The camera authoring request does not match the camera-authoring v1 contract.",
+							recovery: "Use the camera-authoring v1 request contract.",
+							retrySafe: true,
+							nextStep: "fix_input",
+							cause
 						})
 				)
 			);
@@ -234,6 +246,7 @@ export function makeCameraAuthoringBridge(
 						endpoint,
 						objectPath: "/Script/UEShedCore.Default__UEShedCoreLibrary",
 						functionName: "GetCapabilityManifest",
+						idempotent: true,
 						operation: "camera.authoring.negotiate",
 						parameters: {}
 					})
@@ -244,7 +257,10 @@ export function makeCameraAuthoringBridge(
 									code: cause.status === 404 ? "missing_plugin" : "disconnected",
 									message: cause.message,
 									recovery:
-										"Reconnect to an editor with Core and the optional camera authoring bridge enabled."
+										"Reconnect to an editor with Core and the optional camera authoring bridge enabled.",
+									retrySafe: cause.retrySafe,
+									nextStep: cause.status === 404 ? "fix_input" : cause.nextStep,
+									cause
 								})
 						),
 						Effect.flatMap((value) =>
@@ -252,9 +268,12 @@ export function makeCameraAuthoringBridge(
 								Effect.mapError(
 									(cause) =>
 										new CameraBridgeError({
-											code: "protocol",
-											message: String(cause),
-											recovery: "Update the companion capability contract."
+											code: "manifest_invalid",
+											message: `The editor returned a capability manifest that does not match the companion contract during camera authoring ${request.operation}.`,
+											recovery: "Update the companion capability contract.",
+											retrySafe: true,
+											nextStep: "escalate",
+											cause
 										})
 								)
 							)
@@ -266,7 +285,9 @@ export function makeCameraAuthoringBridge(
 							code: "missing_plugin",
 							message: "This editor does not advertise cameras.authoring.v1.",
 							recovery:
-								"Enable UEShedCameraAuthoringBridge. The reference menu is independently optional."
+								"Enable UEShedCameraAuthoringBridge. The reference menu is independently optional.",
+							retrySafe: true,
+							nextStep: "fix_input"
 						})
 					);
 			}
@@ -286,7 +307,12 @@ export function makeCameraAuthoringBridge(
 								code: cause.status === 404 ? "missing_plugin" : "disconnected",
 								message: cause.message,
 								recovery:
-									"Enable UEShedCameraAuthoringBridge in this editor and reconnect to Unreal Remote Control. Pending draft changes remain on disk."
+									cause.status === 404
+										? "Enable UEShedCameraAuthoringBridge in this editor and reconnect to Unreal Remote Control. Pending draft changes remain on disk."
+										: cause.recovery,
+								retrySafe: cause.retrySafe,
+								nextStep: cause.status === 404 ? "fix_input" : cause.nextStep,
+								cause
 							})
 					)
 				);
@@ -296,31 +322,47 @@ export function makeCameraAuthoringBridge(
 				Effect.mapError(
 					(cause) =>
 						new CameraBridgeError({
-							code: "protocol",
-							message: String(cause),
+							code: "response_invalid",
+							message: `The editor returned a camera authoring ${request.operation} response that does not match the camera-authoring v1 contract.`,
 							recovery:
-								"Use matching camera-authoring v1 bridge and package versions."
+								"Use matching camera-authoring v1 bridge and package versions.",
+							retrySafe: false,
+							nextStep: "escalate",
+							cause
 						})
 				)
 			);
 		})
 	};
 }
+/** The bridge rejected the request without applying it, so repeating it is always safe. */
+function rejectedBridgeNextStep(code: "busy" | "stale" | "invalid" | "unavailable") {
+	switch (code) {
+		case "busy":
+			return "retry" as const;
+		case "invalid":
+			return "fix_input" as const;
+		case "stale":
+		case "unavailable":
+			return "reconcile" as const;
+	}
+}
 export function readyCameraBridge(
 	response: CameraBridgeResponse
 ): Effect.Effect<CameraBridgeSnapshot, CameraBridgeError> {
 	if (response.status === "ready") return Effect.succeed(response);
+	const code =
+		response.status === "busy" || response.status === "stale" || response.status === "invalid"
+			? response.status
+			: "unavailable";
 	return Effect.fail(
 		new CameraBridgeError({
-			code:
-				response.status === "busy" ||
-				response.status === "stale" ||
-				response.status === "invalid"
-					? response.status
-					: "unavailable",
+			code,
 			message: response.message,
 			recovery:
-				"Inspect the camera session. Resolve ownership or revision conflicts before retrying."
+				"Inspect the camera session. Resolve ownership or revision conflicts before retrying.",
+			retrySafe: true,
+			nextStep: rejectedBridgeNextStep(code)
 		})
 	);
 }
@@ -453,7 +495,7 @@ export const synchronizeArrangementCamera = Effect.fn("CameraAuthoring.synchroni
 						};
 					}),
 				catch: (cause) =>
-					cause instanceof CameraArrangementError
+					isCameraArrangementError(cause)
 						? cause
 						: arrangementFailure("invalid", String(cause))
 			});

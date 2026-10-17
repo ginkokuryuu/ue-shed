@@ -2,6 +2,7 @@ import type { CameraFrameEvidence } from "./camera-render-schema.js";
 import { randomUUID } from "node:crypto";
 import { mkdir, open, readFile, readdir, rename, rm } from "node:fs/promises";
 import { dirname, join } from "node:path";
+import { ErrorGuidanceFields } from "@ue-shed/protocol";
 import { Context, Effect, Layer, Option, Schema } from "effect";
 import { bootstrapMapReviewSet } from "./review-bootstrap.js";
 import {
@@ -77,7 +78,7 @@ function candidatesForRevision(args: {
 export class ReviewAuthoringSessionError extends Schema.TaggedError<ReviewAuthoringSessionError>()(
 	"ReviewAuthoringSessionError",
 	{
-		message: Schema.String,
+		...ErrorGuidanceFields,
 		operation: Schema.Literals([
 			"approve",
 			"create",
@@ -89,8 +90,7 @@ export class ReviewAuthoringSessionError extends Schema.TaggedError<ReviewAuthor
 			"resume",
 			"save"
 		]),
-		path: Schema.String,
-		recovery: Schema.String
+		path: Schema.String
 	}
 ) {}
 
@@ -156,12 +156,16 @@ function sessionError(args: {
 	readonly operation: ReviewAuthoringSessionError["operation"];
 	readonly path: string;
 	readonly recovery: string;
+	readonly retrySafe: boolean;
+	readonly nextStep: ReviewAuthoringSessionError["nextStep"];
 }): ReviewAuthoringSessionError {
 	return new ReviewAuthoringSessionError({
 		message: String(args.cause),
+		nextStep: args.nextStep,
 		operation: args.operation,
 		path: args.path,
-		recovery: args.recovery
+		recovery: args.recovery,
+		retrySafe: args.retrySafe
 	});
 }
 
@@ -176,7 +180,9 @@ function decodeSessionId(
 				cause,
 				operation,
 				path: sessionRoot(projectRoot),
-				recovery: "Use a safe authoring-session identifier."
+				recovery: "Use a safe authoring-session identifier.",
+				retrySafe: true,
+				nextStep: "fix_input"
 			})
 		)
 	);
@@ -197,7 +203,9 @@ function loadDocument(args: {
 					cause,
 					operation: "load",
 					path,
-					recovery: "Repair the authoring-session document or discard it."
+					recovery: "Repair the authoring-session document or discard it.",
+					retrySafe: true,
+					nextStep: "fix_input"
 				})
 		});
 		return yield* Schema.decodeUnknownEffect(ReviewAuthoringSession)(input).pipe(
@@ -206,7 +214,9 @@ function loadDocument(args: {
 					cause,
 					operation: "load",
 					path,
-					recovery: "Repair the malformed authoring-session document or discard it."
+					recovery: "Repair the malformed authoring-session document or discard it.",
+					retrySafe: true,
+					nextStep: "fix_input"
 				})
 			)
 		);
@@ -224,7 +234,9 @@ function saveDocument(args: {
 				cause,
 				operation: "save",
 				path,
-				recovery: "Check that the project-local review directory is writable."
+				recovery: "Check that the project-local review directory is writable.",
+				retrySafe: true,
+				nextStep: "retry"
 			})
 		),
 		Effect.as(args.session),
@@ -456,7 +468,9 @@ export const ReviewAuthoringSessionsLive = Layer.effect(
 							cause,
 							operation: "create",
 							path: args.reviewSetPath,
-							recovery: "Open a valid Review Set before starting spatial authoring."
+							recovery: "Open a valid Review Set before starting spatial authoring.",
+							retrySafe: cause.retrySafe,
+							nextStep: cause.nextStep
 						})
 					)
 				));
@@ -467,7 +481,9 @@ export const ReviewAuthoringSessionsLive = Layer.effect(
 						operation: "create",
 						path: args.reviewSetPath,
 						recovery:
-							"Open a Review Set for the selected map, or start a map-scoped set from that subject."
+							"Open a Review Set for the selected map, or start a map-scoped set from that subject.",
+						retrySafe: true,
+						nextStep: "fix_input"
 					})
 				);
 			}
@@ -512,7 +528,10 @@ export const ReviewAuthoringSessionsLive = Layer.effect(
 							cause,
 							operation: "create",
 							path: args.reviewSetPath,
-							recovery: "Use a Review View identifier from the configured Review Set."
+							recovery:
+								"Use a Review View identifier from the configured Review Set.",
+							retrySafe: true,
+							nextStep: "fix_input"
 						})
 					)
 				)
@@ -535,7 +554,9 @@ export const ReviewAuthoringSessionsLive = Layer.effect(
 							cause,
 							operation: "create",
 							path: reviewSetPath,
-							recovery: "Open a valid Review Set before starting spatial authoring."
+							recovery: "Open a valid Review Set before starting spatial authoring.",
+							retrySafe: cause.retrySafe,
+							nextStep: cause.nextStep
 						})
 					)
 				);
@@ -550,7 +571,9 @@ export const ReviewAuthoringSessionsLive = Layer.effect(
 							message: `Review View ${destination.viewId} was not found.`,
 							operation: "create",
 							path: reviewSetPath,
-							recovery: "Reload the Review Set and choose an existing Review View."
+							recovery: "Reload the Review Set and choose an existing Review View.",
+							retrySafe: true,
+							nextStep: "reconcile"
 						})
 					);
 				}
@@ -578,7 +601,9 @@ export const ReviewAuthoringSessionsLive = Layer.effect(
 						cause,
 						operation: "create",
 						path: bootstrap.reviewSetPath,
-						recovery: "Check that the map-scoped Review Set directory is readable."
+						recovery: "Check that the map-scoped Review Set directory is readable.",
+						retrySafe: cause.retrySafe,
+						nextStep: cause.nextStep
 					})
 				)
 			);
@@ -590,7 +615,9 @@ export const ReviewAuthoringSessionsLive = Layer.effect(
 						operation: "create",
 						path: bootstrap.reviewSetPath,
 						recovery:
-							"Select a subject in the intended map or configure a different Review Set."
+							"Select a subject in the intended map or configure a different Review Set.",
+						retrySafe: true,
+						nextStep: "fix_input"
 					})
 				);
 			}
@@ -605,7 +632,9 @@ export const ReviewAuthoringSessionsLive = Layer.effect(
 						message: `Review View ${destination.viewId} was not found.`,
 						operation: "create",
 						path: bootstrap.reviewSetPath,
-						recovery: "Reload the Review Set and choose an existing Review View."
+						recovery: "Reload the Review Set and choose an existing Review View.",
+						retrySafe: true,
+						nextStep: "reconcile"
 					})
 				);
 			}
@@ -641,7 +670,9 @@ export const ReviewAuthoringSessionsLive = Layer.effect(
 							id: session.id,
 							projectRoot: args.projectRoot
 						}),
-						recovery: "Reframe an active session or discard this one."
+						recovery: "Reframe an active session or discard this one.",
+						retrySafe: true,
+						nextStep: "reconcile"
 					})
 				);
 			}
@@ -681,7 +712,9 @@ export const ReviewAuthoringSessionsLive = Layer.effect(
 							id: session.id,
 							projectRoot: args.projectRoot
 						}),
-						recovery: "Enable at least one framing group before updating the session."
+						recovery: "Enable at least one framing group before updating the session.",
+						retrySafe: true,
+						nextStep: "fix_input"
 					})
 				);
 			}
@@ -702,7 +735,9 @@ export const ReviewAuthoringSessionsLive = Layer.effect(
 								id: session.id,
 								projectRoot: args.projectRoot
 							}),
-							recovery: "Reload the authoring session before applying overrides."
+							recovery: "Reload the authoring session before applying overrides.",
+							retrySafe: true,
+							nextStep: "reconcile"
 						})
 					);
 				}
@@ -727,7 +762,9 @@ export const ReviewAuthoringSessionsLive = Layer.effect(
 							id: session.id,
 							projectRoot: args.projectRoot
 						}),
-						recovery: "Reload the authoring session and choose an available candidate."
+						recovery: "Reload the authoring session and choose an available candidate.",
+						retrySafe: true,
+						nextStep: "reconcile"
 					})
 				);
 			}
@@ -787,7 +824,9 @@ export const ReviewAuthoringSessionsLive = Layer.effect(
 								projectRoot: args.projectRoot
 							}),
 							recovery:
-								"Reload the authoring session and preview an available candidate."
+								"Reload the authoring session and preview an available candidate.",
+							retrySafe: true,
+							nextStep: "reconcile"
 						})
 					);
 				}
@@ -879,7 +918,9 @@ export const ReviewAuthoringSessionsLive = Layer.effect(
 								projectRoot: args.projectRoot
 							}),
 							recovery:
-								"Reconnect to the Map Review editor capability, then resume again."
+								"Reconnect to the Map Review editor capability, then resume again.",
+							retrySafe: cause.retrySafe,
+							nextStep: cause.nextStep
 						})
 					)
 				);
@@ -919,7 +960,9 @@ export const ReviewAuthoringSessionsLive = Layer.effect(
 							id: session.id,
 							projectRoot: args.projectRoot
 						}),
-						recovery: "Start a new authoring session for this subject."
+						recovery: "Start a new authoring session for this subject.",
+						retrySafe: true,
+						nextStep: "fix_input"
 					})
 				);
 			}
@@ -933,7 +976,9 @@ export const ReviewAuthoringSessionsLive = Layer.effect(
 							id: session.id,
 							projectRoot: args.projectRoot
 						}),
-						recovery: "Return to the Review Set map before reframing this subject."
+						recovery: "Return to the Review Set map before reframing this subject.",
+						retrySafe: true,
+						nextStep: "fix_input"
 					})
 				);
 			}
@@ -981,7 +1026,9 @@ export const ReviewAuthoringSessionsLive = Layer.effect(
 							id: session.id,
 							projectRoot: args.projectRoot
 						}),
-						recovery: "Reframe an active session or start a new one."
+						recovery: "Reframe an active session or start a new one.",
+						retrySafe: true,
+						nextStep: "reconcile"
 					})
 				);
 			}
@@ -1000,7 +1047,9 @@ export const ReviewAuthoringSessionsLive = Layer.effect(
 							id: session.id,
 							projectRoot: args.projectRoot
 						}),
-						recovery: "Reframe the subject and keep at least one candidate."
+						recovery: "Reframe the subject and keep at least one candidate.",
+						retrySafe: true,
+						nextStep: "fix_input"
 					})
 				);
 			}
@@ -1012,7 +1061,9 @@ export const ReviewAuthoringSessionsLive = Layer.effect(
 							cause,
 							operation: "approve",
 							path: session.reviewSet.path,
-							recovery: "Restore the Review Set before keeping this Review View."
+							recovery: "Restore the Review Set before keeping this Review View.",
+							retrySafe: cause.retrySafe,
+							nextStep: cause.nextStep
 						})
 					)
 				));
@@ -1046,7 +1097,9 @@ export const ReviewAuthoringSessionsLive = Layer.effect(
 							message: "The Review Set has no capture profile or visibility policy.",
 							operation: "approve",
 							path: session.reviewSet.path,
-							recovery: "Repair the Review Set before keeping these Review Views."
+							recovery: "Repair the Review Set before keeping these Review Views.",
+							retrySafe: true,
+							nextStep: "fix_input"
 						})
 					);
 				}
@@ -1064,7 +1117,9 @@ export const ReviewAuthoringSessionsLive = Layer.effect(
 						message: `Review View ${session.viewId} was not found.`,
 						operation: "approve",
 						path: session.reviewSet.path,
-						recovery: "Reload the Review Set and select an existing Review View."
+						recovery: "Reload the Review Set and select an existing Review View.",
+						retrySafe: true,
+						nextStep: "reconcile"
 					})
 				);
 			}
@@ -1077,7 +1132,9 @@ export const ReviewAuthoringSessionsLive = Layer.effect(
 							operation: "approve",
 							path: session.reviewSet.path,
 							recovery:
-								"Check that the Review Set is writable, then keep the view again."
+								"Check that the Review Set is writable, then keep the view again.",
+							retrySafe: cause.retrySafe,
+							nextStep: cause.nextStep
 						})
 					)
 				);
@@ -1122,7 +1179,9 @@ export const ReviewAuthoringSessionsLive = Layer.effect(
 						operation: "list",
 						path: root,
 						recovery:
-							"Check that the project-local authoring-session directory is readable."
+							"Check that the project-local authoring-session directory is readable.",
+						retrySafe: true,
+						nextStep: "retry"
 					})
 			});
 			const sessions = yield* Effect.forEach(

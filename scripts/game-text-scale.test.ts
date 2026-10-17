@@ -207,7 +207,9 @@ describe("generated scale harness", () => {
 		const replay = resolve(temporary, "invalid");
 		await mkdir(replay);
 		await writeFile(resolve(replay, "saved-text.ndjson"), '{"event":"text_occurrence"}\n');
-		await expect(readScaleCorpus(replay)).rejects.toThrow("SchemaError");
+		await expect(readScaleCorpus(replay)).rejects.toThrow(
+			"The replayed reader output could not be decoded."
+		);
 	});
 	it("records failed stages from fresh workers and enforces the RSS watchdog", async () => {
 		await copyFile(resolve(first, "scale.json"), resolve(temporary, "scale.json"));

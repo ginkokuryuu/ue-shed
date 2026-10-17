@@ -188,8 +188,10 @@ a Perforce branch or integrate makes.
 
 `pnpm fixture:generate-game-text-actions` builds the editor and runs each stage in a fresh process:
 author the assets and target settings, copy inside packages, duplicate assets, branch, edit the
-branch, gather, reports, then record evidence. It resets only `Content/Localization/GameTextActions`
-and `Content/Fixture/GameTextActions`. The committed packages are generated with UE 5.7. For 5.8,
+branch, slice 2, gather, reports, source gather, then record evidence. It resets only
+`Content/Localization/GameTextActions`, `Content/Localization/GameTextActionsSource`,
+`Content/Fixture/GameTextActions` and its `Content/__ExternalActors__` folder. The committed
+content packages are generated with UE 5.7. For 5.8,
 set `UE_SHED_LOCALIZATION_FIXTURE_ROOT` to a disposable copy and pass this checkout's
 `FixtureExpected/game-text-actions` as the output directory.
 
@@ -227,9 +229,17 @@ Slice 2 (`Slice2/`, Plan 058 A4) adds the places slice 1 leaves out:
 The slice-2 stage runs after `EditBranch`, and `Evidence` also records the folder's maps and their
 external actor packages. `expected-cases.json` marks slice-2 cases with `"slice": 2`, lists the
 places Unreal does not gather in `notGathered`, and records in `evidenceSlices` which slices each
-engine's evidence covers. Slice 2 has UE 5.7 evidence only; its UE 5.8 evidence is still to be
-recorded. Slice 2 was added to the committed fixture by running only its stage, the gather, reports
-and evidence on UE 5.7, so slice 1's packages and evidence are unchanged.
+engine's evidence covers. Both engines' evidence covers slice 2. Slice 2 was added to the committed
+content by running only its stage, the gather, reports and evidence on UE 5.7, so slice 1's packages
+and evidence are unchanged. The UE 5.8 evidence comes from a separate complete generation in a
+disposable project; its GUIDs are independent of the committed UE 5.7 content.
+
+To compare newly generated saves with their own engine's evidence, set
+`UE_SHED_GAME_TEXT_ACTIONS_FIXTURE_ROOT` to that disposable project and
+`UE_SHED_GAME_TEXT_ACTIONS_FIXTURE_ENGINE` to `5.7` or `5.8`, then run
+`node scripts/test.ts packages/game-text/src/game-text-actions-fixture.integration.test.ts`.
+Each disposable project must also contain the other engine's evidence file, because the relation
+checks cover both files. The default test uses committed UE 5.7 content and evidence.
 
 C++ `LOCTEXT` is gather-only: `FixtureSource/GameTextActions/GameTextActionsLoctext.cpp` is not
 compiled, and `GameTextActions_Source.ini` gathers it with `GatherTextFromSource` into its own
@@ -238,12 +248,15 @@ unchanged. The saved-package reader never sees C++ text; the test checks only wh
 Unreal joins a dotted `LOCTEXT` namespace into one id namespace and records a repeated `LOCTEXT`
 with the same id and text once, at its first place.
 
-Not covered yet: UE 5.8's
-renumbered literal types including text with translator notes (covered only by synthetic bytes
-from PR #99), and slice 2 on UE 5.8. Slice 2 found that the graph pin reader did not decode a pin
+`FixtureExpected/game-text-actions/ue5.8-saved/BP_IdentityLiterals.uasset` retains the small Blueprint
+from the separate UE 5.8 generation. Its typed literal includes the translator note
+"A lit lantern, not a command". The portable Rust regression reads both engines' real saved
+Blueprints, checks complete graph-pin decoding, and checks typed, culture-invariant and String
+Table literals in compiled bytecode, including the UE 5.8 translator note. Synthetic malformed
+and framing tests remain separate. Slice 2 found that the graph pin reader did not decode a pin
 holding a String Table reference (FText history 11); it now does, as tagged text properties do.
 
-What UE 5.7 does:
+What UE 5.7 and UE 5.8 do:
 
 - **A duplicated row and a pasted node keep their ids.** Retyping one copy gives it a new key.
 - **Content Browser Duplicate gives every text a new key** in a new package namespace, and splits

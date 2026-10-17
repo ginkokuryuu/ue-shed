@@ -46,7 +46,8 @@ function planError(message: string, recovery: string): ScopedRevisionPlan {
 			kind: "materialization",
 			message,
 			recovery,
-			retrySafe: false
+			retrySafe: false,
+			nextStep: "escalate"
 		})
 	};
 }

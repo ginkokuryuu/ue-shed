@@ -11,9 +11,11 @@ import {
 	unlink
 } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
+import { ErrorGuidanceFields } from "@ue-shed/protocol";
 import { Context, Effect, Layer, Schema } from "effect";
 import {
 	CaptureArtifactSourceRejected,
+	type CaptureFilesystemError,
 	makeFilesystemCaptureDestination,
 	type FilesystemCaptureDestination
 } from "./capture-destination.js";
@@ -24,12 +26,14 @@ import {
 	type MapTilePyramidManifest as MapTilePyramidManifestValue
 } from "./map-tile-schema.js";
 
+const isCaptureArtifactSourceRejected = Schema.is(CaptureArtifactSourceRejected);
+
 export const DEFAULT_MAP_CAPTURE_ROOT = ".ue-shed/map-capture";
 
 export class MapCaptureStorageError extends Schema.TaggedError<MapCaptureStorageError>()(
 	"MapCaptureStorageError",
 	{
-		message: Schema.String,
+		...ErrorGuidanceFields,
 		operation: Schema.Literals([
 			"discard_staging",
 			"finalize",
@@ -42,15 +46,14 @@ export class MapCaptureStorageError extends Schema.TaggedError<MapCaptureStorage
 			"validate_project",
 			"write_manifest"
 		]),
-		path: Schema.String,
-		recovery: Schema.String
+		path: Schema.String
 	}
 ) {}
 
 export class MapCaptureArtifactSourceRejected extends Schema.TaggedError<MapCaptureArtifactSourceRejected>()(
 	"MapCaptureArtifactSourceRejected",
 	{
-		message: Schema.String,
+		...ErrorGuidanceFields,
 		path: Schema.String,
 		root: Schema.String
 	}
@@ -127,15 +130,17 @@ export interface MapCaptureDestination {
 }
 
 function mapDestinationStorageError(args: {
-	readonly cause: { readonly message: string; readonly path: string };
+	readonly cause: Pick<CaptureFilesystemError, "message" | "nextStep" | "path" | "retrySafe">;
 	readonly operation: MapCaptureStorageError["operation"];
 	readonly recovery: string;
 }): MapCaptureStorageError {
 	return new MapCaptureStorageError({
 		message: args.cause.message,
+		nextStep: args.cause.nextStep,
 		operation: args.operation,
 		path: args.cause.path,
-		recovery: args.recovery
+		recovery: args.recovery,
+		retrySafe: args.cause.retrySafe
 	});
 }
 
@@ -212,7 +217,9 @@ function mapCaptureDestination(filesystem: FilesystemCaptureDestination): MapCap
 										completedDestination(args.planId, args.runId),
 										"manifest.json"
 									),
-									recovery: "Retain non-complete runs as attempts instead."
+									recovery: "Retain non-complete runs as attempts instead.",
+									retrySafe: true,
+									nextStep: "escalate"
 								})
 							),
 				retain: (manifest) =>
@@ -231,17 +238,22 @@ function mapCaptureDestination(filesystem: FilesystemCaptureDestination): MapCap
 										retainedDestination(args.planId, args.runId),
 										"manifest.json"
 									),
-									recovery: "Publish the exhaustive successful run."
+									recovery: "Publish the exhaustive successful run.",
+									retrySafe: true,
+									nextStep: "escalate"
 								})
 							),
 				storeTile: (input) =>
 					attempt.storeArtifact(input).pipe(
 						Effect.map((stored) => stored.bytes),
 						Effect.mapError((cause) =>
-							cause instanceof CaptureArtifactSourceRejected
+							isCaptureArtifactSourceRejected(cause)
 								? new MapCaptureArtifactSourceRejected({
 										message: cause.message,
+										nextStep: cause.nextStep,
 										path: cause.path,
+										recovery: cause.recovery,
+										retrySafe: cause.retrySafe,
 										root: cause.root
 									})
 								: mapDestinationStorageError({
@@ -312,7 +324,9 @@ export function validateMapCaptureProjectRoot(
 				operation: "validate_project",
 				path: root,
 				recovery:
-					"Pass a readable Unreal project root containing exactly one .uproject file."
+					"Pass a readable Unreal project root containing exactly one .uproject file.",
+				retrySafe: true,
+				nextStep: "fix_input"
 			})
 	}).pipe(Effect.withSpan("MapCaptureRepository.validateProjectRoot"));
 }
@@ -371,12 +385,16 @@ function storageError(args: {
 	readonly operation: MapCaptureStorageError["operation"];
 	readonly path: string;
 	readonly recovery: string;
+	readonly retrySafe: boolean;
+	readonly nextStep: MapCaptureStorageError["nextStep"];
 }): MapCaptureStorageError {
 	return new MapCaptureStorageError({
 		message: String(args.cause),
+		nextStep: args.nextStep,
 		operation: args.operation,
 		path: args.path,
-		recovery: args.recovery
+		recovery: args.recovery,
+		retrySafe: args.retrySafe
 	});
 }
 
@@ -389,7 +407,9 @@ const makeMapCaptureRepository = (): MapCaptureRepositoryApi => ({
 					cause,
 					operation: "discard_staging",
 					path: args.stagingRoot,
-					recovery: "Remove the abandoned project-local .staging directory manually."
+					recovery: "Remove the abandoned project-local .staging directory manually.",
+					retrySafe: true,
+					nextStep: "retry"
 				})
 		});
 	}),
@@ -410,7 +430,9 @@ const makeMapCaptureRepository = (): MapCaptureRepositoryApi => ({
 					cause,
 					operation: "finalize",
 					path: args.finalRoot,
-					recovery: "Inspect the staged run and retry atomic finalization."
+					recovery: "Inspect the staged run and retry atomic finalization.",
+					retrySafe: false,
+					nextStep: "reconcile"
 				})
 			)
 		);
@@ -457,7 +479,9 @@ const makeMapCaptureRepository = (): MapCaptureRepositoryApi => ({
 					cause,
 					operation: "list_runs",
 					path: root,
-					recovery: "Repair or quarantine the malformed completed map-capture bundle."
+					recovery: "Repair or quarantine the malformed completed map-capture bundle.",
+					retrySafe: true,
+					nextStep: "fix_input"
 				})
 		});
 	}),
@@ -470,7 +494,9 @@ const makeMapCaptureRepository = (): MapCaptureRepositoryApi => ({
 					cause,
 					operation: "load_plan",
 					path,
-					recovery: "Check the Map Capture Plan path and JSON, then retry."
+					recovery: "Check the Map Capture Plan path and JSON, then retry.",
+					retrySafe: true,
+					nextStep: "fix_input"
 				})
 		});
 		return yield* decodeMapCapturePlan(input).pipe(
@@ -479,7 +505,9 @@ const makeMapCaptureRepository = (): MapCaptureRepositoryApi => ({
 					cause,
 					operation: "load_plan",
 					path,
-					recovery: "Validate the Map Capture Plan against contract v1.0."
+					recovery: "Validate the Map Capture Plan against contract v1.0.",
+					retrySafe: true,
+					nextStep: "fix_input"
 				})
 			)
 		);
@@ -491,7 +519,9 @@ const makeMapCaptureRepository = (): MapCaptureRepositoryApi => ({
 					cause,
 					operation: "save_plan",
 					path,
-					recovery: "Check the plan destination permissions and retry Save or Save As."
+					recovery: "Check the plan destination permissions and retry Save or Save As.",
+					retrySafe: true,
+					nextStep: "retry"
 				})
 			)
 		);
@@ -507,7 +537,9 @@ const makeMapCaptureRepository = (): MapCaptureRepositoryApi => ({
 					cause,
 					operation: "prepare",
 					path: args.stagingRoot,
-					recovery: "Check the project-local map-capture directory and retry."
+					recovery: "Check the project-local map-capture directory and retry.",
+					retrySafe: false,
+					nextStep: "reconcile"
 				})
 		});
 	}),
@@ -528,7 +560,9 @@ const makeMapCaptureRepository = (): MapCaptureRepositoryApi => ({
 					cause,
 					operation: "quarantine",
 					path: args.attemptRoot,
-					recovery: "Inspect the .staging run and move it to the attempts tree manually."
+					recovery: "Inspect the .staging run and move it to the attempts tree manually.",
+					retrySafe: false,
+					nextStep: "reconcile"
 				})
 			)
 		);
@@ -549,7 +583,9 @@ const makeMapCaptureRepository = (): MapCaptureRepositoryApi => ({
 					cause,
 					operation: "store_tile",
 					path: args.destinationPath,
-					recovery: "Check contained Unreal staging and project evidence permissions."
+					recovery: "Check contained Unreal staging and project evidence permissions.",
+					retrySafe: true,
+					nextStep: "retry"
 				})
 		});
 	})

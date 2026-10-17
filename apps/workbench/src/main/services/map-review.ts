@@ -934,16 +934,15 @@ export const WorkbenchMapReviewLive = Layer.effect(
 
 		const resolveSavedProject = Effect.fn("Workbench.WorkbenchMapReview.resolveSavedProject")(
 			function* () {
-				return yield* project.savedProject().pipe(
-					Effect.mapError(
-						(error) =>
-							new SavedWorldUnavailable({
-								message: error.message,
-								recovery: error.recovery
-							})
-					)
-				);
-			}
+				return yield* project.savedProject();
+			},
+			Effect.mapError(
+				(error) =>
+					new SavedWorldUnavailable({
+						message: error.message,
+						recovery: error.recovery
+					})
+			)
 		);
 
 		const matchingEditorWorld = Effect.fn("Workbench.MapReview.matchingEditorWorld")(function* (
@@ -1779,7 +1778,8 @@ export const WorkbenchMapReviewLive = Layer.effect(
 									operation: "ensure_cameras",
 									recovery:
 										"Reconnect Unreal, then reframe the selected subject.",
-									retrySafe: true
+									retrySafe: true,
+									nextStep: "reconcile"
 								})
 							);
 						}
@@ -2287,7 +2287,9 @@ export const WorkbenchMapReviewLive = Layer.effect(
 						new CameraBridgeError({
 							code: "stale",
 							message: "The selected actor or map changed. Choose the subject again.",
-							recovery: "Retry from the current editor selection."
+							recovery: "Retry from the current editor selection.",
+							retrySafe: true,
+							nextStep: "reconcile"
 						})
 					);
 				if (!service.cameraWorkspace)
@@ -2295,7 +2297,9 @@ export const WorkbenchMapReviewLive = Layer.effect(
 						new CameraBridgeError({
 							code: "unavailable",
 							message: "Camera authoring is unavailable.",
-							recovery: "Enable the camera workspace."
+							recovery: "Enable the camera workspace.",
+							retrySafe: true,
+							nextStep: "fix_input"
 						})
 					);
 				const result = yield* service.cameraWorkspace({
@@ -2310,7 +2314,9 @@ export const WorkbenchMapReviewLive = Layer.effect(
 						new CameraBridgeError({
 							code: "unavailable",
 							message: result.error ?? "The camera set could not be opened.",
-							recovery: "Correct the error and retry."
+							recovery: "Correct the error and retry.",
+							retrySafe: false,
+							nextStep: "fix_input"
 						})
 					);
 			}),
@@ -2321,7 +2327,9 @@ export const WorkbenchMapReviewLive = Layer.effect(
 						new CameraBridgeError({
 							code: "unavailable",
 							message: "Camera authoring is unavailable.",
-							recovery: "Enable the camera workspace."
+							recovery: "Enable the camera workspace.",
+							retrySafe: true,
+							nextStep: "fix_input"
 						})
 					);
 				const result = yield* service.cameraWorkspace({
@@ -2334,7 +2342,9 @@ export const WorkbenchMapReviewLive = Layer.effect(
 						new CameraBridgeError({
 							code: "unavailable",
 							message: result.error ?? "The camera set could not be opened.",
-							recovery: "Choose the set again, or open it from Workbench."
+							recovery: "Choose the set again, or open it from Workbench.",
+							retrySafe: true,
+							nextStep: "reconcile"
 						})
 					);
 			}),
@@ -2365,8 +2375,11 @@ export const WorkbenchMapReviewLive = Layer.effect(
 				catch: (cause) =>
 					new CameraBridgeError({
 						code: "unavailable",
-						message: String(cause),
-						recovery: "Choose a readable Unreal project."
+						message: `Could not list the selected project folder ${selected.projectRoot}.`,
+						recovery: "Choose a readable Unreal project.",
+						retrySafe: true,
+						nextStep: "fix_input",
+						cause
 					})
 			});
 			const descriptor = files.find((name) => name.endsWith(".uproject"));
@@ -2385,54 +2398,9 @@ export const WorkbenchMapReviewLive = Layer.effect(
 	})
 );
 
+/** A test layer over a complete fake: every operation answers as the fake's own state allows. */
 export function makeWorkbenchMapReviewTestLayer(
-	service: Omit<
-		WorkbenchMapReviewApi,
-		| "savedWorld"
-		| "savedWorldMaps"
-		| "savedWorldProgress"
-		| "applyVisibilityPolicy"
-		| "replaceVisibilityPolicy"
-		| "reviewSetLibrary"
-		| "createReviewSet"
-		| "selectReviewSet"
-	> &
-		Partial<
-			Pick<
-				WorkbenchMapReviewApi,
-				| "savedWorld"
-				| "savedWorldMaps"
-				| "savedWorldProgress"
-				| "applyVisibilityPolicy"
-				| "replaceVisibilityPolicy"
-				| "reviewSetLibrary"
-				| "createReviewSet"
-				| "selectReviewSet"
-			>
-		>
+	service: WorkbenchMapReviewApi
 ): Layer.Layer<WorkbenchMapReview> {
-	return Layer.succeed(
-		WorkbenchMapReview,
-		WorkbenchMapReview.of({
-			applyVisibilityPolicy:
-				service.applyVisibilityPolicy ??
-				(() => Effect.die("visibility policy apply not stubbed")),
-			savedWorld: service.savedWorld ?? (() => Effect.die("saved world reader not stubbed")),
-			savedWorldMaps:
-				service.savedWorldMaps ?? (() => Effect.die("saved world maps reader not stubbed")),
-			savedWorldProgress:
-				service.savedWorldProgress ??
-				(() => Effect.die("saved world progress reader not stubbed")),
-			createReviewSet:
-				service.createReviewSet ?? (() => Effect.die("Review Set creation not stubbed")),
-			replaceVisibilityPolicy:
-				service.replaceVisibilityPolicy ??
-				(() => Effect.die("visibility policy replacement not stubbed")),
-			reviewSetLibrary:
-				service.reviewSetLibrary ?? (() => Effect.die("Review Set library not stubbed")),
-			selectReviewSet:
-				service.selectReviewSet ?? (() => Effect.die("Review Set selection not stubbed")),
-			...service
-		})
-	);
+	return Layer.succeed(WorkbenchMapReview, WorkbenchMapReview.of(service));
 }

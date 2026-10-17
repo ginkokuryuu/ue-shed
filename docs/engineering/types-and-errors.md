@@ -21,7 +21,31 @@ owned by TypeScript.
 - Prefer Effect Schema derivation. Use TypeScript utilities only for shapes that do not need their own
   runtime schema.
 - Avoid `any`, unchecked casts, and non-null assertions in domain code.
-- Keep needed low-level casts in one tested place.
+- Keep needed low-level casts in one tested place. Every type assertion carries a `// SAFETY:`
+  comment stating the invariant TypeScript cannot check; in `apps`, `extensions` and `packages`
+  source the same comment block also has a `// Verified by:` line naming the tests that fail if the
+  invariant breaks. The `anti-slop/require-safety-comment-for-type-assertion` and
+  `anti-slop/require-safety-verification` lint rules enforce both.
+
+## Optional values
+
+Optional values are optional properties (`readonly name?: string`), not Effect `Option`. The
+repository compiles with `exactOptionalPropertyTypes`, so an absent property and a property set to
+`undefined` are different types; omit the property instead of assigning `undefined`, and use
+`Schema.optional` (or `Schema.optionalKey`) in schemas. This is a deliberate difference from Effect
+coding standards that prefer `Option` everywhere: optional fields keep wire, JSON and schema shapes
+identical to the TypeScript types and match the existing code. Use `Option` only inside a workflow
+where it composes with Effect combinators, and convert back to an optional field at the boundary.
+
+## Non-null assertions
+
+The non-null assertion `!` is not used in domain code. The one exemption is the Game Text columnar
+hot path: typed-array and dense-column indexing in `packages/game-text`, where a bounds check per
+read is measurably slower and the column builders already guarantee the index range. The exemption
+covers only those named files and is justified by a repeatable benchmark, as `effect.md` requires
+for any measured hot-path exception. Elsewhere, narrow with a check, a total function or a typed
+error. `typescript/no-non-null-assertion` is enabled outside the exempt files as each package is
+cleared of existing uses.
 
 For TypeScript-only boundaries, Effect Schema is authoritative. For TypeScript/C++ wire contracts, the
 language-neutral schema is authoritative and the Effect Schema representation must match it. Both
@@ -44,6 +68,18 @@ A useful error says:
 - whether retry is safe;
 - whether any work completed;
 - what the caller can do next.
+
+Every tagged error carries the same guidance fields, spread from `ErrorGuidanceFields` in
+`@ue-shed/protocol`:
+
+- `message`: what failed, with the safe IDs and versions that matter;
+- `recovery`: prose the caller can follow;
+- `retrySafe`: whether repeating the same operation is idempotent;
+- `nextStep`: `fix_input`, `retry`, `reconcile` (state changed underneath; re-read first) or
+  `escalate` (the caller cannot fix it). `retry` is only valid when `retrySafe` is true.
+
+`pnpm effect:architecture` enforces the fields in each package listed in its error-guidance check;
+packages join that list as their errors are migrated.
 
 UI and CLI code must not parse error text to make decisions. Translate library errors at the service
 that owns the library. Keep the useful cause.

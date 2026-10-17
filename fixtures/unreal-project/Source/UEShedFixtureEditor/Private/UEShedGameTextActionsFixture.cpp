@@ -466,7 +466,12 @@ bool Literals()
 	const UStringTable* Table = LoadObject<UStringTable>(nullptr, *ObjectPath(FString(Slice2) + TEXT("ST_IdentityTable")));
 	if (!Literals || !Table) return false;
 	UPackage* Package = Literals->GetOutermost();
-	if (!PrintTexts(Literals, { TypedText(Package, FText::GetEmpty(), TEXT("Lamp lit")),
+	FText Lamp = TypedText(Package, FText::GetEmpty(), TEXT("Lamp lit"));
+#if !UE_VERSION_OLDER_THAN(5, 8, 0)
+	Lamp = FText::ChangeKey(FTextInspector::GetNamespace(Lamp).Get(FString()),
+		FTextInspector::GetKey(Lamp).Get(FString()), Lamp, TEXT("A lit lantern, not a command"));
+#endif
+	if (!PrintTexts(Literals, { Lamp,
 		FText::AsCultureInvariant(TEXT("v1.0")), FText::FromStringTable(Table->GetStringTableId(), TEXT("Farewell")) }))
 		return false;
 	FKismetEditorUtilities::CompileBlueprint(Literals);
@@ -587,6 +592,9 @@ bool Evidence(const FString& Output)
 				Text->SetStringField(TEXT("namespace"), Data.NamespaceName);
 				Text->SetStringField(TEXT("key"), Site.KeyName);
 				Text->SetStringField(TEXT("source"), Data.SourceData.SourceString);
+#if !UE_VERSION_OLDER_THAN(5, 8, 0)
+				Text->SetStringField(TEXT("devNotes"), Site.DevNotes);
+#endif
 				Text->SetBoolField(TEXT("editorOnly"), Site.IsEditorOnly);
 				Texts.Add(MakeShared<FJsonValueObject>(Text));
 			}

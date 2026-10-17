@@ -10,6 +10,41 @@ import {
 } from "./index.js";
 
 describe("authoring SDK contracts", () => {
+	for (const body of ["{invalid", "{}", JSON.stringify({ status: "success", value: {} })]) {
+		for (const read of [false, true]) {
+			it(`preserves ${read ? "read escalation" : "mutation reconciliation"} for malformed adopted-host reply ${body}`, async () => {
+				let requests = 0;
+				const server = createServer((request, response) => {
+					request.resume();
+					request.on("end", () => {
+						requests += 1;
+						response.writeHead(200, { "content-type": "application/json" });
+						response.end(body);
+					});
+				});
+				await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+				try {
+					const address = server.address();
+					if (!(address instanceof Object)) throw new Error("Expected TCP listener");
+					const client = makeAuthoringHttpClient({
+						endpoint: `http://127.0.0.1:${address.port}`
+					});
+					const call = read
+						? client.listSessions().pipe(Effect.asVoid)
+						: client.applySession("draft").pipe(Effect.asVoid);
+					const error = await Effect.runPromise(Effect.flip(call));
+					expect(error.retrySafe).toBe(read);
+					expect(error.nextStep).toBe(read ? "escalate" : "reconcile");
+					if (!read) expect(error.recovery).toContain("may have applied");
+					expect(requests).toBe(1);
+				} finally {
+					await new Promise<void>((resolve, reject) =>
+						server.close((error) => (error ? reject(error) : resolve()))
+					);
+				}
+			});
+		}
+	}
 	it("decodes host-neutral row intents", async () => {
 		expect(
 			await Effect.runPromise(

@@ -137,7 +137,9 @@ it.effect("FixtureHealth reports not_running when Remote Control is unreachable"
 									functionName: "GetCapabilityManifest",
 									message: "Editor is not connected",
 									operation: "fixture_health",
-									retrySafe: true
+									retrySafe: true,
+									recovery: "Test double: retry the Remote Control call.",
+									nextStep: "retry"
 								})
 							)
 						)
@@ -194,7 +196,10 @@ it.effect(
 												functionName: request.functionName,
 												message: "Map Review capture is not available",
 												operation: "fixture_health",
-												retrySafe: false
+												retrySafe: false,
+												recovery:
+													"Test double: retry the Remote Control call.",
+												nextStep: "escalate"
 											})
 										)
 							)
@@ -493,11 +498,12 @@ it.effect("concurrent launches for the same mode share one spawn", () =>
 		});
 		const fixtureProcess = FixtureProcess.of({
 			launch: () =>
-				Ref.update(launches, (count) => count + 1).pipe(
-					Effect.andThen(Deferred.await(gate)),
-					Effect.andThen(Ref.set(launchedFlag, true)),
-					Effect.as({ status: "ready" as const })
-				)
+				Effect.gen(function* () {
+					yield* Ref.update(launches, (count) => count + 1);
+					yield* Deferred.await(gate);
+					yield* Ref.set(launchedFlag, true);
+					return { status: "ready" as const };
+				})
 		});
 		const layer = FixtureLauncherLive.pipe(
 			Layer.provide(

@@ -1,16 +1,18 @@
 import { join } from "node:path";
 import { Effect, FileSystem, Metric, Result, Schema } from "effect";
 import { LocalizationChangeSet, LocalizationEvidenceNodeLive } from "@ue-shed/localization";
+import { checkLocalizationTarget } from "@ue-shed/game-text/checks";
 import {
-	checkLocalizationTarget,
 	decodeGameTextRuleDocumentJson,
 	GameTextRuleDocumentError,
 	GAME_TEXT_RULES_RELATIVE_PATH
-} from "@ue-shed/game-text";
+} from "@ue-shed/game-text/rules";
 import { observeCliOperation } from "../cli-operation.js";
 import { CliRuntime, printJson } from "../cli-runtime.js";
 import type { CliCommand } from "../command-model.js";
 import { loadLocalizationContext } from "./localization.js";
+
+const isGameTextRuleDocumentError = Schema.is(GameTextRuleDocumentError);
 
 export class LocalizationCheckOutputError extends Schema.TaggedError<LocalizationCheckOutputError>()(
 	"LocalizationCheckOutputError",
@@ -95,7 +97,7 @@ export const runLocalizationCheck = Effect.fn("Cli.workflow.localization_check")
 							.pipe(Effect.flatMap(decodeGameTextRuleDocumentJson));
 					}).pipe(
 						Effect.mapError((error) =>
-							error instanceof GameTextRuleDocumentError
+							isGameTextRuleDocumentError(error)
 								? error
 								: new LocalizationCheckOutputError({
 										code: "rules_unreadable",

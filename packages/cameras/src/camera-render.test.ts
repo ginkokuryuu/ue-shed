@@ -327,7 +327,9 @@ describe("shared renderer lifecycle", () => {
 							functionName: name,
 							operation: "capture",
 							message: "lost response",
-							retrySafe: true
+							retrySafe: true,
+							recovery: "Test double: retry the Remote Control call.",
+							nextStep: "retry"
 						})
 					)
 				: undefined
@@ -354,8 +356,15 @@ describe("shared renderer lifecycle", () => {
 		const exit = await Effect.runPromise(Effect.exit(h.run()));
 		if (Exit.isSuccess(exit)) throw new Error("Expected both failures");
 		const failure = Cause.squash(exit.cause);
-		expect(String(failure)).toContain("capture_failed");
-		expect(String(failure)).toContain("restoration_failed");
+		expect(failure).toMatchObject({
+			code: "render_or_restoration_failed",
+			message:
+				"Camera render session session failed during capture or restoration; editor state is unknown."
+		});
+		// The classified message omits the native failures; the kept cause chain retains both.
+		const kept = JSON.stringify(failure);
+		expect(kept).toContain("capture_failed");
+		expect(kept).toContain("restoration_failed");
 	});
 	it("preserves interruption and waits for native release", async () => {
 		await Effect.runPromise(
@@ -807,3 +816,46 @@ describe("editor ownership rejections", () => {
 		}
 	);
 });
+
+for (const functionName of [
+	"GetCapabilityManifest",
+	"GetCameraRenderCapabilities",
+	"PreflightCameraRender"
+]) {
+	it(`escalates malformed ${functionName} without suggesting a native operation already exists`, async () => {
+		const { renderer } = harness((name) =>
+			name === functionName ? Effect.succeed({}) : undefined
+		);
+		const error = await Effect.runPromise(
+			Effect.flip(
+				functionName === "PreflightCameraRender"
+					? renderer.preflight(request).pipe(Effect.as(undefined))
+					: renderer.capabilities().pipe(Effect.as(undefined))
+			)
+		);
+		expect(error.nextStep).toBe("escalate");
+		expect(error.retrySafe).toBe(true);
+		expect(error.recovery).toContain("matching host/plugin");
+		expect(error.recovery).not.toContain("existing native operation");
+	});
+}
+for (const nextStep of ["escalate", "fix_input", "retry"] as const) {
+	it(`preserves ${nextStep} from typed renderer read failures`, async () => {
+		const cause = new RemoteControlClientError({
+			endpoint: "http://fixture",
+			functionName: "GetCapabilityManifest",
+			operation: "read",
+			message: "Read failed.",
+			recovery: "Use the classified recovery.",
+			retrySafe: true,
+			nextStep
+		});
+		const { renderer } = harness((name) =>
+			name === "GetCapabilityManifest" ? Effect.fail(cause) : undefined
+		);
+		const error = await Effect.runPromise(Effect.flip(renderer.capabilities()));
+		expect(error.nextStep).toBe(nextStep);
+		expect(error.retrySafe).toBe(true);
+		expect(error.recovery).toBe(cause.recovery);
+	});
+}

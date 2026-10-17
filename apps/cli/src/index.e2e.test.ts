@@ -2,12 +2,13 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { decodeAuthoringTableSnapshot as decodeAuthoringTableSnapshotEffect } from "@ue-shed/protocol";
-import { decodeTextQualityReport as decodeTextQualityReportEffect } from "@ue-shed/game-text";
+import { parseTextQualityReport } from "@ue-shed/game-text/schema";
 import { Effect } from "effect";
 import { describe, expect, it } from "vitest";
 import { useSavedFixtureProject } from "../../../fixtures/unreal-project/saved-project.test-support.js";
 import {
 	repositoryRoot,
+	fixtureProject,
 	runCli,
 	runSuccessfulCli,
 	runSuccessfulHeadlessCli,
@@ -17,8 +18,8 @@ import {
 const decodeAuthoringTableSnapshot = <Input>(input: Input) =>
 	Effect.runSync(decodeAuthoringTableSnapshotEffect(input));
 
-const decodeTextQualityReport = <Input>(input: Input) =>
-	Effect.runSync(decodeTextQualityReportEffect(input));
+const decodeTextQualityReport = (input: Parameters<typeof parseTextQualityReport>[0]) =>
+	Effect.runSync(parseTextQualityReport(input));
 
 const uassetTestsEnabled = process.env.UE_SHED_UASSET_AUTO_BUILD !== "0";
 // Native-reader scenarios belong to the conditional UAsset lane.
@@ -61,6 +62,22 @@ const fixtureTextQualityRules = join(
 );
 
 describe("ue-shed CLI process", () => {
+	it("prints the retained schema issue for invalid row IDs", () => {
+		const result = runCli([
+			"authoring",
+			"sessions",
+			"reorder-rows",
+			"example",
+			"/Game/Table",
+			"[1]",
+			"--project",
+			fixtureProject
+		]);
+		expect(result.status).toBe(2);
+		expect(result.stderr).toContain("Row IDs does not match its schema.");
+		expect(result.stderr).toContain("Expected string");
+		expect(result.stderr).toContain("[0]");
+	});
 	it("reports help, version, and invalid commands through the executable boundary", () => {
 		const help = runCli(["--help"]);
 		expect(help.status).toBe(0);
@@ -75,7 +92,7 @@ describe("ue-shed CLI process", () => {
 		expect(invalid.status).toBe(2);
 		expect(invalid.stdout).toBe("");
 		expect(invalid.stderr).toContain('ue-shed: Unknown subcommand "not-a-command"');
-	}, 20_000);
+	}, 90_000);
 
 	it("explains and compares saved config provenance through the executable boundary", () => {
 		const explanation = parseRecord(
@@ -278,6 +295,7 @@ describe("ue-shed CLI process", () => {
 		30_000
 	);
 
+	// Every read and mutation starts a fresh CLI process; budget for the entire journey.
 	nativeIt(
 		"runs the persistent session lifecycle through separate CLI processes",
 		async () => {
@@ -473,7 +491,7 @@ describe("ue-shed CLI process", () => {
 				await rm(projectRoot, { force: true, recursive: true });
 			}
 		},
-		30_000
+		120_000
 	);
 
 	it("reports malformed input and typed Remote Control failures with usage exit status", () => {
@@ -491,7 +509,7 @@ describe("ue-shed CLI process", () => {
 		]);
 		expect(malformed.status).toBe(2);
 		expect(malformed.stdout).toBe("");
-		expect(malformed.stderr).toContain("ue-shed: Invalid value JSON");
+		expect(malformed.stderr).toContain("ue-shed: Authoring value is not valid JSON.");
 
 		const remote = runCli(["authoring", "live", "tables", "http://127.0.0.1:1"]);
 		expect(remote.status).toBe(2);

@@ -3,23 +3,27 @@
 import { cleanup, render, screen, waitFor, within } from "@solidjs/testing-library";
 import { userEvent } from "@testing-library/user-event";
 import {
-	makeTextOccurrenceId,
-	makeTextUnitId,
 	textCorpusQuery,
 	textQualityQuery,
+	type LocalizationTargetsResult,
+	LocalizationEdit
+} from "@ue-shed/game-text/corpus";
+import {
 	evaluateGameTextSourceQuality,
 	STARTER_GAME_TEXT_RULES,
+	type GameTextRuleDocument
+} from "@ue-shed/game-text/rules";
+import {
+	makeTextOccurrenceId,
+	makeTextUnitId,
 	TextQualityRuleDocument,
-	type GameTextRuleDocument,
 	TextRoleId,
 	TextQualityRuleId,
 	type TextCorpus,
 	type TextCorpusQueryRunResult,
 	type TextCorpusSearchResult,
-	type LocalizationTargetsResult,
-	LocalizationSelection,
-	LocalizationEdit
-} from "@ue-shed/game-text/browser";
+	LocalizationSelection
+} from "@ue-shed/game-text/schema";
 import { EffectRuntimeProvider } from "@ue-shed/ui";
 import { Deferred, Effect, Layer, ManagedRuntime } from "effect";
 import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from "vitest";

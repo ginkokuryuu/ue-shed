@@ -6,6 +6,7 @@ import {
 	RemoteControlClient,
 	type RemoteControlClientApi
 } from "@ue-shed/unreal-connection";
+import { ErrorCauseFields, ErrorGuidanceFields } from "@ue-shed/protocol";
 import { Clock, Context, Effect, Layer, Schema } from "effect";
 import { captureReviewView } from "./review-live.js";
 import {
@@ -34,12 +35,14 @@ import {
 	type ViewResult
 } from "./review-schema.js";
 
+const isReviewArtifactSourceRejected = Schema.is(ReviewArtifactSourceRejected);
+
 export class ReviewCaptureRunError extends Schema.TaggedError<ReviewCaptureRunError>()(
 	"ReviewCaptureRunError",
 	{
-		message: Schema.String,
+		...ErrorGuidanceFields,
+		...ErrorCauseFields,
 		operation: Schema.Literals(["prepare", "capture", "finalize"]),
-		recovery: Schema.String,
 		runId: Schema.String
 	}
 ) {}
@@ -444,7 +447,7 @@ function captureOneView(args: {
 				Effect.succeed(cause)
 			)
 		);
-		if (artifacts instanceof ReviewArtifactSourceRejected) {
+		if (isReviewArtifactSourceRejected(artifacts)) {
 			return {
 				code: "capture_staging_path_rejected",
 				message: artifacts.message,
@@ -516,10 +519,13 @@ function captureReviewSetWith(args: {
 						Effect.mapError(
 							(cause) =>
 								new ReviewCaptureRunError({
-									message: String(cause),
+									message: `The camera renderer policy for Capture Run ${runId} is not supported.`,
 									operation: "prepare",
 									runId,
-									recovery: "Choose a supported camera renderer and retry."
+									recovery: "Choose a supported camera renderer and retry.",
+									retrySafe: true,
+									nextStep: "fix_input",
+									cause
 								})
 						)
 					);
@@ -538,6 +544,8 @@ function captureReviewSetWith(args: {
 					message: "The Capture Invocation belongs to a different Review Set.",
 					operation: "prepare",
 					recovery: "Create an invocation for the Review Set being captured.",
+					retrySafe: true,
+					nextStep: "fix_input",
 					runId
 				})
 			);
@@ -553,6 +561,8 @@ function captureReviewSetWith(args: {
 						"The requested capture plan contains missing or duplicate Review View IDs.",
 					operation: "prepare",
 					recovery: "Reload the Review Set, review the capture plan, and retry.",
+					retrySafe: true,
+					nextStep: "reconcile",
 					runId
 				})
 			);
@@ -619,10 +629,13 @@ function captureReviewSetWith(args: {
 						Effect.mapError(
 							(cause) =>
 								new ReviewCaptureRunError({
-									message: String(cause),
+									message: `Capture Run ${runId} for Review Set ${reviewSet.id} does not match the Capture Run contract.`,
 									operation: "finalize",
 									recovery: "Inspect the generated Capture Run values and retry.",
-									runId
+									retrySafe: false,
+									nextStep: "escalate",
+									runId,
+									cause
 								})
 						)
 					);

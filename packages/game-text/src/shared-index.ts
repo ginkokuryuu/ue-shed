@@ -9,6 +9,7 @@ import {
 	decodeStringBlock,
 	snapshotCheck,
 	SnapshotFormatError,
+	isSnapshotFormatError,
 	snapshotFailure
 } from "./snapshot-format.js";
 import {
@@ -21,6 +22,8 @@ import {
 import {
 	SnapshotStore,
 	SnapshotStoreError,
+	isSnapshotStoreError,
+	snapshotStoreFailure,
 	snapshotStoreNodeLayer,
 	snapshotStoreDirectory,
 	type SnapshotStoreOptions,
@@ -48,7 +51,7 @@ export const LayerRecord = Schema.Struct({
 	idEncoding: Schema.optionalKey(Schema.Literal("delta32"))
 });
 export type SharedLayerRecord = typeof LayerRecord.Type;
-const Index = Schema.Struct({
+export const SharedIndexManifestSchema = Schema.Struct({
 	version: Schema.Literal(2),
 	generation: Schema.String,
 	garbageUpperBytes: Schema.optionalKey(Natural),
@@ -56,20 +59,19 @@ const Index = Schema.Struct({
 	segments: Schema.Array(SharedSegment).check(Schema.isMaxLength(maximumSharedSegments)),
 	layers: Schema.Record(Schema.String, LayerRecord)
 });
-export type SharedIndexManifest = typeof Index.Type;
+export type SharedIndexManifest = typeof SharedIndexManifestSchema.Type;
 type Failure = SnapshotStoreError | SnapshotFormatError;
 const boundary = <A>(operation: string, run: () => Promise<A>) =>
 	Effect.tryPromise({
 		try: run,
 		catch: (cause): Failure =>
-			cause instanceof SnapshotFormatError || cause instanceof SnapshotStoreError
+			isSnapshotFormatError(cause) || isSnapshotStoreError(cause)
 				? cause
-				: new SnapshotStoreError({
+				: snapshotStoreFailure(
 						operation,
-						code: "unavailable",
-						message: String(cause),
-						recovery: "Reopen or rebuild the disposable shared index."
-					})
+						cause,
+						"Reopen or rebuild the disposable shared index."
+					)
 	}).pipe(Effect.uninterruptible);
 const initial = (): SharedIndexManifest => ({
 	version: 2,
@@ -195,7 +197,7 @@ function readIndex(reader: SnapshotReader) {
 		.section("index.meta")
 		.pipe(
 			Effect.flatMap((bytes) =>
-				Schema.decodeUnknownEffect(Schema.fromJsonString(Index))(
+				Schema.decodeUnknownEffect(Schema.fromJsonString(SharedIndexManifestSchema))(
 					new TextDecoder().decode(bytes)
 				).pipe(Effect.mapError((cause) => snapshotFailure("index.meta", String(cause))))
 			)
@@ -204,7 +206,10 @@ function readIndex(reader: SnapshotReader) {
 
 /** One lock and atomic root for segments and every layer; individual cache keys remain independent. */
 export function sharedIndexNodeLayer(options: SharedIndexOptions) {
-	return projectIndexViewLayer(options.projectView, makeSharedIndexNodeLayer(options));
+	const backing = makeSharedIndexNodeLayer(options);
+	return options.projectView
+		? projectIndexViewLayer(options.projectView).pipe(Layer.provide(backing))
+		: backing;
 }
 
 function makeSharedIndexNodeLayer(options: SharedIndexOptions) {
@@ -397,8 +402,8 @@ function makeSharedIndexNodeLayer(options: SharedIndexOptions) {
 					// Retirement can race the interval between reading the root and opening every handle.
 					if (
 						attempt >= 2 ||
-						!(result.failure instanceof SnapshotStoreError) ||
-						!result.failure.message.includes("ENOENT")
+						!isSnapshotStoreError(result.failure) ||
+						result.failure.code !== "missing"
 					)
 						return yield* Effect.fail(result.failure);
 				}
@@ -408,8 +413,7 @@ function makeSharedIndexNodeLayer(options: SharedIndexOptions) {
 				const opened = yield* read().pipe(Effect.result);
 				if (
 					Result.isFailure(opened) &&
-					(!(opened.failure instanceof SnapshotStoreError) ||
-						opened.failure.code !== "missing")
+					(!isSnapshotStoreError(opened.failure) || opened.failure.code !== "missing")
 				)
 					return yield* Effect.fail(opened.failure);
 				let manifest = Result.isSuccess(opened) ? opened.success : initial();
@@ -439,7 +443,7 @@ function makeSharedIndexNodeLayer(options: SharedIndexOptions) {
 					next: SharedIndexManifest
 				) {
 					const started = performance.now();
-					yield* Schema.decodeUnknownEffect(Index)(next).pipe(
+					yield* Schema.decodeUnknownEffect(SharedIndexManifestSchema)(next).pipe(
 						Effect.mapError((cause) => snapshotFailure("index.meta", String(cause)))
 					);
 					const bytes = new TextEncoder().encode(JSON.stringify(next));

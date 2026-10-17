@@ -1,14 +1,13 @@
 import * as stylex from "@stylexjs/stylex";
+import { TEXT_ORIGIN_LABELS, textCountLabel } from "@ue-shed/game-text/labels";
+import { TEXT_ORIGIN_KINDS } from "@ue-shed/game-text/rules";
 import {
 	MAX_TEXT_SCOPE_FILES,
-	TEXT_ORIGIN_KINDS,
-	TEXT_ORIGIN_LABELS,
 	type TextCorpusSearchCounts,
 	type TextFileScopeSummary,
 	type TextOriginKind,
-	type TextWhere,
-	textCountLabel
-} from "@ue-shed/game-text/browser";
+	type TextWhere
+} from "@ue-shed/game-text/schema";
 import { AnchoredPopover, Button, Chip, ToolButton, ToolIcon } from "@ue-shed/ui";
 import { tokens } from "@ue-shed/ui-theme/tokens.stylex.js";
 import { For, Show, createSignal, createUniqueId } from "solid-js";

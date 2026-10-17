@@ -7,7 +7,7 @@ import type {
 	TextGroup,
 	TextGroupBy,
 	TextUnitId
-} from "@ue-shed/game-text/browser";
+} from "@ue-shed/game-text/schema";
 import { Button, createEffectAction } from "@ue-shed/ui";
 import { tokens } from "@ue-shed/ui-theme/tokens.stylex.js";
 import { For, Show, createEffect, createSignal, untrack } from "solid-js";

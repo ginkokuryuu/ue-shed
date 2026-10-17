@@ -53,7 +53,9 @@ it.effect("returns a recoverable reader failure without exposing file authority"
 							new LocalizationError({
 								code: "file_unreadable",
 								message: "C:/Private/Archive",
-								recovery: "C:/Private/PO"
+								recovery: "C:/Private/PO",
+								retrySafe: true,
+								nextStep: "fix_input"
 							})
 						),
 					targets: () => Effect.die("Not used")

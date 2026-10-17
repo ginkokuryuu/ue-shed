@@ -30,7 +30,8 @@ function selectionError(message: string, recovery: string): MapHistoryError {
 		kind: "perforce_command",
 		message,
 		recovery,
-		retrySafe: false
+		retrySafe: false,
+		nextStep: "escalate"
 	});
 }
 
@@ -39,7 +40,8 @@ function resourceLimitError(maxChangelists: number): MapHistoryError {
 		kind: "resource_limit",
 		message: `The selected history contains more than ${maxChangelists} changelists.`,
 		recovery: "Narrow the time range or raise maxChangelists explicitly.",
-		retrySafe: false
+		retrySafe: false,
+		nextStep: "fix_input"
 	});
 }
 
@@ -83,7 +85,8 @@ export function selectSubmittedChanges(
 					message: "Map history needs at least one resolved Perforce file scope.",
 					recovery:
 						"Resolve the selected map to a Perforce depot path before listing history.",
-					retrySafe: false
+					retrySafe: false,
+					nextStep: "fix_input"
 				})
 			);
 		}

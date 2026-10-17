@@ -1,6 +1,12 @@
 import { readFile } from "node:fs/promises";
 import { Effect, Layer, Schema } from "effect";
-import { CliCommandError, CliRuntime, printJson } from "../cli-runtime.js";
+import {
+	CliCommandError,
+	CliRuntime,
+	isCliCommandError,
+	jsonInputFileMessage,
+	printJson
+} from "../cli-runtime.js";
 import { observeCliOperation } from "../cli-operation.js";
 import type { CliCommand } from "../command-model.js";
 
@@ -51,9 +57,21 @@ function readJsonDocument(path: string): Effect.Effect<unknown, CliCommandError>
 			Schema.decodeUnknownSync(Schema.Json)(JSON.parse(await readFile(path, "utf8"))),
 		catch: (cause) =>
 			new CliCommandError({
-				message: `Could not read JSON document ${path}: ${String(cause)}`
+				message: jsonInputFileMessage("JSON document", path, cause),
+				cause
 			})
 	});
+}
+
+/** Classify a schema rejection of a JSON input document without copying the issue into prose. */
+function invalidDocument(label: string, path: string) {
+	return (cause: unknown) =>
+		isCliCommandError(cause)
+			? cause
+			: new CliCommandError({
+					message: `${label} ${path} does not match the ${label} schema.`,
+					cause
+				});
 }
 
 export const runReviewPolicies = Effect.fn("Cli.workflow.review_policies")(
@@ -95,12 +113,7 @@ export const runReviewPolicies = Effect.fn("Cli.workflow.review_policies")(
 					const policy = yield* Schema.decodeUnknownEffect(VisibilityPolicy)(
 						policyInput
 					).pipe(
-						Effect.mapError(
-							(cause) =>
-								new CliCommandError({
-									message: `Invalid Visibility Policy: ${String(cause)}`
-								})
-						)
+						Effect.mapError(invalidDocument("Visibility Policy", command.policyPath))
 					);
 					const overrides =
 						command.overridesPath === undefined
@@ -108,10 +121,10 @@ export const runReviewPolicies = Effect.fn("Cli.workflow.review_policies")(
 							: yield* readJsonDocument(command.overridesPath).pipe(
 									Effect.flatMap(Schema.decodeUnknownEffect(VisibilityOverrides)),
 									Effect.mapError(
-										(cause) =>
-											new CliCommandError({
-												message: `Invalid Visibility Overrides: ${String(cause)}`
-											})
+										invalidDocument(
+											"Visibility Overrides",
+											command.overridesPath
+										)
 									)
 								);
 					const reviewSet = yield* replaceViewVisibilityPolicyAtPath({
@@ -143,12 +156,7 @@ export const runReviewViewPut = Effect.fn("Cli.workflow.review_view_put")(
 					yield* Effect.promise(() => import("@ue-shed/cameras"));
 				const input = yield* readJsonDocument(command.viewPath);
 				const view = yield* Schema.decodeUnknownEffect(ReviewView)(input).pipe(
-					Effect.mapError(
-						(cause) =>
-							new CliCommandError({
-								message: `Invalid Review View: ${String(cause)}`
-							})
-					)
+					Effect.mapError(invalidDocument("Review View", command.viewPath))
 				);
 				const result = yield* putReviewViewAtPath({
 					path: command.reviewSetPath,
@@ -198,10 +206,10 @@ export const runReviewFraming = Effect.fn("Cli.workflow.review_framing")(
 							: yield* readJsonDocument(command.parametersPath).pipe(
 									Effect.flatMap(Schema.decodeUnknownEffect(FramingParameters)),
 									Effect.mapError(
-										(cause) =>
-											new CliCommandError({
-												message: `Invalid Framing Parameters: ${String(cause)}`
-											})
+										invalidDocument(
+											"Framing Parameters",
+											command.parametersPath
+										)
 									)
 								);
 					const candidates =
@@ -294,10 +302,7 @@ export const runReviewAuthoring = Effect.fn("Cli.workflow.review_authoring")(
 							ReviewAuthoringSessionPatch
 						)(patchInput).pipe(
 							Effect.mapError(
-								(cause) =>
-									new CliCommandError({
-										message: `Invalid Review Authoring Patch: ${String(cause)}`
-									})
+								invalidDocument("Review Authoring Patch", command.patchPath)
 							)
 						);
 						return yield* sessions

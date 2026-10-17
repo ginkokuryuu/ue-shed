@@ -1,6 +1,10 @@
 import { Schema } from "effect";
 import { LocalizationError, LocalizationLimits, type POLine } from "@ue-shed/localization";
-import { validateUnrealJsonEscapes, localizationError } from "@ue-shed/localization";
+import {
+	validateUnrealJsonEscapes,
+	localizationError,
+	localizationErrorGuidance
+} from "@ue-shed/localization";
 
 const Positive = Schema.Int.check(Schema.isGreaterThan(0));
 export const LocalizationImportLimits = LocalizationLimits.pipe(
@@ -26,7 +30,8 @@ export function importFailure(
 			code === "file_changed"
 				? `${file}${location}: file changed during import; retry after writing finishes.`
 				: `${file}${location}: localization import failed (${code}).`,
-		recovery: localizationError(code).recovery
+		recovery: localizationError(code).recovery,
+		...localizationErrorGuidance(code)
 	});
 }
 interface Frame {

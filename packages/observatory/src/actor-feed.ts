@@ -3,12 +3,14 @@ import {
 	recordObservatoryPacket,
 	recordObservatoryReceiverReplacements
 } from "@ue-shed/observability";
+import { ErrorCauseFields, ErrorGuidanceFields } from "@ue-shed/protocol";
 import { RemoteControlClientError, type RemoteControlClientApi } from "@ue-shed/unreal-connection";
 import {
 	Context,
 	Duration,
 	Effect,
 	Layer,
+	Predicate,
 	PubSub,
 	Result,
 	Schedule,
@@ -70,10 +72,10 @@ export interface ActorObservationDiagnostic {
 }
 
 export class ActorFeedError extends Schema.TaggedError<ActorFeedError>()("ActorFeedError", {
-	message: Schema.String,
 	operation: Schema.Literals(["listen", "decode_limit"]),
 	pipeName: Schema.String,
-	retrySafe: Schema.Boolean
+	...ErrorGuidanceFields,
+	...ErrorCauseFields
 }) {}
 
 export interface ActorFeedApi {
@@ -130,13 +132,31 @@ function listen(server: Server, pipeName: string): Effect.Effect<void, ActorFeed
 				signal.addEventListener("abort", onAbort, { once: true });
 				server.listen(pipeName);
 			}),
-		catch: (cause) =>
-			new ActorFeedError({
-				message: String(cause),
+		catch: (cause) => {
+			const code =
+				cause instanceof Object && "code" in cause && Predicate.isString(cause.code)
+					? cause.code
+					: undefined;
+			const inUse = code === "EADDRINUSE";
+			const denied = code === "EACCES" || code === "EPERM";
+			return new ActorFeedError({
+				message: inUse
+					? `Actor feed pipe ${pipeName} is already in use by another listener.`
+					: denied
+						? `Permission was denied to listen on actor feed pipe ${pipeName}.`
+						: `Could not listen on actor feed pipe ${pipeName}.`,
 				operation: "listen",
 				pipeName,
-				retrySafe: true
-			})
+				recovery: inUse
+					? "Stop the other listener or choose a different actor feed pipe name."
+					: denied
+						? "Run the host with permission to create the named pipe or choose another pipe name."
+						: "Retry listening on the actor feed pipe.",
+				retrySafe: true,
+				nextStep: inUse || denied ? "fix_input" : "retry",
+				cause
+			});
+		}
 	});
 }
 
@@ -166,7 +186,9 @@ function acquireActorFeedResource(
 				message: `Actor feed capacity must be a positive integer, received ${capacity}.`,
 				operation: "listen",
 				pipeName,
-				retrySafe: false
+				recovery: "Pass a positive integer actor feed capacity.",
+				retrySafe: false,
+				nextStep: "fix_input"
 			})
 		);
 	}
@@ -176,7 +198,9 @@ function acquireActorFeedResource(
 				message: `Actor feed maxMalformedPackets must be a positive integer, received ${maxMalformedPackets}.`,
 				operation: "decode_limit",
 				pipeName,
-				retrySafe: false
+				recovery: "Pass a positive integer maxMalformedPackets.",
+				retrySafe: false,
+				nextStep: "fix_input"
 			})
 		);
 	}
@@ -296,10 +320,10 @@ export class ActorObservationControlError extends Schema.TaggedError<ActorObserv
 	"ActorObservationControlError",
 	{
 		endpoint: Schema.String,
-		message: Schema.String,
 		operation: Schema.Literals(["start", "stop", "status"]),
-		retrySafe: Schema.Boolean,
-		status: Schema.optional(Schema.Number)
+		status: Schema.optional(Schema.Number),
+		...ErrorGuidanceFields,
+		...ErrorCauseFields
 	}
 ) {}
 
@@ -308,8 +332,8 @@ export class ActorObservationSessionError extends Schema.TaggedError<ActorObserv
 	{
 		endpoint: Schema.String,
 		expectedSessionId: Schema.String,
-		message: Schema.String,
-		receivedSessionId: Schema.String
+		receivedSessionId: Schema.String,
+		...ErrorGuidanceFields
 	}
 ) {}
 
@@ -318,7 +342,7 @@ export class ActorObservationRecoveryExhaustedError extends Schema.TaggedError<A
 	{
 		attempts: Schema.Int,
 		endpoint: Schema.String,
-		message: Schema.String
+		...ErrorGuidanceFields
 	}
 ) {}
 
@@ -381,25 +405,33 @@ const SnapshotResponse = Schema.Union([
 	})
 ]);
 
+const isRemoteControlClientError = Schema.is(RemoteControlClientError);
+
 function controlError(
 	endpoint: string,
 	operation: "start" | "stop" | "status",
 	cause: RemoteControlClientError | unknown
 ): ActorObservationControlError {
-	if (cause instanceof RemoteControlClientError) {
+	if (isRemoteControlClientError(cause)) {
 		return new ActorObservationControlError({
 			endpoint: cause.endpoint,
 			message: cause.message,
 			operation,
+			recovery: cause.recovery,
 			retrySafe: cause.retrySafe,
-			...(cause.status === undefined ? undefined : { status: cause.status })
+			nextStep: cause.nextStep,
+			...(cause.status === undefined ? undefined : { status: cause.status }),
+			cause
 		});
 	}
 	return new ActorObservationControlError({
 		endpoint,
-		message: `Invalid observatory ${operation} response: ${String(cause)}`,
+		message: `The observatory ${operation} response from ${endpoint} does not match the actor observation contract.`,
 		operation,
-		retrySafe: false
+		recovery: "Install a UEShedObservatory plugin that matches this host, then observe again.",
+		retrySafe: false,
+		nextStep: "fix_input",
+		cause
 	});
 }
 
@@ -445,6 +477,7 @@ const requestActorSnapshotForFallback = Effect.fn("ActorObservation.snapshotFall
 		.request({
 			endpoint,
 			functionName: "GetActorSnapshot",
+			idempotent: true,
 			objectPath,
 			operation: "observatory.actor_snapshot",
 			parameters: {}
@@ -459,7 +492,9 @@ const requestActorSnapshotForFallback = Effect.fn("ActorObservation.snapshotFall
 			endpoint,
 			message: response.message,
 			operation: "status",
-			retrySafe: true
+			recovery: "Wait for the editor world to become ready, then request the snapshot again.",
+			retrySafe: true,
+			nextStep: "retry"
 		})
 	);
 });
@@ -491,9 +526,13 @@ function buildCatalogFromReady(
 		catch: (cause) =>
 			new ActorObservationControlError({
 				endpoint,
-				message: `Invalid StartActorObservation catalog: ${String(cause)}`,
+				message: `The StartActorObservation catalog from ${endpoint} is invalid.`,
 				operation: "start",
-				retrySafe: false
+				recovery:
+					"Install a UEShedObservatory plugin that matches this host, then observe again.",
+				retrySafe: false,
+				nextStep: "fix_input",
+				cause
 			})
 	});
 }
@@ -702,7 +741,11 @@ function driveObservation(
 						new ActorObservationRecoveryExhaustedError({
 							attempts: attempts - 1,
 							endpoint,
-							message
+							message,
+							recovery:
+								"Check that the editor is running with UEShedObservatory enabled, then start observation again.",
+							retrySafe: true,
+							nextStep: "retry"
 						})
 					);
 				}
@@ -787,7 +830,11 @@ function driveObservation(
 							message: `Actor observation kept receiving packets for the wrong session after ${
 								attempts - 1
 							} recovery attempts.`,
-							receivedSessionId: liveOutcome.receivedSessionId ?? ""
+							receivedSessionId: liveOutcome.receivedSessionId ?? "",
+							recovery:
+								"Stop other observers of this editor, then start observation again to negotiate a fresh session.",
+							retrySafe: true,
+							nextStep: "reconcile"
 						})
 					);
 				}

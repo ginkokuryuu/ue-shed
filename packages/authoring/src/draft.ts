@@ -2,13 +2,15 @@ import {
 	AuthoringCommand as AuthoringCommandSchema,
 	AuthoringOperationError as AuthoringOperationErrorSchema,
 	AuthoringTableSnapshot as AuthoringTableSnapshotSchema,
+	ErrorGuidanceFields,
 	type AuthoringFieldValue,
 	type AuthoringOperationError,
 	type AuthoringCommand,
 	type AuthoringRow,
 	type AuthoringTableSnapshot,
 	type AuthoringTypeDescriptor,
-	type AuthoringValue
+	type AuthoringValue,
+	type ErrorNextStep
 } from "@ue-shed/protocol";
 import { Effect, Schema } from "effect";
 
@@ -125,13 +127,14 @@ export function decodeDraftSessionWithMigration<Input>(input: Input) {
 	);
 }
 
+/** A recorded command no longer matches the draft it folds onto. */
 export class DraftFoldError extends Schema.TaggedError<DraftFoldError>()("DraftFoldError", {
 	commandId: Schema.String,
-	message: Schema.String
+	...ErrorGuidanceFields
 }) {}
 
 export class DraftBuildError extends Schema.TaggedError<DraftBuildError>()("DraftBuildError", {
-	message: Schema.String
+	...ErrorGuidanceFields
 }) {}
 
 export class DraftIntentError extends Schema.TaggedError<DraftIntentError>()("DraftIntentError", {
@@ -146,12 +149,34 @@ export class DraftIntentError extends Schema.TaggedError<DraftIntentError>()("Dr
 		"unsupported_edit",
 		"unsupported_add"
 	]),
-	message: Schema.String,
-	recovery: Schema.String
+	...ErrorGuidanceFields
 }) {}
 
+/**
+ * Intents that name rows, fields or an order the caller no longer sees need a fresh read of the
+ * session; the rest are wrong values the caller corrects. A rejected intent changed nothing, and
+ * repeating it unchanged is rejected again.
+ */
+export function draftIntentNextStep(code: DraftIntentError["code"]): ErrorNextStep {
+	switch (code) {
+		case "row_not_found":
+		case "missing_field":
+		case "stale_fingerprint":
+		case "invalid_row_order":
+			return "reconcile";
+		default:
+			return "fix_input";
+	}
+}
+
 function fail(command: CommandEnvelope, message: string): never {
-	throw new DraftFoldError({ commandId: command.id, message });
+	throw new DraftFoldError({
+		commandId: command.id,
+		message,
+		recovery: "Refresh the session, then repeat the gesture against the current rows.",
+		retrySafe: false,
+		nextStep: "reconcile"
+	});
 }
 
 function replaceField(
@@ -369,14 +394,24 @@ export function buildSetCellCommandGroup(args: {
 	readonly author?: string;
 }): readonly CommandEnvelope[] {
 	if (args.edits.length !== args.commandIds.length) {
-		throw new DraftBuildError({ message: "Every cell edit requires one command identity" });
+		throw new DraftBuildError({
+			message: "Every cell edit requires one command identity",
+			recovery: "Pass exactly one command identity for each cell edit.",
+			retrySafe: false,
+			nextStep: "fix_input"
+		});
 	}
 	let staged = args.session;
 	const commands: CommandEnvelope[] = [];
 	for (const [index, edit] of args.edits.entries()) {
 		const commandId = args.commandIds[index];
 		if (commandId === undefined) {
-			throw new DraftBuildError({ message: "Every cell edit requires one command identity" });
+			throw new DraftBuildError({
+				message: "Every cell edit requires one command identity",
+				recovery: "Pass exactly one command identity for each cell edit.",
+				retrySafe: false,
+				nextStep: "fix_input"
+			});
 		}
 		const table = workingTable(staged, args.tableObjectPath);
 		const row = table.table.rows.find((candidate) => candidate.id === edit.rowId);
@@ -427,7 +462,13 @@ interface RowCommandMetadata {
 }
 
 function rowIntentError(code: DraftIntentError["code"], message: string, recovery: string): never {
-	throw new DraftIntentError({ code, message, recovery });
+	throw new DraftIntentError({
+		code,
+		message,
+		recovery,
+		retrySafe: false,
+		nextStep: draftIntentNextStep(code)
+	});
 }
 
 function baseFingerprint(session: DraftSession, tableObjectPath: string): string {

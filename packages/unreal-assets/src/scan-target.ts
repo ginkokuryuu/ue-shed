@@ -1,7 +1,7 @@
 import { readdir, stat } from "node:fs/promises";
 import { dirname, extname, join, resolve } from "node:path";
 import { Effect } from "effect";
-import { AssetReaderError } from "./asset-reader.js";
+import { AssetReaderError, assetReaderGuidance } from "./asset-reader.js";
 
 export interface ResolvedScanTarget {
 	/** Roots to enumerate. Empty means the project's whole `Content` directory. */
@@ -75,9 +75,11 @@ export function resolveScanTarget(
 				message:
 					cause instanceof ScanTargetError
 						? cause.message
-						: `Could not resolve a scan target from ${path}: ${String(cause)}`,
+						: `Could not resolve a scan target from ${path}.`,
 				path,
-				retrySafe: false
+				retrySafe: false,
+				...assetReaderGuidance("discovery", false),
+				...(cause instanceof ScanTargetError ? undefined : { cause })
 			})
 	}).pipe(Effect.withSpan("unreal_assets.resolve_scan_target"));
 }

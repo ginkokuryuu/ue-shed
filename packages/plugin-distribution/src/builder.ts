@@ -16,10 +16,18 @@ import { dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import { Readable, Transform } from "node:stream";
 import { pipeline } from "node:stream/promises";
 import { createGzip, type ZlibOptions } from "node:zlib";
-import { OwnedProcessTree, type OwnedProcessExit } from "@ue-shed/engine";
-import { Context, Duration, Effect, Layer, Schema } from "effect";
+import {
+	OwnedProcessTree,
+	type OwnedProcessExit,
+	type SupervisedEditorSessionError
+} from "@ue-shed/engine";
+import { Context, Duration, Effect, Exit, Layer, Option, Ref, Schema } from "effect";
 import { extractPluginArchive, verifyPluginArtifact } from "./archive.js";
-import { PluginInstallCancelled } from "./errors.js";
+import {
+	PluginErrorGuidanceFields as ErrorGuidanceFields,
+	PluginInstallCancelled,
+	type PluginErrorNextStep
+} from "./errors.js";
 import {
 	CompiledPluginBundleManifestV3,
 	PluginBundlePlugin,
@@ -65,15 +73,13 @@ export const CompiledPluginBuildResult = Schema.Struct({
 export type CompiledPluginBuildResult = typeof CompiledPluginBuildResult.Type;
 
 const BuildErrorFields = {
-	message: Schema.String,
-	recovery: Schema.String,
-	retrySafe: Schema.Boolean,
+	...ErrorGuidanceFields,
 	stage: Schema.String
 };
 
 export class InvalidCompiledPluginBuild extends Schema.TaggedError<InvalidCompiledPluginBuild>()(
 	"InvalidCompiledPluginBuild",
-	BuildErrorFields
+	{ ...BuildErrorFields, cause: Schema.optionalKey(Schema.Defect()) }
 ) {}
 
 export class CompiledPluginBuildFailed extends Schema.TaggedError<CompiledPluginBuildFailed>()(
@@ -85,6 +91,9 @@ export class CompiledPluginBuildCancelled extends Schema.TaggedError<CompiledPlu
 	"CompiledPluginBuildCancelled",
 	BuildErrorFields
 ) {}
+
+const isCompiledPluginBuildCancelled = Schema.is(CompiledPluginBuildCancelled);
+const isPluginInstallCancelled = Schema.is(PluginInstallCancelled);
 
 export const CompiledPluginBuilderError = Schema.Union([
 	InvalidCompiledPluginBuild,
@@ -150,8 +159,27 @@ function sha256(bytes: Uint8Array) {
 	return Sha256Checksum.make(`sha256:${createHash("sha256").update(bytes).digest("hex")}`);
 }
 
-function invalid(stage: string, message: string, recovery: string) {
-	return new InvalidCompiledPluginBuild({ message, recovery, retrySafe: false, stage });
+/**
+ * Builds run in a private random stage and publish with one final rename, so a failed build leaves
+ * no published output. Repeating requires confirmed process cleanup as well as isolated artifacts.
+ * Most failures are input the caller can fix; pass `escalate` for a failed builder invariant.
+ */
+function invalid(
+	stage: string,
+	message: string,
+	recovery: string,
+	nextStep: PluginErrorNextStep = "fix_input",
+	cause?: unknown,
+	retrySafe = true
+) {
+	return new InvalidCompiledPluginBuild({
+		message,
+		nextStep,
+		recovery,
+		retrySafe,
+		stage,
+		...(cause === undefined ? undefined : { cause })
+	});
 }
 
 function cancelled(stage: CompiledPluginBuildStage) {
@@ -159,6 +187,7 @@ function cancelled(stage: CompiledPluginBuildStage) {
 		message: `Compiled plugin build was cancelled during ${stage}.`,
 		recovery: "Retry the exact build; no output was published.",
 		retrySafe: true,
+		nextStep: "retry",
 		stage
 	});
 }
@@ -167,7 +196,7 @@ function pluginArtifactBuildError(
 	stage: "source-extraction" | "source-verification" | "validation",
 	cause: PluginInstallCancelled | { readonly message: string; readonly recovery: string }
 ) {
-	return cause instanceof PluginInstallCancelled
+	return isPluginInstallCancelled(cause)
 		? cancelled(stage)
 		: invalid(stage, cause.message, cause.recovery);
 }
@@ -534,7 +563,8 @@ function validateExit(exit: OwnedProcessExit) {
 			message: `AutomationTool BuildPlugin exited without success (${String(exit.exitCode)}).`,
 			recovery:
 				"Inspect AutomationTool's reported final log, correct the deterministic build input, and retry.",
-			retrySafe: false,
+			retrySafe: true,
+			nextStep: "fix_input",
 			stage: "build"
 		})
 	);
@@ -560,11 +590,13 @@ export const compiledPluginBuilderLayer = (): Layer.Layer<
 						onExcessProperty: "error"
 					}
 				).pipe(
-					Effect.mapError(() =>
+					Effect.mapError((cause) =>
 						invalid(
 							"validation",
 							"Compiled plugin build request is invalid.",
-							"Provide exact source digests, engine identity, graph, toolchain, and output settings."
+							"Provide exact source digests, engine identity, graph, toolchain, and output settings.",
+							"fix_input",
+							cause
 						)
 					)
 				);
@@ -769,10 +801,20 @@ export const compiledPluginBuilderLayer = (): Layer.Layer<
 										})
 										.pipe(
 											Effect.mapError((cause) =>
-												invalid("build", cause.message, cause.recovery)
+												invalid(
+													"build",
+													cause.message,
+													cause.recovery,
+													cause.nextStep,
+													cause,
+													cause.retrySafe
+												)
 											)
 										);
-									const completed = yield* Effect.acquireUseRelease(
+									const cleanupFailure = yield* Ref.make<
+										Option.Option<SupervisedEditorSessionError>
+									>(Option.none());
+									const completedExit = yield* Effect.acquireUseRelease(
 										Effect.succeed(handle),
 										(owned) => {
 											const awaited =
@@ -784,23 +826,45 @@ export const compiledPluginBuilderLayer = (): Layer.Layer<
 														);
 											return awaited.pipe(
 												Effect.mapError((cause) =>
-													cause instanceof CompiledPluginBuildCancelled
+													isCompiledPluginBuildCancelled(cause)
 														? cause
 														: invalid(
 																"build",
 																cause.message,
-																cause.recovery
+																cause.recovery,
+																"escalate",
+																cause
 															)
 												),
 												Effect.timeoutOption(
 													Duration.seconds(
 														request.maximumBuildSeconds ?? 7_200
 													)
-												)
+												),
+												Effect.exit
 											);
 										},
-										(owned) => owned.terminate("cancelled").pipe(Effect.ignore)
+										(owned) =>
+											owned.terminate("cancelled").pipe(
+												Effect.catch((cause) =>
+													Ref.set(cleanupFailure, Option.some(cause))
+												),
+												Effect.asVoid
+											)
 									);
+									const cleanupError = yield* Ref.get(cleanupFailure);
+									if (Option.isSome(cleanupError))
+										return yield* invalid(
+											"build",
+											"RunUAT process cleanup could not be confirmed.",
+											"Inspect and terminate the remaining process group manually before retrying.",
+											"reconcile",
+											cleanupError.value,
+											false
+										);
+									if (Exit.isFailure(completedExit))
+										return yield* Effect.failCause(completedExit.cause);
+									const completed = completedExit.value;
 									if (completed._tag === "None") {
 										return yield* new CompiledPluginBuildFailed({
 											exitCode: null,
@@ -809,6 +873,7 @@ export const compiledPluginBuilderLayer = (): Layer.Layer<
 											recovery:
 												"Increase the bounded timeout only after inspecting the build host.",
 											retrySafe: true,
+											nextStep: "fix_input",
 											stage: "build"
 										});
 									}
@@ -831,7 +896,8 @@ export const compiledPluginBuilderLayer = (): Layer.Layer<
 												: invalid(
 														"validation",
 														`RunUAT output is invalid: ${String(cause)}`,
-														"Inspect UAT products and rebuild; invalid output is never published."
+														"Inspect UAT products and rebuild; invalid output is never published.",
+														"escalate"
 													)
 									});
 									yield* Effect.sync(() =>
@@ -861,7 +927,7 @@ export const compiledPluginBuilderLayer = (): Layer.Layer<
 												signal: buildSignal
 											}),
 										catch: (cause) =>
-											cause instanceof CompiledPluginBuildCancelled ||
+											isCompiledPluginBuildCancelled(cause) ||
 											buildSignal.aborted
 												? cancelled("archive")
 												: invalid(
@@ -886,7 +952,8 @@ export const compiledPluginBuilderLayer = (): Layer.Layer<
 											invalid(
 												"validation",
 												`Could not attest compiled modules: ${String(cause)}`,
-												"Inspect UAT module output and rebuild."
+												"Inspect UAT module output and rebuild.",
+												"escalate"
 											)
 									});
 									if (state.sourceManifest.schemaVersion !== 3) {
@@ -949,11 +1016,13 @@ export const compiledPluginBuilderLayer = (): Layer.Layer<
 										releaseVersion: state.sourceManifest.releaseVersion,
 										schemaVersion: 3
 									}).pipe(
-										Effect.mapError(() =>
+										Effect.mapError((cause) =>
 											invalid(
 												"manifest",
 												"Generated compiled manifest is invalid.",
-												"Inspect the validated build inputs and retry."
+												"Inspect the validated build inputs and retry.",
+												"escalate",
+												cause
 											)
 										)
 									);

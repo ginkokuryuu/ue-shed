@@ -1,5 +1,7 @@
 import {
 	decodeCompanionCapabilityManifest,
+	ErrorCauseFields,
+	ErrorGuidanceFields,
 	type CompanionCapabilityManifest
 } from "@ue-shed/protocol";
 import { EditorPlaySession, type EditorPlaySessionError } from "@ue-shed/engine";
@@ -7,10 +9,10 @@ import { RemoteControlClient, type RemoteControlClientError } from "@ue-shed/unr
 import { Context, Effect, Layer, Schedule, Schema } from "effect";
 import { movementGymScenario } from "./demo.js";
 import {
-	decodeScenarioCancelResponse,
-	decodeScenarioPrepareResponse,
-	decodeScenarioStartResponse,
-	decodeScenarioStatusResponse,
+	parseScenarioCancelResponse,
+	parseScenarioPrepareResponse,
+	parseScenarioStartResponse,
+	parseScenarioStatusResponse,
 	movementGymExecutionRequest,
 	SCENARIO_EXECUTION_CAPABILITIES,
 	type ScenarioCancelResponse,
@@ -36,10 +38,9 @@ export class ScenarioRunnerError extends Schema.TaggedError<ScenarioRunnerError>
 			"transport_failure"
 		]),
 		endpoint: Schema.String,
-		message: Schema.String,
 		operation: Schema.String,
-		recovery: Schema.String,
-		retrySafe: Schema.Boolean
+		...ErrorGuidanceFields,
+		...ErrorCauseFields
 	}
 ) {}
 
@@ -72,9 +73,20 @@ export class ScenarioRunner extends Context.Service<ScenarioRunner, ScenarioRunn
 	"@ue-shed/scenarios/ScenarioRunner"
 ) {}
 
+/** Internal poll marker; it never leaves the runner, but carries the shared guidance shape. */
 class PollPending extends Schema.TaggedError<PollPending>()("ScenarioRunner.PollPending", {
-	operation: Schema.String
+	operation: Schema.String,
+	...ErrorGuidanceFields
 }) {}
+const pollPending = (operation: string) =>
+	new PollPending({
+		operation,
+		message: `The ${operation} poll has not reached its awaited state yet.`,
+		recovery: "Poll again until the deadline.",
+		retrySafe: true,
+		nextStep: "retry"
+	});
+const isPollPending = Schema.is(PollPending);
 
 function endpointOf(configured: string): string {
 	return configured.replace(/\/+$/, "");
@@ -92,7 +104,9 @@ function transportError(
 		operation,
 		recovery:
 			"Confirm that the selected Unreal Editor and Remote Control endpoint are reachable.",
-		retrySafe: "retrySafe" in cause ? cause.retrySafe : false
+		retrySafe: "retrySafe" in cause ? cause.retrySafe : false,
+		nextStep: "retrySafe" in cause && cause.retrySafe ? "retry" : "reconcile",
+		cause
 	});
 }
 
@@ -100,11 +114,13 @@ function contractError(endpoint: string, operation: string, cause: unknown): Sce
 	return new ScenarioRunnerError({
 		code: "contract_failure",
 		endpoint,
-		message: `The scenario producer returned an invalid response: ${String(cause)}`,
+		message: `The scenario producer at ${endpoint} returned a ${operation} response that does not match the scenario contract.`,
 		operation,
 		recovery:
 			"Update UE Shed so the client and Unreal scenario capability use compatible contracts.",
-		retrySafe: false
+		retrySafe: false,
+		nextStep: "escalate",
+		cause
 	});
 }
 
@@ -116,7 +132,8 @@ function staleBindingError(endpoint: string, operation: string): ScenarioRunnerE
 		operation,
 		recovery:
 			"Cancel any remaining producer run and start again against the current PIE session.",
-		retrySafe: false
+		retrySafe: false,
+		nextStep: "reconcile"
 	});
 }
 
@@ -137,7 +154,11 @@ function rejectedError(
 		message: response.message,
 		operation,
 		recovery: response.recovery,
-		retrySafe: false
+		retrySafe: false,
+		nextStep:
+			response.code === "stale_session" || response.code === "run_not_found"
+				? "reconcile"
+				: "fix_input"
 	});
 }
 
@@ -160,7 +181,8 @@ function validateManifest(
 				operation: "scenario.negotiate",
 				recovery:
 					"Enable compatible UEShedCore and UEShedScenarios plugins, then reconnect.",
-				retrySafe: false
+				retrySafe: false,
+				nextStep: "fix_input"
 			})
 		);
 	}
@@ -180,7 +202,8 @@ function validateManifest(
 					"Connected producer does not advertise sufficient bounded scenario limits.",
 				operation: "scenario.negotiate",
 				recovery: "Use a producer that supports the Movement Gym v1 execution limits.",
-				retrySafe: false
+				retrySafe: false,
+				nextStep: "fix_input"
 			})
 		);
 	}
@@ -196,27 +219,31 @@ export const ScenarioRunnerLive = Layer.effect(
 		const remote = yield* RemoteControlClient;
 		const playSession = yield* EditorPlaySession;
 
-		const call = Effect.fn("ScenarioRunner.call")(function* (options: {
-			readonly endpoint: string;
-			readonly functionName: string;
-			readonly objectPath: string;
-			readonly operation: string;
-			readonly parameters: Schema.JsonObject;
-		}) {
-			return yield* remote
-				.request(options)
-				.pipe(
+		const call = Effect.fn("ScenarioRunner.call")(
+			function* (options: {
+				readonly endpoint: string;
+				readonly functionName: string;
+				readonly idempotent?: boolean;
+				readonly objectPath: string;
+				readonly operation: string;
+				readonly parameters: Schema.JsonObject;
+			}) {
+				return yield* remote.request(options);
+			},
+			(effect, options) =>
+				effect.pipe(
 					Effect.mapError((cause) =>
 						transportError(options.endpoint, options.operation, cause)
 					)
-				);
-		});
+				)
+		);
 
 		const negotiate = Effect.fn("ScenarioRunner.negotiate")(function* (endpoint: string) {
 			const operation = "scenario.negotiate";
 			const value = yield* call({
 				endpoint,
 				functionName: "GetCapabilityManifest",
+				idempotent: true,
 				objectPath: coreObjectPath,
 				operation,
 				parameters: {}
@@ -253,7 +280,8 @@ export const ScenarioRunnerLive = Layer.effect(
 							message: started.message,
 							operation: "scenario.pie.start",
 							recovery: started.recovery,
-							retrySafe: false
+							retrySafe: false,
+							nextStep: "reconcile"
 						})
 					);
 				}
@@ -274,7 +302,8 @@ export const ScenarioRunnerLive = Layer.effect(
 							message: resumed.message,
 							operation: "scenario.pie.resume",
 							recovery: resumed.recovery,
-							retrySafe: false
+							retrySafe: false,
+							nextStep: "reconcile"
 						})
 					);
 				}
@@ -301,11 +330,12 @@ export const ScenarioRunnerLive = Layer.effect(
 									operation: "scenario.pie.await",
 									recovery:
 										"Stop simulation and start Play In Editor, then retry.",
-									retrySafe: false
+									retrySafe: false,
+									nextStep: "fix_input"
 								})
 							);
 						}
-						return Effect.fail(new PollPending({ operation: "scenario.pie.await" }));
+						return Effect.fail(pollPending("scenario.pie.await"));
 					}
 				)
 			);
@@ -314,10 +344,10 @@ export const ScenarioRunnerLive = Layer.effect(
 					schedule: Schedule.spaced("50 millis").pipe(
 						Schedule.upTo({ duration: "15 seconds" })
 					),
-					while: (error) => error instanceof PollPending
+					while: isPollPending
 				}),
 				Effect.mapError((error) =>
-					error instanceof PollPending
+					isPollPending(error)
 						? new ScenarioRunnerError({
 								code: "pie_unavailable",
 								endpoint,
@@ -325,7 +355,8 @@ export const ScenarioRunnerLive = Layer.effect(
 									"Play In Editor did not reach running state before the deadline.",
 								operation: error.operation,
 								recovery: "Inspect Unreal PIE startup diagnostics, then retry.",
-								retrySafe: true
+								retrySafe: true,
+								nextStep: "retry"
 							})
 						: error
 				)
@@ -345,7 +376,7 @@ export const ScenarioRunnerLive = Layer.effect(
 				operation,
 				parameters: { RunId: runId }
 			});
-			return yield* decodeScenarioCancelResponse(value).pipe(
+			return yield* parseScenarioCancelResponse(value).pipe(
 				Effect.mapError((cause) => contractError(endpoint, operation, cause))
 			);
 		});
@@ -377,7 +408,7 @@ export const ScenarioRunnerLive = Layer.effect(
 				operation: prepareOperation,
 				parameters: { MapPath: document.mapPath, ScenarioId: document.id }
 			});
-			const prepared = yield* decodeScenarioPrepareResponse(preparedValue).pipe(
+			const prepared = yield* parseScenarioPrepareResponse(preparedValue).pipe(
 				Effect.mapError((cause) => contractError(endpoint, prepareOperation, cause))
 			);
 			if (prepared._tag === "Rejected") {
@@ -394,11 +425,14 @@ export const ScenarioRunnerLive = Layer.effect(
 					new ScenarioRunnerError({
 						code: "invalid_document",
 						endpoint,
-						message: String(cause),
+						message:
+							"The scenario document cannot be turned into a live Movement Gym execution request.",
 						operation: "scenario.request",
 						recovery:
 							"Use the shipped pre-evaluation Movement Gym document without unsupported tracks.",
-						retrySafe: false
+						retrySafe: false,
+						nextStep: "fix_input",
+						cause
 					})
 			});
 			const startOperation = "scenario.start";
@@ -409,7 +443,7 @@ export const ScenarioRunnerLive = Layer.effect(
 				operation: startOperation,
 				parameters: { RequestJson: JSON.stringify(request) }
 			});
-			const started = yield* decodeScenarioStartResponse(startedValue).pipe(
+			const started = yield* parseScenarioStartResponse(startedValue).pipe(
 				Effect.mapError((cause) => contractError(endpoint, startOperation, cause))
 			);
 			if (started._tag === "Rejected") {
@@ -439,7 +473,7 @@ export const ScenarioRunnerLive = Layer.effect(
 				operation: pollOperation,
 				parameters: { RunId: handle.runId }
 			});
-			const response = yield* decodeScenarioStatusResponse(value).pipe(
+			const response = yield* parseScenarioStatusResponse(value).pipe(
 				Effect.mapError((cause) => contractError(handle.endpoint, pollOperation, cause))
 			);
 			if (response._tag === "Rejected") {
@@ -475,7 +509,7 @@ export const ScenarioRunnerLive = Layer.effect(
 				Effect.flatMap((response) =>
 					response._tag === "Terminal"
 						? Effect.succeed(response.result)
-						: Effect.fail(new PollPending({ operation: "scenario.status" }))
+						: Effect.fail(pollPending("scenario.status"))
 				)
 			);
 
@@ -484,10 +518,10 @@ export const ScenarioRunnerLive = Layer.effect(
 					schedule: Schedule.spaced("50 millis").pipe(
 						Schedule.upTo({ duration: "45 seconds" })
 					),
-					while: (error) => error instanceof PollPending
+					while: isPollPending
 				}),
 				Effect.mapError((error) =>
-					error instanceof PollPending
+					isPollPending(error)
 						? new ScenarioRunnerError({
 								code: "poll_timeout",
 								endpoint: handle.endpoint,
@@ -496,7 +530,8 @@ export const ScenarioRunnerLive = Layer.effect(
 								operation: error.operation,
 								recovery:
 									"Inspect the live run status and cancel it before retrying.",
-								retrySafe: false
+								retrySafe: false,
+								nextStep: "reconcile"
 							})
 						: error
 				),

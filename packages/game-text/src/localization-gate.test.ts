@@ -271,7 +271,9 @@ describe("checking a change's text", () => {
 						error: new LocalizationError({
 							code: "malformed_json",
 							message: "The archive is not JSON.",
-							recovery: "Restore it."
+							recovery: "Restore it.",
+							retrySafe: true,
+							nextStep: "fix_input"
 						})
 					},
 					po: {
@@ -280,7 +282,9 @@ describe("checking a change's text", () => {
 						error: new LocalizationError({
 							code: "file_missing",
 							message: "No PO file.",
-							recovery: "Export one."
+							recovery: "Export one.",
+							retrySafe: true,
+							nextStep: "fix_input"
 						})
 					}
 				}

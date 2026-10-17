@@ -33,7 +33,9 @@ export const captureAuthoredReviewView = Effect.fn("ReviewRenderer.authored")(fu
 				operation: "capture",
 				sessionId: request.operationId,
 				message: "Authored output requires an explicit policy.",
-				recovery: "Provide the saved View visibility policy."
+				recovery: "Provide the saved View visibility policy.",
+				retrySafe: true,
+				nextStep: "fix_input"
 			})
 		);
 	const renderer = makeCameraRenderer(client, args.endpoint),
@@ -46,7 +48,9 @@ export const captureAuthoredReviewView = Effect.fn("ReviewRenderer.authored")(fu
 				sessionId: request.operationId,
 				message: "The connected renderer does not support authored visibility.",
 				recovery:
-					"Enable a matching Cameras plugin; no renderer substitution was performed."
+					"Enable a matching Cameras plugin; no renderer substitution was performed.",
+				retrySafe: true,
+				nextStep: "fix_input"
 			})
 		);
 	const realization =
@@ -94,7 +98,9 @@ export const captureAuthoredReviewView = Effect.fn("ReviewRenderer.authored")(fu
 			new CameraRenderError({
 				...realization,
 				code: "capture_failed",
+				nextStep: "reconcile",
 				operation: "capture",
+				retrySafe: true,
 				sessionId: request.operationId
 			})
 		);
@@ -115,7 +121,9 @@ export const captureAuthoredReviewView = Effect.fn("ReviewRenderer.authored")(fu
 					sessionId: request.operationId,
 					message: "Paired SceneCapture output requires explicit fixed exposure.",
 					recovery:
-						"Set fixed_ev100, or explicitly choose the viewport renderer with meter_once."
+						"Set fixed_ev100, or explicitly choose the viewport renderer with meter_once.",
+					retrySafe: true,
+					nextStep: "fix_input"
 				})
 			);
 		policy = {
@@ -192,7 +200,9 @@ export const captureAuthoredReviewView = Effect.fn("ReviewRenderer.authored")(fu
 								operation: "capture",
 								sessionId,
 								message: assessed.message,
-								recovery: assessed.recovery
+								recovery: assessed.recovery,
+								retrySafe: false,
+								nextStep: "reconcile"
 							})
 						);
 					inspection = assessed;
@@ -209,7 +219,9 @@ export const captureAuthoredReviewView = Effect.fn("ReviewRenderer.authored")(fu
 						operation: "capture",
 						sessionId: request.operationId,
 						message: "Natural exposure was not recorded.",
-						recovery: "Inspect renderer metering before producing the pair."
+						recovery: "Inspect renderer metering before producing the pair.",
+						retrySafe: false,
+						nextStep: "escalate"
 					})
 				);
 			policy = {

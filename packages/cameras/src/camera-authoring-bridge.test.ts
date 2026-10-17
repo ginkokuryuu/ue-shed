@@ -97,7 +97,9 @@ async function fixture(multiCamera = false) {
 							new CameraBridgeError({
 								code: "disconnected",
 								message: "Lost acknowledgement",
-								recovery: "Reconnect"
+								recovery: "Reconnect",
+								retrySafe: false,
+								nextStep: "reconcile"
 							})
 						);
 					}
@@ -464,7 +466,9 @@ describe("replaceable camera bridge coordinator", () => {
 							operation: "discover",
 							retrySafe: true,
 							status: 404,
-							message: "Object not found"
+							message: "Object not found",
+							recovery: "Test double: retry the Remote Control call.",
+							nextStep: "retry"
 						})
 					)
 			},
@@ -483,6 +487,6 @@ describe("replaceable camera bridge coordinator", () => {
 			await Effect.runPromise(
 				invalid.call({ version: 1, operation: "discover" }).pipe(Effect.flip)
 			)
-		).toMatchObject({ code: "protocol" });
+		).toMatchObject({ code: "manifest_invalid" });
 	});
 });

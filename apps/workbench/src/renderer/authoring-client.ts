@@ -17,6 +17,18 @@ import { Effect, Schema } from "effect";
 
 const recovery = "Restart Workbench. If the problem persists, verify package versions.";
 
+/** The renderer cannot tell whether the main process applied a session change; a person decides. */
+function clientError(operation: string, message: string, cause: unknown): AuthoringClientError {
+	return new AuthoringClientError({
+		cause,
+		message,
+		operation,
+		recovery,
+		retrySafe: false,
+		nextStep: "escalate"
+	});
+}
+
 function request<A, HostValue, DecodeError>(args: {
 	readonly decode: (value: HostValue) => Effect.Effect<A, DecodeError>;
 	readonly invoke: () => Promise<HostValue>;
@@ -24,11 +36,21 @@ function request<A, HostValue, DecodeError>(args: {
 }): Effect.Effect<A, AuthoringClientError> {
 	return Effect.tryPromise({
 		try: args.invoke,
-		catch: (cause) => new AuthoringClientError({ cause, operation: args.operation, recovery })
+		catch: (cause) =>
+			clientError(args.operation, `Workbench could not complete ${args.operation}.`, cause)
 	}).pipe(
-		Effect.flatMap(args.decode),
-		Effect.mapError(
-			(cause) => new AuthoringClientError({ cause, operation: args.operation, recovery })
+		Effect.flatMap((value) =>
+			args
+				.decode(value)
+				.pipe(
+					Effect.mapError((cause) =>
+						clientError(
+							args.operation,
+							`Workbench returned an invalid ${args.operation} result.`,
+							cause
+						)
+					)
+				)
 		)
 	);
 }
@@ -37,9 +59,12 @@ export const decodeAuthoringLoadResultFromHost = (
 	value: Schema.Json
 ): Effect.Effect<AuthoringLoadResult, AuthoringClientError> =>
 	decodeAuthoringLoadResult(value).pipe(
-		Effect.mapError(
-			(cause) =>
-				new AuthoringClientError({ cause, operation: "authoring.decodeLoad", recovery })
+		Effect.mapError((cause) =>
+			clientError(
+				"authoring.decodeLoad",
+				"Workbench returned an invalid authoring load result.",
+				cause
+			)
 		)
 	);
 
@@ -47,9 +72,12 @@ export const decodeAuthoringCatalogResultFromHost = (
 	value: Schema.Json
 ): Effect.Effect<AuthoringCatalogResult, AuthoringClientError> =>
 	decodeAuthoringCatalogResult(value).pipe(
-		Effect.mapError(
-			(cause) =>
-				new AuthoringClientError({ cause, operation: "authoring.decodeCatalog", recovery })
+		Effect.mapError((cause) =>
+			clientError(
+				"authoring.decodeCatalog",
+				"Workbench returned an invalid authoring catalog result.",
+				cause
+			)
 		)
 	);
 
