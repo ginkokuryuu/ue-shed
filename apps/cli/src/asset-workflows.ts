@@ -9,7 +9,14 @@ import {
 	type SavedAssetScan
 } from "@ue-shed/unreal-assets";
 import { Effect, Result } from "effect";
-import { CliCommandError, CliRuntime, messageOf, printJson } from "./cli-runtime.js";
+import {
+	CliCommandError,
+	CliRuntime,
+	errnoCode,
+	isCliCommandError,
+	messageOf,
+	printJson
+} from "./cli-runtime.js";
 import { observeCliOperation, readerLayer } from "./cli-operation.js";
 import type { CliCommand } from "./command-model.js";
 import { LocalizationEvidenceNodeLive } from "@ue-shed/localization";
@@ -218,10 +225,18 @@ export const runInputInspect = Effect.fn("Cli.workflow.input_inspect")(
 					const service = yield* EnhancedInputService;
 					const info = yield* Effect.tryPromise({
 						try: () => stat(command.path),
-						catch: (cause) =>
-							new CliCommandError({
-								message: `Could not read path ${command.path}: ${String(cause)}`
-							})
+						catch: (cause) => {
+							const code = errnoCode(cause);
+							return new CliCommandError({
+								message:
+									code === "ENOENT"
+										? `Path ${command.path} does not exist.`
+										: code === "EACCES" || code === "EPERM"
+											? `Permission was denied to read path ${command.path}.`
+											: `Could not read path ${command.path}.`,
+								cause
+							});
+						}
 					});
 					if (info.isDirectory()) {
 						const target = yield* resolveScanTarget(command.path);
@@ -235,7 +250,7 @@ export const runInputInspect = Effect.fn("Cli.workflow.input_inspect")(
 					Effect.provide(EnhancedInputServiceLive),
 					Effect.provide(readerLayer(command.reader)),
 					Effect.mapError((error) =>
-						error instanceof CliCommandError
+						isCliCommandError(error)
 							? error
 							: new CliCommandError({ message: messageOf(error) })
 					)

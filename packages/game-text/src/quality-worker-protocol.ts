@@ -160,12 +160,13 @@ export const qualityWorkerCallValues = {
 } as const;
 
 export function qualityWorkerFailure(operation: string, cause: unknown): QualityWorkerFailure {
-	return cause instanceof SnapshotStoreError || cause instanceof SnapshotFormatError
+	return Schema.is(SnapshotStoreError)(cause) || Schema.is(SnapshotFormatError)(cause)
 		? cause
 		: new SnapshotStoreError({
 				operation,
 				code: "unavailable",
-				message: String(cause),
+				message: `The Game Text quality worker could not complete ${operation}.`,
+				cause,
 				recovery: "Refresh the Game Text index and run the quality scan again."
 			});
 }

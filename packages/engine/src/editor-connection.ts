@@ -1,5 +1,6 @@
 import {
 	decodeCompanionCapabilityManifest,
+	ErrorCauseFields,
 	ErrorGuidanceFields,
 	type CompanionCapabilityManifest
 } from "@ue-shed/protocol";
@@ -18,7 +19,8 @@ export class EditorConnectionError extends Schema.TaggedError<EditorConnectionEr
 			"readiness_timeout"
 		]),
 		endpoint: Schema.String,
-		...ErrorGuidanceFields
+		...ErrorGuidanceFields,
+		...ErrorCauseFields
 	}
 ) {}
 
@@ -56,7 +58,8 @@ function transportError(endpoint: string, cause: RemoteControlClientError): Edit
 		message: cause.message,
 		recovery: cause.recovery,
 		retrySafe: cause.retrySafe,
-		nextStep: cause.nextStep
+		nextStep: cause.nextStep,
+		cause
 	});
 }
 
@@ -84,11 +87,12 @@ export const EditorConnectionLive = Layer.effect(
 						new EditorConnectionError({
 							code: "contract_failure",
 							endpoint,
-							message: `The editor returned an invalid capability manifest: ${String(cause)}`,
+							message: `The editor at ${endpoint} returned a capability manifest that does not match the companion contract.`,
 							recovery:
 								"Update UE Shed so the client and Unreal companion use compatible contracts.",
 							retrySafe: true,
-							nextStep: "escalate"
+							nextStep: "escalate",
+							cause
 						})
 				)
 			);

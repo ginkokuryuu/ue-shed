@@ -98,7 +98,9 @@ export function evidence(
 		error: new LocalizationError({
 			code: "file_missing",
 			message: "Evidence is missing.",
-			recovery: "Generate this file with Unreal."
+			recovery: "Generate this file with Unreal.",
+			retrySafe: true,
+			nextStep: "fix_input"
 		})
 	} satisfies LocalizationTargetEvidence["locmeta"];
 	return {

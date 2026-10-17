@@ -22,6 +22,7 @@ import { WorkbenchConfiguration } from "../workbench-config.js";
 import { WorkbenchProject } from "./project-workspace.js";
 
 const previewRootName = ".ue-shed/niagara-preview";
+const isNiagaraPreviewError = Schema.is(NiagaraPreviewError);
 const ProjectEngineAssociation = Schema.Struct({
 	EngineAssociation: Schema.optionalKey(Schema.String.check(Schema.isPattern(/^\d+\.\d+$/u)))
 });
@@ -255,7 +256,7 @@ export const WorkbenchNiagaraPreviewLive = Layer.effect(
 			Effect.catch((cause) =>
 				Effect.succeed(
 					failureResult(
-						cause instanceof NiagaraPreviewError
+						isNiagaraPreviewError(cause)
 							? cause
 							: failure(
 									"invalid_request",

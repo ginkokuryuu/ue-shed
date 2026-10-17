@@ -9,7 +9,8 @@ function materializationError(message: string, recovery: string): MapHistoryErro
 		kind: "materialization",
 		message,
 		recovery,
-		retrySafe: false
+		retrySafe: false,
+		nextStep: "escalate"
 	});
 }
 
@@ -51,7 +52,8 @@ export function materializePlannedRevision(options: {
 					message: `Changelist ${options.change} needs ${materializedFiles.length} materialized files, exceeding the limit of ${options.maxFiles}.`,
 					recovery:
 						"Narrow the selected map scope or raise maxMaterializedFiles explicitly.",
-					retrySafe: false
+					retrySafe: false,
+					nextStep: "fix_input"
 				})
 			);
 		}

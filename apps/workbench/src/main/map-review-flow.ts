@@ -1,3 +1,4 @@
+import { ErrorCauseFields } from "@ue-shed/protocol";
 import { Clock, Effect, Schema } from "effect";
 import type {
 	MapReviewFlowAttachment,
@@ -15,7 +16,8 @@ export class MapReviewFlowExecutionError extends Schema.TaggedError<MapReviewFlo
 	"MapReviewFlowExecutionError",
 	{
 		message: Schema.NonEmptyString,
-		operation: Schema.NonEmptyString
+		operation: Schema.NonEmptyString,
+		...ErrorCauseFields
 	}
 ) {}
 

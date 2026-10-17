@@ -1,5 +1,5 @@
 import { Config, Context, Effect, Layer, Option, Schema, Stream } from "effect";
-import { ErrorGuidanceFields, PackageHeaderData } from "@ue-shed/protocol";
+import { ErrorCauseFields, ErrorGuidanceFields, PackageHeaderData } from "@ue-shed/protocol";
 import { findValidatedPage, retainValidatedPage } from "./project-index-page-validation.js";
 
 export const PROJECT_INDEX_MAX_PAGE_SIZE = 1024;
@@ -162,6 +162,7 @@ export interface ProjectIndexPage extends Schema.Schema.Type<typeof ProjectIndex
 
 const ErrorFields = {
 	...ErrorGuidanceFields,
+	...ErrorCauseFields,
 	message: BoundedMessage,
 	recovery: BoundedMessage
 };
@@ -199,6 +200,18 @@ export class ProjectIndexRefreshFailed extends Schema.TaggedError<ProjectIndexRe
 	"ProjectIndexRefreshFailed",
 	ErrorFields
 ) {}
+
+/** Tag guard for every Project Index failure; match by tag, not `instanceof`. */
+export const isProjectIndexError = Schema.is(
+	Schema.Union([
+		ProjectIndexUnavailable,
+		ProjectIndexInvalidRequest,
+		ProjectIndexStaleGeneration,
+		ProjectIndexIncompatibleWorker,
+		ProjectIndexCorruptCatalog,
+		ProjectIndexRefreshFailed
+	])
+);
 
 export type ProjectIndexError =
 	| ProjectIndexUnavailable
@@ -258,9 +271,10 @@ export const ProjectIndexConfigLive = Layer.effect(
 	})
 );
 
-const invalidRequest = (message: string): ProjectIndexInvalidRequest =>
+const invalidRequest = (message: string, cause?: unknown): ProjectIndexInvalidRequest =>
 	new ProjectIndexInvalidRequest({
 		message,
+		...(cause === undefined ? undefined : { cause }),
 		recovery: "Correct the Project Index request and retry.",
 		retrySafe: false,
 		nextStep: "fix_input"
@@ -268,8 +282,8 @@ const invalidRequest = (message: string): ProjectIndexInvalidRequest =>
 
 export const decodeProjectIndexCount = <Input>(input: Input) =>
 	Schema.decodeUnknownEffect(ProjectIndexCount)(input).pipe(
-		Effect.mapError(() =>
-			invalidRequest("Project Index counts require between 1 and 16 bounded filters.")
+		Effect.mapError((cause) =>
+			invalidRequest("Project Index counts require between 1 and 16 bounded filters.", cause)
 		)
 	);
 
@@ -287,8 +301,9 @@ export const countProjectIndex = Effect.fn("ProjectIndex.count")(function* (
 			() => invalidRequest("Project Index count returned a different identity or generation.")
 		),
 		Effect.mapError(
-			() =>
+			(cause) =>
 				new ProjectIndexUnavailable({
+					cause,
 					message: "Project Index returned an invalid count result.",
 					recovery: "Refresh the Catalog, then retry the count.",
 					retrySafe: true,
@@ -337,8 +352,8 @@ export const countProjectIndexPages = Effect.fn("ProjectIndex.countPages")(funct
 export const decodeProjectIndexTarget = Effect.fn("ProjectIndex.decodeTarget")(
 	<Input>(input: Input) =>
 		Schema.decodeUnknownEffect(ProjectIndexTarget)(input).pipe(
-			Effect.mapError(() =>
-				invalidRequest("Project Index target must include a non-empty project root.")
+			Effect.mapError((cause) =>
+				invalidRequest("Project Index target must include a non-empty project root.", cause)
 			)
 		)
 );
@@ -346,9 +361,10 @@ export const decodeProjectIndexTarget = Effect.fn("ProjectIndex.decodeTarget")(
 export const decodeProjectIndexQuery = Effect.fn("ProjectIndex.decodeQuery")(
 	<Input>(input: Input) =>
 		Schema.decodeUnknownEffect(ProjectIndexQuery)(input).pipe(
-			Effect.mapError(() =>
+			Effect.mapError((cause) =>
 				invalidRequest(
-					`Project Index queries must be bounded to at most ${PROJECT_INDEX_MAX_PAGE_SIZE} items.`
+					`Project Index queries must be bounded to at most ${PROJECT_INDEX_MAX_PAGE_SIZE} items.`,
+					cause
 				)
 			)
 		)
@@ -365,8 +381,9 @@ export const decodeProjectIndexPage = Effect.fn("ProjectIndex.decodePage")(<Inpu
 		return decodePage(input).pipe(
 			Effect.map(retainValidatedPage),
 			Effect.mapError(
-				() =>
+				(cause) =>
 					new ProjectIndexUnavailable({
+						cause,
 						message: "The Project Index adapter returned an unbounded or invalid page.",
 						recovery: "Rebuild the Catalog, then retry with a bounded query.",
 						retrySafe: true,

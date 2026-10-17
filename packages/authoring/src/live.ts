@@ -1,5 +1,6 @@
 import {
 	AUTHORING_MUTATION_CONTRACT_VERSION,
+	ErrorGuidanceFields,
 	type AuthoringApplyRequest,
 	type AuthoringApplyResult,
 	type AuthoringSaveRequest,
@@ -20,11 +21,10 @@ export class ApplyWorkflowError extends Schema.TaggedError<ApplyWorkflowError>()
 	{
 		code: Schema.String,
 		operationId: Schema.String,
-		message: Schema.String,
-		recovery: Schema.String,
-		retrySafe: Schema.Boolean
+		...ErrorGuidanceFields
 	}
 ) {}
+const isApplyWorkflowError = Schema.is(ApplyWorkflowError);
 
 export interface AuthoringMutationLimits {
 	readonly maxCommands: number;
@@ -44,7 +44,8 @@ function workflowError(operationId: string, code: string, message: string): Appl
 		message,
 		operationId,
 		recovery: "Refresh the live tables, review the draft, and start a new Apply operation.",
-		retrySafe: false
+		retrySafe: false,
+		nextStep: "reconcile"
 	});
 }
 
@@ -237,7 +238,7 @@ export function dispatchApply<E>(args: {
 	return Effect.try({
 		try: () => buildApplyRequest(args.session, args.operationId),
 		catch: (cause) =>
-			cause instanceof ApplyWorkflowError
+			isApplyWorkflowError(cause)
 				? cause
 				: workflowError(args.operationId, "invalid_apply", String(cause))
 	}).pipe(
@@ -256,7 +257,7 @@ export function dispatchApply<E>(args: {
 							)
 						}),
 						catch: (cause) =>
-							cause instanceof ApplyWorkflowError
+							isApplyWorkflowError(cause)
 								? cause
 								: workflowError(
 										args.operationId,
@@ -266,7 +267,7 @@ export function dispatchApply<E>(args: {
 					})
 				),
 				Effect.catch((cause) =>
-					cause instanceof ApplyWorkflowError
+					isApplyWorkflowError(cause)
 						? Effect.fail(cause)
 						: // SAFETY: after excluding ApplyWorkflowError, the only remaining failure is port error E.
 							Effect.succeed({

@@ -623,12 +623,18 @@ describe("map capture orchestration", () => {
 
 	it("cleans project-local host staging when transport fails", async () => {
 		const project = await fixtureProject(1);
+		const transport = new Error("endpoint unavailable");
 		const port: MapTileCapturePortApi = {
-			capture: () => Effect.fail(new Error("endpoint unavailable"))
+			capture: () => Effect.fail(transport)
 		};
-		await expect(Effect.runPromise(runWithPort(project, port))).rejects.toThrow(
-			"endpoint unavailable"
-		);
+		const failure = await Effect.runPromise(Effect.flip(runWithPort(project, port)));
+		expect(failure).toMatchObject({
+			_tag: "MapCaptureRunError",
+			operation: "capture",
+			message: "Map capture run test-run failed while capturing batch 0 (1 tile).",
+			nextStep: "reconcile",
+			cause: transport
+		});
 		await expect(
 			stat(join(mapCaptureRoot(project.projectRoot), ".staging-test-run"))
 		).rejects.toThrow();

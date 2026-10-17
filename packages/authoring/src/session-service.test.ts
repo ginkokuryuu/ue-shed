@@ -993,6 +993,47 @@ describe("AuthoringSessionService", () => {
 				service.reconcileApply("flow").pipe(Effect.provide(livePort))
 			);
 			expect(reconciled.pendingOperation).toEqual({ kind: "none" });
+			const saveRequests: string[] = [];
+			const savePort = authoringSessionLivePortLayer({
+				apply: () => Effect.die("unused"),
+				lookupApplyResult: () => Effect.die("unused"),
+				save: (request) => {
+					saveRequests.push(request.requestId);
+					return saveRequests.length === 1
+						? Effect.fail({
+								message: "Lost Save reply",
+								recovery: "Retry the pending Save.",
+								retrySafe: true,
+								nextStep: "retry" as const
+							})
+						: Effect.succeed({
+								contract: {
+									name: "unreal-authoring-save" as const,
+									version: { major: 1 as const, minor: 0 as const }
+								},
+								requestId: request.requestId,
+								status: "complete" as const,
+								packages: [
+									{
+										objectPath: "/Game/Fixture/DT_Test.DT_Test",
+										packageName: "/Game/Fixture/DT_Test",
+										retrySafe: true,
+										status: "saved" as const
+									}
+								]
+							});
+				}
+			});
+			const saveFailure = await Effect.runPromise(
+				Effect.flip(service.save("flow", "save-reused").pipe(Effect.provide(savePort)))
+			);
+			expect(saveFailure).toMatchObject({ retrySafe: true, nextStep: "retry" });
+			const saved = await Effect.runPromise(
+				service.save("flow", "ignored-new-request").pipe(Effect.provide(savePort))
+			);
+			expect(saveRequests).toEqual(["save-reused", "save-reused"]);
+			expect(saved.pendingOperation).toEqual({ kind: "none" });
+			expect(saved.draft.awaitingSave).toEqual([]);
 		} finally {
 			await rm(root, { force: true, recursive: true });
 		}

@@ -23,7 +23,9 @@ export const renderPreparedCamera = Effect.fn("CameraRenderer.renderPreparedCame
 				message:
 					"Prepared capture requires matching world identity and a preserve-loading camera policy with no separate layers or frame region.",
 				recovery:
-					"Put actor context, ground regions and Data Layer requirements in preparation."
+					"Put actor context, ground regions and Data Layer requirements in preparation.",
+				retrySafe: false,
+				nextStep: "fix_input"
 			});
 		}
 		return yield* withPreparedWorld(args.preparation, (lease) =>

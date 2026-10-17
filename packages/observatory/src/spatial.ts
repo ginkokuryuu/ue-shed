@@ -1,3 +1,4 @@
+import { ErrorGuidanceFields } from "@ue-shed/protocol";
 import { Effect, Schema } from "effect";
 import type { ObservedActor as ObservedActorType } from "./actor-models.js";
 import { WorldScoutResult, WorldScoutFocusResult } from "./scout-contracts.js";
@@ -9,9 +10,7 @@ export class WorldScoutContractError extends Schema.TaggedError<WorldScoutContra
 	"WorldScoutContractError",
 	{
 		code: Schema.Literal("invalid_contract"),
-		message: Schema.String,
-		recovery: Schema.String,
-		retrySafe: Schema.Boolean,
+		...ErrorGuidanceFields,
 		cause: Schema.optionalKey(Schema.Defect())
 	}
 ) {}
@@ -38,6 +37,7 @@ function worldScoutContractParser<S extends Schema.Codec<unknown, unknown>>(
 						recovery:
 							"Run the host and client from the same UE Shed version, then retry.",
 						retrySafe: false,
+						nextStep: "escalate",
 						cause
 					})
 			)

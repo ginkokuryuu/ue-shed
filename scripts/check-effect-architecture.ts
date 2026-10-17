@@ -1079,9 +1079,26 @@ export async function checkCompositionPolicy(root: string) {
  * this list once every one of its `Schema.TaggedError` classes is migrated; it never leaves it.
  */
 const errorGuidancePackages = [
+	"packages/asset-audits",
+	"packages/authoring",
+	"packages/authoring-sdk",
 	"packages/cameras",
+	"packages/config-explorer",
+	"packages/engine",
+	"packages/enhanced-input",
+	"packages/host",
+	"packages/localization",
+	"packages/map-history",
+	"packages/niagara",
+	"packages/observatory",
+	"packages/plugin-distribution",
+	"packages/project-custodian",
+	"packages/protocol",
+	"packages/scenarios",
+	"packages/ui",
 	"packages/unreal-assets",
-	"packages/unreal-connection"
+	"packages/unreal-connection",
+	"packages/world"
 ];
 const errorGuidanceFieldNames = ["message", "recovery", "retrySafe", "nextStep"];
 
@@ -1093,6 +1110,7 @@ function objectFieldNames(
 ): Set<string> | undefined {
 	if (ts.isIdentifier(node)) {
 		if (node.text === "ErrorGuidanceFields") return new Set(errorGuidanceFieldNames);
+		if (node.text === "ErrorCauseFields") return new Set(["cause"]);
 		const local = locals.get(node.text);
 		if (local === undefined || seen.has(node.text)) return undefined;
 		seen.add(node.text);
@@ -1163,6 +1181,46 @@ export async function checkErrorGuidance(root: string = repositoryRoot) {
 	return failures;
 }
 
+/** Files owned by open Plan 058 lane B and C branches; those branches convert their matches. */
+const taggedErrorMatchingPending = new Set([
+	"packages/game-text/src/localization-cold-import.ts",
+	"packages/game-text/src/localization-import.ts",
+	"packages/game-text/src/search-worker-node.ts",
+	"packages/game-text/src/search-worker-protocol.ts"
+]);
+
+/**
+ * Tagged errors are matched by tag (`Effect.catchTag`/`catchTags`, `Schema.is(ErrorClass)` or
+ * `Predicate.isTagged`), never with `instanceof`, which fails across package copies and after a
+ * schema round trip.
+ */
+export async function checkTaggedErrorMatching(root: string = repositoryRoot) {
+	const failures: string[] = [];
+	const sources: { readonly label: string; readonly text: string }[] = [];
+	const tagged = new Set<string>();
+	for (const directory of sourceRoots) {
+		for (const path of await filesUnder(root, directory)) {
+			if (!/\.tsx?$/u.test(path) || testSourcePattern.test(path)) continue;
+			const text = await readFile(path, "utf8");
+			sources.push({ label: relative(root, path).replaceAll("\\", "/"), text });
+			for (const match of text.matchAll(/class\s+(\w+)\s+extends\s+Schema\.TaggedError\b/gu))
+				if (match[1] !== undefined) tagged.add(match[1]);
+		}
+	}
+	for (const { label, text } of sources) {
+		if (taggedErrorMatchingPending.has(label)) continue;
+		for (const match of text.matchAll(/\binstanceof\s+(?:\w+\.)?(\w+)/gu)) {
+			const name = match[1];
+			if (name === undefined || !tagged.has(name)) continue;
+			const line = text.slice(0, match.index).split("\n").length;
+			failures.push(
+				`${label}:${line}: match ${name} by tag (catchTag, Schema.is or Predicate.isTagged), not instanceof`
+			);
+		}
+	}
+	return failures;
+}
+
 export async function checkArchitecture(root: string = repositoryRoot) {
 	return [
 		...(await checkCatalogUsage(root)),
@@ -1171,6 +1229,7 @@ export async function checkArchitecture(root: string = repositoryRoot) {
 		...(await checkDomainServices(root)),
 		...(await checkLocalizationBoundaries(root)),
 		...(await checkErrorGuidance(root)),
+		...(await checkTaggedErrorMatching(root)),
 		...(await checkGameTextEntryPoints(root)),
 		...(await checkWorkbenchBoundaries(root)),
 		...(await checkDecoderExports(root)),

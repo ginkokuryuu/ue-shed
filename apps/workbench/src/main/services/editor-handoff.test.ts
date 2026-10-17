@@ -30,7 +30,9 @@ it.effect("publishes focus failure separately and clears it after a successful h
 											new EditorWindowActivationError({
 												operation: "negotiate",
 												message: "Update Core",
-												recovery: "Restart Unreal."
+												recovery: "Restart Unreal.",
+												retrySafe: false,
+												nextStep: "fix_input"
 											})
 										)
 									: Effect.succeed({

@@ -208,7 +208,7 @@ export const WorkbenchProjectLive = Layer.effect(
 				).pipe(
 					Stream.runCollect,
 					Effect.mapError((error) =>
-						error instanceof WorkbenchProjectUnavailable ||
+						error._tag === "WorkbenchProjectUnavailable" ||
 						error._tag === "ProjectIndexStaleGeneration"
 							? error
 							: new WorkbenchProjectUnavailable({
@@ -452,7 +452,7 @@ export const WorkbenchProjectLive = Layer.effect(
 						)
 					),
 					Effect.mapError((error) =>
-						error instanceof WorkbenchProjectUnavailable
+						error._tag === "WorkbenchProjectUnavailable"
 							? error
 							: new WorkbenchProjectUnavailable({
 									message: error.message,
@@ -785,7 +785,7 @@ export const WorkbenchProjectLive = Layer.effect(
 						})
 					),
 					Effect.mapError((error) =>
-						error instanceof WorkbenchProjectUnavailable
+						error._tag === "WorkbenchProjectUnavailable"
 							? error
 							: new WorkbenchProjectUnavailable({
 									message: error.message,

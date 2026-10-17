@@ -3,7 +3,7 @@ import { NodeServices } from "@effect/platform-node";
 import { CURRENT_PROTOCOL_VERSION } from "@ue-shed/protocol";
 import { CliError, CliOutput, Command } from "effect/cli";
 import { Cause, Console, Effect, Exit, Layer, Option } from "effect";
-import { CliCommandError, CliRuntime } from "./cli-runtime.js";
+import { CliCommandError, CliRuntime, isCliCommandError } from "./cli-runtime.js";
 import {
 	CliCommand as CliCommandSchema,
 	type CliCommand as CliCommandType
@@ -107,7 +107,7 @@ export function runCli(args: readonly string[]): Effect.Effect<void, CliCommandE
 			yield* runtime.setExitCode(2);
 			return;
 		}
-		if (Option.isSome(error) && error.value instanceof CliCommandError) {
+		if (Option.isSome(error) && isCliCommandError(error.value)) {
 			return yield* Effect.fail<CliCommandError>(error.value);
 		}
 		return yield* Effect.die(Cause.squash(result.cause));

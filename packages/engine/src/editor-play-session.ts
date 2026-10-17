@@ -2,6 +2,8 @@ import {
 	decodeCompanionCapabilityManifest,
 	decodeEditorPlaySessionCommandResponse,
 	decodeEditorPlaySessionStateResponse,
+	ErrorCauseFields,
+	ErrorGuidanceFields,
 	type EditorPlaySessionCommand,
 	type EditorPlaySessionCommandResponse,
 	type EditorPlaySessionMode,
@@ -18,10 +20,9 @@ export class EditorPlaySessionError extends Schema.TaggedError<EditorPlaySession
 	{
 		code: Schema.Literals(["capability_unavailable", "contract_failure", "transport_failure"]),
 		endpoint: Schema.String,
-		message: Schema.String,
 		operation: Schema.String,
-		recovery: Schema.String,
-		retrySafe: Schema.Boolean
+		...ErrorGuidanceFields,
+		...ErrorCauseFields
 	}
 ) {}
 
@@ -56,18 +57,37 @@ function normalizedEndpoint(endpoint: string): string {
 	return endpoint.replace(/\/+$/, "");
 }
 
+/**
+ * Reads may be repeated as the transport allows. A play-session command whose response was lost
+ * may already have applied, so the caller reads the session state before sending it again.
+ */
 function transportError(
 	endpoint: string,
 	operation: string,
-	cause: RemoteControlClientError
+	cause: RemoteControlClientError,
+	mutation: boolean
 ): EditorPlaySessionError {
+	if (mutation && cause.retrySafe)
+		return new EditorPlaySessionError({
+			code: "transport_failure",
+			endpoint,
+			message: cause.message,
+			operation,
+			recovery:
+				"The command may have reached the editor. Read the play-session status before sending it again.",
+			retrySafe: false,
+			nextStep: "reconcile",
+			cause
+		});
 	return new EditorPlaySessionError({
 		code: "transport_failure",
 		endpoint,
 		message: cause.message,
 		operation,
 		recovery: "Confirm that Unreal Editor and Remote Control are reachable, then retry.",
-		retrySafe: cause.retrySafe
+		retrySafe: mutation ? false : cause.retrySafe,
+		nextStep: cause.nextStep,
+		cause
 	});
 }
 
@@ -79,10 +99,12 @@ function contractError(
 	return new EditorPlaySessionError({
 		code: "contract_failure",
 		endpoint,
-		message: `The editor returned an invalid play-session response: ${String(cause)}`,
+		message: `The editor at ${endpoint} returned a ${operation} response that does not match the play-session contract.`,
 		operation,
 		recovery: "Update UE Shed so the client and Unreal companion use compatible contracts.",
-		retrySafe: false
+		retrySafe: false,
+		nextStep: "escalate",
+		cause
 	});
 }
 
@@ -113,7 +135,9 @@ export const EditorPlaySessionLive = Layer.effect(
 					operation,
 					parameters: {}
 				})
-				.pipe(Effect.mapError((cause) => transportError(endpoint, operation, cause)));
+				.pipe(
+					Effect.mapError((cause) => transportError(endpoint, operation, cause, false))
+				);
 			const manifest = yield* decodeCompanionCapabilityManifest(value).pipe(
 				Effect.mapError((cause) => contractError(endpoint, operation, cause))
 			);
@@ -126,7 +150,8 @@ export const EditorPlaySessionLive = Layer.effect(
 						operation,
 						recovery:
 							"Enable a compatible UEShedCoreEditor module in Unreal Editor, then reconnect.",
-						retrySafe: false
+						retrySafe: false,
+						nextStep: "fix_input"
 					})
 				);
 			}
@@ -148,7 +173,9 @@ export const EditorPlaySessionLive = Layer.effect(
 					parameters: {}
 				})
 				.pipe(
-					Effect.mapError((cause) => transportError(target.endpoint, operation, cause))
+					Effect.mapError((cause) =>
+						transportError(target.endpoint, operation, cause, false)
+					)
 				);
 			return yield* decodeEditorPlaySessionStateResponse(value).pipe(
 				Effect.mapError((cause) => contractError(target.endpoint, operation, cause))
@@ -170,7 +197,9 @@ export const EditorPlaySessionLive = Layer.effect(
 					parameters: {}
 				})
 				.pipe(
-					Effect.mapError((cause) => transportError(target.endpoint, operation, cause))
+					Effect.mapError((cause) =>
+						transportError(target.endpoint, operation, cause, true)
+					)
 				);
 			return yield* decodeEditorPlaySessionCommandResponse(value).pipe(
 				Effect.mapError((cause) => contractError(target.endpoint, operation, cause))

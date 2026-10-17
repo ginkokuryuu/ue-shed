@@ -4,15 +4,22 @@ import { dirname, join } from "node:path";
 import {
 	decodeCompanionCapabilityManifest,
 	EditorWindowActivationRequest,
-	EditorWindowActivationResult
+	EditorWindowActivationResult,
+	ErrorCauseFields,
+	ErrorGuidanceFields,
+	type ErrorNextStep
 } from "@ue-shed/protocol";
-import { RemoteControlClient } from "@ue-shed/unreal-connection";
+import { RemoteControlClient, type RemoteControlClientError } from "@ue-shed/unreal-connection";
 import { Context, Effect, Layer, Schema } from "effect";
 import { isLoopbackEndpoint } from "./loopback-endpoint.js";
 
 export class EditorWindowActivationError extends Schema.TaggedError<EditorWindowActivationError>()(
 	"EditorWindowActivationError",
-	{ message: Schema.String, recovery: Schema.String, operation: Schema.String }
+	{
+		operation: Schema.String,
+		...ErrorGuidanceFields,
+		...ErrorCauseFields
+	}
 ) {}
 
 /** Optional local OS permission handoff; a remote editor must never receive a local PID grant. */
@@ -23,11 +30,30 @@ export class EditorForegroundPermission extends Context.Service<
 	}
 >()("@ue-shed/engine/EditorForegroundPermission") {}
 
-const failure = (operation: string, cause: unknown) =>
+interface Guidance {
+	readonly recovery: string;
+	readonly retrySafe: boolean;
+	readonly nextStep: ErrorNextStep;
+}
+
+const pluginMismatch: Guidance = {
+	recovery: "Install the UE Shed Core plugin version paired with this client, then reconnect.",
+	retrySafe: false,
+	nextStep: "escalate"
+};
+
+/** Negotiation and activation only read state or raise a window, so repeating them is safe. */
+function requestGuidance(cause: RemoteControlClientError | Schema.SchemaError): Guidance {
+	if (Schema.isSchemaError(cause)) return pluginMismatch;
+	return { recovery: cause.recovery, retrySafe: cause.retrySafe, nextStep: cause.nextStep };
+}
+
+const failure = (operation: string, message: string, guidance: Guidance, cause?: unknown) =>
 	new EditorWindowActivationError({
+		...(cause === undefined ? undefined : { cause }),
 		operation,
-		message: String(cause),
-		recovery: "Check the connected editor and compatible UE Shed Core plugin."
+		message,
+		...guidance
 	});
 
 export const EditorForegroundPermissionLive = Layer.succeed(EditorForegroundPermission, {
@@ -35,7 +61,16 @@ export const EditorForegroundPermissionLive = Layer.succeed(EditorForegroundPerm
 		if (process.platform !== "win32") return;
 		yield* Schema.decodeUnknownEffect(EditorWindowActivationRequest)({
 			expectedProcessId: processId
-		}).pipe(Effect.mapError((cause) => failure("grant.validate", cause)));
+		}).pipe(
+			Effect.mapError((cause) =>
+				failure(
+					"grant.validate",
+					`The foreground permission request for process ${processId} is invalid.`,
+					pluginMismatch,
+					cause
+				)
+			)
+		);
 		const result = yield* Effect.tryPromise({
 			try: (signal) =>
 				new Promise<string>((resolve, reject) => {
@@ -53,7 +88,18 @@ export const EditorForegroundPermissionLive = Layer.succeed(EditorForegroundPerm
 						(error, stdout) => (error ? reject(error) : resolve(stdout.trim()))
 					);
 				}),
-			catch: (cause) => failure("grant", cause)
+			catch: (cause) =>
+				failure(
+					"grant",
+					`The process supervisor could not grant foreground permission to process ${processId}.`,
+					{
+						recovery:
+							"Reinstall UE Shed so its process supervisor is present, or focus the editor window manually.",
+						retrySafe: true,
+						nextStep: "escalate"
+					},
+					cause
+				)
 		});
 		if (result !== "granted")
 			yield* Effect.logDebug("Foreground permission was not granted", { result });
@@ -89,7 +135,16 @@ export const EditorWindowActivationLive = Layer.effect(
 					})
 					.pipe(
 						Effect.flatMap(decodeCompanionCapabilityManifest),
-						Effect.mapError((cause) => failure("negotiate", cause))
+						Effect.mapError((cause) =>
+							failure(
+								"negotiate",
+								Schema.isSchemaError(cause)
+									? `The editor at ${endpoint} returned a capability manifest that does not match the companion contract.`
+									: `Could not read the capability manifest from the editor at ${endpoint}.`,
+								requestGuidance(cause),
+								cause
+							)
+						)
 					);
 				if (
 					!manifest.capabilities.includes("editor.window-activation.v1") ||
@@ -99,7 +154,13 @@ export const EditorWindowActivationLive = Layer.effect(
 					return yield* Effect.fail(
 						failure(
 							"negotiate",
-							"The connected editor does not provide verified window activation. Update UE Shed Core."
+							"The connected editor does not provide verified window activation. Update UE Shed Core.",
+							{
+								recovery:
+									"Update the project's UE Shed Core plugin to a version with window activation, then reconnect.",
+								retrySafe: false,
+								nextStep: "fix_input"
+							}
 						)
 					);
 				}
@@ -128,11 +189,25 @@ export const EditorWindowActivationLive = Layer.effect(
 					})
 					.pipe(
 						Effect.flatMap(Schema.decodeUnknownEffect(EditorWindowActivationResult)),
-						Effect.mapError((cause) => failure("activate", cause))
+						Effect.mapError((cause) =>
+							failure(
+								"activate",
+								Schema.isSchemaError(cause)
+									? `The editor at ${endpoint} returned a window activation result that does not match the contract.`
+									: `The window activation request to the editor at ${endpoint} failed.`,
+								requestGuidance(cause),
+								cause
+							)
+						)
 					);
 				if (result.processId !== processId)
 					return yield* Effect.fail(
-						failure("verify", "The editor process changed during activation.")
+						failure("verify", "The editor process changed during activation.", {
+							recovery:
+								"Another editor process answered. Reconnect to the editor you meant, then activate again.",
+							retrySafe: true,
+							nextStep: "reconcile"
+						})
 					);
 				return result;
 			})

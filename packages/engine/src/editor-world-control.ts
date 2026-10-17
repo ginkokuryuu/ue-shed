@@ -4,7 +4,9 @@ import {
 	EditorWorldState,
 	decodeCompanionCapabilityManifest,
 	decodeEditorWorldOpenResponse,
-	type EditorWorldOpenResponse
+	ErrorGuidanceFields,
+	type EditorWorldOpenResponse,
+	type ErrorNextStep
 } from "@ue-shed/protocol";
 import { RemoteControlClient, RemoteControlClientError } from "@ue-shed/unreal-connection";
 import { Clock, Context, Duration, Effect, Layer, Schedule, Schema } from "effect";
@@ -23,10 +25,8 @@ export class EditorWorldControlError extends Schema.TaggedError<EditorWorldContr
 			"transport_failure"
 		]),
 		endpoint: Schema.String,
-		message: Schema.String,
 		operation: Schema.String,
-		recovery: Schema.String,
-		retrySafe: Schema.Boolean
+		...ErrorGuidanceFields
 	}
 ) {}
 
@@ -64,6 +64,7 @@ function failure(args: {
 	readonly operation: string;
 	readonly recovery: string;
 	readonly retrySafe: boolean;
+	readonly nextStep: ErrorNextStep;
 }): EditorWorldControlError {
 	return new EditorWorldControlError(args);
 }
@@ -96,7 +97,8 @@ export const EditorWorldControlLive = Layer.effect(
 							operation,
 							recovery:
 								"Confirm that Unreal Editor and Remote Control are reachable, then retry.",
-							retrySafe: cause.retrySafe
+							retrySafe: cause.retrySafe,
+							nextStep: cause.nextStep
 						})
 					)
 				);
@@ -109,7 +111,8 @@ export const EditorWorldControlLive = Layer.effect(
 						operation,
 						recovery:
 							"Update UE Shed so the client and Unreal companion use compatible contracts.",
-						retrySafe: false
+						retrySafe: false,
+						nextStep: "escalate"
 					})
 				)
 			);
@@ -122,7 +125,8 @@ export const EditorWorldControlLive = Layer.effect(
 						operation,
 						recovery:
 							"Enable a compatible UEShedCoreEditor module in Unreal Editor, then reconnect.",
-						retrySafe: false
+						retrySafe: false,
+						nextStep: "fix_input"
 					})
 				);
 			}
@@ -143,7 +147,8 @@ export const EditorWorldControlLive = Layer.effect(
 					operation,
 					message: "This editor does not expose live map state.",
 					recovery: "Update the UE Shed Core plugin and reconnect.",
-					retrySafe: false
+					retrySafe: false,
+					nextStep: "fix_input"
 				});
 			const value = yield* remote
 				.request({
@@ -162,7 +167,8 @@ export const EditorWorldControlLive = Layer.effect(
 							message: cause.message,
 							recovery:
 								"The editor may be loading. Waiting for its next state update.",
-							retrySafe: true
+							retrySafe: true,
+							nextStep: cause.retrySafe ? "retry" : cause.nextStep
 						})
 					)
 				);
@@ -174,7 +180,8 @@ export const EditorWorldControlLive = Layer.effect(
 						operation,
 						message: String(cause),
 						recovery: "Update the UE Shed Core plugin and reconnect.",
-						retrySafe: false
+						retrySafe: false,
+						nextStep: "escalate"
 					})
 				)
 			);
@@ -200,7 +207,8 @@ export const EditorWorldControlLive = Layer.effect(
 						message: `Editor world-control request is invalid: ${String(cause)}`,
 						operation,
 						recovery: "Use a /Game/ map package path and a safe operation identity.",
-						retrySafe: false
+						retrySafe: false,
+						nextStep: "fix_input"
 					})
 				)
 			);
@@ -213,7 +221,8 @@ export const EditorWorldControlLive = Layer.effect(
 						operation,
 						message,
 						recovery,
-						retrySafe: false
+						retrySafe: false,
+						nextStep: "reconcile"
 					});
 				const query = Effect.fn("EditorWorldControl.operationStatus")(function* (
 					functionName: string
@@ -322,7 +331,8 @@ export const EditorWorldControlLive = Layer.effect(
 							operation,
 							recovery:
 								"Check Unreal's current map before trying again. Losing the response does not cancel the load.",
-							retrySafe: false
+							retrySafe: false,
+							nextStep: "reconcile"
 						})
 					)
 				);
@@ -335,7 +345,8 @@ export const EditorWorldControlLive = Layer.effect(
 						operation,
 						recovery:
 							"Update UE Shed so the client and Unreal companion use compatible contracts.",
-						retrySafe: false
+						retrySafe: false,
+						nextStep: "escalate"
 					})
 				)
 			);

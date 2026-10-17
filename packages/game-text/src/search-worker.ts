@@ -70,10 +70,9 @@ function answer(
 		id = call.id;
 		response = callReply(query, call);
 	} catch (cause) {
-		const error =
-			cause instanceof GameTextLocalizationError
-				? cause
-				: searchWorkerFailure("search.worker.call", cause);
+		const error = Schema.is(GameTextLocalizationError)(cause)
+			? cause
+			: searchWorkerFailure("search.worker.call", cause);
 		response = {
 			kind: "failed",
 			id,

@@ -26,8 +26,9 @@ function retainedPackageSource(records: string) {
 	const readFailure = (cause: unknown) =>
 		new GameTextIndexError({
 			operation: "read",
-			message: String(cause),
-			recovery: "Convert the generated project's package records again."
+			message: "The generated project's package records could not be read.",
+			recovery: "Convert the generated project's package records again.",
+			cause
 		});
 	return Layer.succeed(
 		GameTextIndexSource,

@@ -34,7 +34,9 @@ describe("localization progress and manifest baselines", () => {
 					error: new LocalizationError({
 						code,
 						message: `Manifest failed (${code}).`,
-						recovery: "Resolve the reader cause."
+						recovery: "Resolve the reader cause.",
+						retrySafe: true,
+						nextStep: "fix_input"
 					})
 				}
 			};
@@ -199,7 +201,9 @@ describe("localization progress and manifest baselines", () => {
 					error: new LocalizationError({
 						code: "file_missing",
 						message: "Missing evidence.",
-						recovery: "Regenerate archives."
+						recovery: "Regenerate archives.",
+						retrySafe: true,
+						nextStep: "fix_input"
 					})
 				} satisfies typeof culture.archive
 			}))

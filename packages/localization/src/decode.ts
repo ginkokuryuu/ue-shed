@@ -1,5 +1,11 @@
 import { Predicate, Result, Schema } from "effect";
-import { defaultLocalizationLimits, LocalizationError, LocalizationLimits } from "./schema.js";
+import {
+	defaultLocalizationLimits,
+	LocalizationError,
+	isLocalizationError,
+	LocalizationLimits,
+	localizationErrorGuidance
+} from "./schema.js";
 import { validateUnrealJsonEscapes } from "./unreal-json.js";
 
 export function localizationError(code: LocalizationError["code"]): LocalizationError {
@@ -36,7 +42,8 @@ export function localizationError(code: LocalizationError["code"]): Localization
 	return new LocalizationError({
 		code,
 		message: `Localization evidence could not be read (${code}).`,
-		recovery: recovery[code]
+		recovery: recovery[code],
+		...localizationErrorGuidance(code)
 	});
 }
 
@@ -46,7 +53,7 @@ export function parseResult<A>(parse: () => A): Result.Result<A, LocalizationErr
 		return Result.succeed(parse());
 	} catch (cause) {
 		return Result.fail(
-			cause instanceof LocalizationError ? cause : localizationError("invalid_schema")
+			isLocalizationError(cause) ? cause : localizationError("invalid_schema")
 		);
 	}
 }

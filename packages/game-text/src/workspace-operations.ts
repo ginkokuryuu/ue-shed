@@ -394,7 +394,7 @@ export const makeGameTextOperations = Effect.fn("GameText.workspace.operations.m
 							const terminationError =
 								stopped &&
 								Result.isSuccess(stopped) &&
-								stopped.success instanceof LocalizationOperationError
+								Schema.is(LocalizationOperationError)(stopped.success)
 									? stopped.success
 									: undefined;
 							const result: GameTextOperationResult = Exit.isSuccess(exit)

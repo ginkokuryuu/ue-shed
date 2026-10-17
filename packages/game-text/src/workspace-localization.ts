@@ -1,3 +1,4 @@
+import { Schema } from "effect";
 import {
 	localizationQualityWorkspaceOf,
 	localizationProgressReport,
@@ -536,7 +537,7 @@ export const makeGameTextWorkspaceLocalization = Effect.fn("GameText.workspace.l
 					)
 				}),
 				catch: (cause) =>
-					cause instanceof LocalizationReportError
+					Schema.is(LocalizationReportError)(cause)
 						? cause
 						: new LocalizationReportError({
 								code: "invalid_report_context",
@@ -596,7 +597,7 @@ export const makeGameTextWorkspaceLocalization = Effect.fn("GameText.workspace.l
 								decoded.success
 							),
 						catch: (cause) =>
-							cause instanceof LocalizationReportError
+							Schema.is(LocalizationReportError)(cause)
 								? cause
 								: new LocalizationReportError({
 										code: "invalid_baseline",
@@ -650,7 +651,7 @@ export const makeGameTextWorkspaceLocalization = Effect.fn("GameText.workspace.l
 						return localizationReportCsv(rows, previous !== undefined);
 					},
 					catch: (cause) =>
-						cause instanceof LocalizationReportError
+						Schema.is(LocalizationReportError)(cause)
 							? cause
 							: new LocalizationReportError({
 									code: "invalid_report_context",
@@ -675,14 +676,12 @@ export const makeGameTextWorkspaceLocalization = Effect.fn("GameText.workspace.l
 				Effect.catch((error) =>
 					Effect.succeed({
 						status: "failed" as const,
-						message:
-							error instanceof LocalizationReportError
-								? error.message
-								: "The file operation failed.",
-						recovery:
-							error instanceof LocalizationReportError
-								? error.recovery
-								: "Choose a new destination for a baseline; existing files are never overwritten. Check permissions and try again."
+						message: Schema.is(LocalizationReportError)(error)
+							? error.message
+							: "The file operation failed.",
+						recovery: Schema.is(LocalizationReportError)(error)
+							? error.recovery
+							: "Choose a new destination for a baseline; existing files are never overwritten. Check permissions and try again."
 					})
 				)
 			);

@@ -12,22 +12,40 @@ export const actorFilterStorageKey = "ue-shed.actor-filter-presets.v1";
 
 export class ActorUtilityError extends Schema.TaggedError<ActorUtilityError>()(
 	"ActorUtilityError",
-	{ message: Schema.String }
+	{
+		message: Schema.String,
+		recovery: Schema.String,
+		retrySafe: Schema.Boolean,
+		nextStep: Schema.Literals(["fix_input", "retry", "reconcile", "escalate"]),
+		cause: Schema.optionalKey(Schema.Defect())
+	}
 ) {}
+/** Reading presets, writing the whole preset list and copying text are all repeatable. */
+const storageUnavailable = () =>
+	new ActorUtilityError({
+		message: "Preset storage is unavailable.",
+		recovery: "Enable browser local storage for the Workbench, then reload presets.",
+		retrySafe: true,
+		nextStep: "escalate"
+	});
 
 export const readActorFilterPresets = Effect.fn("ActorFilters.read")(function* (
 	storage: Pick<Storage, "getItem">
 ) {
 	const text = yield* Effect.try({
 		try: () => storage.getItem(actorFilterStorageKey),
-		catch: () => new ActorUtilityError({ message: "Preset storage is unavailable." })
+		catch: () => storageUnavailable()
 	});
 	if (text === null) return [];
 	return (yield* Schema.decodeUnknownEffect(Schema.fromJsonString(Presets))(text).pipe(
 		Effect.mapError(
-			() =>
+			(cause) =>
 				new ActorUtilityError({
-					message: "Saved presets could not be read. Existing data has been preserved."
+					message: "Saved presets could not be read. Existing data has been preserved.",
+					recovery: "Repair or clear the saved actor filter presets.",
+					retrySafe: true,
+					nextStep: "escalate",
+					cause
 				})
 		)
 	)).presets;
@@ -50,10 +68,15 @@ export const writeActorFilterPreset = Effect.fn("ActorFilters.write")(function* 
 					...retained,
 					yield* Schema.decodeUnknownEffect(Preset)(presetInput).pipe(
 						Effect.mapError(
-							() =>
+							(cause) =>
 								new ActorUtilityError({
 									message:
-										"Use a preset name of 1–80 characters and a search of at most 4096 characters."
+										"Use a preset name of 1–80 characters and a search of at most 4096 characters.",
+									recovery:
+										"Use a preset name of 1–80 characters and a search of at most 4096 characters.",
+									retrySafe: true,
+									nextStep: "fix_input",
+									cause
 								})
 						)
 					)
@@ -62,7 +85,10 @@ export const writeActorFilterPreset = Effect.fn("ActorFilters.write")(function* 
 		try: () => storage.setItem(actorFilterStorageKey, JSON.stringify({ version: 1, presets })),
 		catch: () =>
 			new ActorUtilityError({
-				message: "Could not save presets. Check available browser storage."
+				message: "Could not save presets. Check available browser storage.",
+				recovery: "Free browser storage, then save the preset again.",
+				retrySafe: true,
+				nextStep: "fix_input"
 			})
 	});
 	return presets;
@@ -86,12 +112,15 @@ export const copyActorText = Effect.fn("ActorDetails.copy")((text: string) =>
 		try: () => navigator.clipboard.writeText(text),
 		catch: () =>
 			new ActorUtilityError({
-				message: "Clipboard unavailable. Select and copy the displayed value."
+				message: "Clipboard unavailable. Select and copy the displayed value.",
+				recovery: "Select and copy the displayed value.",
+				retrySafe: true,
+				nextStep: "retry"
 			})
 	})
 );
 
 export const actorPresetStorage = Effect.try({
 	try: () => window.localStorage,
-	catch: () => new ActorUtilityError({ message: "Preset storage is unavailable." })
+	catch: () => storageUnavailable()
 });

@@ -1,3 +1,4 @@
+import { ErrorGuidanceFields } from "@ue-shed/protocol";
 import { SavedWorldActor, SavedWorldTransform, SavedWorldVector } from "@ue-shed/protocol";
 import { DateTime, Effect, Schema } from "effect";
 
@@ -377,9 +378,7 @@ export class MapHistoryContractError extends Schema.TaggedError<MapHistoryContra
 	"MapHistoryContractError",
 	{
 		code: Schema.Literal("invalid_contract"),
-		message: Schema.String,
-		recovery: Schema.String,
-		retrySafe: Schema.Boolean,
+		...ErrorGuidanceFields,
 		cause: Schema.optionalKey(Schema.Defect())
 	}
 ) {}
@@ -406,6 +405,7 @@ function mapHistoryContractParser<S extends Schema.Codec<unknown, unknown>>(
 						recovery:
 							"Run the host and client from the same UE Shed version, then retry.",
 						retrySafe: false,
+						nextStep: "escalate",
 						cause
 					})
 			)

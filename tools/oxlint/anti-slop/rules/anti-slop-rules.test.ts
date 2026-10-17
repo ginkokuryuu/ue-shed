@@ -1,3 +1,4 @@
+import { noStringifiedCauseInErrorRule } from "./no-stringified-cause-in-error.ts";
 import { RuleTester } from "oxlint/plugins-dev";
 import { describe, it } from "vitest";
 
@@ -155,6 +156,28 @@ ruleTester.run("require-safety-verification", requireSafetyVerificationRule, {
 			code: "// SAFETY: the parser only produces numbers here.\nconst n = value as number;",
 			filename: "packages/example/src/parser.ts",
 			errors: [{ messageId: "missingVerification" }]
+		}
+	]
+});
+
+ruleTester.run("no-stringified-cause-in-error", noStringifiedCauseInErrorRule, {
+	valid: [
+		'new ReaderError({ message: "The reader failed.", cause });',
+		"new ReaderError({ message: `Could not read ${path}.`, cause: error });",
+		"report({ message: String(cause) });"
+	],
+	invalid: [
+		{
+			code: "new ReaderError({ message: String(cause) });",
+			errors: [{ messageId: "stringifiedCause" }]
+		},
+		{
+			code: "new errors.ReaderError({ message: `Read failed: ${String(error)}` });",
+			errors: [{ messageId: "stringifiedCause" }]
+		},
+		{
+			code: "new ReaderFailure({ message: Cause.pretty(cause) });",
+			errors: [{ messageId: "stringifiedCause" }]
 		}
 	]
 });

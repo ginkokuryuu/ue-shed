@@ -356,8 +356,15 @@ describe("shared renderer lifecycle", () => {
 		const exit = await Effect.runPromise(Effect.exit(h.run()));
 		if (Exit.isSuccess(exit)) throw new Error("Expected both failures");
 		const failure = Cause.squash(exit.cause);
-		expect(String(failure)).toContain("capture_failed");
-		expect(String(failure)).toContain("restoration_failed");
+		expect(failure).toMatchObject({
+			code: "render_or_restoration_failed",
+			message:
+				"Camera render session session failed during capture or restoration; editor state is unknown."
+		});
+		// The classified message omits the native failures; the kept cause chain retains both.
+		const kept = JSON.stringify(failure);
+		expect(kept).toContain("capture_failed");
+		expect(kept).toContain("restoration_failed");
 	});
 	it("preserves interruption and waits for native release", async () => {
 		await Effect.runPromise(

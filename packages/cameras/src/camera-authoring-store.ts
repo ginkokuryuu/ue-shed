@@ -28,6 +28,9 @@ import {
 	arrangementFailure
 } from "./camera-arrangement.js";
 import { CameraArrangementRecipe } from "./camera-arrangement.js";
+import { fileFailureReason, isMalformedDocument } from "./file-failure.js";
+
+const isCameraArrangementError = Schema.is(CameraArrangementError);
 
 const Outcome = Schema.Struct({
 	operationId: CameraOperationId,
@@ -258,18 +261,32 @@ async function exclusive<A>(path: string, operation: () => Promise<A>): Promise<
 		}
 	}
 }
-function storageError(cause: unknown) {
-	return cause instanceof CameraArrangementError
-		? cause
-		: new CameraArrangementError({
-				code: "storage",
-				message: String(cause),
-				recovery:
-					"Check the authoring document and directory permissions. Retry the same operation ID to recover a committed result.",
-				retrySafe: true,
-				nextStep: "retry"
-			});
-}
+/** Map a file failure on `subject` (a described path) to a classified storage error. */
+const storageError =
+	(subject: string) =>
+	(cause: unknown): CameraArrangementError => {
+		if (isCameraArrangementError(cause)) return cause;
+		const message = `Could not use ${subject} because ${fileFailureReason(cause)}.`;
+		return isMalformedDocument(cause)
+			? new CameraArrangementError({
+					code: "storage",
+					message,
+					recovery:
+						"Repair or replace the document so it matches its schema, then retry.",
+					retrySafe: true,
+					nextStep: "fix_input",
+					cause
+				})
+			: new CameraArrangementError({
+					code: "storage",
+					message,
+					recovery:
+						"Check the authoring document and directory permissions. Retry the same operation ID to recover a committed result.",
+					retrySafe: true,
+					nextStep: "retry",
+					cause
+				});
+	};
 
 export const readCameraArrangementRecipe = Effect.fn("CameraAuthoringStore.readRecipe")(
 	(path: string) =>
@@ -282,14 +299,14 @@ export const readCameraArrangementRecipe = Effect.fn("CameraAuthoringStore.readR
 					{ onExcessProperty: "error" }
 				);
 			},
-			catch: storageError
+			catch: storageError(`camera arrangement recipe ${path}`)
 		})
 );
 export const writeCameraArrangementRecipe = Effect.fn("CameraAuthoringStore.writeRecipe")(
 	(path: string, recipe: CameraArrangementRecipe) =>
 		Effect.tryPromise({
 			try: () => writeAtomic(resolve(path), json(CameraArrangementRecipe.make(recipe))),
-			catch: storageError
+			catch: storageError(`camera arrangement recipe ${path}`)
 		})
 );
 
@@ -338,9 +355,10 @@ export function makeCameraAuthoringStore(documentPath: string): CameraAuthoringS
 			? exclusive(document.projection.path, () => projectLocked(document))
 			: Promise.resolve(document);
 	const transact = <A>(operation: () => Promise<A>) =>
-		Effect.tryPromise({ try: () => exclusive(path, operation), catch: storageError }).pipe(
-			Effect.uninterruptible
-		);
+		Effect.tryPromise({
+			try: () => exclusive(path, operation),
+			catch: storageError(`camera authoring document ${path}`)
+		}).pipe(Effect.uninterruptible);
 	const prior = (document: CameraAuthoringDocument, operationId: string, fingerprint: string) => {
 		const outcome = document.outcomes.find((entry) => entry.operationId === operationId);
 		if (outcome && outcome.fingerprint !== fingerprint)
@@ -352,7 +370,10 @@ export function makeCameraAuthoringStore(documentPath: string): CameraAuthoringS
 	};
 	return {
 		load: Effect.fn("CameraAuthoringStore.load")(() =>
-			Effect.tryPromise({ try: load, catch: storageError })
+			Effect.tryPromise({
+				try: load,
+				catch: storageError(`camera authoring document ${path}`)
+			})
 		),
 		create: Effect.fn("CameraAuthoringStore.create")((arrangement, reviewSet) =>
 			transact(async () => {
@@ -493,7 +514,7 @@ export const readCameraVisibilityPreset = Effect.fn("CameraAuthoringStore.readVi
 					{ onExcessProperty: "error" }
 				);
 			},
-			catch: storageError
+			catch: storageError(`camera visibility preset ${path}`)
 		})
 );
 export const writeCameraVisibilityPreset = Effect.fn("CameraAuthoringStore.writeVisibilityPreset")(
@@ -511,6 +532,6 @@ export const writeCameraVisibilityPreset = Effect.fn("CameraAuthoringStore.write
 						);
 					await writeAtomic(resolve(path), expected);
 				}),
-			catch: storageError
+			catch: storageError(`camera visibility preset ${path}`)
 		})
 );

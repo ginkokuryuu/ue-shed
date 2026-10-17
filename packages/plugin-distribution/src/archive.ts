@@ -3,7 +3,7 @@ import { createReadStream } from "node:fs";
 import { lstat, mkdir, open, readFile, realpath, stat } from "node:fs/promises";
 import { dirname, isAbsolute, relative, resolve, sep } from "node:path";
 import { createGunzip } from "node:zlib";
-import { Effect, Schema } from "effect";
+import { Effect, Predicate, Schema } from "effect";
 import {
 	PluginInstallCancelled,
 	ArtifactDigestMismatch,
@@ -17,6 +17,10 @@ import {
 	type PluginBundleManifest
 } from "./manifest.js";
 import type { PluginDistributionLimits, PluginInstallProgress } from "./model.js";
+
+const isPluginInstallCancelled = Schema.is(PluginInstallCancelled);
+const isArtifactDigestMismatch = Schema.is(ArtifactDigestMismatch);
+const isMalformedOrUnsafeArchive = Schema.is(MalformedOrUnsafeArchive);
 
 const TAR_BLOCK_BYTES = 512;
 const COPY_CHUNK_BYTES = 64 * 1024;
@@ -52,18 +56,46 @@ function abortError(signal: AbortSignal, releaseVersion: string, stage: string) 
 				recovery: "Retry installing the exact release when the host is ready.",
 				releaseVersion,
 				retrySafe: true,
+				nextStep: "retry",
 				stage
 			})
 		: undefined;
 }
 
+/** Node errno code of a filesystem failure, when the cause carries one. */
+function errnoCode(cause: unknown): string | undefined {
+	return cause instanceof Object && "code" in cause && Predicate.isString(cause.code)
+		? cause.code
+		: undefined;
+}
+
+/** Classified storage message: what failed for which release, without the raw cause text. */
+function storageMessage(releaseVersion: string, operation: string, cause: unknown): string {
+	const code = errnoCode(cause);
+	if (code === "EACCES" || code === "EPERM") {
+		return `${operation} for plugin release ${releaseVersion} was denied permission.`;
+	}
+	if (code === "ENOSPC") {
+		return `${operation} for plugin release ${releaseVersion} ran out of disk space.`;
+	}
+	return `${operation} failed for plugin release ${releaseVersion}.`;
+}
+
+/** Permission and disk-space failures need the caller to fix the cache; others may be transient. */
+function storageNextStep(cause: unknown): "fix_input" | "retry" {
+	const code = errnoCode(cause);
+	return code === "EACCES" || code === "EPERM" || code === "ENOSPC" ? "fix_input" : "retry";
+}
+
 function storageFailure(releaseVersion: string, operation: string, cause: unknown) {
 	return new PluginStorageFailure({
-		message: `${operation} failed: ${String(cause)}`,
+		message: storageMessage(releaseVersion, operation, cause),
 		operation,
 		recovery: "Check cache permissions and free space, then retry.",
 		releaseVersion,
-		retrySafe: true
+		retrySafe: true,
+		nextStep: storageNextStep(cause),
+		cause
 	});
 }
 
@@ -73,7 +105,8 @@ function archiveFailure(releaseVersion: string, message: string, entry?: string)
 		message,
 		recovery: "Discard the artifact and install it again from a trusted exact release.",
 		releaseVersion,
-		retrySafe: false
+		retrySafe: false,
+		nextStep: "escalate"
 	});
 }
 
@@ -216,7 +249,8 @@ export const verifyPluginArtifact = (options: {
 					message: `Artifact size ${details.size} does not match ${options.expectedBytes}.`,
 					recovery: "Discard the truncated or oversized artifact and download it again.",
 					releaseVersion: options.releaseVersion,
-					retrySafe: true
+					retrySafe: true,
+					nextStep: "retry"
 				});
 			}
 			const hash = createHash("sha256");
@@ -244,16 +278,14 @@ export const verifyPluginArtifact = (options: {
 					message: `Artifact digest ${digest} does not match ${options.expectedDigest}.`,
 					recovery: "Discard the artifact and download the exact release asset again.",
 					releaseVersion: options.releaseVersion,
-					retrySafe: true
+					retrySafe: true,
+					nextStep: "escalate"
 				});
 			}
 			return { bytes: details.size, digest, path: resolve(options.artifactPath) };
 		},
 		catch: (cause) => {
-			if (
-				cause instanceof PluginInstallCancelled ||
-				cause instanceof ArtifactDigestMismatch
-			) {
+			if (isPluginInstallCancelled(cause) || isArtifactDigestMismatch(cause)) {
 				return cause;
 			}
 			return (
@@ -523,7 +555,7 @@ export async function extractPluginArchiveToDirectory(
 		}
 		return { extractedBytes, fileCount, files };
 	} catch (cause) {
-		if (cause instanceof PluginInstallCancelled) throw cause;
+		if (isPluginInstallCancelled(cause)) throw cause;
 		throw (
 			abortError(options.signal, options.manifest.releaseVersion, "extraction") ??
 			archiveFailure(
@@ -541,7 +573,7 @@ export const extractPluginArchive = (
 	Effect.tryPromise({
 		try: () => extractPluginArchiveToDirectory(options),
 		catch: (cause) =>
-			cause instanceof PluginInstallCancelled || cause instanceof MalformedOrUnsafeArchive
+			isPluginInstallCancelled(cause) || isMalformedOrUnsafeArchive(cause)
 				? cause
 				: archiveFailure(
 						options.manifest.releaseVersion,

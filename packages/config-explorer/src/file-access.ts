@@ -1,13 +1,17 @@
 import { access, readdir, readFile, stat } from "node:fs/promises";
 import { Context, Effect, Layer, Schema } from "effect";
 
+/** The shared UE Shed error guidance shape; this package does not depend on the protocol. */
+export const ConfigErrorGuidanceFields = {
+	message: Schema.String,
+	recovery: Schema.String,
+	retrySafe: Schema.Boolean,
+	nextStep: Schema.Literals(["fix_input", "retry", "reconcile", "escalate"])
+};
+
 export class ConfigFileAccessError extends Schema.TaggedError<ConfigFileAccessError>()(
 	"ConfigFileAccessError",
-	{
-		operation: Schema.Literals(["read", "list", "stat"]),
-		message: Schema.String,
-		retrySafe: Schema.Boolean
-	}
+	{ operation: Schema.Literals(["read", "list", "stat"]), ...ConfigErrorGuidanceFields }
 ) {}
 
 export interface ConfigDirectoryEntry {
@@ -28,12 +32,18 @@ export class ConfigFileAccess extends Context.Service<ConfigFileAccess, ConfigFi
 	"@ue-shed/config-explorer/ConfigFileAccess"
 ) {}
 
+/** Filesystem reads are repeatable; a transient lock or share violation may clear. */
 function fileError(
 	operation: ConfigFileAccessError["operation"],
-	message: string,
-	retrySafe = true
+	message: string
 ): ConfigFileAccessError {
-	return new ConfigFileAccessError({ operation, message, retrySafe });
+	return new ConfigFileAccessError({
+		operation,
+		message,
+		recovery: "Check that the path exists and is readable, then read it again.",
+		retrySafe: true,
+		nextStep: "retry"
+	});
 }
 
 export const ConfigFileAccessLive = Layer.succeed(

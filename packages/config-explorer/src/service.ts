@@ -6,6 +6,7 @@ import {
 } from "@ue-shed/engine";
 import { Context, Effect, Layer, Result, Schema } from "effect";
 import {
+	ConfigErrorGuidanceFields as ErrorGuidanceFields,
 	ConfigFileAccess,
 	ConfigFileAccessLive,
 	type ConfigFileAccessError
@@ -37,8 +38,25 @@ import {
 
 export class ConfigExplorerError extends Schema.TaggedError<ConfigExplorerError>()(
 	"ConfigExplorerError",
-	ConfigExplorerPublicError.fields
+	{
+		code: ConfigExplorerPublicError.fields.code,
+		...ErrorGuidanceFields,
+		candidates: ConfigExplorerPublicError.fields.candidates,
+		cause: Schema.optionalKey(Schema.Defect())
+	}
 ) {}
+
+/**
+ * Request, project, engine, family and platform failures all need a changed selection; only a
+ * resolution failure that is retry-safe may succeed by repeating the same read.
+ */
+function configNextStep(
+	code: ConfigExplorerError["code"],
+	retrySafe: boolean
+): ConfigExplorerError["nextStep"] {
+	if (code === "resolution_failed") return retrySafe ? "retry" : "escalate";
+	return "fix_input";
+}
 
 export interface ConfigExplorerApi {
 	readonly explain: (
@@ -101,14 +119,17 @@ function error(
 	message: string,
 	recovery: string,
 	retrySafe = true,
-	candidates?: readonly string[]
+	candidates?: readonly string[],
+	cause?: unknown
 ): ConfigExplorerError {
 	return new ConfigExplorerError({
 		code,
 		message,
+		nextStep: configNextStep(code, retrySafe),
 		recovery,
 		retrySafe,
-		...(candidates === undefined ? undefined : { candidates: [...candidates] })
+		...(candidates === undefined ? undefined : { candidates: [...candidates] }),
+		...(cause === undefined ? undefined : { cause })
 	});
 }
 
@@ -351,12 +372,14 @@ export const ConfigExplorerLive = Layer.effect(
 			input: ConfigExplainRequest
 		) {
 			const request = yield* Schema.decodeUnknownEffect(ConfigExplainRequest)(input).pipe(
-				Effect.mapError(() =>
+				Effect.mapError((cause) =>
 					error(
 						"invalid_request",
 						"The config explanation request is invalid.",
 						"Provide non-empty project, platform, section, and key values.",
-						false
+						false,
+						undefined,
+						cause
 					)
 				)
 			);
@@ -438,12 +461,14 @@ export const ConfigExplorerLive = Layer.effect(
 			input: ConfigCompareRequest
 		) {
 			const request = yield* Schema.decodeUnknownEffect(ConfigCompareRequest)(input).pipe(
-				Effect.mapError(() =>
+				Effect.mapError((cause) =>
 					error(
 						"invalid_request",
 						"The config comparison request is invalid.",
 						"Provide explicit left and right platforms.",
-						false
+						false,
+						undefined,
+						cause
 					)
 				)
 			);

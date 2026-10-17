@@ -35,13 +35,14 @@ import { GameTextIndexBuilder, type GameTextIndexBuildSessionRequest } from "./i
 import { GameTextIndexProgressReporter } from "./index-progress.js";
 import {
 	GameTextIndexError,
+	isGameTextIndexError,
 	GameTextIndexSource,
 	GameTextIndexRefreshRequest,
 	type GameTextIndexRefreshResult,
 	type IndexFailure
 } from "./index-contract.js";
-import { SnapshotStoreError } from "./snapshot-store.js";
-import { SnapshotFormatError } from "./snapshot-format.js";
+import { isSnapshotStoreError } from "./snapshot-store.js";
+import { isSnapshotFormatError } from "./snapshot-format.js";
 import { reuseJoinedQueryProjection, type JoinedQueryProjection } from "./joined-query-data.js";
 import { instrumentIndexQuery } from "./index-query.js";
 import { columnarTextCorpusQuery, type ColumnarTextCorpusQuery } from "./columnar-query.js";
@@ -156,8 +157,14 @@ const hostQueryPreparations = Metric.counter("game_text.index.host_query_prepara
 const queryRevisionFor = (project: GameTextProject, generation: string, joinedKey: string) =>
 	JSON.stringify([project.cacheRoot, project.projectRoot, generation, joinedKey]);
 
-const failure = (operation: string, message: string, recovery: string) =>
-	new GameTextIndexError({ operation, message, recovery, retrySafe: true });
+const failure = (operation: string, message: string, recovery: string, cause?: unknown) =>
+	new GameTextIndexError({
+		operation,
+		message,
+		recovery,
+		retrySafe: true,
+		...(cause === undefined ? undefined : { cause })
+	});
 const stale = (operation: string) =>
 	failure(
 		operation,
@@ -194,9 +201,9 @@ const checkProject = (project: GameTextProjectIndex, manifest: SharedIndexManife
 const normalizeFailure = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
 	effect.pipe(
 		Effect.mapError((cause) =>
-			cause instanceof GameTextIndexError ||
-			cause instanceof SnapshotStoreError ||
-			cause instanceof SnapshotFormatError
+			isGameTextIndexError(cause) ||
+			isSnapshotStoreError(cause) ||
+			isSnapshotFormatError(cause)
 				? cause
 				: failure("index", String(cause), "Refresh the Game Text index and retry.")
 		)
@@ -346,7 +353,7 @@ export const makeGameTextIndexSteps = (
 				const worker = yield* RcMap.get(workers, JSON.stringify({ input, instance })).pipe(
 					Effect.provideService(Scope.Scope, pin),
 					Effect.tapError((cause) =>
-						cause instanceof SnapshotStoreError || cause instanceof SnapshotFormatError
+						isSnapshotStoreError(cause) || isSnapshotFormatError(cause)
 							? rotate(instance)
 							: Effect.void
 					),
@@ -379,11 +386,12 @@ export const makeGameTextIndexSteps = (
 						writers,
 						sharedIndexDirectory(configuration)
 					).pipe(
-						Effect.mapError(() =>
+						Effect.mapError((cause) =>
 							failure(
 								"writer",
 								"Too many project writers are active.",
-								"Wait for a project operation to finish and retry."
+								"Wait for a project operation to finish and retry.",
+								cause
 							)
 						)
 					);
@@ -751,9 +759,9 @@ export const makeGameTextIndexSteps = (
 							search: worker.search
 						})),
 						Effect.mapError((cause) =>
-							cause instanceof GameTextIndexError ||
-							cause instanceof SnapshotStoreError ||
-							cause instanceof SnapshotFormatError
+							isGameTextIndexError(cause) ||
+							isSnapshotStoreError(cause) ||
+							isSnapshotFormatError(cause)
 								? cause
 								: failure(
 										"search-worker",

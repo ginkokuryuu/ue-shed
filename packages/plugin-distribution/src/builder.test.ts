@@ -5,6 +5,7 @@ import { dirname, join } from "node:path";
 import { gzipSync } from "node:zlib";
 import {
 	makeOwnedProcessTreeTestLayer,
+	SupervisedEditorSessionError,
 	type OwnedProcessTreeHandle,
 	type OwnedProcessTreeLaunchOptions
 } from "@ue-shed/engine";
@@ -276,6 +277,48 @@ afterEach(async () => {
 });
 
 describe("compiled plugin builder", () => {
+	it("requires manual reconciliation when supervision and termination both fail", async () => {
+		const source = await fixture();
+		let terminations = 0;
+		const supervision = new SupervisedEditorSessionError({
+			code: "process_tree_supervision_unavailable",
+			stage: "operation",
+			message: "Cannot inspect the process group.",
+			recovery: "Terminate the remaining process group manually before retrying.",
+			retrySafe: false,
+			nextStep: "reconcile"
+		});
+		const cleanup = new SupervisedEditorSessionError({
+			code: "termination_failed",
+			stage: "termination",
+			message: "Cannot terminate the process group.",
+			recovery: "Terminate the remaining process group manually before retrying.",
+			retrySafe: false,
+			nextStep: "reconcile"
+		});
+		const layer = builderLayer(() =>
+			Effect.succeed({
+				pid: 42,
+				awaitExit: Effect.fail(supervision),
+				terminate: () => {
+					terminations += 1;
+					return Effect.fail(cleanup);
+				}
+			})
+		);
+		const error = await Effect.runPromise(
+			Effect.flatMap(CompiledPluginBuilder, (builder) =>
+				Effect.flip(builder.build(source.request))
+			).pipe(Effect.provide(layer))
+		);
+		expect(error._tag).toBe("InvalidCompiledPluginBuild");
+		expect(error.retrySafe).toBe(false);
+		expect(error.nextStep).toBe("reconcile");
+		expect(error.recovery).toContain("manually");
+		expect(error.cause).toBe(cleanup);
+		expect(terminations).toBe(1);
+		expect(await readdir(source.request.outputDirectory)).toEqual([]);
+	});
 	it("publishes only a validated dependency-first compiled graph", async () => {
 		const source = await fixture();
 		const engineSourceCommit = "b".repeat(40);
@@ -355,6 +398,8 @@ describe("compiled plugin builder", () => {
 			).pipe(Effect.provide(layer))
 		);
 		expect(error._tag).toBe("InvalidCompiledPluginBuild");
+		expect(error.retrySafe).toBe(true);
+		expect(error.nextStep).toBe("fix_input");
 		expect(launches).toBe(0);
 	});
 

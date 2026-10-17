@@ -29,7 +29,8 @@ const unavailableEngine = makeEngineInstallationDiscoveryTestLayer(() =>
 			code: "engine_not_found",
 			message: "No matching Unreal installation was discovered.",
 			recovery: "Pass an explicit engine root.",
-			retrySafe: true
+			retrySafe: true,
+			nextStep: "fix_input"
 		})
 	)
 );
@@ -194,7 +195,9 @@ it.effect("surfaces an existing unreadable layer as partial coverage", () =>
 								new ConfigFileAccessError({
 									operation: "read",
 									message: "Fixture read denied.",
-									retrySafe: true
+									recovery: "Grant read access to the fixture.",
+									retrySafe: true,
+									nextStep: "retry"
 								})
 							)
 						: base.readText(path)

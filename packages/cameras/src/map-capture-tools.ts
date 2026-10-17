@@ -1,29 +1,46 @@
 import { Effect, Schema } from "effect";
-import { decodeCompanionCapabilityManifest, ErrorGuidanceFields } from "@ue-shed/protocol";
+import {
+	decodeCompanionCapabilityManifest,
+	ErrorCauseFields,
+	ErrorGuidanceFields
+} from "@ue-shed/protocol";
 import { RemoteControlClient, RemoteControlClientError } from "@ue-shed/unreal-connection";
 import { MapCaptureSelection, MapCaptureReadiness } from "./map-capture-tools-schema.js";
 export * from "./map-capture-tools-schema.js";
 export class MapCaptureInspectionError extends Schema.TaggedError<MapCaptureInspectionError>()(
 	"MapCaptureInspectionError",
-	ErrorGuidanceFields
+	{ ...ErrorGuidanceFields, ...ErrorCauseFields }
 ) {}
+const isMapCaptureInspectionError = Schema.is(MapCaptureInspectionError);
+const isRemoteControlClientError = Schema.is(RemoteControlClientError);
 const failure = (cause: unknown) =>
-	cause instanceof MapCaptureInspectionError
+	isMapCaptureInspectionError(cause)
 		? cause
-		: cause instanceof RemoteControlClientError
+		: isRemoteControlClientError(cause)
 			? new MapCaptureInspectionError({
 					message: cause.message,
 					nextStep: cause.nextStep,
 					recovery: cause.recovery,
-					retrySafe: cause.retrySafe
+					retrySafe: cause.retrySafe,
+					cause
 				})
-			: new MapCaptureInspectionError({
-					message: String(cause),
-					nextStep: "escalate",
-					recovery:
-						"Check the editor endpoint and update Core and Cameras plugins together.",
-					retrySafe: true
-				});
+			: Schema.isSchemaError(cause)
+				? new MapCaptureInspectionError({
+						message:
+							"The editor returned a map capture inspection response that does not match this package.",
+						nextStep: "fix_input",
+						recovery: "Update Core and Cameras plugins together with this package.",
+						retrySafe: true,
+						cause
+					})
+				: new MapCaptureInspectionError({
+						message: "Map capture inspection failed unexpectedly.",
+						nextStep: "escalate",
+						recovery:
+							"Check the editor endpoint and update Core and Cameras plugins together.",
+						retrySafe: true,
+						cause
+					});
 const negotiate = Effect.fn("MapCapture.inspect.negotiate")(function* (
 	endpoint: string,
 	capability: string

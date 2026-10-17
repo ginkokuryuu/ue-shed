@@ -22,6 +22,8 @@ export class SnapshotFormatError extends Schema.TaggedError<SnapshotFormatError>
 	"SnapshotFormatError",
 	{ section: Schema.String, message: Schema.String, recovery: Schema.String }
 ) {}
+/** Tag guard for snapshot format failures; match by tag, not `instanceof`. */
+export const isSnapshotFormatError = Schema.is(SnapshotFormatError);
 export function snapshotFailure(section: string, message: string): SnapshotFormatError {
 	return new SnapshotFormatError({
 		section,

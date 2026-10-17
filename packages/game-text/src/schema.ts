@@ -175,7 +175,12 @@ export const TextCorpus = Schema.Struct({
 export type TextCorpus = Schema.Schema.Type<typeof TextCorpus>;
 
 export const TextCorpusPublicError = Schema.Struct({
-	code: Schema.Literals(["invalid_project", "scan_limit_exceeded", "contract_failure"]),
+	code: Schema.Literals([
+		"invalid_project",
+		"invalid_options",
+		"scan_limit_exceeded",
+		"contract_failure"
+	]),
 	message: Schema.String,
 	recovery: Schema.String,
 	retrySafe: Schema.Boolean

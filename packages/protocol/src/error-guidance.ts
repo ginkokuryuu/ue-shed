@@ -23,3 +23,9 @@ export const ErrorGuidanceFields = {
 	retrySafe: Schema.Boolean,
 	nextStep: ErrorNextStep
 };
+
+/**
+ * The original failure behind a classified error. Keep it here instead of stringifying it into
+ * `message`; it is diagnostic evidence, not text to branch on.
+ */
+export const ErrorCauseFields = { cause: Schema.optionalKey(Schema.Defect()) };

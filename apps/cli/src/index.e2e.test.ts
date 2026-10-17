@@ -8,6 +8,7 @@ import { describe, expect, it } from "vitest";
 import { useSavedFixtureProject } from "../../../fixtures/unreal-project/saved-project.test-support.js";
 import {
 	repositoryRoot,
+	fixtureProject,
 	runCli,
 	runSuccessfulCli,
 	runSuccessfulHeadlessCli,
@@ -61,6 +62,22 @@ const fixtureTextQualityRules = join(
 );
 
 describe("ue-shed CLI process", () => {
+	it("prints the retained schema issue for invalid row IDs", () => {
+		const result = runCli([
+			"authoring",
+			"sessions",
+			"reorder-rows",
+			"example",
+			"/Game/Table",
+			"[1]",
+			"--project",
+			fixtureProject
+		]);
+		expect(result.status).toBe(2);
+		expect(result.stderr).toContain("Row IDs does not match its schema.");
+		expect(result.stderr).toContain("Expected string");
+		expect(result.stderr).toContain("[0]");
+	});
 	it("reports help, version, and invalid commands through the executable boundary", () => {
 		const help = runCli(["--help"]);
 		expect(help.status).toBe(0);
@@ -492,7 +509,7 @@ describe("ue-shed CLI process", () => {
 		]);
 		expect(malformed.status).toBe(2);
 		expect(malformed.stdout).toBe("");
-		expect(malformed.stderr).toContain("ue-shed: Invalid value JSON");
+		expect(malformed.stderr).toContain("ue-shed: Authoring value is not valid JSON.");
 
 		const remote = runCli(["authoring", "live", "tables", "http://127.0.0.1:1"]);
 		expect(remote.status).toBe(2);

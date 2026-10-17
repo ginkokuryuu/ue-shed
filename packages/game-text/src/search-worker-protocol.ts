@@ -99,12 +99,13 @@ export const searchWorkerCallValues = {
 } as const;
 
 export function searchWorkerFailure(operation: string, cause: unknown) {
-	return cause instanceof SnapshotStoreError || cause instanceof SnapshotFormatError
+	return Schema.is(SnapshotStoreError)(cause) || Schema.is(SnapshotFormatError)(cause)
 		? cause
 		: new SnapshotStoreError({
 				operation,
 				code: "unavailable",
-				message: String(cause),
+				message: `The Game Text search worker could not complete ${operation}.`,
+				cause,
 				recovery: "Refresh the Game Text index and retry the search."
 			});
 }

@@ -11,6 +11,7 @@ import {
 	checkDecoderExports,
 	checkLocalizationBoundaries,
 	checkSourcePolicy,
+	checkTaggedErrorMatching,
 	checkServiceStrategies,
 	checkWorkbenchBoundaries
 } from "./check-effect-architecture.ts";
@@ -60,6 +61,37 @@ test("Game Text entry points are named and first-party code imports focused entr
 			"apps/cli/src/browser.ts: import a focused @ue-shed/game-text entry point (/schema, /rules, /checks, /labels, /corpus, /index or /workspace)",
 			"apps/cli/src/root.ts: import a focused @ue-shed/game-text entry point (/schema, /rules, /checks, /labels, /corpus, /index or /workspace)",
 			"packages/game-text/src/entry-corpus.ts: Game Text entry points use named exports only"
+		]);
+	} finally {
+		await rm(fixtureRoot, { recursive: true, force: true });
+	}
+});
+
+test("tagged errors are matched by tag, not instanceof", async () => {
+	const fixtureRoot = await mkdtemp(join(tmpdir(), "ue-shed-tagged-matching-"));
+	try {
+		const source = join(fixtureRoot, "packages/example/src");
+		await mkdir(source, { recursive: true });
+		await writeFile(
+			join(source, "errors.ts"),
+			[
+				'import { Schema } from "effect";',
+				'export class ReadError extends Schema.TaggedError<ReadError>()("ReadError", {}) {}',
+				"export class PlainError extends Error {}",
+				"export const isRead = Schema.is(ReadError);"
+			].join("\n")
+		);
+		await writeFile(
+			join(source, "use.ts"),
+			[
+				'import { ReadError, PlainError } from "./errors.js";',
+				"export const a = (cause: unknown) => cause instanceof PlainError;",
+				"export const b = (cause: unknown) => cause instanceof Error;",
+				"export const c = (cause: unknown) => cause instanceof ReadError;"
+			].join("\n")
+		);
+		assert.deepEqual(await checkTaggedErrorMatching(fixtureRoot), [
+			"packages/example/src/use.ts:4: match ReadError by tag (catchTag, Schema.is or Predicate.isTagged), not instanceof"
 		]);
 	} finally {
 		await rm(fixtureRoot, { recursive: true, force: true });

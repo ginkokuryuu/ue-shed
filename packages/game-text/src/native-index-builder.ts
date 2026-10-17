@@ -30,7 +30,8 @@ const unavailable = (operation: string, cause: unknown) =>
 	new SnapshotStoreError({
 		operation,
 		code: "unavailable",
-		message: String(cause),
+		message: `The native Game Text index could not complete ${operation}.`,
+		cause,
 		recovery: "Check the paired native reader and disposable Game Text cache, then retry."
 	});
 const nativeFailure = (cause: AssetReaderError) =>
@@ -43,6 +44,7 @@ const nativeFailure = (cause: AssetReaderError) =>
 					? "invalid_input"
 					: "unavailable",
 		message: cause.message,
+		cause,
 		recovery: "Resolve the native reader or cache failure and open a new build session."
 	});
 const io = <A>(operation: string, action: () => Promise<A>) =>

@@ -16,7 +16,7 @@ import {
 	writeFile
 } from "node:fs/promises";
 import { dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
-import { Context, Effect, Layer, Option, Schema, type Scope } from "effect";
+import { Context, Effect, Layer, Option, Predicate, Schema, type Scope } from "effect";
 import { extractPluginArchiveToDirectory } from "./archive.js";
 import {
 	PluginInstallCancelled,
@@ -53,6 +53,11 @@ const metadataFile = ".ue-shed-distribution.json";
 const manifestFile = "plugins.manifest.json";
 const artifactFile = "plugins.tar.gz";
 const leaseRecordVersion = 1;
+const isActiveLeasePreventsPrune = Schema.is(ActiveLeasePreventsPrune);
+const isCorruptCacheEntry = Schema.is(CorruptCacheEntry);
+const isImmutableVersionConflict = Schema.is(ImmutableVersionConflict);
+const isMalformedOrUnsafeArchive = Schema.is(MalformedOrUnsafeArchive);
+const isPluginInstallCancelled = Schema.is(PluginInstallCancelled);
 
 const StoredMetadataV1 = Schema.Struct({
 	artifactBytes: Schema.Int.check(Schema.isGreaterThan(0)),
@@ -181,35 +186,66 @@ async function digestFile(path: string): Promise<`sha256:${string}`> {
 	return `sha256:${hash.digest("hex")}`;
 }
 
+/** Node errno code of a filesystem failure, when the cause carries one. */
+function errnoCode(cause: unknown): string | undefined {
+	return cause instanceof Object && "code" in cause && Predicate.isString(cause.code)
+		? cause.code
+		: undefined;
+}
+
+/** Classified storage message: what failed for which release, without the raw cause text. */
+function storageMessage(releaseVersion: string, operation: string, cause: unknown): string {
+	const code = errnoCode(cause);
+	if (code === "EACCES" || code === "EPERM") {
+		return `${operation} for plugin release ${releaseVersion} was denied permission.`;
+	}
+	if (code === "ENOSPC") {
+		return `${operation} for plugin release ${releaseVersion} ran out of disk space.`;
+	}
+	return `${operation} failed for plugin release ${releaseVersion}.`;
+}
+
+/** Permission and disk-space failures need the caller to fix the cache; others may be transient. */
+function storageNextStep(cause: unknown): "fix_input" | "retry" {
+	const code = errnoCode(cause);
+	return code === "EACCES" || code === "EPERM" || code === "ENOSPC" ? "fix_input" : "retry";
+}
+
 function storageError(releaseVersion: string, operation: string, cause: unknown) {
 	return new PluginStorageFailure({
-		message: `${operation} failed: ${String(cause)}`,
+		message: storageMessage(releaseVersion, operation, cause),
 		operation,
 		recovery: "Check the caller-owned cache permissions and free space, then retry.",
 		releaseVersion,
-		retrySafe: true
+		retrySafe: true,
+		nextStep: storageNextStep(cause),
+		cause
 	});
 }
 
-function corrupt(releaseVersion: string, cachePath: string, message: string) {
+function corrupt(releaseVersion: string, cachePath: string, message: string, cause?: unknown) {
 	return new CorruptCacheEntry({
+		...(cause === undefined ? undefined : { cause }),
 		cachePath,
 		message,
 		recovery: "Explicitly prune the corrupt release, then reinstall the exact artifact.",
 		releaseVersion,
-		retrySafe: false
+		retrySafe: false,
+		nextStep: "reconcile"
 	});
 }
 
 function decodeReleaseVersion(input: string) {
 	return Schema.decodeUnknownEffect(ReleaseVersion)(input).pipe(
 		Effect.mapError(
-			() =>
+			(cause) =>
 				new PluginDistributionValidationError({
 					field: "releaseVersion",
 					message: "Plugin release version must be an exact semantic version.",
 					recovery: "Provide an exact SemVer release such as 0.4.0.",
-					retrySafe: false
+					retrySafe: true,
+					nextStep: "fix_input",
+					cause
 				})
 		)
 	);
@@ -311,7 +347,8 @@ async function readStoredManifest(cacheRoot: string, releaseVersion: string, roo
 		throw corrupt(
 			releaseVersion,
 			root,
-			`Cached release metadata is malformed: ${String(cause)}`
+			"Cached release metadata is missing, unsafe or malformed.",
+			cause
 		);
 	}
 	if (metadata.releaseVersion !== releaseVersion) {
@@ -329,7 +366,7 @@ async function readStoredManifest(cacheRoot: string, releaseVersion: string, roo
 	}
 	const manifestPath = join(root, manifestFile);
 	await assertRegularCacheFile(manifestPath).catch((cause) => {
-		throw corrupt(releaseVersion, root, `Cached release manifest is unsafe: ${String(cause)}`);
+		throw corrupt(releaseVersion, root, "Cached release manifest is unsafe.", cause);
 	});
 	const manifestBytes = await readFile(manifestPath);
 	if (digestBytes(manifestBytes) !== metadata.manifestDigest) {
@@ -345,7 +382,7 @@ async function readStoredManifest(cacheRoot: string, releaseVersion: string, roo
 			JSON.parse(manifestBytes.toString("utf8"))
 		);
 	} catch (cause) {
-		throw corrupt(releaseVersion, root, `Cached manifest JSON is malformed: ${String(cause)}`);
+		throw corrupt(releaseVersion, root, "Cached manifest JSON is malformed.", cause);
 	}
 	return { manifest, manifestPath, metadata, root };
 }
@@ -354,7 +391,7 @@ async function readStoredBasic(cacheRoot: string, releaseVersion: string, root: 
 	const storedManifest = await readStoredManifest(cacheRoot, releaseVersion, root);
 	const artifactPath = join(root, artifactFile);
 	await assertRegularCacheFile(artifactPath).catch((cause) => {
-		throw corrupt(releaseVersion, root, `Cached release artifact is unsafe: ${String(cause)}`);
+		throw corrupt(releaseVersion, root, "Cached release artifact is unsafe.", cause);
 	});
 	const artifactDetails = await stat(artifactPath);
 	if (
@@ -416,13 +453,9 @@ function verifyStored(cacheRoot: string, releaseVersion: string, root: string) {
 	return Effect.tryPromise({
 		try: () => readStoredBasic(cacheRoot, releaseVersion, root),
 		catch: (cause) =>
-			cause instanceof CorruptCacheEntry
+			isCorruptCacheEntry(cause)
 				? cause
-				: corrupt(
-						releaseVersion,
-						root,
-						`Cached release cannot be verified: ${String(cause)}`
-					)
+				: corrupt(releaseVersion, root, "Cached release cannot be verified.", cause)
 	}).pipe(
 		Effect.flatMap((basic) =>
 			validatePluginBundleManifest(basic.manifest, {
@@ -445,12 +478,13 @@ function verifyStoredVariantIdentity(cacheRoot: string, releaseVersion: string, 
 	return Effect.tryPromise({
 		try: () => readStoredManifest(cacheRoot, releaseVersion, root),
 		catch: (cause) =>
-			cause instanceof CorruptCacheEntry
+			isCorruptCacheEntry(cause)
 				? cause
 				: corrupt(
 						releaseVersion,
 						root,
-						`Cached release identity cannot be recovered: ${String(cause)}`
+						"Cached release identity cannot be recovered.",
+						cause
 					)
 	}).pipe(
 		Effect.flatMap((stored) =>
@@ -686,12 +720,14 @@ export const pluginStoreLayer = (options: PluginStoreLayerOptions): Layer.Layer<
 					onExcessProperty: "error"
 				}).pipe(
 					Effect.mapError(
-						() =>
+						(cause) =>
 							new PluginDistributionValidationError({
 								field: "variantIdentity",
 								message: "Cached plugin variant reference is invalid.",
 								recovery: "Use an exact reference returned by install or list.",
-								retrySafe: false
+								retrySafe: true,
+								nextStep: "fix_input",
+								cause
 							})
 					)
 				);
@@ -701,7 +737,8 @@ export const pluginStoreLayer = (options: PluginStoreLayerOptions): Layer.Layer<
 					field: "variantIdentity",
 					message: `Cached plugin variant ${reference.variantIdentity} does not exist for release ${reference.releaseVersion}.`,
 					recovery: "Install the exact variant or use a reference returned by list.",
-					retrySafe: false
+					retrySafe: true,
+					nextStep: "reconcile"
 				});
 
 			const resolveReference = Effect.fn("PluginStore.resolveReference")((
@@ -756,7 +793,8 @@ export const pluginStoreLayer = (options: PluginStoreLayerOptions): Layer.Layer<
 										: `Release ${reference} has multiple cached variants.`,
 								recovery:
 									"Pass the exact releaseVersion and variantIdentity returned by install or list.",
-								retrySafe: false
+								retrySafe: true,
+								nextStep: "fix_input"
 							})
 						);
 					});
@@ -810,7 +848,8 @@ export const pluginStoreLayer = (options: PluginStoreLayerOptions): Layer.Layer<
 							recovery:
 								"Use its exact pinned digests or explicitly prune this source variant.",
 							releaseVersion: request.releaseVersion,
-							retrySafe: false
+							retrySafe: true,
+							nextStep: "reconcile"
 						})
 					);
 				}
@@ -893,10 +932,11 @@ export const pluginStoreLayer = (options: PluginStoreLayerOptions): Layer.Layer<
 											recovery:
 												"Verify and reuse it, or explicitly prune it before reacquisition.",
 											releaseVersion,
-											retrySafe: false
+											retrySafe: true,
+											nextStep: "reconcile"
 										});
 									} catch (cause) {
-										if (cause instanceof ImmutableVersionConflict) throw cause;
+										if (isImmutableVersionConflict(cause)) throw cause;
 									}
 									const stage = await mkdtemp(join(cacheRoot, ".publish-"));
 									try {
@@ -979,10 +1019,10 @@ export const pluginStoreLayer = (options: PluginStoreLayerOptions): Layer.Layer<
 					},
 					catch: (cause) => {
 						if (
-							cause instanceof PluginInstallCancelled ||
-							cause instanceof CorruptCacheEntry ||
-							cause instanceof ImmutableVersionConflict ||
-							cause instanceof MalformedOrUnsafeArchive
+							isPluginInstallCancelled(cause) ||
+							isCorruptCacheEntry(cause) ||
+							isImmutableVersionConflict(cause) ||
+							isMalformedOrUnsafeArchive(cause)
 						) {
 							return cause;
 						}
@@ -1150,7 +1190,8 @@ export const pluginStoreLayer = (options: PluginStoreLayerOptions): Layer.Layer<
 													recovery:
 														"Release all scoped consumers before pruning this exact variant.",
 													releaseVersion: release.releaseVersion,
-													retrySafe: true
+													retrySafe: true,
+													nextStep: "retry"
 												});
 											}
 											await rm(release.cachePath, {
@@ -1169,8 +1210,7 @@ export const pluginStoreLayer = (options: PluginStoreLayerOptions): Layer.Layer<
 										}
 									),
 								catch: (cause) =>
-									cause instanceof ActiveLeasePreventsPrune ||
-									cause instanceof CorruptCacheEntry
+									isActiveLeasePreventsPrune(cause) || isCorruptCacheEntry(cause)
 										? cause
 										: storageError(
 												release.releaseVersion,

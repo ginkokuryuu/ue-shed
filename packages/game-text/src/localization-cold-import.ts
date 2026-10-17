@@ -156,14 +156,16 @@ export const importColdLocalizationTarget = Effect.fn("LocalizationSnapshot.impo
 					}
 				},
 				catch: (cause) =>
-					cause instanceof LocalizationError ||
-					cause instanceof SnapshotFormatError ||
-					cause instanceof SnapshotStoreError
+					Schema.is(LocalizationError)(cause) ||
+					Schema.is(SnapshotFormatError)(cause) ||
+					Schema.is(SnapshotStoreError)(cause)
 						? cause
 						: new SnapshotStoreError({
 								operation: "cold.parse",
 								code: "unavailable",
-								message: String(cause),
+								message:
+									"The localization import could not parse the target files.",
+								cause,
 								recovery: "Retry the cold target import."
 							})
 			}),

@@ -1,4 +1,5 @@
 import {
+	ErrorCauseFields,
 	ErrorGuidanceFields,
 	AutomationCsvRequest,
 	AutomationInputRequest,
@@ -54,7 +55,8 @@ export class UnrealConnectionError extends Schema.TaggedError<UnrealConnectionEr
 		status: Schema.optional(Schema.Number),
 		/** Producer refusal code, such as `invalid_request` or `operation_not_found`. */
 		code: Schema.optional(Schema.String),
-		...ErrorGuidanceFields
+		...ErrorGuidanceFields,
+		...ErrorCauseFields
 	}
 ) {}
 
@@ -124,9 +126,10 @@ function validateRequest<A, DecodeError>(
 				new UnrealConnectionError({
 					endpoint,
 					operation,
-					message: `Invalid ${operation} request: ${String(cause)}`,
+					message: `The ${operation} request does not match its schema.`,
 					recovery:
-						"Correct the request fields named in the message, then send it again.",
+						"Correct the request fields named in the cause's schema issue, then send it again.",
+					cause,
 					retrySafe: false,
 					nextStep: "fix_input"
 				})
@@ -401,8 +404,9 @@ function decodeResult<A, DecodeError>(
 					(cause) =>
 						new UnrealConnectionError({
 							endpoint,
-							message: `Invalid ${operation} response: ${String(cause)}`,
+							message: `The editor's ${operation} response does not match its schema.`,
 							operation,
+							cause,
 							recovery: producerContractRecovery,
 							retrySafe: false,
 							nextStep: "escalate"

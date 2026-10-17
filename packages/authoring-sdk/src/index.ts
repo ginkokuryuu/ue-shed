@@ -3,7 +3,9 @@ import {
 	AuthoringSessionReview,
 	AuthoringOperationError,
 	AuthoringTableSnapshot,
-	AuthoringValue
+	AuthoringValue,
+	ErrorGuidanceFields,
+	type ErrorNextStep
 } from "@ue-shed/protocol";
 import { Context, Effect, Schema } from "effect";
 
@@ -204,7 +206,7 @@ export class AuthoringClientError extends Schema.TaggedError<AuthoringClientErro
 	{
 		cause: Schema.Defect(),
 		operation: Schema.String,
-		recovery: Schema.String
+		...ErrorGuidanceFields
 	}
 ) {}
 
@@ -352,6 +354,33 @@ export interface AuthoringHttpClientOptions {
 	readonly endpoint: string;
 }
 
+/** Transport requests that only read host state; every other request changes a session. */
+const authoringReadRequests: ReadonlySet<AuthoringTransportRequest["operation"]> = new Set([
+	"get_catalog_progress",
+	"load_configured_catalog",
+	"load_configured_table",
+	"open_catalog_table",
+	"choose_table",
+	"list_sessions",
+	"open_session",
+	"review_session"
+]);
+
+interface AuthoringRequestGuidance {
+	readonly retrySafe: boolean;
+	readonly nextStep: ErrorNextStep;
+}
+
+/**
+ * A read whose outcome is unknown may be repeated. A session change may already have applied,
+ * so the caller reopens the session before sending it again.
+ */
+function unknownOutcomeGuidance(read: boolean): AuthoringRequestGuidance {
+	return read
+		? { retrySafe: true, nextStep: "retry" }
+		: { retrySafe: false, nextStep: "reconcile" };
+}
+
 export function makeAuthoringHttpClient(options: AuthoringHttpClientOptions): AuthoringClientApi {
 	const request = <A, DecodeError>(args: {
 		readonly decode: (input: Schema.Json) => Effect.Effect<A, DecodeError>;
@@ -359,6 +388,14 @@ export function makeAuthoringHttpClient(options: AuthoringHttpClientOptions): Au
 		readonly payload: AuthoringTransportRequest;
 	}) =>
 		Effect.gen(function* () {
+			const read = authoringReadRequests.has(args.payload.operation);
+			const contractMismatch: AuthoringRequestGuidance = {
+				retrySafe: read,
+				nextStep: read ? "escalate" : "reconcile"
+			};
+			const protocolRecovery = read
+				? "Run the adopted host and client from the same UE Shed version, or report the protocol failure."
+				: "Reopen the session and reconcile its state before sending this change again; the host may have applied it.";
 			const response = yield* Effect.tryPromise({
 				try: (signal) =>
 					fetch(options.endpoint, {
@@ -370,25 +407,36 @@ export function makeAuthoringHttpClient(options: AuthoringHttpClientOptions): Au
 				catch: (cause) =>
 					new AuthoringClientError({
 						cause,
+						message: `The adopted UE Shed host did not answer ${args.operation}.`,
 						operation: args.operation,
-						recovery: "Verify the adopted UE Shed host is running, then retry."
+						recovery: read
+							? "Verify the adopted UE Shed host is running, then retry."
+							: protocolRecovery,
+						...unknownOutcomeGuidance(read)
 					})
 			});
 			if (!response.ok)
-				return yield* Effect.fail(
-					new AuthoringClientError({
-						cause: { status: response.status },
-						operation: args.operation,
-						recovery: `The adopted host rejected the request with HTTP ${response.status}.`
-					})
-				);
+				return yield* new AuthoringClientError({
+					cause: { status: response.status },
+					message: `The adopted host rejected ${args.operation} with HTTP ${response.status}.`,
+					operation: args.operation,
+					recovery:
+						response.status >= 500 && !read
+							? protocolRecovery
+							: `Inspect the adopted host failure for HTTP ${response.status}.`,
+					...(response.status >= 500
+						? unknownOutcomeGuidance(read)
+						: { retrySafe: read, nextStep: "fix_input" as const })
+				});
 			const input = yield* Effect.tryPromise({
 				try: () => response.json(),
 				catch: (cause) =>
 					new AuthoringClientError({
 						cause,
+						message: `The adopted host returned invalid JSON for ${args.operation}.`,
 						operation: args.operation,
-						recovery: "The adopted host returned invalid JSON. Restart it and retry."
+						recovery: protocolRecovery,
+						...contractMismatch
 					})
 			});
 			const transport = yield* decodeAuthoringTransportResponse(input).pipe(
@@ -396,27 +444,31 @@ export function makeAuthoringHttpClient(options: AuthoringHttpClientOptions): Au
 					(cause) =>
 						new AuthoringClientError({
 							cause,
+							message: `The adopted host returned an invalid transport response for ${args.operation}.`,
 							operation: args.operation,
-							recovery: "The adopted host returned an invalid transport response."
+							recovery: protocolRecovery,
+							...contractMismatch
 						})
 				)
 			);
 			if (transport.status === "transport_error")
-				return yield* Effect.fail(
-					new AuthoringClientError({
-						cause: transport.error.message,
-						operation: args.operation,
-						recovery: transport.error.recovery
-					})
-				);
+				return yield* new AuthoringClientError({
+					cause: transport.error.message,
+					message: transport.error.message,
+					operation: args.operation,
+					recovery: transport.error.recovery,
+					retrySafe: false,
+					nextStep: "fix_input"
+				});
 			return yield* args.decode(transport.value).pipe(
 				Effect.mapError(
 					(cause) =>
 						new AuthoringClientError({
 							cause,
+							message: `The adopted host response for ${args.operation} does not match the authoring contract.`,
 							operation: args.operation,
-							recovery:
-								"The adopted host response does not match the authoring contract."
+							recovery: protocolRecovery,
+							...contractMismatch
 						})
 				)
 			);

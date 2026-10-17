@@ -3,6 +3,7 @@ import {
 	EditorWindowActivationLive,
 	EditorForegroundPermissionLive
 } from "@ue-shed/engine";
+import { ErrorCauseFields, ErrorGuidanceFields } from "@ue-shed/protocol";
 import { RemoteControlClient, RemoteControlClientError } from "@ue-shed/unreal-connection";
 import { Context, Effect, Layer, Schema, type Stream } from "effect";
 import { WorldActorSnapshot, type ActorId as ActorIdType } from "./actor-models.js";
@@ -40,10 +41,9 @@ const ObservationCadenceResponse = Schema.Union([
 export class ObservatoryConnectionError extends Schema.TaggedError<ObservatoryConnectionError>()(
 	"ObservatoryConnectionError",
 	{
-		message: Schema.String,
 		operation: Schema.String,
-		recovery: Schema.String,
-		retrySafe: Schema.Boolean
+		...ErrorGuidanceFields,
+		...ErrorCauseFields
 	}
 ) {}
 
@@ -83,17 +83,22 @@ export class Observatory extends Context.Service<Observatory, ObservatoryApi>()(
 ) {}
 
 const objectPath = "/Script/UEShedObservatoryEditor.Default__UEShedObservatoryLibrary";
+const isRemoteControlClientError = Schema.is(RemoteControlClientError);
 
 function connectionError(
 	operation: string,
 	cause: RemoteControlClientError | unknown
 ): ObservatoryConnectionError {
 	return new ObservatoryConnectionError({
-		message: cause instanceof RemoteControlClientError ? cause.message : String(cause),
+		message: isRemoteControlClientError(cause)
+			? cause.message
+			: `The observatory ${operation} response does not match the observatory contract.`,
 		operation,
 		recovery:
 			"Open an editor world with UEShedObservatory enabled, then retry the live world scan.",
-		retrySafe: cause instanceof RemoteControlClientError ? cause.retrySafe : false
+		retrySafe: isRemoteControlClientError(cause) ? cause.retrySafe : false,
+		nextStep: isRemoteControlClientError(cause) ? cause.nextStep : "fix_input",
+		cause
 	});
 }
 
@@ -130,7 +135,8 @@ export const ObservatoryLive = Layer.effect(
 						message: response.message,
 						operation: "actor_snapshot",
 						recovery: response.recovery,
-						retrySafe: true
+						retrySafe: true,
+						nextStep: "retry"
 					})
 				);
 			}
@@ -197,7 +203,8 @@ export const ObservatoryLive = Layer.effect(
 					message: response.message,
 					operation: "set_actor_observation_cadence",
 					recovery: response.recovery,
-					retrySafe: true
+					retrySafe: true,
+					nextStep: "retry"
 				})
 			);
 		});

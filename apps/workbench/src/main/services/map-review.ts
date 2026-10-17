@@ -2375,10 +2375,11 @@ export const WorkbenchMapReviewLive = Layer.effect(
 				catch: (cause) =>
 					new CameraBridgeError({
 						code: "unavailable",
-						message: String(cause),
+						message: `Could not list the selected project folder ${selected.projectRoot}.`,
 						recovery: "Choose a readable Unreal project.",
 						retrySafe: true,
-						nextStep: "fix_input"
+						nextStep: "fix_input",
+						cause
 					})
 			});
 			const descriptor = files.find((name) => name.endsWith(".uproject"));

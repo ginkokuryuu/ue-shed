@@ -1,5 +1,7 @@
 import {
 	decodeCompanionCapabilityManifest,
+	ErrorCauseFields,
+	ErrorGuidanceFields,
 	type CompanionCapabilityManifest
 } from "@ue-shed/protocol";
 import { RemoteControlClient, type RemoteControlClientError } from "@ue-shed/unreal-connection";
@@ -14,9 +16,9 @@ export class LiveTexturePreviewError extends Schema.TaggedError<LiveTexturePrevi
 	{
 		endpoint: Schema.String,
 		operation: Schema.Literals(["manifest", "preview"]),
-		message: Schema.String,
-		retrySafe: Schema.Boolean,
-		status: Schema.optional(Schema.Number)
+		status: Schema.optional(Schema.Number),
+		...ErrorGuidanceFields,
+		...ErrorCauseFields
 	}
 ) {}
 
@@ -49,8 +51,11 @@ function liveError(
 		endpoint: error.endpoint,
 		message: error.message,
 		operation,
+		recovery: error.recovery,
 		retrySafe: error.retrySafe,
-		...(error.status === undefined ? undefined : { status: error.status })
+		nextStep: error.nextStep,
+		...(error.status === undefined ? undefined : { status: error.status }),
+		cause: error
 	});
 }
 
@@ -97,8 +102,11 @@ function readManifest(
 						new LiveTexturePreviewError({
 							endpoint,
 							operation: "manifest",
-							message: `Invalid Unreal capability manifest: ${String(cause)}`,
-							retrySafe: false
+							message: `The editor at ${endpoint} returned a capability manifest that does not match the companion contract.`,
+							recovery: "Install a UEShedCore plugin that matches this host.",
+							retrySafe: false,
+							nextStep: "fix_input",
+							cause
 						})
 				)
 			)
@@ -140,8 +148,12 @@ export function readLiveTexturePreview(
 								new LiveTexturePreviewError({
 									endpoint: options.endpoint,
 									operation: "preview",
-									message: `Invalid texture preview result: ${String(cause)}`,
-									retrySafe: false
+									message: `The editor at ${options.endpoint} returned a texture preview for ${options.objectPath} that does not match the preview contract.`,
+									recovery:
+										"Install UEShedCore and Asset Audits plugins that match this host.",
+									retrySafe: false,
+									nextStep: "fix_input",
+									cause
 								})
 						)
 					)

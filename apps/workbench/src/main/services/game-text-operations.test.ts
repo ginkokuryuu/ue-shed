@@ -351,6 +351,7 @@ it.effect("rejects stale confirmations, scanning, missing targets and typed runn
 						message: "Unreal could not finish the step.",
 						recovery: "Repair the target configuration, then review a new plan.",
 						retrySafe: false,
+						nextStep: "reconcile",
 						logExcerpt: [
 							"Error: C:/Private/Project/file.po could not be read",
 							"password=secret"

@@ -1,3 +1,4 @@
+import { ErrorGuidanceFields } from "@ue-shed/protocol";
 import { Effect, Schema } from "effect";
 
 const NonNegativeInt = Schema.Int.check(Schema.isGreaterThanOrEqualTo(0));
@@ -308,9 +309,7 @@ export class ScenarioContractError extends Schema.TaggedError<ScenarioContractEr
 	"ScenarioContractError",
 	{
 		code: Schema.Literal("invalid_contract"),
-		message: Schema.String,
-		recovery: Schema.String,
-		retrySafe: Schema.Boolean,
+		...ErrorGuidanceFields,
 		cause: Schema.optionalKey(Schema.Defect())
 	}
 ) {}
@@ -337,6 +336,7 @@ export function scenarioContractParser<S extends Schema.Codec<unknown, unknown>>
 						recovery:
 							"Run the host and client from the same UE Shed version, then retry.",
 						retrySafe: false,
+						nextStep: "escalate",
 						cause
 					})
 			)

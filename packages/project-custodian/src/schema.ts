@@ -1,3 +1,4 @@
+import { ErrorGuidanceFields } from "./error-guidance.js";
 import { Effect, Schema } from "effect";
 
 const Bytes = Schema.Int.check(Schema.isGreaterThanOrEqualTo(0));
@@ -278,9 +279,7 @@ export class CustodianContractError extends Schema.TaggedError<CustodianContract
 	"CustodianContractError",
 	{
 		code: Schema.Literal("invalid_contract"),
-		message: Schema.String,
-		recovery: Schema.String,
-		retrySafe: Schema.Boolean,
+		...ErrorGuidanceFields,
 		cause: Schema.optionalKey(Schema.Defect())
 	}
 ) {}
@@ -307,6 +306,7 @@ function custodianContractParser<S extends Schema.Codec<unknown, unknown>>(
 						recovery:
 							"Run the host and client from the same UE Shed version, then retry.",
 						retrySafe: false,
+						nextStep: "escalate",
 						cause
 					})
 			)

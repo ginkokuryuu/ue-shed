@@ -1,4 +1,5 @@
 import { Effect, Schema } from "effect";
+import { ErrorCauseFields, ErrorGuidanceFields } from "./error-guidance.js";
 
 export const IdentifierKind = Schema.Literals([
 	"actor",
@@ -14,7 +15,8 @@ export class IdentifierValidationError extends Schema.TaggedError<IdentifierVali
 	{
 		kind: IdentifierKind,
 		input: Schema.String,
-		recovery: Schema.String
+		...ErrorGuidanceFields,
+		...ErrorCauseFields
 	}
 ) {}
 
@@ -35,11 +37,19 @@ export type SessionId = Schema.Schema.Type<typeof SessionId>;
 export const WorldId = IdentifierString.pipe(Schema.brand("WorldId"));
 export type WorldId = Schema.Schema.Type<typeof WorldId>;
 
-function identifierError(kind: IdentifierKind, input: string): IdentifierValidationError {
+function identifierError(
+	kind: IdentifierKind,
+	input: string,
+	cause?: unknown
+): IdentifierValidationError {
 	return new IdentifierValidationError({
 		kind,
 		input,
-		recovery: `Provide a non-empty ${kind} identifier.`
+		...(cause === undefined ? undefined : { cause }),
+		message: `The ${kind} identifier is empty or whitespace.`,
+		recovery: `Provide a non-empty ${kind} identifier.`,
+		retrySafe: true,
+		nextStep: "fix_input"
 	});
 }
 
@@ -49,7 +59,7 @@ function decodeIdentifier<S extends Schema.ConstraintDecoder<string>>(
 	input: string
 ): Effect.Effect<S["Type"], IdentifierValidationError, S["DecodingServices"]> {
 	return Schema.decodeUnknownEffect(schema)(input).pipe(
-		Effect.mapError(() => identifierError(kind, input))
+		Effect.mapError((cause) => identifierError(kind, input, cause))
 	);
 }
 
@@ -163,7 +173,7 @@ export * from "./uasset-inspection.js";
 export * from "./editor-window-activation.js";
 export * from "./editor-foreground-responsiveness.js";
 export * from "./level-sequence.js";
-export { ErrorGuidanceFields, ErrorNextStep } from "./error-guidance.js";
+export { ErrorCauseFields, ErrorGuidanceFields, ErrorNextStep } from "./error-guidance.js";
 
 export { makeWireJsonSchemaDocument, canonicalJsonSchemaReferences } from "./json-schema.js";
 

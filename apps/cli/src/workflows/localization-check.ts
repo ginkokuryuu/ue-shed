@@ -12,6 +12,8 @@ import { CliRuntime, printJson } from "../cli-runtime.js";
 import type { CliCommand } from "../command-model.js";
 import { loadLocalizationContext } from "./localization.js";
 
+const isGameTextRuleDocumentError = Schema.is(GameTextRuleDocumentError);
+
 export class LocalizationCheckOutputError extends Schema.TaggedError<LocalizationCheckOutputError>()(
 	"LocalizationCheckOutputError",
 	{
@@ -95,7 +97,7 @@ export const runLocalizationCheck = Effect.fn("Cli.workflow.localization_check")
 							.pipe(Effect.flatMap(decodeGameTextRuleDocumentJson));
 					}).pipe(
 						Effect.mapError((error) =>
-							error instanceof GameTextRuleDocumentError
+							isGameTextRuleDocumentError(error)
 								? error
 								: new LocalizationCheckOutputError({
 										code: "rules_unreadable",

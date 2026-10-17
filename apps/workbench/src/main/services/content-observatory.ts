@@ -3,7 +3,8 @@ import {
 	ProjectRoot,
 	PerforceFastMapHistoryQuery,
 	PerforceMapHistoryQuery,
-	MapHistoryError
+	MapHistoryError,
+	mapHistoryNextStep
 } from "@ue-shed/map-history";
 import { AssetReader, type AssetReaderError } from "@ue-shed/unreal-assets";
 import type {
@@ -55,14 +56,16 @@ function errorState(error: MapHistoryError) {
 }
 
 function targetCatalogError(operation: string, error: AssetReaderError): MapHistoryError {
+	const kind = error.kind === "resource_limit" ? "resource_limit" : "saved_world_decode";
 	return new MapHistoryError({
-		kind: error.kind === "resource_limit" ? "resource_limit" : "saved_world_decode",
+		kind,
 		message: `${operation}: ${error.message}`,
 		recovery:
 			error.kind === "resource_limit"
 				? "Narrow the selected map or raise the saved-world package limit explicitly."
 				: "Confirm the selected map's saved files can be read, then retry.",
-		retrySafe: error.retrySafe
+		retrySafe: error.retrySafe,
+		nextStep: mapHistoryNextStep(kind, error.retrySafe)
 	});
 }
 
@@ -147,7 +150,8 @@ export const WorkbenchContentObservatoryLive = Layer.effect(
 							message:
 								"No Workbench project is configured for current actor discovery.",
 							recovery: "Configure a project, then retry loading current actors.",
-							retrySafe: false
+							retrySafe: false,
+							nextStep: "fix_input"
 						})
 				)
 			);
@@ -157,7 +161,8 @@ export const WorkbenchContentObservatoryLive = Layer.effect(
 						kind: "invalid_target",
 						message: `Saved map ${mapPath} is not configured for current actor discovery.`,
 						recovery: "Choose one of the configured maps, then retry.",
-						retrySafe: false
+						retrySafe: false,
+						nextStep: "fix_input"
 					})
 				);
 			}

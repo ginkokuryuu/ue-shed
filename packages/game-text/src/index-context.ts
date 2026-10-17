@@ -6,6 +6,7 @@ import {
 	LocalizationError,
 	LocalizationFileAccess,
 	defaultLocalizationLimits,
+	localizationError,
 	localizationIdentityDiagnostics,
 	parseLocmeta,
 	parseWordCountCSV,
@@ -128,14 +129,7 @@ export const readIndexedLocalizationEvidence = Effect.fn("GameTextIndex.evidence
 			return {
 				status: "failed" as const,
 				relativePath: path ?? null,
-				error:
-					error ??
-					new LocalizationError({
-						code: "file_missing",
-						message: "Localization evidence could not be read (file_missing).",
-						recovery:
-							"Restore the expected file or generate it through Unreal's localization pipeline."
-					})
+				error: error ?? localizationError("file_missing")
 			};
 		return {
 			status: "read" as const,
@@ -193,15 +187,7 @@ export const readIndexedLocalizationEvidence = Effect.fn("GameTextIndex.evidence
 				relativePath: path,
 				error
 			});
-			if (path === null)
-				return failed(
-					new LocalizationError({
-						code: "file_missing",
-						message: "Localization evidence could not be read (file_missing).",
-						recovery:
-							"Restore the expected file or generate it through Unreal's localization pipeline."
-					})
-				);
+			if (path === null) return failed(localizationError("file_missing"));
 			const read = yield* files
 				.read(root, path, defaultLocalizationLimits)
 				.pipe(Effect.result);

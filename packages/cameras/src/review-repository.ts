@@ -13,8 +13,9 @@ import {
 	unlink
 } from "node:fs/promises";
 import { basename, dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
-import { ErrorGuidanceFields } from "@ue-shed/protocol";
+import { ErrorCauseFields, ErrorGuidanceFields } from "@ue-shed/protocol";
 import { Context, Effect, Layer, Schema } from "effect";
+import { fileFailureReason } from "./file-failure.js";
 import {
 	decodeCaptureRun,
 	decodeReviewSet,
@@ -33,6 +34,7 @@ export class ReviewStorageError extends Schema.TaggedError<ReviewStorageError>()
 	"ReviewStorageError",
 	{
 		...ErrorGuidanceFields,
+		...ErrorCauseFields,
 		operation: Schema.Literals([
 			"create_set",
 			"discard_staging",
@@ -83,12 +85,13 @@ function loadReviewSetWithNode(path: string): Effect.Effect<ReviewSet, ReviewSto
 			Schema.decodeUnknownSync(Schema.Json)(JSON.parse(await readFile(path, "utf8"))),
 		catch: (cause) =>
 			new ReviewStorageError({
-				message: String(cause),
+				message: `Could not load Review Set ${path} because ${fileFailureReason(cause)}.`,
 				operation: "load_set",
 				path,
 				recovery: "Validate or repair the Review Set document, then retry.",
 				retrySafe: true,
-				nextStep: "fix_input"
+				nextStep: "fix_input",
+				cause
 			})
 	}).pipe(
 		Effect.flatMap((input) =>
@@ -96,12 +99,13 @@ function loadReviewSetWithNode(path: string): Effect.Effect<ReviewSet, ReviewSto
 				Effect.mapError(
 					(cause) =>
 						new ReviewStorageError({
-							message: String(cause),
+							message: `Review Set ${path} does not match the Review Set contract.`,
 							operation: "load_set",
 							path,
 							recovery: "Validate or repair the Review Set document, then retry.",
 							retrySafe: true,
-							nextStep: "fix_input"
+							nextStep: "fix_input",
+							cause
 						})
 				)
 			)
@@ -125,12 +129,13 @@ function findReviewSetWithNode(
 		},
 		catch: (cause) =>
 			new ReviewStorageError({
-				message: String(cause),
+				message: `Could not check for Review Set ${path} because ${fileFailureReason(cause)}.`,
 				operation: "load_set",
 				path,
 				recovery: "Check that the Review Set directory is readable.",
 				retrySafe: true,
-				nextStep: "retry"
+				nextStep: "retry",
+				cause
 			})
 	}).pipe(
 		Effect.flatMap((exists) =>
@@ -150,12 +155,13 @@ function saveReviewSetWithNode(args: {
 		},
 		catch: (cause) =>
 			new ReviewStorageError({
-				message: String(cause),
+				message: `Could not save Review Set ${args.path} because ${fileFailureReason(cause)}.`,
 				operation: "save_set",
 				path: args.path,
 				recovery: "Check that the Review Set directory is writable.",
 				retrySafe: true,
-				nextStep: "retry"
+				nextStep: "retry",
+				cause
 			})
 	}).pipe(Effect.withSpan("camera.review.set.save", { attributes: { path: args.path } }));
 }
@@ -207,7 +213,8 @@ function listReviewSetsWithNode(
 			},
 			catch: (cause) =>
 				new ReviewStorageError({
-					message: String(cause),
+					message: `Could not list Review Sets in ${root} because ${fileFailureReason(cause)}.`,
+					cause,
 					operation: "list_sets",
 					path: root,
 					recovery:
@@ -222,7 +229,8 @@ function listReviewSetsWithNode(
 				Effect.mapError(
 					(cause) =>
 						new ReviewStorageError({
-							message: String(cause),
+							message: `Review Set ${path} does not match the Review Set contract.`,
+							cause,
 							operation: "list_sets",
 							path,
 							recovery: "Validate or repair the malformed Review Set document.",
@@ -671,13 +679,14 @@ function loadCaptureRunWithNode(path: string): Effect.Effect<CaptureRun, ReviewS
 			Schema.decodeUnknownSync(Schema.Json)(JSON.parse(await readFile(path, "utf8"))),
 		catch: (cause) =>
 			new ReviewStorageError({
-				message: String(cause),
+				message: `Could not load Capture Run ${path} because ${fileFailureReason(cause)}.`,
 				operation: "load_run",
 				path,
 				recovery:
 					"Inspect the immutable Capture Run bundle or restore it from evidence storage.",
 				retrySafe: true,
-				nextStep: "fix_input"
+				nextStep: "fix_input",
+				cause
 			})
 	}).pipe(
 		Effect.flatMap((input) =>
@@ -685,13 +694,14 @@ function loadCaptureRunWithNode(path: string): Effect.Effect<CaptureRun, ReviewS
 				Effect.mapError(
 					(cause) =>
 						new ReviewStorageError({
-							message: String(cause),
+							message: `Capture Run ${path} does not match the Capture Run contract.`,
 							operation: "load_run",
 							path,
 							recovery:
 								"Inspect the immutable Capture Run bundle or restore it from evidence storage.",
 							retrySafe: true,
-							nextStep: "escalate"
+							nextStep: "escalate",
+							cause
 						})
 				)
 			)
@@ -733,12 +743,13 @@ function listCaptureRunsWithNode(
 		},
 		catch: (cause) =>
 			new ReviewStorageError({
-				message: String(cause),
+				message: `Could not list Capture Runs in ${root} because ${fileFailureReason(cause)}.`,
 				operation: "list_runs",
 				path: root,
 				recovery: "Check the local review-run directory and repair malformed bundles.",
 				retrySafe: true,
-				nextStep: "fix_input"
+				nextStep: "fix_input",
+				cause
 			})
 	}).pipe(
 		Effect.flatMap((entries) =>
@@ -763,12 +774,13 @@ function listCaptureRunsWithNode(
 					Effect.mapError(
 						(cause) =>
 							new ReviewStorageError({
-								message: String(cause),
+								message: `Capture Run ${path} does not match the Capture Run contract.`,
 								operation: "list_runs",
 								path,
 								recovery: "Repair or remove the malformed Capture Run bundle.",
 								retrySafe: true,
-								nextStep: "fix_input"
+								nextStep: "fix_input",
+								cause
 							})
 					)
 				)
@@ -847,12 +859,13 @@ const makeReviewRepository = (): ReviewRepositoryApi => {
 			},
 			catch: (cause) =>
 				new ReviewStorageError({
-					message: String(cause),
+					message: `Could not prepare Capture Run staging ${args.stagingRoot} because ${fileFailureReason(cause)}.`,
 					operation: "prepare_run",
 					path: args.stagingRoot,
 					recovery: "Check that the project review directory is writable.",
 					retrySafe: false,
-					nextStep: "reconcile"
+					nextStep: "reconcile",
+					cause
 				})
 		});
 	});
@@ -871,12 +884,13 @@ const makeReviewRepository = (): ReviewRepositoryApi => {
 			},
 			catch: (cause) =>
 				new ReviewStorageError({
-					message: String(cause),
+					message: `Could not store artifact ${args.destinationPath} from ${args.sourcePath} because ${fileFailureReason(cause)}.`,
 					operation: "store_artifact",
 					path: args.destinationPath,
 					recovery: "Check staging and evidence directory permissions, then retry.",
 					retrySafe: true,
-					nextStep: "retry"
+					nextStep: "retry",
+					cause
 				})
 		});
 	});
@@ -888,12 +902,13 @@ const makeReviewRepository = (): ReviewRepositoryApi => {
 			try: () => writeJsonAtomically(args.path, args.value),
 			catch: (cause) =>
 				new ReviewStorageError({
-					message: String(cause),
+					message: `Could not write Capture Run document ${args.path} because ${fileFailureReason(cause)}.`,
 					operation: "write_run",
 					path: args.path,
 					recovery: "Check the evidence directory and retry the run.",
 					retrySafe: true,
-					nextStep: "retry"
+					nextStep: "retry",
+					cause
 				})
 		});
 	});
@@ -909,12 +924,13 @@ const makeReviewRepository = (): ReviewRepositoryApi => {
 			},
 			catch: (cause) =>
 				new ReviewStorageError({
-					message: String(cause),
+					message: `Could not finalize Capture Run ${args.stagingRoot} into ${args.finalRoot} because ${fileFailureReason(cause)}.`,
 					operation: "finalize_run",
 					path: args.stagingRoot,
 					recovery: "Inspect the staged Capture Run and retry finalization safely.",
 					retrySafe: false,
-					nextStep: "reconcile"
+					nextStep: "reconcile",
+					cause
 				})
 		});
 	});
@@ -925,12 +941,13 @@ const makeReviewRepository = (): ReviewRepositoryApi => {
 			try: () => rm(stagingRoot, { force: true, recursive: true }),
 			catch: (cause) =>
 				new ReviewStorageError({
-					message: String(cause),
+					message: `Could not discard Capture Run staging ${stagingRoot} because ${fileFailureReason(cause)}.`,
 					operation: "discard_staging",
 					path: stagingRoot,
 					recovery: "Remove the leftover .staging-* directory manually if it remains.",
 					retrySafe: true,
-					nextStep: "retry"
+					nextStep: "retry",
+					cause
 				})
 		});
 	});

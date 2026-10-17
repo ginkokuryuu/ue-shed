@@ -45,6 +45,8 @@ export class OfflineTexturePreviewError extends Schema.TaggedError<OfflineTextur
 	}
 ) {}
 
+const isOfflineTexturePreviewError = Schema.is(OfflineTexturePreviewError);
+
 export interface OfflineTexturePreviewInput {
 	readonly maxDimension?: number;
 	readonly objectPath: string;
@@ -239,7 +241,7 @@ function readPreview(
 		return yield* decodeTexturePreviewResult(json);
 	}).pipe(
 		Effect.mapError((cause) =>
-			cause instanceof OfflineTexturePreviewError
+			isOfflineTexturePreviewError(cause)
 				? cause
 				: previewError(
 						"contract_failure",

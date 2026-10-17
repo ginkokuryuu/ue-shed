@@ -9,6 +9,7 @@ import {
 import {
 	type LocalizationIdentity,
 	LocalizationError,
+	localizationErrorGuidance,
 	PODocument,
 	POEntry,
 	type POFormat,
@@ -62,7 +63,8 @@ function malformedPO(lineNumber: number): LocalizationError {
 	return new LocalizationError({
 		code: "malformed_po",
 		message: `Line ${lineNumber} of the PO file is not valid PO syntax.`,
-		recovery: localizationError("malformed_po").recovery
+		recovery: localizationError("malformed_po").recovery,
+		...localizationErrorGuidance("malformed_po")
 	});
 }
 
