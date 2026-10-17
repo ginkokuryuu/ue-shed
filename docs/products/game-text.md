@@ -889,8 +889,10 @@ This falls short of [base, not constraints](../vision-and-architecture.md#base-n
 The parsers follow Unreal, and a version-3 rule file now sets each built-in's severity and the
 heuristics' thresholds and word lists (length ratios, placeholder words and markers, short-text
 limits). Some policy is still fixed in code (the audience and debug-content rules behind
-`culture_invariant_text`, boundary whitespace policy), and a host cannot add its own checks to the
-same report; both are open work.
+`culture_invariant_text`, boundary whitespace policy) and is open work. A version-3 file can define
+its own checks (`customChecks`: patterns, lengths and forbidden terms on the source or each
+translation, each scoped by culture, role and path) that report beside the built-ins with the same
+evidence, review and workspace model.
 Hosts whose projects cannot store translator notes (packages saved by UE 4.27 and by UE5 before 5.8;
 String Tables and UE 5.8+ can) can pass `disabledChecks: ["missing_translator_notes"]`.
 
