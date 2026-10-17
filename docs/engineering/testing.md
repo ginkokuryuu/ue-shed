@@ -34,7 +34,7 @@ codecs, errors, and recovery need deep coverage.
 
 ## Local verification
 
-GitHub Actions on Blacksmith runs the portable repository checks on pull requests and `main`.
+GitHub-hosted Ubuntu 24.04 runners execute the portable repository checks on pull requests and `main`.
 Separate UAsset library and IO lanes are added only when their Rust, WASM, package, contract, script, or fixture inputs
 change. Parser and inspection changes also trigger downstream IO conformance; WASM-package-only
 changes do not. Native-reader CLI and fixture integration tests run in the conditional IO lane, not
@@ -81,9 +81,8 @@ layer and join tests reuse read-only header and extraction evidence for committe
 each test builds its own writable index. Reader protocol tests and benchmark measurements still
 perform fresh native reads.
 
-The hosted workflow is `.github/workflows/portable.yml`. Change detection and the aggregate
-`pnpm check` status use 2-vCPU Blacksmith Ubuntu 24.04 runners; repository, UAsset, and Catalog
-oracle jobs use 4-vCPU runners. Changes to the workflow itself enable both conditional UAsset
+The hosted workflow is `.github/workflows/portable.yml`. All jobs, including change detection and the aggregate `pnpm check` status,
+use standard GitHub-hosted Ubuntu 24.04 runners. Changes to the workflow itself enable both conditional UAsset
 lanes. The aggregate status requires the repository job to succeed and accepts only success or
 an intentional skip from the conditional jobs. Rust compilation uses sccache with the GitHub
 Actions cache backend; pnpm uses the setup-node dependency cache. Evidence and failure diagnostics
@@ -99,9 +98,9 @@ Chromium's headless shell, which both WASM browser smoke tests use.
 Each UAsset evidence artifact includes `sccache-stats.json` and, when emitted, `sccache.log` with
 warning-level server diagnostics. Inspect these for write failures alongside the hit rate; a Cargo
 `Compiling` line alone does not establish a cache miss. Cache duration counters are cumulative across
-concurrent requests, not job wall time. Blacksmith accelerates the ordinary Actions dependency cache;
-its documented sccache exception still uses GitHub's backend. Compare cold and warm hosted runs before
-adding target-directory caches or increasing runner size.
+concurrent requests, not job wall time. Both compiler and dependency caches use GitHub Actions
+backends. Compare cold and warm hosted runs before adding target-directory caches or increasing
+runner size.
 
 The former `.depot/workflows/portable.yml` is removed so pushes after migration do not schedule a
 second portable workflow in Depot. No release or Unreal runner is enabled by this migration.
