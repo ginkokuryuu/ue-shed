@@ -1,6 +1,6 @@
 import {
 	decodeCameraScheduleConfig,
-	decodeCameraStatus,
+	decodeCameraControlResponse,
 	type CameraScheduleConfig,
 	type CameraStatus
 } from "@ue-shed/protocol";
@@ -428,15 +428,41 @@ export class CameraControlError extends Schema.TaggedError<CameraControlError>()
 		message: Schema.String,
 		operation: Schema.Literals(["configure", "status"]),
 		retrySafe: Schema.Boolean,
-		status: Schema.optional(Schema.Number)
+		status: Schema.optional(Schema.Number),
+		/** The plugin's code when it reported a failure, for example `no-renderable-world`. */
+		code: Schema.optionalKey(Schema.String)
 	}
 ) {}
+
+/** A status or configure response, or the plugin's coded failure as a CameraControlError. */
+function cameraStatusOrFailure(endpoint: string, operation: "configure" | "status") {
+	return (value: Schema.Json) =>
+		decodeCameraControlResponse(value).pipe(
+			Effect.flatMap((response) =>
+				"error" in response
+					? Effect.fail(
+							new CameraControlError({
+								endpoint,
+								operation,
+								code: response.error,
+								message:
+									response.message ??
+									`The camera plugin reported ${response.error}.`,
+								// Only a missing world can change by itself; other codes need a new request.
+								retrySafe: response.error === "no-renderable-world"
+							})
+						)
+					: Effect.succeed(response)
+			)
+		);
+}
 
 function cameraControlError(
 	endpoint: string,
 	operation: "configure" | "status",
 	cause: RemoteControlClientError | unknown
 ): CameraControlError {
+	if (cause instanceof CameraControlError) return cause;
 	if (cause instanceof RemoteControlClientError) {
 		return new CameraControlError({
 			endpoint: cause.endpoint,
@@ -476,7 +502,7 @@ export function getCameraStatus(
 	endpoint: string
 ): Effect.Effect<CameraStatus, CameraControlError, RemoteControlClient> {
 	return cameraRemoteCall(endpoint, "GetStatus", "status", {}).pipe(
-		Effect.flatMap(decodeCameraStatus),
+		Effect.flatMap(cameraStatusOrFailure(endpoint, "status")),
 		Effect.mapError((error) => cameraControlError(endpoint, "status", error))
 	);
 }
@@ -492,7 +518,7 @@ export function configureCameras(
 				ConfigJson: JSON.stringify(validConfig)
 			})
 		),
-		Effect.flatMap(decodeCameraStatus),
+		Effect.flatMap(cameraStatusOrFailure(endpoint, "configure")),
 		Effect.flatMap((status) =>
 			config.editorBackgroundTicking === "while_streaming" &&
 			status.config.editorBackgroundTicking !== "while_streaming"
