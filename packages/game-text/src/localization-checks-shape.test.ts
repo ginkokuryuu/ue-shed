@@ -41,7 +41,7 @@ import {
 	workspaceQualityCsv
 } from "./localization-workspace.js";
 import { STARTER_GAME_TEXT_RULES } from "./starter-rules.js";
-import { evaluateGameTextSourceQuality } from "./game-text-rules.js";
+import { GameTextRuleDocument, evaluateGameTextSourceQuality } from "./game-text-rules.js";
 import { TextQualityRuleDocument } from "./quality-schema.js";
 import { TextUnit, type TextCorpus } from "./schema.js";
 
@@ -57,7 +57,7 @@ function report(
 	text: TextCorpus,
 	files: ReturnType<typeof evidence>,
 	options: LocalizationCheckOptions = {},
-	rules?: TextQualityRuleDocument
+	rules?: GameTextRuleDocument
 ) {
 	const joined = joinLocalizationTarget(text, files, files.target);
 	return {
@@ -71,7 +71,7 @@ function line(
 	source: string,
 	translation: string,
 	options: LocalizationCheckOptions = {},
-	rules?: TextQualityRuleDocument
+	rules?: GameTextRuleDocument
 ) {
 	const text = corpus([unit("K", source)]);
 	return report(
@@ -395,6 +395,26 @@ describe("translation shape checks", () => {
 		])
 			expect(kinds(line(harbour, "skip", options))).toContain("length_outlier");
 		expect(kinds(line(harbour, "skip"))).not.toContain("length_outlier");
+		// An out-of-scope check never hides an in-scope one: placeholder_translation runs only for
+		// another culture, so it does not take the German length finding.
+		const scoped = Schema.decodeUnknownSync(GameTextRuleDocument)({
+			schemaVersion: 3,
+			roles: [],
+			rules: [],
+			checks: {
+				placeholder_translation: { scope: { cultures: ["fr"] } },
+				length_outlier: { scope: { cultures: ["de"] } }
+			}
+		});
+		expect(kinds(line(harbour, "skip", {}, scoped))).toEqual(["length_outlier"]);
+		// In scope, the placeholder keeps the finding.
+		const inScope = Schema.decodeUnknownSync(GameTextRuleDocument)({
+			schemaVersion: 3,
+			roles: [],
+			rules: [],
+			checks: { placeholder_translation: { scope: { cultures: ["de"] } } }
+		});
+		expect(kinds(line(harbour, "skip", {}, inScope))).toEqual(["placeholder_translation"]);
 		expect(kinds(line("Your spouse checks the supplies.", "..."))).toContain(
 			"placeholder_translation"
 		);
