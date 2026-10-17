@@ -46,6 +46,7 @@ const tests = [
 	"UEShed.Authoring.ActorReferenceDepth",
 	"UEShed.GameText.ObjectProperties",
 	"UEShed.GameText.Blueprint",
+	"UEShed.GameText.SaveRecovery",
 	"UEShed.Automation.Input",
 	"UEShed.Automation.Profiling",
 	"UEShed.Cameras.Rendering.LifecycleAndReference",

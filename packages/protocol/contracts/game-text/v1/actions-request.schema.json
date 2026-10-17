@@ -4,6 +4,17 @@
 		"GameTextActionPlace": {
 			"type": "object",
 			"properties": {
+				"packageFile": {
+					"type": "string",
+					"allOf": [
+						{
+							"minLength": 1
+						},
+						{
+							"maxLength": 4096
+						}
+					]
+				},
 				"objectPath": {
 					"type": "string",
 					"allOf": [
@@ -27,7 +38,7 @@
 					]
 				}
 			},
-			"required": ["objectPath", "propertyPath"],
+			"required": ["packageFile", "objectPath", "propertyPath"],
 			"additionalProperties": false
 		},
 		"GameTextActionIdentity": {

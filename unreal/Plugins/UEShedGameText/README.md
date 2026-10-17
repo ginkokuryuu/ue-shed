@@ -19,7 +19,8 @@ failed, and `2` when it could not read the request or write the result.
 
 ## Places
 
-A place is an object path and the saved-package reader's property chain: struct members joined by
+A place retains `packageFile` (absolute or relative to the connected editor project), the saved
+object path and the reader's property chain: struct members joined by
 `.`, fixed and dynamic array elements as `[n]`, and map values as `{n}.value`. The chain must end in
 a text property. DataAsset properties, Blueprint class defaults, SCS component templates and widget
 trees are supported. DataTable cells are rejected with `unsupported_place` (use `UEShedAuthoring`
@@ -34,24 +35,37 @@ Apply 1.2), as are graph nodes until Plan 058 A2.
 | `adopt_key`      | SourceString, Namespace, then Key                             |
 | `change_source`  | SourceString (Unreal keeps the key only for a sole reference) |
 
+The plugin resolves the file through Unreal's mounted content, then resolves the object within that
+package and verifies its owner. A copied file may retain its original serialized package prefix;
+this never redirects the edit to that original. Missing or ambiguous bindings fail with
+`package_mismatch`. Keep the same file path convention when re-reading for verification.
+
 Namespaces on the wire leave out the package namespace; Unreal re-applies it on write.
 `change_key` and `adopt_key` fail with `key_conflict` when Unreal does not keep the requested key
 because another text in the package uses that id with different source.
 
 ## Verification and failures
 
-A request is all or nothing. Every place must resolve, hold localizable text and still hold the
-expected namespace, key and source; otherwise nothing changes and the result is `rejected`. Actions
-apply in order. A dry run applies, checks, then restores every value and each package's dirty flag.
-An apply compiles each owning Blueprint once, reads every place back, and on a compile error or a
-place that did not keep its edit (`not_persisted`) restores the old values, recompiles and reports
-`failed` with `rolledBack: true`. Saving is optional; a read-only file reports `save_failed` and
-leaves the edits in the editor. Errors carry `code`, `message`, `recovery`, `retrySafe` and
-`nextStep`.
+Every place must resolve, hold localizable text and still hold the expected namespace, key and
+source; otherwise nothing changes and the result is `rejected`. Actions apply in order. A dry run
+applies, checks, then restores every value and each package's dirty flag. Normal and rollback
+compiles use `SkipSave`, independently of the editor's Save on Compile preference. An apply reads
+every place back; compile or verification failures restore edits, recompile and verify restoration
+before reporting `rolledBack: true`. Failed restoration reports `rollback_failed` and unknown
+outcomes requiring reconciliation.
 
-Native automation tests `UEShed.GameText.ObjectProperties` and `UEShed.GameText.Blueprint` cover
+Saving packages is not atomic. A save failure leaves edits applied, with their generated keys and
+file-bound places in the receipt. Package results distinguish `saved`, `unsaved` (no write attempted)
+and `unknown` persistence. `save_failed` has `retrySafe: false`, `nextStep: reconcile`: inspect live
+text and saved bytes, resolve checkout/disk failures, then explicitly save the reviewed outstanding
+state through Unreal. Never replay the edits to recover persistence. Successfully saved actions
+remain eligible for `verifyGameTextActions` even when another package failed. A lost mutation reply
+also requires reconciliation. UE Shed never checks files out.
+
+Native automation tests `UEShed.GameText.ObjectProperties` and `UEShed.GameText.Blueprint` plus `UEShed.GameText.SaveRecovery` cover
 every edit, dry run, conflicts with rollback, struct, array, map and fixed-array places, read-only
 and unsupported places, malformed requests, and a Blueprint class default and component template
-that keep their edits through a compile. `pnpm test:unreal-game-text-actions` drives the fixture's
+that keep their edits through a compile. They also check disk bytes with Save on Compile enabled,
+post-compile verification rollback, and partial-save recovery without generating another key. `pnpm test:unreal-game-text-actions` drives the fixture's
 identity cases through Remote Control on a copy of the fixture project and compares the re-read ids
 with Unreal's gather table.

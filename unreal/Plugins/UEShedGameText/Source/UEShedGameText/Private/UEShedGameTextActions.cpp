@@ -60,6 +60,9 @@ struct FAction
 {
 	FString Id;
 	FString ObjectPath;
+	FString PackageFile;
+	FString PackageName;
+	FString ResolvedObjectPath;
 	FString PropertyPath;
 	FTextIdentity Expected;
 	EEditKind Kind = EEditKind::ChangeKey;
@@ -309,14 +312,49 @@ UBlueprint* OwningBlueprint(UObject* Object)
 	return nullptr;
 }
 
+/** Bind the scanned file to Unreal's actual mount before loading any object. */
+TOptional<FError> BindPackage(FAction& Action)
+{
+	FString Filename = FPaths::IsRelative(Action.PackageFile)
+		? FPaths::ConvertRelativePathToFull(FPaths::ProjectDir(), Action.PackageFile)
+		: FPaths::ConvertRelativePathToFull(Action.PackageFile);
+	FPaths::NormalizeFilename(Filename);
+	FPaths::CollapseRelativeDirectories(Filename);
+	FString MountedFile;
+	if (!FPackageName::TryConvertFilenameToLongPackageName(Filename, Action.PackageName)
+		|| !FPackageName::DoesPackageExist(Action.PackageName, &MountedFile)
+		|| !FPaths::IsSamePath(Filename, FPaths::ConvertRelativePathToFull(MountedFile)))
+	{
+		return ActionError(TEXT("package_mismatch"), Action.Id,
+			FString::Printf(TEXT("Cannot bind %s to an existing mounted package."), *Action.PackageFile),
+			TEXT("Rescan the selected project and verify its content mounts; no object path fallback is allowed."), TEXT("reconcile"));
+	}
+	FString RelativeObject = Action.ObjectPath;
+	if (RelativeObject.StartsWith(TEXT("/")))
+	{
+		int32 Dot = INDEX_NONE;
+		if (!RelativeObject.FindChar(TEXT('.'), Dot))
+			return ActionError(TEXT("package_mismatch"), Action.Id, TEXT("An absolute object path needs a package and object."),
+				TEXT("Rescan the package and pass its object path with the scanned file."), TEXT("reconcile"));
+		RelativeObject = RelativeObject.Mid(Dot + 1);
+	}
+	Action.ResolvedObjectPath = Action.PackageName + TEXT(".") + RelativeObject;
+	return {};
+}
+
 /** Resolves one action's place, or the error that stops the request. */
 TOptional<FError> Resolve(const FAction& Action, FPlace& Place)
 {
-	UObject* Object = FindPlaceObject(Action.ObjectPath);
+	UObject* Object = FindPlaceObject(Action.ResolvedObjectPath);
 	if (!Object)
 	{
 		return ActionError(TEXT("place_not_found"), Action.Id, FString::Printf(TEXT("No object at %s."), *Action.ObjectPath),
 			TEXT("Rescan the project; the asset may have been renamed, moved or deleted."), TEXT("reconcile"));
+	}
+	if (Object->GetPackage()->GetName() != Action.PackageName)
+	{
+		return ActionError(TEXT("package_mismatch"), Action.Id, TEXT("The resolved object belongs to a different package."),
+			TEXT("Rescan the selected file; do not edit an object in another package."), TEXT("reconcile"));
 	}
 	for (const UObject* Outer = Object; Outer; Outer = Outer->GetOuter())
 	{
@@ -452,6 +490,7 @@ public:
 	TArray<TSharedPtr<FJsonValue>> Packages;
 	FString Status = TEXT("ok");
 	bool bRolledBack = false;
+	bool bRollbackFailed = false;
 	int32 Applied = 0;
 
 	bool Parse(const FString& RequestJson)
@@ -488,6 +527,7 @@ public:
 			const TSharedPtr<FJsonObject>* EditObject = nullptr;
 			if (!ReadString(*Object, TEXT("id"), Action.Id, false)
 				|| !(*Object)->TryGetObjectField(TEXT("place"), Place)
+				|| !ReadString(*Place, TEXT("packageFile"), Action.PackageFile, false)
 				|| !ReadString(*Place, TEXT("objectPath"), Action.ObjectPath, false)
 				|| !ReadString(*Place, TEXT("propertyPath"), Action.PropertyPath, false)
 				|| !(*Object)->TryGetObjectField(TEXT("expected"), Expected)
@@ -497,7 +537,7 @@ public:
 				|| !(*Object)->TryGetObjectField(TEXT("edit"), EditObject) || !ParseEdit(*EditObject, Action))
 				return Reject(TEXT("An action is missing id, place, expected or a valid edit."), Action.Id);
 			if (Ids.Contains(Action.Id)) return Reject(TEXT("Action ids must be unique."), Action.Id);
-			const FString PlaceKey = Action.ObjectPath + TEXT("\n") + Action.PropertyPath;
+			const FString PlaceKey = Action.PackageFile + TEXT("\n") + Action.ObjectPath + TEXT("\n") + Action.PropertyPath;
 			if (PlaceKeys.Contains(PlaceKey)) return Reject(TEXT("Each place may appear in one action only."), Action.Id);
 			Ids.Add(Action.Id);
 			PlaceKeys.Add(PlaceKey);
@@ -510,11 +550,19 @@ public:
 	{
 		Places.SetNum(Actions.Num());
 		Outcomes.SetNum(Actions.Num());
+		TSet<FString> ResolvedPlaces;
 		for (int32 Index = 0; Index < Actions.Num(); ++Index)
 		{
-			if (TOptional<FError> Error = Resolve(Actions[Index], Places[Index])) Errors.Add(*Error);
+			if (TOptional<FError> Binding = BindPackage(Actions[Index])) Errors.Add(*Binding);
+			else if (ResolvedPlaces.Contains(Actions[Index].ResolvedObjectPath + TEXT("\n") + Actions[Index].PropertyPath))
+			{
+				Reject(TEXT("Each resolved place may appear in one action only."), Actions[Index].Id);
+				return;
+			}
+			else if (TOptional<FError> Error = Resolve(Actions[Index], Places[Index])) Errors.Add(*Error);
 			else if (TOptional<FError> Stale = CheckExpected(Actions[Index], Places[Index], Outcomes[Index].Before))
 				Errors.Add(*Stale);
+			ResolvedPlaces.Add(Actions[Index].ResolvedObjectPath + TEXT("\n") + Actions[Index].PropertyPath);
 		}
 		if (!Errors.IsEmpty())
 		{
@@ -569,7 +617,13 @@ public:
 				const TSharedRef<FJsonObject> Item = MakeShared<FJsonObject>();
 				Item->SetStringField(TEXT("id"), Actions[Index].Id);
 				Item->SetStringField(TEXT("status"), !Outcome.bChanged ? TEXT("unchanged")
-					: Mode == TEXT("dry_run") || Status != TEXT("ok") ? TEXT("planned") : TEXT("applied"));
+					: Mode == TEXT("dry_run") ? TEXT("planned")
+					: bRolledBack ? TEXT("rolled_back") : bRollbackFailed ? TEXT("unknown") : TEXT("applied"));
+				const TSharedRef<FJsonObject> Place = MakeShared<FJsonObject>();
+				Place->SetStringField(TEXT("packageFile"), Actions[Index].PackageFile);
+				Place->SetStringField(TEXT("objectPath"), Actions[Index].ObjectPath);
+				Place->SetStringField(TEXT("propertyPath"), Actions[Index].PropertyPath);
+				Item->SetObjectField(TEXT("place"), Place);
 				Item->SetObjectField(TEXT("before"), IdentityJson(Outcome.Before));
 				Item->SetObjectField(TEXT("after"), IdentityJson(Outcome.After, Outcome.bMinted && Mode == TEXT("dry_run")));
 				ActionResults.Add(MakeShared<FJsonValueObject>(Item));
@@ -592,11 +646,13 @@ public:
 			TSet<FString> Seen;
 			for (const FAction& Action : Actions)
 			{
-				const FString PackageName = FPackageName::ObjectPathToPackageName(Action.ObjectPath);
+				const FString PackageName = Action.PackageName;
 				if (Seen.Contains(PackageName)) continue;
 				Seen.Add(PackageName);
 				const TSharedRef<FJsonObject> Item = MakeShared<FJsonObject>();
 				Item->SetStringField(TEXT("packageName"), PackageName);
+				Item->SetStringField(TEXT("packageFile"), Action.PackageFile);
+				Item->SetStringField(TEXT("persistence"), TEXT("unsaved"));
 				Item->SetBoolField(TEXT("saved"), false);
 				PackageResults.Add(MakeShared<FJsonValueObject>(Item));
 			}
@@ -650,7 +706,7 @@ private:
 			FBlueprintEditorUtils::MarkBlueprintAsModified(Blueprint);
 			FCompilerResultsLog Log;
 			Log.bSilentMode = true;
-			FKismetEditorUtilities::CompileBlueprint(Blueprint, EBlueprintCompileOptions::SkipGarbageCollection, &Log);
+			FKismetEditorUtilities::CompileBlueprint(Blueprint, EBlueprintCompileOptions::SkipGarbageCollection | EBlueprintCompileOptions::SkipSave, &Log);
 			const bool bCompiled = Log.NumErrors == 0 && Blueprint->Status != BS_Error;
 			Compiled.Add({ Blueprint->GetPathName(), bCompiled });
 			if (!bCompiled)
@@ -690,15 +746,32 @@ private:
 			if (!Resolve(Actions[Index], Place).IsSet())
 				Place.Property->SetPropertyValue(Place.Value, Outcomes[Index].Original);
 		}
+		bool bRestored = true;
 		for (UBlueprint* Blueprint : Blueprints)
 		{
 			FBlueprintEditorUtils::MarkBlueprintAsModified(Blueprint);
 			FCompilerResultsLog Log;
 			Log.bSilentMode = true;
-			FKismetEditorUtilities::CompileBlueprint(Blueprint, EBlueprintCompileOptions::SkipGarbageCollection, &Log);
+			FKismetEditorUtilities::CompileBlueprint(Blueprint, EBlueprintCompileOptions::SkipGarbageCollection | EBlueprintCompileOptions::SkipSave, &Log);
+			bRestored = bRestored && Log.NumErrors == 0 && Blueprint->Status != BS_Error;
 		}
-		for (const TPair<UPackage*, bool>& Entry : DirtyBefore) Entry.Key->SetDirtyFlag(Entry.Value);
-		bRolledBack = true;
+		for (int32 Index = 0; Index < Applied; ++Index)
+		{
+			FPlace Place;
+			FTextIdentity Current;
+			FString Why;
+			const bool bMatches = !Resolve(Actions[Index], Place).IsSet()
+				&& ReadIdentity(Place.Property->GetPropertyValue(Place.Value), Current, Why)
+				&& Current == Outcomes[Index].Before;
+			bRestored = bRestored && bMatches;
+		}
+		if (bRestored)
+			for (const TPair<UPackage*, bool>& Entry : DirtyBefore) Entry.Key->SetDirtyFlag(Entry.Value);
+		else
+			Errors.Add(ActionError(TEXT("rollback_failed"), FString(), TEXT("Could not verify complete restoration after compilation."),
+				TEXT("Inspect every affected live and saved place; do not replay the mutation."), TEXT("reconcile")));
+		bRolledBack = bRestored;
+		bRollbackFailed = !bRestored;
 	}
 
 	void SavePackages()
@@ -710,12 +783,16 @@ private:
 				Package->ContainsMap() ? FPackageName::GetMapPackageExtension() : FPackageName::GetAssetPackageExtension());
 			const TSharedRef<FJsonObject> Item = MakeShared<FJsonObject>();
 			Item->SetStringField(TEXT("packageName"), Package->GetName());
+			const FAction* Action = Actions.FindByPredicate([Package](const FAction& Candidate) { return Candidate.PackageName == Package->GetName(); });
+			Item->SetStringField(TEXT("packageFile"), Action ? Action->PackageFile : Filename);
+			FString Persistence = TEXT("unknown");
 			bool bSaved = false;
 			if (IFileManager::Get().FileExists(*Filename) && IFileManager::Get().IsReadOnly(*Filename))
 			{
+				Persistence = TEXT("unsaved");
 				Errors.Add(ActionError(TEXT("save_failed"), FString(),
 					FString::Printf(TEXT("%s is read-only."), *Package->GetName()),
-					TEXT("Check the file out or make it writable, then save again; the edits stay in the editor."), TEXT("retry"), true));
+					TEXT("Reconcile live text and saved files, resolve checkout, then explicitly save the reviewed outstanding state; do not replay edits."), TEXT("reconcile")));
 			}
 			else
 			{
@@ -728,10 +805,11 @@ private:
 				{
 					Errors.Add(ActionError(TEXT("save_failed"), FString(),
 						FString::Printf(TEXT("Unreal could not save %s."), *Package->GetName()),
-						TEXT("See the editor log, then save again; the edits stay in the editor."), TEXT("retry"), true));
+						TEXT("Inspect the editor log and saved files, then reconcile before an explicit save; do not replay edits."), TEXT("reconcile")));
 				}
 			}
 			Item->SetBoolField(TEXT("saved"), bSaved);
+			Item->SetStringField(TEXT("persistence"), bSaved ? TEXT("saved") : Persistence);
 			Packages.Add(MakeShared<FJsonValueObject>(Item));
 		}
 		if (!Errors.IsEmpty()) Status = TEXT("failed");

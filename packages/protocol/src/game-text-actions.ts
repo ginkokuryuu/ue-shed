@@ -24,8 +24,10 @@ export const GameTextActionIdentity = Schema.Struct({
 }).annotate({ identifier: "GameTextActionIdentity" });
 export type GameTextActionIdentity = typeof GameTextActionIdentity.Type;
 
-/** An object path and the saved-package reader's property chain (`Info.Lines[2]`, `Map{0}.value`). */
+/** The scanned package file, serialized object path and reader property chain. */
 export const GameTextActionPlace = Schema.Struct({
+	/** Absolute or relative to the connected editor project; retain the reader record path. */
+	packageFile: NonEmptyField,
 	objectPath: NonEmptyField,
 	propertyPath: NonEmptyField
 }).annotate({ identifier: "GameTextActionPlace" });
@@ -69,6 +71,7 @@ export type GameTextActionsRequest = typeof GameTextActionsRequest.Type;
 
 export const GameTextActionErrorCode = Schema.Literals([
 	"invalid_request",
+	"package_mismatch",
 	"place_not_found",
 	"not_text",
 	"read_only_text",
@@ -77,7 +80,8 @@ export const GameTextActionErrorCode = Schema.Literals([
 	"key_conflict",
 	"compile_failed",
 	"not_persisted",
-	"save_failed"
+	"save_failed",
+	"rollback_failed"
 ]);
 export type GameTextActionErrorCode = typeof GameTextActionErrorCode.Type;
 
@@ -110,7 +114,8 @@ export type GameTextActionOutcomeIdentity = typeof GameTextActionOutcomeIdentity
 
 export const GameTextActionOutcome = Schema.Struct({
 	id: Schema.String,
-	status: Schema.Literals(["applied", "planned", "unchanged"]),
+	place: GameTextActionPlace,
+	status: Schema.Literals(["applied", "planned", "unchanged", "rolled_back", "unknown"]),
 	before: GameTextActionIdentity,
 	after: GameTextActionOutcomeIdentity
 }).annotate({ identifier: "GameTextActionOutcome" });
@@ -132,10 +137,14 @@ export const GameTextActionsResult = Schema.Struct({
 		Schema.Struct({ objectPath: Schema.String, compiled: Schema.Boolean })
 	),
 	/** Packages the request saved, or for a dry run or unsaved apply, the packages it would write. */
-	packages: Schema.Array(Schema.Struct({ packageName: Schema.String, saved: Schema.Boolean })),
+	packages: Schema.Array(
+		Schema.Struct({
+			packageName: Schema.String,
+			packageFile: Schema.String,
+			saved: Schema.Boolean,
+			persistence: Schema.Literals(["saved", "unsaved", "unknown"])
+		})
+	),
 	errors: Schema.Array(GameTextActionError)
 }).annotate({ identifier: "GameTextActionsResult" });
 export type GameTextActionsResult = typeof GameTextActionsResult.Type;
-
-export const decodeGameTextActionsRequest = Schema.decodeUnknownEffect(GameTextActionsRequest);
-export const decodeGameTextActionsResult = Schema.decodeUnknownEffect(GameTextActionsResult);

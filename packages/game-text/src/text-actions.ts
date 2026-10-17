@@ -67,18 +67,21 @@ export function gameTextActionsRequest(options: {
  * reader reports the namespace as saved, with the package namespace marker (`[...]`); actions use
  * the namespace Gather reports, without it. Only
  * localized asset-property text is editable here: DataTable cells go through authoring, and
- * culture-invariant or String Table text has no key of its own.
+ * culture-invariant or String Table text has no key of its own. Keep the owning reader record's
+ * packageFile with the occurrence; serialized object paths alone cannot identify copied assets.
  */
 export function gameTextActionForOccurrence(
 	id: string,
 	occurrence: SavedAssetTextOccurrence,
-	edit: GameTextActionEdit
+	edit: GameTextActionEdit,
+	packageFile: string
 ): GameTextAction | undefined {
 	if (occurrence.location.kind !== "asset_property") return undefined;
 	if (occurrence.identity.status !== "resolved") return undefined;
 	return {
 		id,
 		place: {
+			packageFile,
 			objectPath: occurrence.location.object_path,
 			propertyPath: occurrence.location.property_path
 		},
@@ -94,15 +97,16 @@ export function gameTextActionForOccurrence(
 const decodeRequest = Schema.decodeUnknownEffect(GameTextActionsRequest);
 const decodeResult = Schema.decodeUnknownEffect(GameTextActionsResult);
 
-function connectionFailed(endpoint: string, error: RemoteControlClientError) {
+function connectionFailed(endpoint: string, error: RemoteControlClientError, mutation = false) {
+	const retrySafe = !mutation && error.retrySafe;
 	return new GameTextActionsError({
 		code: "connection_failed",
 		message: `Remote Control call ${error.functionName} to ${endpoint} failed.`,
-		recovery: error.retrySafe
+		recovery: retrySafe
 			? "Check that the editor is running with Remote Control enabled, then retry."
-			: "Check the editor log for the failed call before retrying.",
-		retrySafe: error.retrySafe,
-		nextStep: error.retrySafe ? "retry" : "escalate",
+			: "Reconcile the editor state and saved files before issuing another mutation; the reply may have been lost.",
+		retrySafe,
+		nextStep: retrySafe ? "retry" : "reconcile",
 		endpoint,
 		cause: error
 	});
@@ -173,7 +177,7 @@ export const runGameTextActions = Effect.fn("game_text.actions.run")(function* (
 			operation: `game_text.actions.${request.mode}`,
 			parameters: { RequestJson: JSON.stringify(request) }
 		})
-		.pipe(Effect.mapError((error) => connectionFailed(endpoint, error)));
+		.pipe(Effect.mapError((error) => connectionFailed(endpoint, error, true)));
 	return yield* decodeResult(value).pipe(
 		Effect.mapError(
 			(cause) =>
@@ -207,22 +211,15 @@ export interface GameTextActionsVerification {
 	readonly complete: boolean;
 }
 
-/**
- * Whether a reader occurrence in a package file names the action's place. Paths match exactly; a
- * package-relative path (UE 4.27 saves no package name) matches only inside the place's own
- * package file, so a branch copy with the same relative path never stands in for it.
- */
-function namesPlace(file: string, objectPath: string, place: string): boolean {
-	if (objectPath === place) return true;
-	if (objectPath.startsWith("/")) return false;
-	const dot = place.indexOf(".");
-	if (!place.startsWith("/") || dot < 0 || place.slice(dot + 1) !== objectPath) return false;
-	const [, mount, ...rest] = place.slice(0, dot).split("/");
-	if (!mount || rest.length === 0) return false;
-	// `/Game/X` is `Content/X`; plugin content `/<Plugin>/X` is `<Plugin>/Content/X`.
-	const suffix = `${mount === "Game" ? "" : `${mount}/`}Content/${rest.join("/")}`;
-	const stem = file.replaceAll("\\", "/").replace(/\.(?:uasset|umap)$/iu, "");
-	return stem === suffix || stem.endsWith(`/${suffix}`);
+/** Object paths inside the same physical file can retain an older serialized package name. */
+function packageObjectPath(objectPath: string): string {
+	if (!objectPath.startsWith("/")) return objectPath;
+	const dot = objectPath.indexOf(".");
+	return dot < 0 ? objectPath : objectPath.slice(dot + 1);
+}
+
+function samePackageFile(left: string, right: string): boolean {
+	return left.replaceAll("\\", "/") === right.replaceAll("\\", "/");
 }
 
 /**
@@ -247,7 +244,9 @@ export function verifyGameTextActions(
 			({ file, occurrence: candidate }) =>
 				candidate.location.kind === "asset_property" &&
 				candidate.location.property_path === action.place.propertyPath &&
-				namesPlace(file, candidate.location.object_path, action.place.objectPath)
+				samePackageFile(file, action.place.packageFile) &&
+				packageObjectPath(candidate.location.object_path) ===
+					packageObjectPath(action.place.objectPath)
 		)?.occurrence;
 		const found =
 			occurrence?.identity.status === "resolved"

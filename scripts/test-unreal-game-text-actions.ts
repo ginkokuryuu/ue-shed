@@ -159,6 +159,7 @@ const files = [
 	"WBP_ActionPanel_Duplicate.uasset",
 	"Branched/WBP_ActionPanel.uasset",
 	"BP_ActionSign.uasset",
+	"Branched/BP_ActionSign.uasset",
 	"BP_ActionSign_Duplicate.uasset"
 ];
 const before = await readPackages(files);
@@ -191,18 +192,38 @@ const action = (
 	propertyPath: string,
 	edit: GameTextActionEdit
 ): GameTextAction => {
+	const record = before.get(file);
+	if (!record) throw new Error(`No package record for ${file}.`);
 	const built = gameTextActionForOccurrence(
 		name,
 		occurrenceAt(before, file, objectPathEnd, propertyPath),
-		edit
+		edit,
+		record.path
 	);
 	if (!built) throw new Error(`${name} is not an editable place.`);
 	return built;
 };
 // One action per applicable identity case in expected-cases.json. DataTable cells stay with
-// UEShedAuthoring and graph pins wait for Plan 058 A2. The branch's BP_ActionSign copy is left
-// out: the reader still names it by its saved package name (Plan 058 A1), which is the original's.
+// UEShedAuthoring and graph pins wait for Plan 058 A2. File-bound places also include the copied
+// Blueprint whose serialized path and expected identity still equal the original's.
+const copiedGreeting = occurrenceAt(
+	before,
+	"Branched/BP_ActionSign.uasset",
+	".Default__BP_ActionSign_C",
+	"Greeting"
+);
+assert.deepEqual(id(copiedGreeting), id(greeting));
+assert.equal(copiedGreeting.source, greeting.source);
+assert.equal(copiedGreeting.location.object_path, greeting.location.object_path);
+const originalBlueprintBytes = readFileSync(join(project, folder, "BP_ActionSign.uasset"));
 const actions = [
+	action(
+		"greeting-branch",
+		"Branched/BP_ActionSign.uasset",
+		".Default__BP_ActionSign_C",
+		"Greeting",
+		{ kind: "regenerate_key" }
+	),
 	// A readable key for the original data asset text...
 	action("notes", "DA_ActionNotes.uasset", ".DA_ActionNotes", "SharedPrimary", {
 		kind: "change_key",
@@ -306,6 +327,34 @@ async function applyActions() {
 	);
 	const applied = await send("apply");
 	writeFileSync(join(run, "apply.json"), `${JSON.stringify(applied, null, "\t")}\n`);
+	if (applied.status === "ok") {
+		const unchangedOriginal = await Effect.runPromise(
+			runGameTextActions({
+				endpoint,
+				request: gameTextActionsRequest({
+					mode: "dry_run",
+					actions: [
+						action(
+							"original-unchanged",
+							"BP_ActionSign.uasset",
+							".Default__BP_ActionSign_C",
+							"Greeting",
+							{
+								kind: "change_source",
+								source: greeting.source
+							}
+						)
+					]
+				})
+			}).pipe(Effect.provide(RemoteControlClientLive))
+		);
+		writeFileSync(
+			join(run, "original-live.json"),
+			`${JSON.stringify(unchangedOriginal, null, "\t")}\n`
+		);
+		assert.equal(unchangedOriginal.status, "ok", JSON.stringify(unchangedOriginal.errors));
+		assert.equal(unchangedOriginal.actions[0]?.status, "unchanged");
+	}
 	return applied;
 }
 try {
@@ -325,7 +374,11 @@ assert.ok(
 	result.packages.every((item) => item.saved),
 	JSON.stringify(result.packages)
 );
-assert.equal(result.packages.length, 6);
+assert.equal(result.packages.length, 7);
+assert.deepEqual(
+	readFileSync(join(project, folder, "BP_ActionSign.uasset")),
+	originalBlueprintBytes
+);
 assert.ok(result.blueprints.every((item) => item.compiled));
 const request = gameTextActionsRequest({ mode: "apply", save: true, actions });
 
@@ -351,7 +404,7 @@ runProcess(tools.editorCommandlet, [
 ]);
 const evidencePath = join(evidenceDirectory, `evidence.ue${version.label}.json`);
 assert.ok(existsSync(evidencePath));
-// SAFETY: written by the fixture's Evidence stage a moment ago; fields are checked as they are used.
+// SAFETY: written by the fixture's Evidence stage. Verified by: the site, identity and runtime-text comparisons below.
 const evidence = JSON.parse(readFileSync(evidencePath, "utf8")) as {
 	readonly packages: ReadonlyArray<{
 		readonly package: string;
@@ -401,6 +454,10 @@ assert.deepEqual(
 	[panelText.namespace, panelText.key, panelText.source]
 );
 const greetingText = gathered("BP_ActionSign.Default__BP_ActionSign_C.Greeting");
+const branchGreeting = gathered("Branched/BP_ActionSign.Default__BP_ActionSign_C.Greeting");
+assert.equal(branchGreeting.key, outcome("greeting-branch").key);
+assert.notEqual(branchGreeting.key, greetingText.key);
+assert.equal(greetingText.key, id(greeting).key);
 const duplicateGreeting = gathered(
 	"BP_ActionSign_Duplicate.Default__BP_ActionSign_Duplicate_C.Greeting"
 );

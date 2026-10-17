@@ -19,6 +19,8 @@ import {
 const ENDPOINT = "http://127.0.0.1:30010";
 const GAME_TEXT = "/Script/UEShedGameText.Default__UEShedGameTextLibrary";
 const PATH = "/Game/Notes/DA_Notes.DA_Notes";
+const FILE = "Content/Notes/DA_Notes.uasset";
+const PLACE = { packageFile: FILE, objectPath: PATH, propertyPath: "SharedPrimary" };
 
 const occurrence: SavedAssetTextOccurrence = {
 	source: "Keep the lamp lit",
@@ -47,22 +49,35 @@ const applied: GameTextActionsResult = {
 	actions: [
 		{
 			id: "notes",
+			place: PLACE,
 			status: "applied",
 			before: { namespace: "", key: "A1", source: "Keep the lamp lit" },
 			after: { namespace: "Notes", key: "Lamp", source: "Keep the lamp lit" }
 		}
 	],
 	blueprints: [],
-	packages: [{ packageName: "/Game/Notes/DA_Notes", saved: true }],
+	packages: [
+		{
+			packageName: "/Game/Notes/DA_Notes",
+			packageFile: FILE,
+			saved: true,
+			persistence: "saved"
+		}
+	],
 	errors: []
 };
 
 function request() {
-	const action = gameTextActionForOccurrence("notes", occurrence, {
-		kind: "change_key",
-		namespace: "Notes",
-		key: "Lamp"
-	});
+	const action = gameTextActionForOccurrence(
+		"notes",
+		occurrence,
+		{
+			kind: "change_key",
+			namespace: "Notes",
+			key: "Lamp"
+		},
+		FILE
+	);
 	if (!action) throw new Error("Expected an editable occurrence.");
 	return gameTextActionsRequest({ mode: "apply", save: true, actions: [action] });
 }
@@ -92,7 +107,7 @@ describe("Game Text actions API", () => {
 	it("builds an action from a reader occurrence, expecting what the reader saw", () => {
 		expect(request().actions[0]).toEqual({
 			id: "notes",
-			place: { objectPath: PATH, propertyPath: "SharedPrimary" },
+			place: PLACE,
 			expected: { namespace: "", key: "A1", source: "Keep the lamp lit" },
 			edit: { kind: "change_key", namespace: "Notes", key: "Lamp" }
 		});
@@ -117,7 +132,7 @@ describe("Game Text actions API", () => {
 		};
 		for (const text of [invariant, cell])
 			expect(
-				gameTextActionForOccurrence("x", text, { kind: "regenerate_key" })
+				gameTextActionForOccurrence("x", text, { kind: "regenerate_key" }, FILE)
 			).toBeUndefined();
 	});
 
@@ -238,8 +253,13 @@ describe("Game Text actions API", () => {
 			location: { ...rekeyed.location, object_path: "/Game/Branched/Notes/DA_Notes.DA_Notes" }
 		};
 		expect(verifyGameTextActions(request(), applied, [record([branchMounted])]).verified).toBe(
-			0
+			1
 		);
+		const copiedOriginalPath = {
+			...record([rekeyed]),
+			path: "Content/Branched/Notes/DA_Notes.uasset"
+		};
+		expect(verifyGameTextActions(request(), applied, [copiedOriginalPath]).verified).toBe(0);
 		expect(verifyGameTextActions(request(), applied, [record([occurrence])])).toEqual({
 			verified: 0,
 			mismatches: [
@@ -254,5 +274,75 @@ describe("Game Text actions API", () => {
 		expect(verifyGameTextActions(request(), applied, [record([])]).mismatches).toEqual([
 			{ actionId: "notes", expected: applied.actions[0]?.after }
 		]);
+	});
+});
+
+describe("Game Text mutation recovery", () => {
+	it("requires reconciliation when an apply reply is lost, even if the transport suggests retry", async () => {
+		const calls: string[] = [];
+		const exit = await Effect.runPromiseExit(
+			runGameTextActions({ endpoint: ENDPOINT, request: request() }).pipe(
+				Effect.provide(
+					makeRemoteControlClientTestLayer((call) => {
+						calls.push(call.functionName);
+						if (call.functionName === "GetCapabilityManifest")
+							return Effect.succeed(
+								Schema.decodeUnknownSync(Schema.Json)(
+									manifest(["game-text.actions.v1"], GAME_TEXT)
+								)
+							);
+						return Effect.fail(
+							new RemoteControlClientError({
+								endpoint: call.endpoint,
+								functionName: call.functionName,
+								message: "reply timed out after mutation",
+								operation: call.operation ?? "call",
+								retrySafe: true
+							})
+						);
+					})
+				)
+			)
+		);
+		expect(calls).toEqual(["GetCapabilityManifest", "ApplyTextActions"]);
+		expect(failure(exit)).toMatchObject({ retrySafe: false, nextStep: "reconcile" });
+	});
+
+	it("verifies persisted edits from a failed partially saved batch", () => {
+		const partial: GameTextActionsResult = {
+			...applied,
+			status: "failed",
+			packages: [
+				...applied.packages,
+				{
+					packageName: "/Game/ReadOnly",
+					packageFile: "Content/ReadOnly.uasset",
+					saved: false,
+					persistence: "unsaved"
+				}
+			],
+			errors: [
+				{
+					code: "save_failed",
+					message: "Read-only file",
+					recovery: "Reconcile before saving.",
+					retrySafe: false,
+					nextStep: "reconcile"
+				}
+			]
+		};
+		const record = {
+			...emptyPackageTextRecord(FILE),
+			occurrences: [
+				{
+					...occurrence,
+					identity: { status: "resolved", namespace: "Notes", key: "Lamp" }
+				} satisfies SavedAssetTextOccurrence
+			]
+		};
+		expect(verifyGameTextActions(request(), partial, [record])).toMatchObject({
+			verified: 1,
+			mismatches: []
+		});
 	});
 });

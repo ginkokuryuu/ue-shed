@@ -1,6 +1,46 @@
 {
 	"$schema": "https://json-schema.org/draft/2020-12/schema",
 	"$defs": {
+		"GameTextActionPlace": {
+			"type": "object",
+			"properties": {
+				"packageFile": {
+					"type": "string",
+					"allOf": [
+						{
+							"minLength": 1
+						},
+						{
+							"maxLength": 4096
+						}
+					]
+				},
+				"objectPath": {
+					"type": "string",
+					"allOf": [
+						{
+							"minLength": 1
+						},
+						{
+							"maxLength": 4096
+						}
+					]
+				},
+				"propertyPath": {
+					"type": "string",
+					"allOf": [
+						{
+							"minLength": 1
+						},
+						{
+							"maxLength": 4096
+						}
+					]
+				}
+			},
+			"required": ["packageFile", "objectPath", "propertyPath"],
+			"additionalProperties": false
+		},
 		"GameTextActionIdentity": {
 			"type": "object",
 			"properties": {
@@ -61,9 +101,12 @@
 				"id": {
 					"type": "string"
 				},
+				"place": {
+					"$ref": "#/$defs/GameTextActionPlace"
+				},
 				"status": {
 					"type": "string",
-					"enum": ["applied", "planned", "unchanged"]
+					"enum": ["applied", "planned", "unchanged", "rolled_back", "unknown"]
 				},
 				"before": {
 					"$ref": "#/$defs/GameTextActionIdentity"
@@ -72,7 +115,7 @@
 					"$ref": "#/$defs/GameTextActionOutcomeIdentity"
 				}
 			},
-			"required": ["id", "status", "before", "after"],
+			"required": ["id", "place", "status", "before", "after"],
 			"additionalProperties": false
 		},
 		"GameTextActionError": {
@@ -82,6 +125,7 @@
 					"type": "string",
 					"enum": [
 						"invalid_request",
+						"package_mismatch",
 						"place_not_found",
 						"not_text",
 						"read_only_text",
@@ -90,7 +134,8 @@
 						"key_conflict",
 						"compile_failed",
 						"not_persisted",
-						"save_failed"
+						"save_failed",
+						"rollback_failed"
 					]
 				},
 				"actionId": {
@@ -165,11 +210,18 @@
 							"packageName": {
 								"type": "string"
 							},
+							"packageFile": {
+								"type": "string"
+							},
 							"saved": {
 								"type": "boolean"
+							},
+							"persistence": {
+								"type": "string",
+								"enum": ["saved", "unsaved", "unknown"]
 							}
 						},
-						"required": ["packageName", "saved"],
+						"required": ["packageName", "packageFile", "saved", "persistence"],
 						"additionalProperties": false
 					}
 				},
