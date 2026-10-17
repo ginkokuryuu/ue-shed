@@ -938,6 +938,8 @@ fn adapt_decode_error(
         class_path: error.class_path,
         kind,
         message: error.message,
+        field: error.field,
+        offset: error.offset,
     })
 }
 

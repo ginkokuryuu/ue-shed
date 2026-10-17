@@ -210,7 +210,11 @@ export const SavedAssetDecodeError = Schema.Struct({
 		"unsupported_version",
 		"unsupported_capability"
 	]),
-	message: Schema.String
+	message: Schema.String,
+	/** The logical field being read when decoding failed, such as `Exports[3].Properties.Name`. */
+	field: Schema.optional(Schema.String),
+	/** The absolute byte offset in the package where decoding failed. */
+	offset: Schema.optional(Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)))
 }).annotate({ identifier: "SavedAssetDecodeError" });
 export type SavedAssetDecodeError = Schema.Schema.Type<typeof SavedAssetDecodeError>;
 
