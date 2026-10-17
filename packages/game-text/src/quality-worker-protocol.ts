@@ -6,11 +6,13 @@ import { TextQualityFinding, TextQualityRuleSummary } from "./quality-schema.js"
 import {
 	LocalizationCheckDiagnostic,
 	LocalizationCheckOptions,
+	LocalizationCustomFinding,
 	LocalizationPolicyFinding,
 	LocalizationQualityFinding
 } from "./localization-quality-schema.js";
 import { LocalizationLine } from "./localization-schema.js";
-import { GameTextRuleDocument } from "./quality-rules-v2.js";
+import { GameTextRuleDocument } from "./game-text-rules.js";
+import { CheckSeverity } from "./localization-check-ids.js";
 import { WorkspaceFinding, WorkspaceQualityFilter } from "./localization-workspace.js";
 import { SearchWorkerInput } from "./search-worker-protocol.js";
 import { SnapshotStoreError } from "./snapshot-store.js";
@@ -54,6 +56,7 @@ export const QualityWorkerFindings = Schema.Struct({
 		Schema.Struct({
 			culture: CultureCode,
 			filter: WorkspaceQualityFilter,
+			severity: CheckSeverity,
 			ruleId: RuleId,
 			eligible: Schema.Boolean,
 			reportedBySource: Schema.Boolean,
@@ -78,6 +81,9 @@ export const QualityWorkerFindings = Schema.Struct({
 			cultures: Schema.Array(CultureCode)
 		}),
 		rules: Schema.Array(RuleId),
+		customChecks: Schema.optionalKey(
+			Schema.Array(Schema.Struct({ ruleId: RuleId, label: Schema.String }))
+		),
 		unsupportedRuleCultures: Count,
 		status: TextCorpus.fields.status,
 		coverage: TextCorpus.fields.coverage,
@@ -140,6 +146,7 @@ export const qualityWorkerCallValues = {
 			finding: Schema.Union([
 				LocalizationQualityFinding,
 				LocalizationPolicyFinding,
+				LocalizationCustomFinding,
 				TextQualityFinding
 			]),
 			line: Schema.UndefinedOr(LocalizationLine),
