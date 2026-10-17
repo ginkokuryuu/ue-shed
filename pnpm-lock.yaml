@@ -937,9 +937,15 @@ importers:
       '@ue-shed/localization':
         specifier: workspace:0.16.2
         version: link:../localization
+      '@ue-shed/protocol':
+        specifier: workspace:0.16.2
+        version: link:../protocol
       '@ue-shed/unreal-assets':
         specifier: workspace:0.16.2
         version: link:../unreal-assets
+      '@ue-shed/unreal-connection':
+        specifier: workspace:0.16.2
+        version: link:../unreal-connection
       linebreak:
         specifier: 1.1.0
         version: 1.1.0

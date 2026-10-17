@@ -113,6 +113,7 @@ function sessionLayer(args: {
 					findSet: () => Effect.succeed(undefined),
 					finalizeRun: () => Effect.die("not used"),
 					listRuns: () => Effect.die("not used"),
+					listSets: () => Effect.die("not used"),
 					loadRun: () => Effect.die("not used"),
 					loadSet: () => Effect.succeed(args.loadSet?.() ?? reviewSet),
 					prepareRun: () => Effect.die("not used"),

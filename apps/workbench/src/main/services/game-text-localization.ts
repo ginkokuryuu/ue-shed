@@ -1,6 +1,19 @@
-import { checkLocalizationTarget } from "@ue-shed/game-text/checks";
 import {
-	localizationQuality,
+	MAX_LOCALIZATION_CULTURES,
+	type LocalizationJoin,
+	type TextCorpus,
+	type TextCorpusSearchRequest,
+	type TextCorpusSearchResult
+} from "@ue-shed/game-text/schema";
+import {
+	makeRetainedGameTextIndexWith,
+	GameTextIndexSteps,
+	type GameTextProjectIndex,
+	GameTextIndexError,
+	type GameTextIndexRefreshResult,
+	type RetainedGameTextIndexResult
+} from "@ue-shed/game-text/index";
+import {
 	localizationQualityWorkspaceOf,
 	localizationProgressReport,
 	localizationReportPage,
@@ -38,22 +51,7 @@ import {
 	type LocalizationTargetsResult,
 	type TextCorpusQuery
 } from "@ue-shed/game-text/corpus";
-import {
-	makeRetainedGameTextIndexWith,
-	GameTextIndexSteps,
-	type GameTextProjectIndex,
-	GameTextIndexError,
-	type GameTextIndexRefreshResult,
-	type RetainedGameTextIndexResult
-} from "@ue-shed/game-text/index";
-import { evaluateGameTextSourceQuality, type GameTextRuleDocument } from "@ue-shed/game-text/rules";
-import {
-	MAX_LOCALIZATION_CULTURES,
-	type LocalizationJoin,
-	type TextCorpus,
-	type TextCorpusSearchRequest,
-	type TextCorpusSearchResult
-} from "@ue-shed/game-text/schema";
+import { type GameTextRuleDocument } from "@ue-shed/game-text/rules";
 import {
 	applyLocalizationChangeSet,
 	LocalizationEvidence,
@@ -434,24 +432,11 @@ export const makeGameTextLocalization = Effect.fn("Workbench.GameText.localizati
 						// Indexed source rules read only the units their findings name.
 						const source = !document
 							? undefined
-							: retained.sourceQuality
-								? (yield* retained.sourceQuality(document)).export("all")
-								: evaluateGameTextSourceQuality(retained.corpus, document);
+							: (yield* retained.sourceQuality(document)).export("all");
 						// Indexed targets check page by page, yielding between pages.
 						return localizationQualityWorkspaceOf(
 							source,
-							retained.quality
-								? yield* retained.quality(options, document)
-								: localizationQuality(
-										checkLocalizationTarget(
-											retained.corpus,
-											retained.join,
-											retained.evidence,
-											options,
-											document
-										),
-										retained.join
-									)
+							yield* retained.quality(document, options)
 						);
 					})
 				).pipe(Effect.forkIn(serviceScope));

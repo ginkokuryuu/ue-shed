@@ -263,7 +263,8 @@ export class StringArena {
 	private offsets: Uint32Array | Float64Array;
 	private size = 0;
 	private count = 0;
-	constructor(byteCapacity = 256 * 1024, stringCapacity = 4095) {
+	private readonly owned: boolean;
+	constructor(byteCapacity = 256 * 1024, stringCapacity = 4095, owned = false) {
 		snapshotCheck(
 			Number.isSafeInteger(byteCapacity) &&
 				byteCapacity >= 0 &&
@@ -274,7 +275,10 @@ export class StringArena {
 			"strings",
 			"Invalid arena capacity"
 		);
-		this.bytes = Buffer.allocUnsafe(Math.max(1, byteCapacity));
+		this.owned = owned;
+		this.bytes = (this.owned ? Buffer.allocUnsafeSlow : Buffer.allocUnsafe)(
+			Math.max(1, byteCapacity)
+		);
 		this.offsets =
 			byteCapacity >= 0xffffffff
 				? new Float64Array(stringCapacity + 1)
@@ -300,7 +304,7 @@ export class StringArena {
 			"String arena exceeds the 16 GiB byte cap"
 		);
 		if (this.size + length > this.bytes.length) {
-			const next = Buffer.allocUnsafe(
+			const next = (this.owned ? Buffer.allocUnsafeSlow : Buffer.allocUnsafe)(
 				Math.min(16 * 1024 ** 3, Math.max(this.size + length, this.bytes.length * 2))
 			);
 			next.set(this.bytes.subarray(0, this.size));

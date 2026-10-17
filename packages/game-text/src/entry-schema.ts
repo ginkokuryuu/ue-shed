@@ -6,21 +6,24 @@ export {
 	makeTextOccurrenceId,
 	makeTextUnitId
 } from "./identifiers.js";
+
 export {
 	BuiltInCheckId,
 	CheckSeverity,
 	LocalizationCheckId,
-	SourceCheckId,
-	checkSeverity
+	SourceCheckId
 } from "./localization-check-ids.js";
+
 export {
 	LocalizationCheckDiagnostic,
 	LocalizationCheckOptions,
+	LocalizationCustomFinding,
 	LocalizationPolicyFinding,
 	LocalizationQualityFinding,
 	LocalizationQualityReport,
 	LocalizationRuleDiagnostic
 } from "./localization-quality-schema.js";
+
 export {
 	GameTextLocalizationError,
 	LocalizationCarriedTranslation,
@@ -45,6 +48,7 @@ export {
 	localizationManifestFailure,
 	localizationStates
 } from "./localization-schema.js";
+
 export {
 	OperationRelativePath,
 	WorkbenchOperationFailure,
@@ -60,6 +64,7 @@ export {
 	WorkbenchOperationState,
 	WorkbenchOperationTarget
 } from "./operation-query.js";
+
 export {
 	CharacterBudgetActual,
 	CharacterBudgetExpectation,
@@ -79,16 +84,20 @@ export {
 	TextRoleMatcher,
 	TextRoleScope,
 	TextTerminologyEntry,
-	decodeTextQualityReport,
 	decodeTextQualityRuleDocument,
-	decodeTextQualityRuleDocumentJson
+	decodeTextQualityRuleDocumentJson,
+	parseTextQualityReport
 } from "./quality-schema.js";
+
 export {
 	MAX_TEXT_GROUPS,
 	MAX_TEXT_PICKED_LINES,
 	MAX_TEXT_QUERY_PAGE_SIZE,
 	MAX_TEXT_SCOPE_FILES,
 	StringTableTextIdentity,
+	TEXT_AUDIENCE_LABELS,
+	TextAudience,
+	TextAudienceReason,
 	TextCapabilityFilter,
 	TextCopyKind,
 	TextCorpus,
@@ -112,6 +121,7 @@ export {
 	TextFileScopeSummary,
 	TextFilter,
 	TextFilterClause,
+	type TextFilterField,
 	TextFinding,
 	TextGroup,
 	TextGroupBy,
@@ -121,6 +131,7 @@ export {
 	TextNotes,
 	TextOccurrence,
 	TextOriginKind,
+	TextOutOfScopeReason,
 	TextPackageCoverage,
 	TextProblem,
 	TextProblemCounts,
@@ -134,10 +145,10 @@ export {
 	TextWhere,
 	UnrealTextIdentity,
 	UnresolvedTextIdentity,
-	decodeTextCorpusFocusResult,
-	decodeTextCorpusQueryRunResult,
-	decodeTextCorpusRunResult,
-	decodeTextCorpusSearchResult,
-	type TextFilterField
+	parseTextCorpusFocusResult,
+	parseTextCorpusQueryRunResult,
+	parseTextCorpusRunResult,
+	parseTextCorpusSearchResult
 } from "./schema.js";
-export { TextAudience, TextAudienceReason, TextOutOfScopeReason } from "./text-audience-schema.js";
+
+export { GameTextResponseError, gameTextResponseParser } from "./response-parser.js";

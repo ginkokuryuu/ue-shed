@@ -86,11 +86,9 @@ export const WorkbenchContentObservatoryLive = Layer.effect(
 
 		const resolveProjectState = Effect.fn("Workbench.ContentObservatory.resolveProjectState")(
 			function* () {
-				return yield* project.savedProject().pipe(
-					Effect.map(readyState),
-					Effect.catch(() => Effect.succeed({ status: "not_configured" as const }))
-				);
-			}
+				return readyState(yield* project.savedProject());
+			},
+			Effect.catch(() => Effect.succeed({ status: "not_configured" as const }))
 		);
 		const readProgress = Effect.fn("Workbench.ContentObservatory.readProgress")(
 			(): Effect.Effect<ContentObservatoryProgress> =>

@@ -21,27 +21,27 @@ import {
 	LocalizationTargetResult,
 	LocalizationFocusResult,
 	type LocalizationFocusRequest,
-	decodeTextQualityFocusResult,
-	decodeTextQualityQueryRunResult,
-	decodeTextQualityRuleUpdateResult,
-	decodeTextQualitySearchResult,
+	parseTextQualityFocusResult,
+	parseTextQualityQueryRunResult,
+	parseTextQualityRuleUpdateResult,
+	parseTextQualitySearchResult,
 	type TextQualityFocusRequest,
 	type TextQualityFocusResult,
 	type TextQualityRuleUpdateResult,
 	type TextQualitySearchRequest,
 	type TextQualitySearchResult
 } from "@ue-shed/game-text/corpus";
-import { type GameTextRuleDocument } from "@ue-shed/game-text/rules";
 import {
 	type LocalizationSelection,
-	decodeTextCorpusFocusResult,
-	decodeTextCorpusQueryRunResult,
-	decodeTextCorpusSearchResult,
+	parseTextCorpusFocusResult,
+	parseTextCorpusQueryRunResult,
+	parseTextCorpusSearchResult,
 	type TextCorpusFocusRequest,
 	type TextCorpusFocusResult,
 	type TextCorpusSearchRequest,
 	type TextCorpusSearchResult
 } from "@ue-shed/game-text/schema";
+import { type GameTextRuleDocument } from "@ue-shed/game-text/rules";
 import { decodeEditorAssetLocateResult } from "@ue-shed/protocol";
 import {
 	GameTextClient,
@@ -225,7 +225,7 @@ export const gameTextClient: GameTextClientApi = GameTextClient.of({
 		invokeRequest(
 			"gameText.reloadQualityRules",
 			() => window.ueShed.gameText.reloadQualityRules(),
-			decodeTextQualityQueryRunResult
+			parseTextQualityQueryRunResult
 		)
 	),
 	projectKey: Effect.fn("GameTextClient.projectKey")(() =>
@@ -243,7 +243,7 @@ export const gameTextClient: GameTextClientApi = GameTextClient.of({
 		invokeRequest(
 			"gameText.createStarterRules",
 			() => window.ueShed.gameText.createStarterRules(loadExisting),
-			decodeTextQualityQueryRunResult
+			parseTextQualityQueryRunResult
 		)
 	),
 	investigations: {
@@ -270,7 +270,7 @@ export const gameTextClient: GameTextClientApi = GameTextClient.of({
 		invokeRequest(
 			"gameText.loadConfiguredProject",
 			() => window.ueShed.gameText.refreshConfiguredProject(refresh),
-			decodeTextCorpusQueryRunResult
+			parseTextCorpusQueryRunResult
 		)
 	),
 	progress: Effect.fn("GameTextClient.progress")(() =>
@@ -294,7 +294,7 @@ export const gameTextClient: GameTextClientApi = GameTextClient.of({
 			invokeRequest(
 				"gameText.search",
 				() => window.ueShed.gameText.search(input),
-				decodeTextCorpusSearchResult
+				parseTextCorpusSearchResult
 			)
 	),
 	focus: Effect.fn("GameTextClient.focus")(
@@ -304,14 +304,14 @@ export const gameTextClient: GameTextClientApi = GameTextClient.of({
 			invokeRequest(
 				"gameText.focus",
 				() => window.ueShed.gameText.focus(input),
-				decodeTextCorpusFocusResult
+				parseTextCorpusFocusResult
 			)
 	),
 	chooseQualityRules: Effect.fn("GameTextClient.chooseQualityRules")(() =>
 		invokeRequest(
 			"gameText.chooseQualityRules",
 			() => window.ueShed.gameText.chooseQualityRules(),
-			decodeTextQualityQueryRunResult
+			parseTextQualityQueryRunResult
 		)
 	),
 	previewQualityRules: Effect.fn("GameTextClient.previewQualityRules")(
@@ -321,7 +321,7 @@ export const gameTextClient: GameTextClientApi = GameTextClient.of({
 			invokeRequest(
 				"gameText.previewQualityRules",
 				() => window.ueShed.gameText.previewQualityRules(document),
-				decodeTextQualityRuleUpdateResult
+				parseTextQualityRuleUpdateResult
 			)
 	),
 	saveQualityRules: Effect.fn("GameTextClient.saveQualityRules")(
@@ -331,7 +331,7 @@ export const gameTextClient: GameTextClientApi = GameTextClient.of({
 			invokeRequest(
 				"gameText.saveQualityRules",
 				() => window.ueShed.gameText.saveQualityRules(document),
-				decodeTextQualityRuleUpdateResult
+				parseTextQualityRuleUpdateResult
 			)
 	),
 	qualitySearch: Effect.fn("GameTextClient.qualitySearch")(
@@ -341,7 +341,7 @@ export const gameTextClient: GameTextClientApi = GameTextClient.of({
 			invokeRequest(
 				"gameText.qualitySearch",
 				() => window.ueShed.gameText.qualitySearch(input),
-				decodeTextQualitySearchResult
+				parseTextQualitySearchResult
 			)
 	),
 	qualityFocus: Effect.fn("GameTextClient.qualityFocus")(
@@ -351,7 +351,7 @@ export const gameTextClient: GameTextClientApi = GameTextClient.of({
 			invokeRequest(
 				"gameText.qualityFocus",
 				() => window.ueShed.gameText.qualityFocus(input),
-				decodeTextQualityFocusResult
+				parseTextQualityFocusResult
 			)
 	)
 });

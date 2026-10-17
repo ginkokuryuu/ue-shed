@@ -934,16 +934,15 @@ export const WorkbenchMapReviewLive = Layer.effect(
 
 		const resolveSavedProject = Effect.fn("Workbench.WorkbenchMapReview.resolveSavedProject")(
 			function* () {
-				return yield* project.savedProject().pipe(
-					Effect.mapError(
-						(error) =>
-							new SavedWorldUnavailable({
-								message: error.message,
-								recovery: error.recovery
-							})
-					)
-				);
-			}
+				return yield* project.savedProject();
+			},
+			Effect.mapError(
+				(error) =>
+					new SavedWorldUnavailable({
+						message: error.message,
+						recovery: error.recovery
+					})
+			)
 		);
 
 		const matchingEditorWorld = Effect.fn("Workbench.MapReview.matchingEditorWorld")(function* (
@@ -2385,54 +2384,9 @@ export const WorkbenchMapReviewLive = Layer.effect(
 	})
 );
 
+/** A test layer over a complete fake: every operation answers as the fake's own state allows. */
 export function makeWorkbenchMapReviewTestLayer(
-	service: Omit<
-		WorkbenchMapReviewApi,
-		| "savedWorld"
-		| "savedWorldMaps"
-		| "savedWorldProgress"
-		| "applyVisibilityPolicy"
-		| "replaceVisibilityPolicy"
-		| "reviewSetLibrary"
-		| "createReviewSet"
-		| "selectReviewSet"
-	> &
-		Partial<
-			Pick<
-				WorkbenchMapReviewApi,
-				| "savedWorld"
-				| "savedWorldMaps"
-				| "savedWorldProgress"
-				| "applyVisibilityPolicy"
-				| "replaceVisibilityPolicy"
-				| "reviewSetLibrary"
-				| "createReviewSet"
-				| "selectReviewSet"
-			>
-		>
+	service: WorkbenchMapReviewApi
 ): Layer.Layer<WorkbenchMapReview> {
-	return Layer.succeed(
-		WorkbenchMapReview,
-		WorkbenchMapReview.of({
-			applyVisibilityPolicy:
-				service.applyVisibilityPolicy ??
-				(() => Effect.die("visibility policy apply not stubbed")),
-			savedWorld: service.savedWorld ?? (() => Effect.die("saved world reader not stubbed")),
-			savedWorldMaps:
-				service.savedWorldMaps ?? (() => Effect.die("saved world maps reader not stubbed")),
-			savedWorldProgress:
-				service.savedWorldProgress ??
-				(() => Effect.die("saved world progress reader not stubbed")),
-			createReviewSet:
-				service.createReviewSet ?? (() => Effect.die("Review Set creation not stubbed")),
-			replaceVisibilityPolicy:
-				service.replaceVisibilityPolicy ??
-				(() => Effect.die("visibility policy replacement not stubbed")),
-			reviewSetLibrary:
-				service.reviewSetLibrary ?? (() => Effect.die("Review Set library not stubbed")),
-			selectReviewSet:
-				service.selectReviewSet ?? (() => Effect.die("Review Set selection not stubbed")),
-			...service
-		})
-	);
+	return Layer.succeed(WorkbenchMapReview, WorkbenchMapReview.of(service));
 }

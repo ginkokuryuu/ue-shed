@@ -1,20 +1,38 @@
 // Named exports only. Modules not listed in an entry point are private to the package.
 
 export { LocalizationWordCount, localizationWordCount } from "./localization-words.js";
+
 export {
+	CustomLocalizationCheck,
 	GameTextRuleDocument,
 	GameTextRuleDocumentError,
 	GameTextSourceQualityReport,
+	LocalizationCheckPreset,
+	LocalizationCheckSettings,
 	LocalizationProjectRule,
+	type ResolvedLocalizationCheck,
+	type ResolvedLocalizationChecks,
 	TextQualityRuleDocumentV2,
+	TextQualityRuleDocumentV3,
 	decodeGameTextRuleDocumentJson,
-	evaluateGameTextSourceQuality
-} from "./quality-rules-v2.js";
+	evaluateGameTextSourceQuality,
+	migrateGameTextRuleDocument,
+	resolveLocalizationChecks
+} from "./game-text-rules.js";
+
 export { GAME_TEXT_RULES_RELATIVE_PATH, STARTER_GAME_TEXT_RULES } from "./starter-rules.js";
+
 export {
+	type SavedTextAudienceInput,
 	TEXT_AUDIENCE_MATCHER_VERSION,
 	TEXT_AUDIENCE_POLICY,
 	TEXT_OUT_OF_SCOPE_REASONS,
+	type TextAudienceClassification,
+	type TextAudienceEvidence,
+	type TextAudienceMatch,
+	type TextAudienceRule,
+	type TextAudienceRuleId,
+	type TextAudienceSubject,
 	TextGatherScope,
 	classifySavedTextAudience,
 	classifyTextAudience,
@@ -29,17 +47,12 @@ export {
 	textAudienceBit,
 	textAudienceFields,
 	textAudienceOfMask,
-	textAudienceSubject,
-	type SavedTextAudienceInput,
-	type TextAudienceClassification,
-	type TextAudienceEvidence,
-	type TextAudienceMatch,
-	type TextAudienceRule,
-	type TextAudienceRuleId,
-	type TextAudienceSubject
+	textAudienceSubject
 } from "./text-audience.js";
+
 export {
 	TEXT_ORIGIN_KINDS,
+	type TextFileScope,
 	emptyTextOriginCounts,
 	manifestFileKeys,
 	manifestOrigins,
@@ -56,6 +69,5 @@ export {
 	unitFileKeys,
 	unitMatchesTextWhere,
 	unitOrigins,
-	unitPaths,
-	type TextFileScope
+	unitPaths
 } from "./text-origin.js";

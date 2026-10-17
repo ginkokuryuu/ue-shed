@@ -86,11 +86,11 @@ describe.skipIf(!executable)("loc gate with the real reader", () => {
 				const before = yield* gate("--files", table);
 				expect(before.text).not.toContain("not_checked");
 				const unchanged = yield* verdict(before.text);
-				// Checking every target checks both gathered targets: FixtureGame and the Game
-				// target's problem cases.
+				// Check the authoring, problem-case and Game Text action fixture targets.
 				expect(unchanged.targets.map((target) => target.target)).toEqual([
 					"FixtureGame",
-					"Game"
+					"Game",
+					"GameTextActions"
 				]);
 				expect(unchanged.skipped).toEqual([]);
 				expect(unchanged.targets[0]?.checks.key_changed).toBe(0);

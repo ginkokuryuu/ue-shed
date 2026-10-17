@@ -153,6 +153,8 @@ try {
 	assert.ok(gameTextFiles.includes("package/dist/search-worker.js"));
 	assert.ok(gameTextFiles.includes("package/dist/search-worker-node.js"));
 	assert.ok(gameTextFiles.includes("package/dist/search-worker-protocol.js"));
+	assert.ok(gameTextFiles.includes("package/dist/quality-worker.js"));
+	assert.ok(gameTextFiles.includes("package/dist/quality-worker-node.js"));
 	const gameTextAdoption = JSON.parse(
 		run(
 			"tar",
@@ -670,8 +672,11 @@ try {
 				"import { resolveUassetExecutable } from '@ue-shed/uasset';",
 				"import { assetReaderLayer } from '@ue-shed/unreal-assets';",
 				"import { LocalizationEvidenceNodeLive } from '@ue-shed/localization';",
-				"import { scanTextCorpus, GameTextIndexSteps, gameTextIndexStepsLayer, gameTextIndexSourceNodeLayer, typeScriptIndexBuilderLayer } from '@ue-shed/game-text/index';",
+				"import { scanTextCorpus, GameTextIndexSteps, gameTextIndexStepsLayer, gameTextIndexSourceNodeLayer, typeScriptIndexBuilderLayer, nativeIndexBuilderLayer, gameTextActionsRequest } from '@ue-shed/game-text/index';",
 				"import { textCorpusQuery } from '@ue-shed/game-text/corpus';",
+				"if (!Layer.isLayer(nativeIndexBuilderLayer({ executable: resolveUassetExecutable() }))) throw new Error('packed native builder entry is missing');",
+				"const actionRequest = gameTextActionsRequest({ mode: 'dry_run', actions: [{ id: 'text', place: { packageFile: 'Content/Notes.uasset', objectPath: '/Game/Notes.Notes', propertyPath: 'Title' }, expected: { namespace: '', key: 'k', source: 'Notes' }, edit: { kind: 'regenerate_key' } }] });",
+				"if (actionRequest.actions[0].place.packageFile !== 'Content/Notes.uasset') throw new Error('packed actions entry lost file provenance');",
 				"const corpus = await Effect.runPromise(",
 				"  scanTextCorpus({ projectRoot: resolve('./game-text-project') }).pipe(",
 				"    Effect.provide(assetReaderLayer({ executable: resolveUassetExecutable() }))",

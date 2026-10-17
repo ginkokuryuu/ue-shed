@@ -148,6 +148,7 @@ export const decodeConnectionState = Schema.decodeUnknownEffect(ConnectionState)
 
 export * from "./authoring.js";
 export * from "./authoring-actor-references.js";
+export * from "./game-text-actions.js";
 export * from "./automation.js";
 export * from "./authoring-review.js";
 export * from "./blueprint-graph.js";
@@ -164,3 +165,5 @@ export * from "./editor-foreground-responsiveness.js";
 export * from "./level-sequence.js";
 
 export { makeWireJsonSchemaDocument, canonicalJsonSchemaReferences } from "./json-schema.js";
+
+export * from "./game-text-index.js";
