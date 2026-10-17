@@ -3,6 +3,7 @@ import { PassThrough, Writable } from "node:stream";
 import { Effect } from "effect";
 import { expect, it } from "vitest";
 import { AssetReaderError } from "./asset-reader.js";
+import { MAX_PROTOCOL_REQUEST_BYTES } from "./protocol-request-limit.js";
 import {
 	invokeProtocolSessionSingle,
 	makeProtocolRequest,
@@ -12,8 +13,6 @@ import {
 	runUassetProtocolEvents,
 	UassetProtocolSession
 } from "./protocol-transport.js";
-
-const MAX_PROTOCOL_REQUEST_BYTES = 4 * 1024 * 1024;
 
 function closedPipeError(): Error {
 	return Object.assign(new Error("write EPIPE"), { code: "EPIPE" });
@@ -373,7 +372,7 @@ it("rejects a one-shot request over the native 4 MiB frame limit before spawning
 	expect(spawner.spawns).toBe(0);
 	expect(oversized?.kind).toBe("contract");
 	expect(oversized?.message).toBe(
-		"Native reader request exceeds 4 MiB; split package paths into batches"
+		"Native reader request exceeds 4 MiB; split package paths with batchProtocolPaths"
 	);
 
 	// The native reader accepts a frame of exactly 4 MiB, trailing newline included.
