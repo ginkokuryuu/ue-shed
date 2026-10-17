@@ -501,7 +501,7 @@ export function workspaceQualityItem(
 	const summary: WorkspaceFinding = {
 		id,
 		filter,
-		severity: workspaceQualitySeverity(filter),
+		severity: localized ? finding.severity : workspaceQualitySeverity(filter),
 		source: (localized ? findingSource(finding, line) : finding.actual.source).slice(0, 512),
 		...(variants
 			? { sourceVariants: variants.slice(0, 16).map((variant) => variant.slice(0, 512)) }
@@ -589,6 +589,8 @@ function ranges(text: string, finding: Finding, side: "source" | "translation") 
 export interface LocalizationFindingGroup {
 	readonly culture: CultureCode;
 	readonly filter: WorkspaceQualityFilter;
+	/** The severity the scan stored for these findings. */
+	readonly severity: CheckSeverity;
 	readonly ruleId: RuleId;
 	readonly eligible: boolean;
 	readonly reportedBySource: boolean;
@@ -603,6 +605,8 @@ export interface LocalizationFindingList {
 	readonly groups?: readonly LocalizationFindingGroup[];
 	culture(position: number): CultureCode;
 	filter(position: number): WorkspaceQualityFilter;
+	/** The severity the finding was reported with, as the rule file rated its check or rule. */
+	severity(position: number): CheckSeverity;
 	ruleId(position: number): RuleId;
 	eligible(position: number): boolean;
 	/**
@@ -673,6 +677,12 @@ export function localizationQuality(
 				return ("culture" in finding ? finding.culture : undefined)!;
 			},
 			filter: (position) => workspaceQualityFilterOf(report.findings[position]!),
+			severity: (position) => {
+				const finding = report.findings[position]!;
+				return "culture" in finding
+					? finding.severity
+					: workspaceQualitySeverity(workspaceQualityFilterOf(finding));
+			},
 			ruleId: (position) => report.findings[position]!.ruleId,
 			eligible: (position) =>
 				eligibleLocalizationChange(report.findings[position]!) !== undefined,
@@ -810,7 +820,9 @@ export function localizationQualityWorkspaceOf(
 		position < sourceCount
 			? workspaceQualityFilterOf(sourceFindings[position]!)
 			: list.filter(position - sourceCount);
-	const severityAt = (position: number) => {
+	/** Source findings have their rule kind's severity; localization findings their stored one. */
+	const severityAt = (position: number): CheckSeverity => {
+		if (position >= sourceCount) return list.severity(position - sourceCount);
 		const filter = filterAt(position);
 		return filter === "all" ? "normal" : workspaceQualitySeverity(filter);
 	};
@@ -870,11 +882,11 @@ export function localizationQualityWorkspaceOf(
 			suggestedFixCount = 0;
 		const record = (
 			filter: WorkspaceQualityFilter,
+			severity: CheckSeverity,
 			rule: RuleId,
 			count: number,
 			eligible: number
 		) => {
-			const severity = filter === "all" ? "normal" : workspaceQualitySeverity(filter);
 			cultureCount += count;
 			typeCounts.set(filter, (typeCounts.get(filter) ?? 0) + count);
 			ruleCounts.set(rule, (ruleCounts.get(rule) ?? 0) + count);
@@ -889,7 +901,7 @@ export function localizationQualityWorkspaceOf(
 			const filter = filterAt(position),
 				rule = ruleAt(position),
 				severity = severityAt(position);
-			if (record(filter, rule, 1, eligibleAt(position) ? 1 : 0))
+			if (record(filter, severity, rule, 1, eligibleAt(position) ? 1 : 0))
 				matchedBySeverity[severity].push(position);
 		}
 		const runs: SeverityBuckets<{ positions: Uint32Array; base: number }> = {
@@ -904,12 +916,14 @@ export function localizationQualityWorkspaceOf(
 					base: 0
 				});
 		if (list.groups)
-			for (const group of groupedSource())
-				if (record(group.filter, group.ruleId, group.positions.length, 0))
-					runs[workspaceQualitySeverity(group.filter)].push({
+			for (const group of groupedSource()) {
+				const severity = workspaceQualitySeverity(group.filter);
+				if (record(group.filter, severity, group.ruleId, group.positions.length, 0))
+					runs[severity].push({
 						positions: group.positions,
 						base: 0
 					});
+			}
 		for (const group of list.groups ?? []) {
 			if (
 				(source && group.reportedBySource) ||
@@ -919,14 +933,13 @@ export function localizationQualityWorkspaceOf(
 			if (
 				record(
 					group.filter,
+					group.severity,
 					group.ruleId,
 					group.positions.length,
 					group.eligible ? group.positions.length : 0
 				)
 			)
-				runs[
-					group.filter === "all" ? "normal" : workspaceQualitySeverity(group.filter)
-				].push({
+				runs[group.severity].push({
 					positions: group.positions,
 					base: sourceCount
 				});

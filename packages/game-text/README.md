@@ -330,11 +330,14 @@ default `severity`, its parameter schema (`params`, every field defaulted, so `{
 `parseLocalizationRuleId(ruleId)` convert between a check and the `localization.<id>` rule ID its
 findings and review marks record. The table below is generated from the catalogue.
 
-Every localization finding has a `severity`, its check's catalogue severity: `blocking` (players
-see wrong or untranslated text), `normal` or `low`. It is never part of the finding's ID.
-Workspace pages list blocking findings first, then normal, then low, each in report order, and
-count findings by severity in `severityCounts`; summaries, focus and CSV exports carry the
-severity.
+Every localization finding has a `severity`: the rule file's `severity` for its check, or the
+catalogue's (the table's column) when the file sets none: `blocking` (players see wrong or
+untranslated text), `normal` or `low`. Version-2 and version-3 `localizationRules` may set their
+own `severity` too (`normal` when absent). Severity is never part of the finding's ID. Indexed
+scans store each finding's severity beside its other facts, so workspace pages list blocking
+findings first, then normal, then low, each in report order, and count findings by severity in
+`severityCounts` from what the scan reported, not from the check's default; summaries, focus and
+CSV exports carry the severity.
 
 <!-- check table: generated from localizationCheckCatalogue; do not edit -->
 

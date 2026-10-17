@@ -22,12 +22,16 @@ const [Budget, Terminology] = TextQualityRule.members;
 export const LocalizationProjectRule = Schema.Union([
 	Budget.mapFields(({ maximumCharacters, ...fields }) => ({
 		...fields,
+		/** The severity of the rule's findings; absent, `normal`. */
+		severity: Schema.optionalKey(CheckSeverity),
 		kind: Schema.Literal("localization_character_budget"),
 		cultures: Schema.Record(CultureCode, maximumCharacters),
 		defaultMaximumCharacters: Schema.optionalKey(maximumCharacters)
 	})),
 	Terminology.mapFields(({ terms, ...fields }) => ({
 		...fields,
+		/** The severity of the rule's findings; absent, `normal`. */
+		severity: Schema.optionalKey(CheckSeverity),
 		kind: Schema.Literal("localization_terminology"),
 		cultures: Schema.Record(CultureCode, terms)
 	}))
