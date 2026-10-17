@@ -2,7 +2,7 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { decodeAuthoringTableSnapshot as decodeAuthoringTableSnapshotEffect } from "@ue-shed/protocol";
-import { decodeTextQualityReport as decodeTextQualityReportEffect } from "@ue-shed/game-text";
+import { decodeTextQualityReport as decodeTextQualityReportEffect } from "@ue-shed/game-text/schema";
 import { Effect } from "effect";
 import { describe, expect, it } from "vitest";
 import { useSavedFixtureProject } from "../../../fixtures/unreal-project/saved-project.test-support.js";

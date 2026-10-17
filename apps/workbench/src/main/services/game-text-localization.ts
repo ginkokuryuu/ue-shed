@@ -1,13 +1,7 @@
+import { checkLocalizationTarget } from "@ue-shed/game-text/checks";
 import {
-	MAX_LOCALIZATION_CULTURES,
-	makeRetainedGameTextIndexWith,
-	GameTextIndexSteps,
-	type GameTextProjectIndex,
-	GameTextIndexError,
-	checkLocalizationTarget,
 	localizationQuality,
 	localizationQualityWorkspaceOf,
-	evaluateGameTextSourceQuality,
 	localizationProgressReport,
 	localizationReportPage,
 	localizationReportCsv,
@@ -15,7 +9,6 @@ import {
 	decodeLocalizationBaselineJson,
 	LocalizationReportError,
 	type LocalizationBaseline,
-	type GameTextRuleDocument,
 	type WorkspaceQualityRequest,
 	type WorkspaceQualityFocusRequest,
 	type WorkspaceQualityResult,
@@ -41,16 +34,26 @@ import {
 	type LocalizationEditResult,
 	type LocalizationFocusRequest,
 	type LocalizationFocusResult,
-	type LocalizationJoin,
 	type LocalizationTargetResult,
 	type LocalizationTargetsResult,
-	type TextCorpus,
-	type TextCorpusQuery,
+	type TextCorpusQuery
+} from "@ue-shed/game-text/corpus";
+import {
+	makeRetainedGameTextIndexWith,
+	GameTextIndexSteps,
+	type GameTextProjectIndex,
+	GameTextIndexError,
 	type GameTextIndexRefreshResult,
-	type RetainedGameTextIndexResult,
+	type RetainedGameTextIndexResult
+} from "@ue-shed/game-text/index";
+import { evaluateGameTextSourceQuality, type GameTextRuleDocument } from "@ue-shed/game-text/rules";
+import {
+	MAX_LOCALIZATION_CULTURES,
+	type LocalizationJoin,
+	type TextCorpus,
 	type TextCorpusSearchRequest,
 	type TextCorpusSearchResult
-} from "@ue-shed/game-text";
+} from "@ue-shed/game-text/schema";
 import {
 	applyLocalizationChangeSet,
 	LocalizationEvidence,

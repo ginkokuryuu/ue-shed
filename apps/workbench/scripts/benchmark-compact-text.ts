@@ -14,7 +14,7 @@ import {
 	STRING_TABLE_CLASS,
 	TEXT_PROPERTY_NAME,
 	textPackagePathsFromProjectIndex
-} from "@ue-shed/game-text";
+} from "@ue-shed/game-text/index";
 import { SAVED_TABLE_SCAN_CLASSES } from "@ue-shed/unreal-assets";
 import {
 	ENHANCED_INPUT_CLASS_NAME_SUFFIXES,

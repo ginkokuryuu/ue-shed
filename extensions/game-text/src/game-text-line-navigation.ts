@@ -3,7 +3,7 @@ import type {
 	TextCorpusSearchPage,
 	TextGroupBy,
 	TextUnitId
-} from "@ue-shed/game-text/browser";
+} from "@ue-shed/game-text/schema";
 import { createEffect, createSignal, untrack } from "solid-js";
 import { loadedRows, type GroupLoaded, type LoadedRow } from "./game-text-grouped-results.js";
 import type { LinePosition } from "./game-text-line-page.js";

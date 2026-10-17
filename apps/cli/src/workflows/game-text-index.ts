@@ -10,7 +10,7 @@ import {
 	gameTextIndexSourceNodeLayer,
 	typeScriptIndexBuilderLayer,
 	type GameTextIndexRefreshRequest
-} from "@ue-shed/game-text";
+} from "@ue-shed/game-text/index";
 import { readerLayer } from "../cli-operation.js";
 
 export function cliGameTextIndexLayer(reader?: string) {

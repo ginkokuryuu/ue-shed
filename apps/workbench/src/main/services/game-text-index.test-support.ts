@@ -1,5 +1,13 @@
 import { Effect, Layer, Option, type Scope } from "effect";
 import {
+	joinLocalizationTarget,
+	applyLocalizationReview,
+	applyLocalizationKeyChanges,
+	localizationKeyChanges,
+	mergeLocalizationKeyChanges,
+	textCorpusQuery
+} from "@ue-shed/game-text/corpus";
+import {
 	GameTextIndexRefresh,
 	GameTextIndexSteps,
 	type GameTextProjectIndex,
@@ -7,15 +15,9 @@ import {
 	type GameTextIndexRefreshRequest,
 	GameTextIndexError,
 	TextCorpusService,
-	joinLocalizationTarget,
-	applyLocalizationReview,
-	applyLocalizationKeyChanges,
-	localizationKeyChanges,
-	mergeLocalizationKeyChanges,
-	textCorpusQuery,
-	type GameTextIndexRefreshResult,
-	type TextCorpus
-} from "@ue-shed/game-text";
+	type GameTextIndexRefreshResult
+} from "@ue-shed/game-text/index";
+import { type TextCorpus } from "@ue-shed/game-text/schema";
 import {
 	LocalizationEvidence,
 	LocalizationFileAccessLive,

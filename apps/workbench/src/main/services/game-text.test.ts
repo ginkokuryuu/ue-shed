@@ -12,18 +12,16 @@ import {
 	unit as localizationUnit,
 	target as localizationTarget
 } from "./game-text-localization.test-support.js";
+import { makeTextCorpusServiceTestLayer, TextCorpusScanError } from "@ue-shed/game-text/index";
+import { STARTER_GAME_TEXT_RULES, GAME_TEXT_RULES_RELATIVE_PATH } from "@ue-shed/game-text/rules";
 import {
-	makeTextCorpusServiceTestLayer,
 	makeTextUnitId,
 	makeTextOccurrenceId,
 	TextUnit,
-	TextCorpusScanError,
 	TextQualityRuleId,
 	TextQualityRuleDocument,
-	TextRoleId,
-	STARTER_GAME_TEXT_RULES,
-	GAME_TEXT_RULES_RELATIVE_PATH
-} from "@ue-shed/game-text";
+	TextRoleId
+} from "@ue-shed/game-text/schema";
 import type { SavedAssetScan } from "@ue-shed/unreal-assets";
 import { Deferred, Effect, Fiber, Layer, Ref } from "effect";
 import { expect } from "vitest";

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { cultureCell, cultureSummary, lineState } from "./game-text-culture-state.js";
-import type { TextFilter } from "@ue-shed/game-text/browser";
+import type { TextFilter } from "@ue-shed/game-text/schema";
 import {
 	clauseParts,
 	fieldOp,

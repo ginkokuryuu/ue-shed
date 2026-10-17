@@ -554,7 +554,8 @@ reads units in pages of index columns, yields between them, reports progress, ke
 as a few numbers and rebuilds only the findings a page, focus or export shows. Its summary,
 pages, focus, export and finding IDs equal the in-memory evaluation's.
 
-Browser-safe rule, report, finding, and query schemas live in `@ue-shed/game-text/browser` for
+Browser-safe rule, report, finding, and query schemas live in `@ue-shed/game-text/schema`,
+`/rules`, `/checks`, `/labels` and `/corpus` for
 trusted host presentation. Workbench exposes quality review through the existing `GameTextClient`
 and corpus query boundary. Its trusted main process retains the active index, decoded rules,
 the rules' indexed findings, and rule-file path; the renderer receives the bounded decoded rule document, a

@@ -5,6 +5,7 @@ import { join } from "node:path";
 import { after, before, test } from "node:test";
 import {
 	checkCatalogUsage,
+	checkGameTextEntryPoints,
 	checkLocalizationBoundaries,
 	checkSourcePolicy,
 	checkServiceStrategies,
@@ -15,6 +16,41 @@ let root = "";
 
 test("the localization browser entry and Config Explorer dependency are browser-safe", async () => {
 	assert.deepEqual(await checkLocalizationBoundaries(), []);
+});
+
+test("Game Text entry points are named and first-party code imports focused entry points", async () => {
+	assert.deepEqual(await checkGameTextEntryPoints(), []);
+	const fixtureRoot = await mkdtemp(join(tmpdir(), "ue-shed-game-text-entries-"));
+	try {
+		const source = join(fixtureRoot, "packages/game-text/src");
+		const consumer = join(fixtureRoot, "apps/cli/src");
+		await mkdir(source, { recursive: true });
+		await mkdir(consumer, { recursive: true });
+		await writeFile(
+			join(source, "entry-schema.ts"),
+			'export { TextUnit } from "./schema.js";\n'
+		);
+		await writeFile(join(source, "entry-corpus.ts"), 'export * from "./query.js";\n');
+		await writeFile(
+			join(consumer, "ok.ts"),
+			'import { TextUnit } from "@ue-shed/game-text/schema";\n'
+		);
+		await writeFile(
+			join(consumer, "root.ts"),
+			'import { TextUnit } from "@ue-shed/game-text";\n'
+		);
+		await writeFile(
+			join(consumer, "browser.ts"),
+			"const load = () => import('@ue-shed/game-text/browser');\n"
+		);
+		assert.deepEqual((await checkGameTextEntryPoints(fixtureRoot)).sort(), [
+			"apps/cli/src/browser.ts: import a focused @ue-shed/game-text entry point (/schema, /rules, /checks, /labels, /corpus or /index)",
+			"apps/cli/src/root.ts: import a focused @ue-shed/game-text entry point (/schema, /rules, /checks, /labels, /corpus or /index)",
+			"packages/game-text/src/entry-corpus.ts: Game Text entry points use named exports only"
+		]);
+	} finally {
+		await rm(fixtureRoot, { recursive: true, force: true });
+	}
 });
 
 test("browser import scanning distinguishes module syntax from strings and comments", async () => {

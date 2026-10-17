@@ -9,7 +9,7 @@ import { AssetReaderError, makeAssetReaderTestLayer } from "@ue-shed/unreal-asse
 import type { TextureAuditRunResult, TexturePreviewResult } from "@ue-shed/asset-audits";
 import type { MapReviewApprovalResult } from "@ue-shed/cameras/review-contracts";
 import type { EnhancedInputRunResult } from "@ue-shed/enhanced-input";
-import type { TextCorpusQueryRunResult } from "@ue-shed/game-text";
+import type { TextCorpusQueryRunResult } from "@ue-shed/game-text/schema";
 import type { CameraScheduleConfig, CameraStatus } from "@ue-shed/protocol";
 import { makeEditorPlaySessionTestLayer } from "@ue-shed/engine";
 import {

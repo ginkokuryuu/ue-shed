@@ -1,4 +1,5 @@
-import { MAX_TEXT_SCOPE_FILES, projectRelativeTextFiles } from "@ue-shed/game-text/browser";
+import { projectRelativeTextFiles } from "@ue-shed/game-text/rules";
+import { MAX_TEXT_SCOPE_FILES } from "@ue-shed/game-text/schema";
 import { Effect, FileSystem, Metric } from "effect";
 import { CliCommandError } from "../cli-runtime.js";
 

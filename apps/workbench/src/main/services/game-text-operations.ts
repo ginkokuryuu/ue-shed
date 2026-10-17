@@ -9,7 +9,7 @@ import {
 	type WorkbenchOperationRequest,
 	type WorkbenchOperationResult,
 	type WorkbenchOperationState
-} from "@ue-shed/game-text";
+} from "@ue-shed/game-text/schema";
 import {
 	LocalizationOperations,
 	LocalizationOperationError,

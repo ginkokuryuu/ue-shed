@@ -1,5 +1,5 @@
 import * as stylex from "@stylexjs/stylex";
-import type { TextFilter, TextGroup, TextGroupList } from "@ue-shed/game-text/browser";
+import type { TextFilter, TextGroup, TextGroupList } from "@ue-shed/game-text/schema";
 import { tokens } from "@ue-shed/ui-theme/tokens.stylex.js";
 import { For, Show } from "solid-js";
 import { hasValue, toggleValue } from "./game-text-filter-model.js";

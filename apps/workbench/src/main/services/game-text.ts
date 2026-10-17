@@ -6,11 +6,10 @@ import {
 	workspaceQualityCsv,
 	gameTextCsv,
 	gameTextQualityCsv,
-	createStarterTextRules,
-	GAME_TEXT_RULES_RELATIVE_PATH,
-	projectRelativeTextFiles,
 	type LocalizationLinesFileResult
-} from "@ue-shed/game-text";
+} from "@ue-shed/game-text/corpus";
+import { createStarterTextRules } from "@ue-shed/game-text/index";
+import { GAME_TEXT_RULES_RELATIVE_PATH, projectRelativeTextFiles } from "@ue-shed/game-text/rules";
 import { userInfo } from "node:os";
 import { resolve } from "node:path";
 import {
@@ -26,14 +25,7 @@ import {
 } from "./investigation-files.js";
 import { scopedGameTextOperation as scoped } from "./game-text-scope.js";
 import {
-	decodeGameTextRuleDocumentJson,
-	evaluateGameTextSourceQuality,
 	textQualityQuery,
-	makeRetainedGameTextIndexWith,
-	GameTextIndexSteps,
-	GameTextIndexProgressReporter,
-	type GameTextIndexProgress,
-	type TextCorpus,
 	type WorkspaceQualityRequest,
 	type WorkspaceQualityResult,
 	type WorkspaceQualityFocusRequest,
@@ -49,25 +41,38 @@ import {
 	type WorkspaceReportFileResult,
 	type LocalizationTargetsResult,
 	type LocalizationTargetResult,
-	type LocalizationJoin,
 	type LocalizationFocusRequest,
 	type LocalizationFocusResult,
-	type TextCorpusFocusRequest,
-	type TextCorpusFocusResult,
-	type RetainedGameTextIndexResult,
-	type TextCorpusQueryRunResult,
-	type TextCorpusRunResult,
-	type TextCorpusSearchRequest,
-	type TextCorpusSearchResult,
 	type TextQualityFocusRequest,
 	type TextQualityFocusResult,
 	type TextQualityQuery,
 	type TextQualityQueryRunResult,
-	type GameTextRuleDocument,
 	type TextQualityRuleUpdateResult,
 	type TextQualitySearchRequest,
 	type TextQualitySearchResult
-} from "@ue-shed/game-text";
+} from "@ue-shed/game-text/corpus";
+import {
+	makeRetainedGameTextIndexWith,
+	GameTextIndexSteps,
+	GameTextIndexProgressReporter,
+	type GameTextIndexProgress,
+	type RetainedGameTextIndexResult
+} from "@ue-shed/game-text/index";
+import {
+	decodeGameTextRuleDocumentJson,
+	evaluateGameTextSourceQuality,
+	type GameTextRuleDocument
+} from "@ue-shed/game-text/rules";
+import {
+	type TextCorpus,
+	type LocalizationJoin,
+	type TextCorpusFocusRequest,
+	type TextCorpusFocusResult,
+	type TextCorpusQueryRunResult,
+	type TextCorpusRunResult,
+	type TextCorpusSearchRequest,
+	type TextCorpusSearchResult
+} from "@ue-shed/game-text/schema";
 import { makeGameTextLocalization } from "./game-text-localization.js";
 import type { SavedAssetScan } from "@ue-shed/unreal-assets";
 import type { LocalizationTarget } from "@ue-shed/localization";

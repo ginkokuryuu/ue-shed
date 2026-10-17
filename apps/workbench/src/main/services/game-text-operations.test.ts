@@ -19,7 +19,7 @@ import {
 	WorkbenchOperationProgress,
 	WorkbenchOperationPlanResult,
 	WorkbenchOperationState
-} from "@ue-shed/game-text";
+} from "@ue-shed/game-text/schema";
 import { makeWorkbenchWindowTestLayer, WorkbenchWindowTest } from "../adapters/electron-window.js";
 import { makeWorkbenchConfigurationLayer } from "../workbench-config.js";
 import { makeWorkbenchProjectTestLayer } from "./project-workspace.js";

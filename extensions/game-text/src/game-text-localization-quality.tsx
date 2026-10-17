@@ -1,19 +1,20 @@
 import * as stylex from "@stylexjs/stylex";
 import {
 	WorkspaceQualityFilter,
-	workspaceQualityLabels,
-	textCountLabel,
-	textLocationLabel,
 	type WorkspaceQualityPage,
 	type WorkspaceQualityFocusResult,
 	type TextQualityFindingId,
 	type TextQualityQuerySummary,
-	type TextUnitId,
-	type GameTextRuleDocument,
-	type LocalizationCheckDiagnostic,
 	type LocalizationFocus,
 	type LocalizationReviewChange
-} from "@ue-shed/game-text/browser";
+} from "@ue-shed/game-text/corpus";
+import {
+	workspaceQualityLabels,
+	textCountLabel,
+	textLocationLabel
+} from "@ue-shed/game-text/labels";
+import { type GameTextRuleDocument } from "@ue-shed/game-text/rules";
+import { type TextUnitId, type LocalizationCheckDiagnostic } from "@ue-shed/game-text/schema";
 import { Button, Chip, createEffectAction } from "@ue-shed/ui";
 import { Effect } from "effect";
 import { For, Show, createEffect, createSignal, untrack } from "solid-js";

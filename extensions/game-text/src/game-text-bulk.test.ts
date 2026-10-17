@@ -2,7 +2,7 @@ import {
 	LocalizationLineId,
 	LocalizationLinePreview,
 	LocalizationSelection
-} from "@ue-shed/game-text/browser";
+} from "@ue-shed/game-text/schema";
 import { Schema } from "effect";
 import { describe, expect, it } from "vitest";
 import {

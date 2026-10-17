@@ -1,18 +1,16 @@
 import * as stylex from "@stylexjs/stylex";
+import { textProblems } from "@ue-shed/game-text/checks";
+import { type LocalizationFocus } from "@ue-shed/game-text/corpus";
 import {
 	TEXT_ORIGIN_LABELS,
 	TEXT_PROBLEM_LABELS,
-	manifestPathOrigin,
 	textFileLabel,
 	textFolderLabel,
-	textLocationOrigin,
-	textProblems,
 	textCountLabel,
-	textReviewSignalLabel,
-	type LocalizationFocus,
-	type TextCorpusFocus,
-	type TextProblem
-} from "@ue-shed/game-text/browser";
+	textReviewSignalLabel
+} from "@ue-shed/game-text/labels";
+import { manifestPathOrigin, textLocationOrigin } from "@ue-shed/game-text/rules";
+import { type TextCorpusFocus, type TextProblem } from "@ue-shed/game-text/schema";
 import { Button } from "@ue-shed/ui";
 import { tokens } from "@ue-shed/ui-theme/tokens.stylex.js";
 import { For, Show, createMemo } from "solid-js";

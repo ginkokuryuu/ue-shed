@@ -21,7 +21,7 @@ import { packageTextJsonLines } from "../packages/game-text/src/package-text-ndj
 import { compareLocalizationJoins } from "./localization-join-oracle.test-support.ts";
 import { refreshPackageTextLayer } from "../packages/game-text/src/package-text-layer.ts";
 import { importLocalizationTarget } from "../packages/game-text/src/localization-import.ts";
-import { textCorpusWithExcludedPackages } from "../packages/game-text/dist/index.js";
+import { textCorpusWithExcludedPackages } from "../packages/game-text/dist/package-text-candidates.js";
 import {
 	LocalizationEvidenceNodeLive,
 	LocalizationFileAccessLive,

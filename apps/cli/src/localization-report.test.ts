@@ -3,7 +3,7 @@ import { NodeServices } from "@effect/platform-node";
 import { it } from "@effect/vitest";
 import { Effect, FileSystem, Layer, Ref, Result, Schema } from "effect";
 import { expect } from "vitest";
-import { createLocalizationBaseline } from "@ue-shed/game-text/browser";
+import { createLocalizationBaseline } from "@ue-shed/game-text/corpus";
 import { corpus, evidence } from "../../../packages/game-text/src/localization.test-support.js";
 import {
 	readLocalizationBaseline,

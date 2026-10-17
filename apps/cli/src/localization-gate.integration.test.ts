@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join, relative } from "node:path";
 import { Effect, Layer, Ref, Schema } from "effect";
 import { describe, expect } from "vitest";
-import { LocalizationGateResult } from "@ue-shed/game-text/browser";
+import { LocalizationGateResult } from "@ue-shed/game-text/checks";
 import { useSavedFixtureProject } from "../../../fixtures/unreal-project/saved-project.test-support.js";
 import { CliRuntime } from "./cli-runtime.js";
 import { runCli } from "./command.js";

@@ -28,6 +28,9 @@ import {
 import {
 	GameTextInvestigationQuery,
 	GameTextInvestigationPresetResult,
+	LocalizationLinesFileResult
+} from "@ue-shed/game-text/corpus";
+import {
 	WorkbenchOperationRequest,
 	WorkbenchOperationPlanResult,
 	WorkbenchOperationId,
@@ -36,9 +39,8 @@ import {
 	WorkbenchOperationResult,
 	WorkbenchOperationFilesRequest,
 	WorkbenchOperationFilesResult,
-	WorkbenchOperationProgress,
-	LocalizationLinesFileResult
-} from "@ue-shed/game-text/browser";
+	WorkbenchOperationProgress
+} from "@ue-shed/game-text/schema";
 import { InvestigationFileResult, InvestigationFormat } from "@ue-shed/unreal-assets/investigation";
 import {
 	AuthoringAuthority,
@@ -115,20 +117,22 @@ import {
 	LocalizationTargetResult,
 	LocalizationFocusRequest,
 	LocalizationFocusResult,
+	TextQualityFocusRequest,
+	TextQualityFocusResult,
+	TextQualityQueryRunResult,
+	TextQualityRuleUpdateResult,
+	TextQualitySearchRequest,
+	TextQualitySearchResult
+} from "@ue-shed/game-text/corpus";
+import { GameTextRuleDocument } from "@ue-shed/game-text/rules";
+import {
 	LocalizationSelection,
 	TextCorpusFocusRequest,
 	TextCorpusFocusResult,
 	TextCorpusQueryRunResult,
 	TextCorpusSearchRequest,
-	TextCorpusSearchResult,
-	TextQualityFocusRequest,
-	TextQualityFocusResult,
-	TextQualityQueryRunResult,
-	GameTextRuleDocument,
-	TextQualityRuleUpdateResult,
-	TextQualitySearchRequest,
-	TextQualitySearchResult
-} from "@ue-shed/game-text/browser";
+	TextCorpusSearchResult
+} from "@ue-shed/game-text/schema";
 import { RuntimeHealth } from "@ue-shed/observability/health";
 import {
 	ScenarioDocument,

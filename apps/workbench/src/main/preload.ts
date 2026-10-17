@@ -17,7 +17,7 @@ import type {
 } from "@ue-shed/extension-camera-review/client";
 import type { EditorHandoffNotice } from "../shared/editor-handoff.js";
 import type { MapCaptureProgressEvent } from "@ue-shed/extension-camera-review/map-capture-client";
-import type { WorkbenchOperationProgress } from "@ue-shed/game-text/browser";
+import type { WorkbenchOperationProgress } from "@ue-shed/game-text/schema";
 import type { ContentObservatoryHistoryRequestWire } from "@ue-shed/extension-content-observatory/client";
 import type {
 	CameraScheduleConfig,

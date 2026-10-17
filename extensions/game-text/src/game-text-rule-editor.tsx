@@ -1,13 +1,13 @@
 import * as stylex from "@stylexjs/stylex";
+import type { TextQualityQuerySummary } from "@ue-shed/game-text/corpus";
+import type { LocalizationProjectRule, GameTextRuleDocument } from "@ue-shed/game-text/rules";
 import type {
-	TextQualityQuerySummary,
 	TextQualityRule,
-	LocalizationProjectRule,
-	GameTextRuleDocument,
 	TextRoleMatcher,
 	TextTerminologyEntry
-} from "@ue-shed/game-text/browser";
-import { TextQualityRuleId, textCountLabel } from "@ue-shed/game-text/browser";
+} from "@ue-shed/game-text/schema";
+import { textCountLabel } from "@ue-shed/game-text/labels";
+import { TextQualityRuleId } from "@ue-shed/game-text/schema";
 import { tokens } from "@ue-shed/ui-theme/tokens.stylex.js";
 import { For, Match, Show, Switch, createEffect, createMemo, createSignal } from "solid-js";
 import { CultureRuleFields } from "./game-text-culture-rule-fields.js";
