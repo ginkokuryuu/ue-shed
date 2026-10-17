@@ -19,7 +19,7 @@ concurrency:
 jobs:
     changes:
         name: Validate CI inputs and select checks
-        runs-on: blacksmith-2vcpu-ubuntu-2404
+        runs-on: ubuntu-24.04
         outputs:
             catalog_oracle: ${{ steps.scope.outputs.catalog_oracle }}
             site: ${{ steps.scope.outputs.site }}
@@ -50,7 +50,7 @@ jobs:
     repository:
         name: Repository checks
         needs: changes
-        runs-on: blacksmith-4vcpu-ubuntu-2404
+        runs-on: ubuntu-24.04
         timeout-minutes: 90
         steps:
             - name: Checkout without persisted credentials
@@ -104,7 +104,7 @@ jobs:
         name: UAsset libraries
         needs: changes
         if: needs.changes.outputs.uasset_libraries == 'true'
-        runs-on: blacksmith-4vcpu-ubuntu-2404
+        runs-on: ubuntu-24.04
         timeout-minutes: 90
         env:
             SCCACHE_GHA_ENABLED: "true"
@@ -181,7 +181,7 @@ jobs:
         name: UAsset IO
         needs: changes
         if: needs.changes.outputs.uasset_io == 'true'
-        runs-on: blacksmith-4vcpu-ubuntu-2404
+        runs-on: ubuntu-24.04
         timeout-minutes: 90
         env:
             SCCACHE_GHA_ENABLED: "true"
@@ -263,7 +263,7 @@ jobs:
         name: SQLite Catalog oracle
         needs: changes
         if: needs.changes.outputs.catalog_oracle == 'true'
-        runs-on: blacksmith-4vcpu-ubuntu-2404
+        runs-on: ubuntu-24.04
         timeout-minutes: 20
         steps:
             - name: Checkout without persisted credentials
@@ -294,7 +294,7 @@ jobs:
         name: Website and illustrated guides
         needs: changes
         if: needs.changes.outputs.site == 'true'
-        runs-on: blacksmith-2vcpu-ubuntu-2404
+        runs-on: ubuntu-24.04
         timeout-minutes: 30
         steps:
             - uses: actions/checkout@v6
@@ -337,7 +337,7 @@ jobs:
             - uasset_libraries
             - catalog_oracle
         if: always()
-        runs-on: blacksmith-2vcpu-ubuntu-2404
+        runs-on: ubuntu-24.04
         steps:
             - name: Verify portable jobs
               shell: bash
