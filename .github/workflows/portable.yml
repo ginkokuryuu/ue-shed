@@ -229,6 +229,9 @@ jobs:
                       packages/unreal-assets/src/fixture.integration.test.ts \
                       packages/unreal-assets/src/project-index-process.test.ts \
                       packages/game-text/src/fixture.integration.test.ts \
+                      packages/game-text/src/native-index-builder.integration.test.ts \
+                      packages/game-text/src/native-index-builder-regressions.integration.test.ts \
+                      scripts/native-game-text-join.test.ts \
                       packages/enhanced-input/src/dogfood.integration.test.ts \
                       2>&1 | tee -a evidence/uasset-io-check.log
             - name: Collect compiler cache diagnostics

@@ -446,7 +446,7 @@ export class SharedStringFiles {
 		if (!values) {
 			this.decodedMisses++;
 			const cursor = a64Cursor(this.blockSync(segment, block)),
-				arena = new StringArena(1024, 64);
+				arena = new StringArena(1024, 64, true);
 			for (let value = cursor.next(); value; value = cursor.next()) arena.add(value);
 			values = arena.finish();
 			const size = values.bytes.buffer.byteLength + values.offsets.buffer.byteLength;
@@ -554,7 +554,7 @@ export class SharedStringFiles {
 			if (!values) {
 				this.decodedMisses++;
 				const cursor = a64Cursor(await this.block(group.segment, group.block)),
-					arena = new StringArena(1024, 64);
+					arena = new StringArena(1024, 64, true);
 				for (let value = cursor.next(); value; value = cursor.next()) arena.add(value);
 				values = arena.finish();
 				const size = values.bytes.buffer.byteLength + values.offsets.buffer.byteLength;

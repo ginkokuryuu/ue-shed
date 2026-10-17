@@ -96,3 +96,4 @@ export {
 	inspectJoinedTarget,
 	type JoinedTargetReader
 } from "./joined-target-reader.js";
+export { nativeIndexBuilderLayer } from "./native-index-builder.js";
