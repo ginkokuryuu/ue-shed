@@ -88,7 +88,7 @@ export function localizationLinePolicyFindings(
 			ruleId: rule.id,
 			recovery: rule.recovery,
 			translationOrigin: shipped.origin,
-			severity: "normal" as const,
+			severity: rule.severity ?? "normal",
 			affectedOccurrences: occurrences.map(({ id, location, packageFile }) => ({
 				id,
 				location,
