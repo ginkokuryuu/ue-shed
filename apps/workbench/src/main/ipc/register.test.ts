@@ -9,7 +9,7 @@ import { AssetReaderError, makeAssetReaderTestLayer } from "@ue-shed/unreal-asse
 import type { TextureAuditRunResult, TexturePreviewResult } from "@ue-shed/asset-audits";
 import type { MapReviewApprovalResult } from "@ue-shed/cameras/review-contracts";
 import type { EnhancedInputRunResult } from "@ue-shed/enhanced-input";
-import type { TextCorpusQueryRunResult } from "@ue-shed/game-text";
+import type { TextCorpusQueryRunResult } from "@ue-shed/game-text/schema";
 import type { CameraScheduleConfig, CameraStatus } from "@ue-shed/protocol";
 import { makeEditorPlaySessionTestLayer } from "@ue-shed/engine";
 import {
@@ -37,7 +37,7 @@ import { makeFixtureLauncherTestLayer } from "../services/fixture-launcher.js";
 import { makeWorkbenchGameTextTestLayer } from "../services/game-text.js";
 import { WorkbenchGameTextOperations } from "../services/game-text-operations.js";
 import { makeWorkbenchInputAtlasTestLayer } from "../services/input-atlas.js";
-import { makeWorkbenchMapReviewTestLayer } from "../services/map-review.js";
+import { makeWorkbenchMapReviewTestLayer, SavedWorldUnavailable } from "../services/map-review.js";
 import { makeWorkbenchMapCaptureTestLayer } from "../services/map-capture.js";
 import { makeWorkbenchNiagaraPreviewTestLayer } from "../services/niagara-preview.js";
 import { makeProjectLauncherTestLayer } from "../services/project-launcher.js";
@@ -527,7 +527,48 @@ function buildRegistrationLayer(recorder: Recorder, options: RegistrationOptions
 				.pipe(Effect.asVoid),
 		unsubscribeWorldObservations: () =>
 			recorder.record("mapReview.unsubscribeWorldObservations").pipe(Effect.asVoid),
-		worldObservationPresentationReplacements: () => Effect.succeed(0)
+		worldObservationPresentationReplacements: () => Effect.succeed(0),
+		// No map is configured, so saved worlds and Review Sets answer as an unconfigured host.
+		savedWorldMaps: () =>
+			recorder.record("mapReview.savedWorldMaps").pipe(Effect.as([] as const)),
+		savedWorld: (mapPath) =>
+			recorder.record(`mapReview.savedWorld:${mapPath}`).pipe(
+				Effect.andThen(
+					Effect.fail(
+						new SavedWorldUnavailable({
+							message: "No saved map is configured.",
+							recovery: "Choose a map."
+						})
+					)
+				)
+			),
+		savedWorldProgress: () =>
+			Effect.succeed({
+				actorsFound: 0,
+				phase: "idle" as const,
+				processedPackages: 0,
+				totalPackages: 0
+			}),
+		applyVisibilityPolicy: () =>
+			recorder
+				.record("mapReview.applyVisibilityPolicy")
+				.pipe(Effect.as({ status: "not_configured" as const })),
+		replaceVisibilityPolicy: () =>
+			recorder
+				.record("mapReview.replaceVisibilityPolicy")
+				.pipe(Effect.as({ status: "not_configured" as const })),
+		reviewSetLibrary: () =>
+			recorder
+				.record("mapReview.reviewSetLibrary")
+				.pipe(Effect.as({ status: "not_configured" as const })),
+		createReviewSet: () =>
+			recorder
+				.record("mapReview.createReviewSet")
+				.pipe(Effect.as({ status: "not_configured" as const })),
+		selectReviewSet: () =>
+			recorder
+				.record("mapReview.selectReviewSet")
+				.pipe(Effect.as({ status: "not_configured" as const }))
 	});
 	const mapCapture = makeWorkbenchMapCaptureTestLayer({
 		actors: () =>

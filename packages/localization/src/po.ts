@@ -85,6 +85,8 @@ function rawLines(text: string): POLine[] {
 	for (const match of text.matchAll(/([^\r\n]*)(\r\n|\r|\n|$)/gu)) {
 		if (match[0] !== "") {
 			// SAFETY: the ending capture enumerates exactly POLine's four endings.
+			// Verified by: packages/localization/src/po.test.ts ("preserves trivia, obsolete
+			// entries, mixed endings, extra blank lines and BOM", "preserves ... with trailing newline")
 			lines.push({ text: match[1] ?? "", ending: match[2] as POLine["ending"] });
 		}
 	}
@@ -160,6 +162,8 @@ function decodeBlock(lines: readonly POLine[], lineOffset: number, detailed = tr
 		const match = /^(msgctxt|msgid_plural|msgid|msgstr)(?:\[(\d+)\])?\s+(.*)$/su.exec(trimmed);
 		if (match === null) throw malformedPO(lineNumber);
 		// SAFETY: the keyword capture enumerates exactly the four PO field names.
+		// Verified by: packages/localization/src/po.test.ts
+		// ("retains plural fields and indexed translations")
 		const name = match[1] as POStringField["name"];
 		const fieldIndex = match[2] === undefined ? undefined : Number(match[2]);
 		if (fieldIndex !== undefined && (name !== "msgstr" || !Number.isSafeInteger(fieldIndex)))

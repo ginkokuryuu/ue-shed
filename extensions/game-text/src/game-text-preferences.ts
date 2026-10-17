@@ -1,5 +1,11 @@
 import { Effect, Option, Schema } from "effect";
 import {
+	TextQualityFindingId,
+	WorkspaceQualityFilter,
+	LocalizationEdit
+} from "@ue-shed/game-text/corpus";
+import { GameTextRuleDocument, LocalizationProjectRule } from "@ue-shed/game-text/rules";
+import {
 	LocalizationSelection,
 	LocalizationLineId,
 	TextCapabilityFilter,
@@ -8,14 +14,9 @@ import {
 	TextReviewLens,
 	TextUnitId,
 	TextWhere,
-	TextQualityFindingId,
-	WorkspaceQualityFilter,
-	GameTextRuleDocument,
-	LocalizationEdit,
 	TextQualityRule,
-	TextTerminologyEntry,
-	LocalizationProjectRule
-} from "@ue-shed/game-text/browser";
+	TextTerminologyEntry
+} from "@ue-shed/game-text/schema";
 import { legacyFilter } from "./game-text-filter-model.js";
 import type { RuleEditorState } from "./game-text-rule-state.js";
 
@@ -79,10 +80,15 @@ const DraftLocalizationRule = Schema.Union([
 		cultures: Schema.Record(Schema.String, Schema.Array(DraftTerm))
 	}))
 ]);
-const [DocumentV1, DocumentV2] = GameTextRuleDocument.members;
+const [DocumentV1, DocumentV2, DocumentV3] = GameTextRuleDocument.members;
 const DraftDocument = Schema.Union([
 	DocumentV1.mapFields((fields) => ({ ...fields, rules: Schema.Array(DraftSourceRule) })),
 	DocumentV2.mapFields((fields) => ({
+		...fields,
+		rules: Schema.Array(DraftSourceRule),
+		localizationRules: Schema.optionalKey(Schema.Array(DraftLocalizationRule))
+	})),
+	DocumentV3.mapFields((fields) => ({
 		...fields,
 		rules: Schema.Array(DraftSourceRule),
 		localizationRules: Schema.optionalKey(Schema.Array(DraftLocalizationRule))

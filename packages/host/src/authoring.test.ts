@@ -57,6 +57,115 @@ const failingRemoteControl = makeRemoteControlClientTestLayer(() =>
 	)
 );
 
+it.effect("reconciles a lost Apply acknowledgement without replaying the pending operation", () =>
+	Effect.scoped(
+		Effect.gen(function* () {
+			const root = yield* Effect.acquireRelease(
+				Effect.promise(() => mkdtemp(join(tmpdir(), "ue-shed-apply-recovery-"))),
+				(path) => Effect.promise(() => rm(path, { recursive: true, force: true }))
+			);
+			const calls: string[] = [];
+			let reachable = false;
+			const remote = makeRemoteControlClientTestLayer((request) => {
+				calls.push(request.functionName);
+				if (request.functionName === "GetCapabilityManifest" && reachable)
+					return Effect.succeed({
+						schemaVersion: 1,
+						producerKind: "unreal_editor",
+						authoringObjectPath: "/Script/Fixture.Authoring",
+						authoringLimits: {
+							maxCommands: 1024,
+							maxPayloadBytes: 1048576,
+							maxTables: 16
+						},
+						capabilities: [
+							"authoring.snapshot.v2",
+							"authoring.table-list.v1",
+							"authoring.apply.v1",
+							"authoring.apply-result.v1",
+							"authoring.save.v1"
+						]
+					});
+				return Effect.fail(
+					new RemoteControlClientError({
+						endpoint: request.endpoint,
+						functionName: request.functionName,
+						operation: "test.lost_reply",
+						message: "Lost editor acknowledgement.",
+						// A port's replay guarantee cannot remove the session's persisted pending Apply.
+						retrySafe: true,
+						nextStep: "retry",
+						recovery: "Retry the transport request."
+					})
+				);
+			});
+			const configuration = shedHostConfigurationLayer({
+				project: { status: "configured", projectRoot: root },
+				authoringAsset: { status: "configured", path: join(root, "DT_Test.uasset") },
+				remoteControlEndpoint: "http://fixture-editor:30001"
+			});
+			const dependencies = Layer.mergeAll(
+				configuration,
+				remote,
+				AuthoringFilePickerCancelled,
+				makeAuthoringCatalogTestLayer({ discover: () => Effect.die("unused") }),
+				makeAssetReaderTestLayer({
+					discoverAssets: () => Effect.die("unused"),
+					discoverTables: () => Effect.die("unused"),
+					readAsset: () => Effect.die("unused"),
+					readTable: () => Effect.succeed(snapshot),
+					source: () => Effect.succeed("configured")
+				})
+			);
+			const host = ShedAuthoringLive.pipe(
+				Layer.provide(ShedAuthoringSessionsLive.pipe(Layer.provide(configuration))),
+				Layer.provide(SavedTableIndexLive.pipe(Layer.provide(dependencies))),
+				Layer.provide(dependencies)
+			);
+			yield* Effect.gen(function* () {
+				const client = yield* AuthoringClient;
+				yield* client.loadConfiguredTable();
+				const session = yield* client.beginSession(snapshot.table.objectPath);
+				if (session.status !== "ready") throw new Error("Expected a draft session");
+				const id = session.view.sessionId;
+				expect(
+					(yield* client.editSession({
+						kind: "set_cells",
+						sessionId: id,
+						tableObjectPath: snapshot.table.objectPath,
+						edits: [
+							{
+								fieldName: "Count",
+								rowId: "row:Alpha",
+								value: { kind: "int", value: "2" }
+							}
+						]
+					})).status
+				).toBe("ready");
+				const disconnected = yield* client.applySession(id);
+				if (disconnected.status !== "failed")
+					throw new Error("Expected connection failure");
+				expect(disconnected.error.code).toBe("editor_connection_failed");
+				expect(disconnected.error.retrySafe).toBe(true);
+				reachable = true;
+				const lost = yield* client.applySession(id);
+				if (lost.status !== "failed") throw new Error("Expected lost acknowledgement");
+				expect(lost.error.code).toBe("session_live_failed");
+				expect(lost.error.retrySafe).toBe(false);
+				expect(lost.error.recovery).toContain("reconcileSession");
+				const repeated = yield* client.applySession(id);
+				if (repeated.status !== "failed") throw new Error("Expected pending Apply refusal");
+				expect(repeated.error.code).toBe("session_transition_refused");
+				expect(calls.filter((name) => name === "Apply")).toHaveLength(1);
+				const lookup = yield* client.reconcileSession(id);
+				if (lookup.status !== "failed") throw new Error("Expected lookup failure");
+				expect(lookup.error.retrySafe).toBe(true);
+				expect(calls).toContain("LookupApplyResult");
+			}).pipe(Effect.provide(AuthoringClientLive.pipe(Layer.provide(host))));
+		})
+	)
+);
+
 it.effect(
 	"acquires sessions after selection and isolates matching table paths across projects",
 	() =>

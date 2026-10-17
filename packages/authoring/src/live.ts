@@ -272,6 +272,8 @@ export function dispatchApply<E>(args: {
 						: // SAFETY: after excluding ApplyWorkflowError, the only remaining failure is port error E.
 							Effect.succeed({
 								// SAFETY: after excluding ApplyWorkflowError, the failure channel is the port error E.
+								// Verified by: packages/authoring/src/live.test.ts ("records an
+								// indeterminate receipt instead of replaying an uncertain mutation")
 								cause: cause as E,
 								kind: "indeterminate" as const,
 								session: markIndeterminate(

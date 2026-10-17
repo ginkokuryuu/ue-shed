@@ -72,6 +72,7 @@ function remoteCall(options: {
 			.request({
 				endpoint,
 				functionName: options.functionName,
+				idempotent: options.operation === "manifest",
 				objectPath: options.objectPath,
 				operation: `asset_audits.live_${options.operation}`,
 				parameters: options.parameters

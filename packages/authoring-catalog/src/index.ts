@@ -177,12 +177,6 @@ export class AuthoringLiveConnection extends Context.Service<
 	UnrealAuthoringConnection
 >()("@ue-shed/authoring-catalog/AuthoringLiveConnection") {}
 
-export function authoringLiveConnectionLayer(
-	connection: UnrealAuthoringConnection
-): Layer.Layer<AuthoringLiveConnection> {
-	return Layer.succeed(AuthoringLiveConnection, AuthoringLiveConnection.of(connection));
-}
-
 function discoverAuthoringProjectCatalogWith(
 	reader: AssetReaderApi,
 	options: AuthoringCatalogDiscoverArgs,
@@ -309,5 +303,5 @@ export function discoverAuthoringProjectCatalog(options: {
 	).pipe(Effect.provide(AuthoringCatalogLive));
 	return live === undefined
 		? program
-		: program.pipe(Effect.provide(authoringLiveConnectionLayer(live)));
+		: program.pipe(Effect.provideService(AuthoringLiveConnection, live));
 }

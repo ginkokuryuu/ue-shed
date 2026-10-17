@@ -386,101 +386,93 @@ export function makeAuthoringHttpClient(options: AuthoringHttpClientOptions): Au
 		readonly decode: (input: Schema.Json) => Effect.Effect<A, DecodeError>;
 		readonly operation: string;
 		readonly payload: AuthoringTransportRequest;
-	}) => {
-		const read = authoringReadRequests.has(args.payload.operation);
-		const contractMismatch: AuthoringRequestGuidance = {
-			retrySafe: read,
-			nextStep: "escalate"
-		};
-		return Effect.tryPromise({
-			try: (signal) =>
-				fetch(options.endpoint, {
-					body: JSON.stringify(args.payload),
-					headers: { "content-type": "application/json" },
-					method: "POST",
-					signal
-				}),
-			catch: (cause) =>
-				new AuthoringClientError({
-					cause,
-					message: `The adopted UE Shed host did not answer ${args.operation}.`,
+	}) =>
+		Effect.gen(function* () {
+			const read = authoringReadRequests.has(args.payload.operation);
+			const contractMismatch: AuthoringRequestGuidance = {
+				retrySafe: read,
+				nextStep: read ? "escalate" : "reconcile"
+			};
+			const protocolRecovery = read
+				? "Run the adopted host and client from the same UE Shed version, or report the protocol failure."
+				: "Reopen the session and reconcile its state before sending this change again; the host may have applied it.";
+			const response = yield* Effect.tryPromise({
+				try: (signal) =>
+					fetch(options.endpoint, {
+						body: JSON.stringify(args.payload),
+						headers: { "content-type": "application/json" },
+						method: "POST",
+						signal
+					}),
+				catch: (cause) =>
+					new AuthoringClientError({
+						cause,
+						message: `The adopted UE Shed host did not answer ${args.operation}.`,
+						operation: args.operation,
+						recovery: read
+							? "Verify the adopted UE Shed host is running, then retry."
+							: protocolRecovery,
+						...unknownOutcomeGuidance(read)
+					})
+			});
+			if (!response.ok)
+				return yield* new AuthoringClientError({
+					cause: { status: response.status },
+					message: `The adopted host rejected ${args.operation} with HTTP ${response.status}.`,
 					operation: args.operation,
-					recovery: read
-						? "Verify the adopted UE Shed host is running, then retry."
-						: "Verify the adopted UE Shed host is running, then reopen the session to check whether the change applied.",
-					...unknownOutcomeGuidance(read)
-				})
-		}).pipe(
-			Effect.flatMap((response) =>
-				response.ok
-					? Effect.tryPromise({
-							try: () => response.json(),
-							catch: (cause) =>
-								new AuthoringClientError({
-									cause,
-									message: `The adopted host returned invalid JSON for ${args.operation}.`,
-									operation: args.operation,
-									recovery:
-										"The adopted host returned invalid JSON. Restart it and retry.",
-									...(read ? contractMismatch : unknownOutcomeGuidance(read))
-								})
+					recovery:
+						response.status >= 500 && !read
+							? protocolRecovery
+							: `Inspect the adopted host failure for HTTP ${response.status}.`,
+					...(response.status >= 500
+						? unknownOutcomeGuidance(read)
+						: { retrySafe: read, nextStep: "fix_input" as const })
+				});
+			const input = yield* Effect.tryPromise({
+				try: () => response.json(),
+				catch: (cause) =>
+					new AuthoringClientError({
+						cause,
+						message: `The adopted host returned invalid JSON for ${args.operation}.`,
+						operation: args.operation,
+						recovery: protocolRecovery,
+						...contractMismatch
+					})
+			});
+			const transport = yield* decodeAuthoringTransportResponse(input).pipe(
+				Effect.mapError(
+					(cause) =>
+						new AuthoringClientError({
+							cause,
+							message: `The adopted host returned an invalid transport response for ${args.operation}.`,
+							operation: args.operation,
+							recovery: protocolRecovery,
+							...contractMismatch
 						})
-					: Effect.fail(
-							new AuthoringClientError({
-								cause: { status: response.status },
-								message: `The adopted host rejected ${args.operation} with HTTP ${response.status}.`,
-								operation: args.operation,
-								recovery: `The adopted host rejected the request with HTTP ${response.status}.`,
-								...(response.status >= 500
-									? unknownOutcomeGuidance(read)
-									: ({ retrySafe: false, nextStep: "fix_input" } as const))
-							})
-						)
-			),
-			Effect.flatMap((input) =>
-				decodeAuthoringTransportResponse(input).pipe(
-					Effect.mapError(
-						(cause) =>
-							new AuthoringClientError({
-								cause,
-								message: `The adopted host returned an invalid transport response for ${args.operation}.`,
-								operation: args.operation,
-								recovery:
-									"The adopted host returned an invalid transport response.",
-								...contractMismatch
-							})
-					)
 				)
-			),
-			Effect.flatMap((response) =>
-				response.status === "transport_error"
-					? Effect.fail(
-							new AuthoringClientError({
-								cause: response.error.message,
-								message: response.error.message,
-								operation: args.operation,
-								recovery: response.error.recovery,
-								retrySafe: false,
-								nextStep: "fix_input"
-							})
-						)
-					: args.decode(response.value).pipe(
-							Effect.mapError(
-								(cause) =>
-									new AuthoringClientError({
-										cause,
-										message: `The adopted host response for ${args.operation} does not match the authoring contract.`,
-										operation: args.operation,
-										recovery:
-											"The adopted host response does not match the authoring contract.",
-										...contractMismatch
-									})
-							)
-						)
-			),
-			Effect.withSpan(args.operation)
-		);
-	};
+			);
+			if (transport.status === "transport_error")
+				return yield* new AuthoringClientError({
+					cause: transport.error.message,
+					message: transport.error.message,
+					operation: args.operation,
+					recovery: transport.error.recovery,
+					retrySafe: false,
+					nextStep: "fix_input"
+				});
+			return yield* args.decode(transport.value).pipe(
+				Effect.mapError(
+					(cause) =>
+						new AuthoringClientError({
+							cause,
+							message: `The adopted host response for ${args.operation} does not match the authoring contract.`,
+							operation: args.operation,
+							recovery: protocolRecovery,
+							...contractMismatch
+						})
+				)
+			);
+		}).pipe(Effect.withSpan(args.operation));
 
 	return AuthoringClient.of({
 		getCatalogProgress: () =>

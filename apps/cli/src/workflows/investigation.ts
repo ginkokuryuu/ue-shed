@@ -15,7 +15,9 @@ export const runInvestigation = Effect.fn("Cli.workflow.investigation")(
 		observeCliOperation(
 			command._tag,
 			Effect.gen(function* () {
-				const text = yield* Effect.promise(() => import("@ue-shed/game-text"));
+				const text = yield* Effect.promise(() => import("@ue-shed/game-text/corpus"));
+				const textChecks = yield* Effect.promise(() => import("@ue-shed/game-text/checks"));
+				const textRules = yield* Effect.promise(() => import("@ue-shed/game-text/rules"));
 				const textures = yield* Effect.promise(() => import("@ue-shed/asset-audits"));
 				const input = yield* readInvestigationPresetJson(command.preset);
 				const preset = yield* Schema.decodeUnknownEffect(
@@ -61,12 +63,12 @@ export const runInvestigation = Effect.fn("Cli.workflow.investigation")(
 								? text
 										.localizationQualityWorkspace(
 											preset.rules
-												? text.evaluateGameTextSourceQuality(
+												? textRules.evaluateGameTextSourceQuality(
 														corpus,
 														preset.rules
 													)
 												: undefined,
-											text.checkLocalizationTarget(
+											textChecks.checkLocalizationTarget(
 												corpus,
 												indexed.localizationJoin,
 												indexed.evidence,

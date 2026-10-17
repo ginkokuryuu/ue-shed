@@ -74,6 +74,27 @@ fresh child and 10× refusal apply; this child also loads `tsx` to read the pack
 node scripts/benchmark-game-text-scale.ts --project test-results/game-text-scale/project-1x --select quality --cache test-results/game-text-scale/quality-cache-1x --records test-results/game-text-scale/phase4-records-1x --output test-results/game-text-scale/quality-1x.json
 ```
 
+`--stages` adds a stage breakdown of the `open` and `quality` stages to the counts
+(`game-text-stage-timings.ts`). A recording tracer keeps every span the child's coordinator ends:
+`stage.<span>.count`, `.wallMs` (the wall time the span's runs cover; overlapping runs count
+once, so concurrent reads are never summed) and `.maxMs`. Long sequential steps also put their
+own stages on their span with `StageClock`. These are wall time between marks on one fiber, so they
+add up to the step and include the event-loop turns it yields:
+
+- `PackageText.refresh`: `package-text.stage_ms.selection`, `read` (the reader's work and staging
+  its records) and `import` (cold) or `publish` (incremental).
+- `JoinedTarget.refresh` (full joins): `join.stage_ms.inputs`, `order`, `lines`, `duplicates`,
+  `folders`, `marks`, `query_columns`, `line_ids`, `query_places`, `columns`, `source_cache` and
+  `publish`.
+- `GameText.localizationQuality`: `game_text.quality.stage_ms.prepare` (duplicates, translations
+  and properties), `units`, `order`, `scan` and `columns`. `scan.hydrate` (reading lines) and
+  `scan.check` (running the checks) are parts of `scan`; the rest of `scan` is storing findings
+  and yielding.
+
+Spans in worker threads (cold layers, the search worker) are not recorded; their coordinator's
+wait is. The tracer itself costs a little per span, so compare runs with and without `--stages`
+before you trust a small difference.
+
 `--select source-quality` runs the same `open` stage, then `source_quality`: the opened index's
 `sourceQuality` with `scaleSourceRules` (`game-text-scale-quality.ts`), five roles over the
 generated paths, rows, String Table keys and properties, with two character budgets and three

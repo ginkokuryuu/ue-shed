@@ -351,33 +351,34 @@ export const LocalizationOperationsLive = Layer.effect(
 			run: (request) =>
 				Stream.callback<LocalizationRunEvent, LocalizationOperationError>(
 					(queue) =>
-						execute(request, (event) =>
-							Queue.offer(queue, event).pipe(Effect.asVoid)
-						).pipe(
-							// Explicit failures contain private log lines. Trace only the handled boundary.
-							Effect.withTracerEnabled(false),
-							Effect.flatMap((receipt) =>
-								Effect.annotateCurrentSpan({
-									operation: receipt.operation,
-									duration_ms: receipt.durationMs,
-									configs: receipt.plan.configs.length,
-									steps: receipt.plan.steps.length,
-									planned_files: receipt.plan.files.length,
-									changed_files: receipt.changes.length,
-									diagnostics: receipt.diagnostics.length
-								}).pipe(Effect.andThen(Queue.offer(queue, receipt)))
-							),
-							Effect.andThen(Queue.end(queue)),
+						Effect.gen(function* () {
+							const receipt = yield* execute(request, (event) =>
+								Queue.offer(queue, event).pipe(Effect.asVoid)
+							).pipe(
+								// Explicit failures contain private log lines. Trace only the handled boundary.
+								Effect.withTracerEnabled(false)
+							);
+							yield* Effect.annotateCurrentSpan({
+								operation: receipt.operation,
+								duration_ms: receipt.durationMs,
+								configs: receipt.plan.configs.length,
+								steps: receipt.plan.steps.length,
+								planned_files: receipt.plan.files.length,
+								changed_files: receipt.changes.length,
+								diagnostics: receipt.diagnostics.length
+							});
+							yield* Queue.offer(queue, receipt);
+							return yield* Queue.end(queue);
+						}).pipe(
 							Effect.catch((error) =>
-								Metric.update(
-									Metric.counter("localization.operations.failures"),
-									1
-								).pipe(
-									Effect.andThen(
-										Effect.annotateCurrentSpan({ code: error.code })
-									),
-									Effect.andThen(Queue.fail(queue, error))
-								)
+								Effect.gen(function* () {
+									yield* Metric.update(
+										Metric.counter("localization.operations.failures"),
+										1
+									);
+									yield* Effect.annotateCurrentSpan({ code: error.code });
+									return yield* Queue.fail(queue, error);
+								})
 							),
 							Effect.withSpan("LocalizationOperations.run")
 						),

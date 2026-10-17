@@ -53,6 +53,10 @@ This plan adds the four items with the best effort-to-impact ratio:
 - Any fix that writes to assets, such as a key fix, is applied in Unreal: through its own APIs, or
   through a UE Shed editor plugin where those fall short. UE Shed detects and plans; the headless PO
   writer stays for translations (ADR 0009 addendum).
+- **Asset key fixes** (change, regenerate or adopt a text's key inside an asset, then recompile and
+  re-read) are planned in Plan 058, lane A
+  (`plans/058-game-text-actions-rules-and-codebase-week.md`): an editor plugin over Remote Control
+  with a commandlet entry for headless batches. Nothing in this plan writes keys.
 
 ## Phase 1 — Where text comes from
 

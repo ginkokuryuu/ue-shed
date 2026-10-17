@@ -477,6 +477,7 @@ const requestActorSnapshotForFallback = Effect.fn("ActorObservation.snapshotFall
 		.request({
 			endpoint,
 			functionName: "GetActorSnapshot",
+			idempotent: true,
 			objectPath,
 			operation: "observatory.actor_snapshot",
 			parameters: {}

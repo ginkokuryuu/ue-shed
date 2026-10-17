@@ -7,7 +7,7 @@ import {
 	textQualityQuery,
 	type TextQualityQuery
 } from "./quality-query.js";
-import { evaluateGameTextSourceQuality, type GameTextRuleDocument } from "./quality-rules-v2.js";
+import { evaluateGameTextSourceQuality, type GameTextRuleDocument } from "./game-text-rules.js";
 import type { TextCorpus, TextOccurrenceId } from "./schema.js";
 
 /** Walks every search page by cursor, as a host does. */
@@ -34,7 +34,7 @@ export const expectSameSourceQuality = Effect.fn("Test.GameText.sameSourceQualit
 	const report = evaluateGameTextSourceQuality(result.corpus, document);
 	if (memory) expect(evaluateGameTextSourceQuality(memory, document)).toEqual(report);
 	const legacy = textQualityQuery(report);
-	const indexed = yield* result.sourceQuality!(document);
+	const indexed = yield* result.sourceQuality(document);
 	expect(indexed.summary()).toEqual(legacy.summary());
 	for (const filter of TextQualityFilter.literals) {
 		expect(indexed.export(filter)).toEqual(legacy.export(filter));

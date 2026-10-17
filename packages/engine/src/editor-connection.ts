@@ -56,7 +56,7 @@ function transportError(endpoint: string, cause: RemoteControlClientError): Edit
 		code: "transport_failure",
 		endpoint,
 		message: cause.message,
-		recovery: "Confirm that Unreal Editor and Remote Control are reachable, then retry.",
+		recovery: cause.recovery,
 		retrySafe: cause.retrySafe,
 		nextStep: cause.nextStep,
 		cause
@@ -75,6 +75,7 @@ export const EditorConnectionLive = Layer.effect(
 				.request({
 					endpoint,
 					functionName: "GetCapabilityManifest",
+					idempotent: true,
 					objectPath: coreObjectPath,
 					operation: "editor.connection.connect",
 					parameters: {}
@@ -89,7 +90,7 @@ export const EditorConnectionLive = Layer.effect(
 							message: `The editor at ${endpoint} returned a capability manifest that does not match the companion contract.`,
 							recovery:
 								"Update UE Shed so the client and Unreal companion use compatible contracts.",
-							retrySafe: false,
+							retrySafe: true,
 							nextStep: "escalate",
 							cause
 						})
@@ -104,7 +105,7 @@ export const EditorConnectionLive = Layer.effect(
 					endpoint,
 					message: `The editor identifies project ${manifest.projectName ?? "unknown"}, not ${request.expectedProjectName}.`,
 					recovery: "Connect to the selected project's Remote Control endpoint.",
-					retrySafe: false,
+					retrySafe: true,
 					nextStep: "fix_input"
 				});
 			}
@@ -118,7 +119,10 @@ export const EditorConnectionLive = Layer.effect(
 			return yield* connect(request).pipe(
 				Effect.retry({
 					schedule: Schedule.spaced(request.pollInterval ?? "500 millis"),
-					while: (error) => error.code === "transport_failure" && error.retrySafe
+					while: (error) =>
+						error.code === "transport_failure" &&
+						error.retrySafe &&
+						error.nextStep === "retry"
 				}),
 				Effect.timeoutOrElse({
 					duration: request.timeout ?? "3 minutes",

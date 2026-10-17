@@ -13,7 +13,7 @@ import {
 	type SavedProperty,
 	type SavedPropertyValue
 } from "@ue-shed/unreal-assets";
-import { Context, Effect, Layer, Ref, Schema, Stream } from "effect";
+import { Context, Effect, Layer, Schema, Stream } from "effect";
 import {
 	TextOccurrenceId,
 	TextUnitId,
@@ -33,15 +33,27 @@ import {
 	type PackageTextOccurrence
 } from "./representation-copies.js";
 import { classifyTextAudience, textAudienceFields } from "./text-audience.js";
+import { GameTextIndexProgressReporter } from "./index-progress.js";
 
 const makeOccurrenceId = TextOccurrenceId.make;
 const makeUnitId = TextUnitId.make;
 
 interface ExtractionProgress {
-	readonly phase: "idle" | "scanning" | "ready" | "failed";
+	readonly phase: "scanning" | "ready" | "failed";
 	readonly processedAssets: number;
 	readonly totalAssets: number;
 }
+
+/** A scan's progress, as `corpus` (or `failed`) events to the caller's reporter. */
+const reportExtraction = (progress: ExtractionProgress): Effect.Effect<void> =>
+	Effect.gen(function* () {
+		const report = yield* GameTextIndexProgressReporter;
+		report({
+			phase: progress.phase === "failed" ? "failed" : "corpus",
+			completed: progress.processedAssets,
+			total: progress.totalAssets
+		});
+	});
 
 export class TextCorpusScanError extends Schema.TaggedError<TextCorpusScanError>()(
 	"TextCorpusScanError",
@@ -54,14 +66,38 @@ export class TextCorpusScanError extends Schema.TaggedError<TextCorpusScanError>
 	}
 ) {}
 
+/**
+ * A positive concurrency or asset limit. The brand is the evidence that the value was checked,
+ * so the scan service never decodes its own typed options again.
+ */
+export const TextCorpusScanLimit = Schema.Int.check(Schema.isGreaterThanOrEqualTo(1)).pipe(
+	Schema.brand("TextCorpusScanLimit")
+);
+export type TextCorpusScanLimit = typeof TextCorpusScanLimit.Type;
+
 export const TextCorpusScanOptions = Schema.Struct({
-	concurrency: Schema.optional(Schema.Int.check(Schema.isGreaterThanOrEqualTo(1))),
-	maximumAssets: Schema.optional(Schema.Int.check(Schema.isGreaterThanOrEqualTo(1))),
+	concurrency: Schema.optional(TextCorpusScanLimit),
+	maximumAssets: Schema.optional(TextCorpusScanLimit),
 	projectRoot: Schema.String
 });
 export type TextCorpusScanOptions = Schema.Schema.Type<typeof TextCorpusScanOptions>;
 
 const decodeScanOptions = Schema.decodeUnknownEffect(TextCorpusScanOptions);
+
+/** Scan options from an untrusted source (a CLI flag, a request body), checked once. */
+export const parseTextCorpusScanOptions = (encoded: typeof TextCorpusScanOptions.Encoded) =>
+	decodeScanOptions(encoded).pipe(
+		Effect.mapError(
+			(cause) =>
+				new TextCorpusScanError({
+					code: "invalid_options",
+					message: "The text corpus scan options do not match their schema.",
+					recovery: "Provide a project root and positive scan limits.",
+					retrySafe: false,
+					cause
+				})
+		)
+	);
 
 export const STRING_TABLE_CLASS = "/Script/Engine.StringTable";
 
@@ -885,7 +921,7 @@ function extractTextCorpusWith(
 		readonly projectRoot: string;
 	},
 	inheritedFailures: readonly TextCorpusDiagnostic[] = [],
-	reportProgress: (progress: ExtractionProgress) => Effect.Effect<void> = () => Effect.void
+	reportProgress: (progress: ExtractionProgress) => Effect.Effect<void> = reportExtraction
 ): Effect.Effect<TextCorpus, TextCorpusScanError> {
 	if (options.paths?.length === 0) {
 		const accumulator = emptyTextExtractionAccumulator();
@@ -981,8 +1017,7 @@ function extractTextCorpusWith(
 
 function scanTextCorpusWith(
 	reader: AssetReaderApi,
-	options: TextCorpusScanOptions,
-	reportProgress: (progress: ExtractionProgress) => Effect.Effect<void>
+	options: TextCorpusScanOptions
 ): Effect.Effect<TextCorpus, TextCorpusScanError> {
 	return extractTextCorpusWith(
 		reader,
@@ -996,16 +1031,14 @@ function scanTextCorpusWith(
 				: { maximumAssets: options.maximumAssets }),
 			projectRoot: options.projectRoot
 		},
-		[],
-		reportProgress
+		[]
 	).pipe(Effect.withSpan("game-text.scan-corpus"));
 }
 
 function scanTextCorpusFromProjectIndexWith(
 	reader: AssetReaderApi,
 	index: SavedAssetScan,
-	options: TextCorpusScanOptions,
-	reportProgress: (progress: ExtractionProgress) => Effect.Effect<void>
+	options: TextCorpusScanOptions
 ): Effect.Effect<TextCorpus, TextCorpusScanError> {
 	const paths = textPackagePathsFromProjectIndex(index);
 	const inheritedFailures = index.failures.map(
@@ -1028,13 +1061,12 @@ function scanTextCorpusFromProjectIndexWith(
 			paths,
 			projectRoot: options.projectRoot
 		},
-		inheritedFailures,
-		reportProgress
+		inheritedFailures
 	).pipe(Effect.withSpan("game-text.scan-corpus-from-project-index"));
 }
 
+/** Scans report `corpus` progress through `GameTextIndexProgressReporter`. */
 export interface TextCorpusServiceApi {
-	readonly progress: () => Effect.Effect<ExtractionProgress>;
 	readonly scan: (
 		options: TextCorpusScanOptions
 	) => Effect.Effect<TextCorpus, TextCorpusScanError>;
@@ -1056,60 +1088,22 @@ export const TextCorpusServiceLive = Layer.effect(
 	TextCorpusService,
 	Effect.gen(function* () {
 		const reader = yield* AssetReader;
-		const progressState = yield* Ref.make<ExtractionProgress>({
-			phase: "idle",
-			processedAssets: 0,
-			totalAssets: 0
-		});
-		const reportProgress = (progress: ExtractionProgress) => Ref.set(progressState, progress);
-		const progress = Effect.fn("TextCorpus.progress")(() => Ref.get(progressState));
-		const scan = Effect.fn("TextCorpus.scan")(function* (options: TextCorpusScanOptions) {
-			const validated = yield* decodeScanOptions(options).pipe(
-				Effect.mapError(
-					(cause) =>
-						new TextCorpusScanError({
-							code: "invalid_options",
-							message: "The text corpus scan options do not match their schema.",
-							recovery: "Provide a project root and positive scan limits.",
-							retrySafe: false,
-							cause
-						})
-				)
-			);
-			return yield* scanTextCorpusWith(reader, validated, reportProgress);
-		});
+		// Branded scan limits have already been validated at the boundary.
+		const scan = Effect.fn("TextCorpus.scan")((options: TextCorpusScanOptions) =>
+			scanTextCorpusWith(reader, options)
+		);
 		const scanFromProjectIndex = Effect.fn("TextCorpus.scanFromProjectIndex")(function* (
 			index: SavedAssetScan,
 			options: TextCorpusScanOptions
 		) {
-			const validated = yield* decodeScanOptions(options).pipe(
-				Effect.mapError(
-					(cause) =>
-						new TextCorpusScanError({
-							code: "invalid_options",
-							message: "The text corpus scan options do not match their schema.",
-							recovery: "Provide a project root and positive scan limits.",
-							retrySafe: false,
-							cause
-						})
-				)
-			);
-			return yield* scanTextCorpusFromProjectIndexWith(
-				reader,
-				index,
-				validated,
-				reportProgress
-			);
+			return yield* scanTextCorpusFromProjectIndexWith(reader, index, options);
 		});
-		return TextCorpusService.of({ progress, scan, scanFromProjectIndex });
+		return TextCorpusService.of({ scan, scanFromProjectIndex });
 	})
 );
 
-export type TextCorpusServiceTestApi = Omit<
-	TextCorpusServiceApi,
-	"progress" | "scanFromProjectIndex"
-> &
-	Partial<Pick<TextCorpusServiceApi, "progress" | "scanFromProjectIndex">>;
+export type TextCorpusServiceTestApi = Omit<TextCorpusServiceApi, "scanFromProjectIndex"> &
+	Partial<Pick<TextCorpusServiceApi, "scanFromProjectIndex">>;
 
 /** @deprecated Use `TextCorpusServiceTestApi`. */
 export type TextCorpusServiceTestShape = TextCorpusServiceTestApi;
@@ -1121,9 +1115,6 @@ export function makeTextCorpusServiceTestLayer(
 		TextCorpusService,
 		TextCorpusService.of({
 			...service,
-			progress:
-				service.progress ??
-				(() => Effect.succeed({ phase: "idle", processedAssets: 0, totalAssets: 0 })),
 			scanFromProjectIndex:
 				service.scanFromProjectIndex ?? ((_index, options) => service.scan(options))
 		})

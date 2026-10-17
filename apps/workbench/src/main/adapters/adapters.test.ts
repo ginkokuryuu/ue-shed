@@ -7,7 +7,13 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { expect } from "vitest";
 import { invokeContracts } from "../ipc-contracts.js";
-import { ElectronApp, makeElectronAppTestLayer } from "./electron-app.js";
+import {
+	ElectronApp,
+	type ElectronAppEvent,
+	type ElectronAppHost,
+	electronAppLayer,
+	makeElectronAppTestLayer
+} from "./electron-app.js";
 import { ElectronDialog, makeElectronDialogTestLayer } from "./electron-dialog.js";
 import {
 	electronIpcLayer,
@@ -51,6 +57,34 @@ it.effect("ElectronApp test layer records readiness and quit", () =>
 		const metrics = yield* app.getAppMetrics();
 		expect(metrics.length).toBeGreaterThan(0);
 	}).pipe(Effect.provide(makeElectronAppTestLayer()))
+);
+
+it.effect("ElectronApp forwards host event arguments and removes the same listener", () =>
+	Effect.gen(function* () {
+		const registered = new Map<ElectronAppEvent, (...args: Array<unknown>) => void>();
+		const removed: Array<ElectronAppEvent> = [];
+		const host: ElectronAppHost = {
+			getAppMetrics: () => [],
+			getPath: () => "C:/Workbench-Test-UserData",
+			on: (event, listener) => {
+				registered.set(event, listener);
+			},
+			quit: () => undefined,
+			removeListener: (event, listener) => {
+				if (registered.get(event) === listener) removed.push(event);
+			},
+			whenReady: () => Promise.resolve()
+		};
+		let prevented = 0;
+		yield* Effect.gen(function* () {
+			const app = yield* ElectronApp;
+			yield* app.on("before-quit", (event) => event.preventDefault());
+			// Electron calls listeners with its event object first and extra arguments after it.
+			registered.get("before-quit")?.({ preventDefault: () => (prevented += 1) }, "extra");
+		}).pipe(Effect.provide(electronAppLayer(host)));
+		expect(prevented).toBe(1);
+		expect(removed).toEqual(["before-quit"]);
+	})
 );
 
 it.effect("WorkbenchWindow test layer blocks sends after destroy", () =>

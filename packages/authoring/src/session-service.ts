@@ -176,26 +176,36 @@ const CauseGuidance = Schema.Struct({
 const isCauseGuidance = Schema.is(CauseGuidance);
 
 /**
- * Keeps the port's own guidance when it carries one. Otherwise an Apply or Save whose outcome is
- * unknown leaves the session indeterminate, so the caller reconciles before sending it again.
+ * Apply failures leave a durable pending operation that must be reconciled even if the port can
+ * safely replay its request. Lookup and Save keep the port's guidance: Save can reuse its pending
+ * request, and lookup does not dispatch another Apply.
  */
 function liveError(
 	operation: AuthoringSessionLiveError["operation"],
 	cause: unknown
 ): AuthoringSessionLiveError {
-	const guidance = isCauseGuidance(cause)
-		? { recovery: cause.recovery, retrySafe: cause.retrySafe, nextStep: cause.nextStep }
-		: operation === "lookup_apply"
+	const guidance =
+		operation === "apply"
 			? {
-					recovery: "Check the live editor connection, then reconcile the Apply again.",
-					retrySafe: true,
-					nextStep: "escalate" as const
-				}
-			: {
-					recovery: `Reconcile the session's pending ${operation} before sending it again.`,
+					recovery:
+						"Call reconcileSession to resolve the pending Apply before applying any further changes.",
 					retrySafe: false,
 					nextStep: "reconcile" as const
-				};
+				}
+			: isCauseGuidance(cause)
+				? { recovery: cause.recovery, retrySafe: cause.retrySafe, nextStep: cause.nextStep }
+				: operation === "lookup_apply"
+					? {
+							recovery:
+								"Check the live editor connection, then reconcile the Apply again.",
+							retrySafe: true,
+							nextStep: "escalate" as const
+						}
+					: {
+							recovery: `Reconcile the session's pending ${operation} before sending it again.`,
+							retrySafe: false,
+							nextStep: "reconcile" as const
+						};
 	return new AuthoringSessionLiveError({
 		message:
 			cause instanceof Error
@@ -739,38 +749,31 @@ function makeAuthoringSessionServiceEffect(): Effect.Effect<
 		const load = (
 			sessionId: string
 		): Effect.Effect<AuthoringSessionDocument, AuthoringSessionServiceError> =>
-			validateSessionId(sessionId).pipe(
-				Effect.flatMap((validId) =>
-					repository.read(validId).pipe(
-						Effect.flatMap((contents) =>
-							Effect.try({
-								try: () => JSON.parse(contents),
-								catch: (cause) => cause
-							}).pipe(
-								Effect.flatMap(Schema.decodeUnknownEffect(Schema.Json)),
-								Effect.flatMap(decodeDocument),
-								Effect.catch((cause) => repository.quarantine(validId, cause))
-							)
-						),
-						Effect.flatMap(({ document, migrated }) =>
-							document.project.id === repository.project.id
-								? migrated
-									? repository.persist(document).pipe(Effect.as(document))
-									: Effect.succeed(document)
-								: Effect.fail(
-										new AuthoringSessionStorageError({
-											message: `Session ${validId} belongs to project ${document.project.id}`,
-											operation: "verify_project",
-											recovery:
-												"Open the session through its owning project.",
-											retrySafe: false,
-											nextStep: "fix_input",
-											sessionId: validId
-										})
-									)
-						)
-					)
-				),
+			Effect.gen(function* () {
+				const validId = yield* validateSessionId(sessionId);
+				const contents = yield* repository.read(validId);
+				const { document, migrated } = yield* Effect.gen(function* () {
+					const json = yield* Effect.try({
+						try: () => JSON.parse(contents),
+						catch: (cause) => cause
+					});
+					const value = yield* Schema.decodeUnknownEffect(Schema.Json)(json);
+					return yield* decodeDocument(value);
+				}).pipe(Effect.catch((cause) => repository.quarantine(validId, cause)));
+				if (document.project.id !== repository.project.id)
+					return yield* Effect.fail(
+						new AuthoringSessionStorageError({
+							message: `Session ${validId} belongs to project ${document.project.id}`,
+							operation: "verify_project",
+							recovery: "Open the session through its owning project.",
+							retrySafe: false,
+							nextStep: "fix_input",
+							sessionId: validId
+						})
+					);
+				if (migrated) yield* repository.persist(document);
+				return document;
+			}).pipe(
 				Effect.withSpan("authoring.session.open", {
 					attributes: { "authoring.session.id": sessionId }
 				})
@@ -784,39 +787,33 @@ function makeAuthoringSessionServiceEffect(): Effect.Effect<
 			) => AuthoringSessionDocument
 		): Effect.Effect<AuthoringSessionDocument, AuthoringSessionServiceError> =>
 			mutex.withPermits(1)(
-				load(sessionId).pipe(
-					Effect.flatMap((document) =>
-						now.pipe(
-							Effect.flatMap((timestamp) =>
-								Effect.try({
-									try: () => transition(document, timestamp),
-									catch: (cause) =>
-										isDraftIntentError(cause)
-											? cause
-											: new AuthoringSessionTransitionError({
-													cause,
-													message:
-														cause instanceof SessionTransitionRejected
-															? cause.message
-															: `Authoring session ${sessionId} could not apply the requested change.`,
-													recovery:
-														"Correct the rejected intent and retry the complete gesture.",
-													retrySafe: false,
-													// A rejection names session state that changed underneath the caller.
-													nextStep:
-														cause instanceof SessionTransitionRejected
-															? "reconcile"
-															: "fix_input",
-													sessionId
-												})
-								})
-							)
-						)
-					),
-					Effect.flatMap((document) =>
-						repository.persist(document).pipe(Effect.as(document))
-					)
-				)
+				Effect.gen(function* () {
+					const current = yield* load(sessionId);
+					const timestamp = yield* now;
+					const document = yield* Effect.try({
+						try: () => transition(current, timestamp),
+						catch: (cause) =>
+							isDraftIntentError(cause)
+								? cause
+								: new AuthoringSessionTransitionError({
+										cause,
+										message:
+											cause instanceof SessionTransitionRejected
+												? cause.message
+												: `Authoring session ${sessionId} could not apply the requested change.`,
+										recovery:
+											"Correct the rejected intent and retry the complete gesture.",
+										retrySafe: false,
+										nextStep:
+											cause instanceof SessionTransitionRejected
+												? "reconcile"
+												: "fix_input",
+										sessionId
+									})
+					});
+					yield* repository.persist(document);
+					return document;
+				})
 			);
 
 		const requireIdle = (document: AuthoringSessionDocument): void => {
@@ -1395,28 +1392,25 @@ export const AuthoringSessionServiceLayer = Layer.effect(
 	makeAuthoringSessionServiceEffect().pipe(Effect.map(AuthoringSessions.of))
 );
 
-function authoringSessionDependencies(
-	config: AuthoringSessionServiceConfig,
-	idLayer: Layer.Layer<AuthoringIdGenerator>
-) {
-	const repository = authoringSessionRepositoryLayer(config).pipe(Layer.provide(idLayer));
-	return Layer.merge(repository, idLayer);
-}
+/** The session repository for `config`, over the `AuthoringIdGenerator` the caller provides. */
+const authoringSessionDependencies = (config: AuthoringSessionServiceConfig) =>
+	authoringSessionRepositoryLayer(config);
 
+/**
+ * Authoring sessions stored for `config`. Provide an `AuthoringIdGenerator`:
+ * `AuthoringIdGeneratorLive` in hosts, `authoringIdGeneratorLayer(...)` in tests.
+ */
 export function authoringSessionServiceLayer(
-	config: AuthoringSessionServiceConfig,
-	idLayer: Layer.Layer<AuthoringIdGenerator> = AuthoringIdGeneratorLive
-): Layer.Layer<AuthoringSessions> {
-	return AuthoringSessionServiceLayer.pipe(
-		Layer.provide(authoringSessionDependencies(config, idLayer))
-	);
+	config: AuthoringSessionServiceConfig
+): Layer.Layer<AuthoringSessions, never, AuthoringIdGenerator> {
+	return AuthoringSessionServiceLayer.pipe(Layer.provide(authoringSessionDependencies(config)));
 }
 
+/** The session service for `config`, needing an `AuthoringIdGenerator` like the layer. */
 export function makeAuthoringSessionService(
-	config: AuthoringSessionServiceConfig,
-	idLayer: Layer.Layer<AuthoringIdGenerator> = AuthoringIdGeneratorLive
-): Effect.Effect<AuthoringSessionService> {
+	config: AuthoringSessionServiceConfig
+): Effect.Effect<AuthoringSessionService, never, AuthoringIdGenerator> {
 	return makeAuthoringSessionServiceEffect().pipe(
-		Effect.provide(authoringSessionDependencies(config, idLayer))
+		Effect.provide(authoringSessionDependencies(config))
 	);
 }

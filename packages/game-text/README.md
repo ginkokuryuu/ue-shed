@@ -44,18 +44,37 @@ Use `scanFromProjectIndex` when the host already maintains a saved-project heade
 `scan` performs its own bounded project scan. Both paths preserve coverage and typed recovery
 guidance.
 
-The `@ue-shed/game-text/browser` entry point contains only schemas and pure query helpers. It does
-not expose filesystem, process, Electron, Perforce, or Unreal authority.
+## Entry points
 
-The package also exports a pure compact snapshot codec from both entry points and the Effect
-`SnapshotStore` with `snapshotStoreNodeLayer` from the Node entry point. Compact-index hosts use
+Import from a focused entry point. Each lists its exports by name; modules no entry point names
+are private to the package.
+
+| Entry point                    | Runtime      | Contents                                                                                      |
+| ------------------------------ | ------------ | --------------------------------------------------------------------------------------------- |
+| `@ue-shed/game-text/schema`    | browser-safe | Wire schemas, identifiers, check and rule ids, operation requests                             |
+| `@ue-shed/game-text/rules`     | browser-safe | Rule documents, starter rules, audience and origin policy, word counting                      |
+| `@ue-shed/game-text/checks`    | browser-safe | Check catalogue and scopes, custom checks, the gate, text problems, Unreal text syntax        |
+| `@ue-shed/game-text/labels`    | browser-safe | Display labels for states, problems, audiences, origins and quality                           |
+| `@ue-shed/game-text/corpus`    | browser-safe | Corpus queries, search, localization join, reports, CSV, edits and package text diffs         |
+| `@ue-shed/game-text/index`     | Node         | `TextCorpus`, index layers/builders, workers, rules-file IO, progress and Unreal text actions |
+| `@ue-shed/game-text/workspace` | Node         | Workspace and localization operations with selected-project and file hooks                    |
+
+The browser-safe entry points do not expose filesystem, process, Electron, Perforce, or Unreal
+authority. The root `@ue-shed/game-text` and `@ue-shed/game-text/browser` aggregates still re-export
+the public names for one release and are deprecated. The compact snapshot codec, `SnapshotStore`,
+`SharedIndex`, joined-target readers, package-text storage/columns and cold-pool modules are private;
+`SnapshotStoreError` and `SnapshotFormatError` stay exported from `/index` because public index
+signatures name them.
+
+The index keeps its data in a compact snapshot format behind a private `SnapshotStore`; neither is
+part of the public API. Compact-index hosts use
 persistent package, localization and joined layers, bounded queries and lazy object projections;
 the in-memory corpus API remains available for batch consumers. See the
 [snapshot engineering guide](../../docs/engineering/game-text-snapshots.md) for the format, caps,
 immutable publication and recovery behavior. `reader.domain()` bulk-loads one source, identity,
 translation or path domain; `reader.strings()` keeps page reads limited to touched blocks.
-`SharedIndex` with `sharedIndexNodeLayer({ ...options, projectView })` shares package extraction
-and one deduplicated string ID space across explicit source and localization views. Each view keeps
+The private shared index shares package extraction and one deduplicated string ID space across
+explicit source and localization views. Each view keeps
 independent joined pointers; omitting `projectView` retains the separate-store behavior.
 Localization imports use independent content keys, immutable string segments and atomic
 generation publication; compaction remaps active layers while existing readers retain their handles.
@@ -75,7 +94,20 @@ Compact-index hosts can select worker search with
 the worker and pinned reader together. `latestSearchOnly: true` cancels replaced pages and older
 filter selections while preserving concurrent group pages;
 independent callers should leave it false. Cancellation does not evict completed query results.
-The synchronous `query.search(request)` API remains available.
+The synchronous `query.search(request)` API remains available. With a search worker, the worker
+prepares the generation's query once, off the caller's thread, and the synchronous `query`
+methods borrow it: each call blocks the caller until the worker answers, and can wait behind a
+running search. A synchronous call waits at most 100 ms for the worker (configurable through
+`syncCallTimeoutMs` on the refresh and steps layers). If that deadline expires, the worker is
+retired and the call uses a local query over the model's pinned generation. Later synchronous
+calls reuse that local query. This also covers worker loss before its exit callback can run;
+a busy worker can take the same fallback. Asynchronous searches retain their 30-second deadline.
+
+`qualityWorker: true` runs `localizationQuality` scans in a worker per opened model, started by
+the first scan. The caller keeps the findings' facts and groups; `items`, `find`, `lineOfUnit`
+and `sourceKeyOfUnit` block the caller while the worker reads them, and the worker keeps a scan
+until both its `findings` and `metadata` objects are collected. Interrupting a scan cancels it in
+the worker. If the worker cannot start or fails, the scan runs on the caller's thread instead.
 
 For host-owned composition, use `GameTextIndexSteps` from `gameTextIndexStepsLayer(cacheRoot)`:
 
@@ -96,6 +128,13 @@ Project/import/build handles are trusted, process-local values, not transport or
 Each write step owns and releases its lease. Stale package revisions or superseded localization
 publications fail with recovery guidance; opening a model pins its reader in the caller's scope.
 The compatibility `GameTextIndexRefresh.refresh()` composes these same steps.
+
+Hosts can replace `typeScriptIndexBuilderLayer` with
+`nativeIndexBuilderLayer(readerConfiguration)` to opt into native dictionary, publication and
+join construction through uasset-io protocol 1.13. Package extraction, localization import and
+JavaScript queries keep their existing interfaces. See the
+[native preparation guide](../../docs/engineering/native-game-text-index.md) for composition,
+incremental eligibility, limits and measurement scope. The default builder remains TypeScript.
 
 Retained desktop models separate preparation from publication. `makeRetainedGameTextIndex()`
 returns `refresh` and `release`; prepare inside an operation scope, publish the result and run
@@ -133,23 +172,23 @@ uses the same version as its preset.
 
 `evaluateGameTextSourceQuality(corpus, ruleDocument)` evaluates source rules over a corpus in
 memory, and `textQualityQuery(report)` pages it. An opened index model's
-`sourceQuality(ruleDocument, options?)` returns that same `TextQualityQuery` from the index,
+`sourceQuality(ruleDocument)` returns that same `TextQualityQuery` from the index,
 without building the corpus's units: the same summary, role and rule counts, pages, cursors,
 focus, export and finding IDs. Hosts with an index replace
 `textQualityQuery(evaluateGameTextSourceQuality(result.corpus, document))` with
-`yield* result.sourceQuality(document)`; adapters without one keep the in-memory functions.
-`indexedSourceQuality(joined, corpus, ruleDocument, options?)` is the same scan over a pinned
-joined reader.
+`yield* result.sourceQuality(document)`. Every index result has `sourceQuality` and
+`localizationQuality`; an adapter without an index implements them with the in-memory functions.
+`indexedSourceQuality(joined, corpus, ruleDocument)` is the same scan over a pinned joined reader.
 
 The scan reads text units in report order, in pages of up to 256 units or 1,024 occurrences, and
 yields between pages, so it can be interrupted. Roles match each occurrence's stored location;
 only occurrences a rule's role selects have their source read. Each finding is kept as its rule,
 unit, place among the unit's findings and ID hash, 18 bytes. Search pages, focus and export
 rebuild only the findings they return from their units and check each against its hash; `export`
-rebuilds every matching finding, in batches. `options.onProgress` receives `SourceQualityProgress`
-(`{ checkedTextUnits, totalTextUnits, findings }`): once before the scan with nothing checked and
-`totalTextUnits` already known, then after each page, the last call with every unit checked and the
-scan's finding count. It runs inside the scan; keep it cheap and do not throw from it.
+rebuilds every matching finding, in batches. The scan reports `source_quality` events to
+`GameTextIndexProgressReporter` (`{ phase, completed, total, findings }`): once before the scan
+with nothing checked and `total` already known, then after each page, the last with every unit
+checked and the scan's finding count.
 
 Roles match a place by its own location, in memory and over the index alike. A folded Blueprint
 place's copies (`occurrence.copies`) never match by their compiled paths (`X_C`, `X_C.Name_INST`,
@@ -281,44 +320,139 @@ file provenance/diagnostics and unchanged corpus coverage. Source-quality report
 Check IDs are stable string literals: `LocalizationCheckId` for checks of a translation against its
 source and `SourceCheckId` for checks of the source itself; `BuiltInCheckId` is both. Review files
 record them as `localization.<id>`. Pass `{ culture?, checks?, disabledChecks? }` to select them.
-They need no rule document; v1 and v2 `Config/UEShed/GameTextRules.json` documents can optionally
-contain `disabledLocalizationChecks` (any built-in ID), `segmentSeparator`, `optionalTags` and
-`optionalArguments`. Version 2 adds
-per-culture project policy and progress reports, described below. Every check is on by default,
-except `segment_separator` until a rule file names a separator.
+They need no rule document. A version-3 `Config/UEShed/GameTextRules.json` sets each check's
+policy under `checks`, keyed by check ID: `enabled`, `severity` (`blocking`, `normal` or `low`),
+`scope` and `params` (the catalogue's parameters; unlisted fields keep their defaults). `preset`
+is `default` (every check runs with its catalogue severity) or `none` (only the checks the file
+enables run). Version 3 rejects unknown keys, so a misspelt check or parameter is an
+`invalid_structure` error rather than ignored. Version 2 adds per-culture project policy and
+progress reports, described below, and version 3 keeps them.
 
-Every localization finding has a `severity` from `checkSeverity`: `blocking` (players see wrong or
-untranslated text), `normal` or `low`. It is never part of the finding's ID. Workspace pages list
-blocking findings first, then normal, then low, each in report order, and count findings by
-severity in `severityCounts`; summaries, focus and CSV exports carry the severity.
+```json
+{
+	"schemaVersion": 3,
+	"roles": [],
+	"rules": [],
+	"checks": {
+		"length_outlier": { "severity": "low", "params": { "maximumRatio": 4 } },
+		"segment_separator": { "params": { "separator": "//" } },
+		"missing_translator_notes": { "enabled": false }
+	}
+}
+```
 
-| Check                         | Severity | Reports                                                                                           |
-| ----------------------------- | -------- | ------------------------------------------------------------------------------------------------- |
-| `format_arguments`            | normal   | Source arguments the translation drops, or arguments it adds                                      |
-| `format_argument_renamed`     | normal   | A dropped and an added argument paired in order, as `{qty}` → `{qté}`; one rename stages a change |
-| `argument_modifiers`          | normal   | Plural, ordinal, gender and Hangul modifier syntax and forms                                      |
-| `rich_text`                   | normal   | Unbalanced tags, as Unreal's compile validator counts them                                        |
-| `rich_text_tags`              | normal   | Tags (`<b>…</>`, `<Name>…</>`, `<img/>`) the translation drops, compared without case             |
-| `rich_text_tags_added`        | low      | Tags the translation adds and drops none                                                          |
-| `rich_text_tag_case`          | low      | The same tag in another case, as `<italic>` for `<Italic>`; Slate matches names without case      |
-| `po_escape_safety`            | normal   | Literal `\n`, `\r`, `\t` that Unreal's PO round trip turns into control characters                |
-| `whitespace`                  | normal   | Leading or trailing whitespace that differs from the source, or unsafe edge spaces                |
-| `line_breaks`                 | normal   | A different number of line breaks inside the text than the source; edges are `whitespace`'s       |
-| `segment_separator`           | normal   | The rule file's `segmentSeparator` used a different number of times than in the source            |
-| `length_outlier`              | normal   | A translation under a third (zh, ja, ko, th: a quarter) or over three times the source's length   |
-| `placeholder_translation`     | normal   | A translation that is only a placeholder ("skip", "TBD", "script lama") or punctuation ("...")    |
-| `empty_translation`           | normal   | An existing empty PO or archive entry                                                             |
-| `outdated_translation`        | blocking | An archive translation recorded for older source text; Unreal ships the source instead            |
-| `source_line_endings_changed` | low      | An archive translation recorded for the same source with other line endings (`\r\n`, `\n`)        |
-| `inconsistent_translation`    | normal   | Short shared source text (up to four words) translated differently in one culture                 |
-| `missing_translator_notes`    | low      | No translator notes on any occurrence or manifest entry                                           |
-| `duplicate_source`            | low      | The same source text under different keys                                                         |
-| `culture_invariant_text`      | low      | Culture-invariant player text in a property that is localizable elsewhere: never translated       |
-| `placeholder_text`            | normal   | `TODO`, `TBD`, `FIXME` (upper case only), "lorem ipsum", "to be translated", "placeholder"        |
-| `source_whitespace`           | low      | Whitespace at either end of a gathered source, or doubled spaces inside it                        |
-| `source_markup`               | normal   | Unclosed rich-text tags, `</Name>` closings or unpaired format braces in the source               |
-| `number_only_text`            | low      | Localizable text with digits and no letters or arguments, which could be culture invariant        |
-| `string_table_key_collision`  | normal   | One namespace and key declared by more than one String Table                                      |
+V1 and v2 files keep loading: their `disabledLocalizationChecks` (any built-in ID),
+`segmentSeparator`, `optionalTags` and `optionalArguments` read as the equivalent v3 settings
+(`enabled: false`; `segment_separator`'s `separator`; the `optionalTags` of `rich_text_tags` and
+`rich_text_tags_added`; the `optionalArguments` of those two, `format_arguments`,
+`format_argument_renamed` and `rich_text_tag_case`). `migrateGameTextRuleDocument(document)`
+writes a v1 or v2 file as v3 with the same behaviour, and `resolveLocalizationChecks(document)`
+returns each check's resolved `enabled`, `severity`, `scope` and `params`. Every check is on by
+default, except `segment_separator` until it has a separator. The host's `checks` and
+`disabledChecks` options still narrow what runs.
+
+A check's `scope` limits where its findings are reported. Every listed dimension must hold: the
+finding's culture is one of `cultures`, and one saved place of its line is both at a place of one
+of `roles` (the file's roles) and under one of `pathPrefixes` (object paths, compared as written).
+A finding without a saved place, such as gathered-only text, is outside any `roles` or
+`pathPrefixes` scope. Scope is applied after a check finds something, so a line's saved places are
+read only for scoped findings. Where one check's finding takes the place of another's (a
+placeholder translation instead of its length, missing tags instead of added ones, a rename
+instead of a dropped and an added argument), the first check takes it only when it runs and is in
+scope for the line and culture; otherwise the second reports it.
+
+A version-3 file can define its own checks in `customChecks` (up to 512), reported beside the
+built-in ones with the same evidence, review and workspace model. Each has an `id` (its rule ID,
+unique among the file's rules and not starting with `localization.`), a `label`, an optional
+`severity` (`normal` when absent) and `scope`, a `recovery` text and a `subject`: `source` checks
+a keyed line's source once, under its source culture; `translation` checks each culture's shipped
+translation, the native culture aside. The kinds are:
+
+- `pattern`: text a JavaScript regular expression (Unicode mode; `caseSensitive: false` adds the
+  `i` flag) matches, or with `report: "no_match"` text it does not match. A pattern that does not
+  compile is an `invalid_structure` error.
+- `length`: text shorter than `minimum` or longer than `maximum` (at least one, in order), in
+  `visible` characters as `length_outlier` measures them or code point `characters`.
+- `forbidden_term`: text using one of `terms`, matched as the terminology rules match terms.
+
+Custom checks evaluate present text, including empty and whitespace-only strings; absent
+translations are skipped. Zero-width regex matches count as matches without highlight spans.
+Pattern evidence examines at most 16 matches, including zero-width matches; `no_match` stops at
+the first match.
+
+```json
+{
+	"customChecks": [
+		{
+			"id": "no-wip",
+			"label": "Work in progress",
+			"kind": "pattern",
+			"subject": "source",
+			"pattern": "\\bWIP\\b",
+			"severity": "blocking",
+			"recovery": "Replace the marker with final text."
+		}
+	]
+}
+```
+
+Their findings are `LocalizationCustomFinding`s (`kind: "custom"`, with `check`, `label`,
+`subject`, `actual.text` and its `matches` or `length`). Reports list the checks in
+`customChecks` and count them in `rules`. A custom check's workspace filter is `custom.<id>`
+(`customQualityFilter(id)`); `WorkspaceQualityFilter` accepts it beside the built-in filters
+(`BuiltInQualityFilter`), pages list the file's checks in `customFilters` and count each under
+`counts["custom.<id>"]`, and `workspaceQualityLabel(filter, labels)` names one. Indexed scans keep
+each finding's rule in its own column, so the number of rules and custom checks is no longer
+limited by the packed facts.
+
+`localizationCheckCatalogue` describes every built-in check: its `basis` (`unreal` when the
+finding states what Unreal does with the text, so only its severity and whether it runs are the
+project's; `heuristic` when it is a judgment with thresholds or word lists), its `label`, its
+default `severity`, its parameter schema (`params`, every field defaulted, so `{}` decodes to
+`defaults`) and a `condition` text generated from its parameters. `localizationRuleId(id)` and
+`parseLocalizationRuleId(ruleId)` convert between a check and the `localization.<id>` rule ID its
+findings and review marks record. The table below is generated from the catalogue.
+
+Every localization finding has a `severity`: the rule file's `severity` for its check, or the
+catalogue's (the table's column) when the file sets none: `blocking` (players see wrong or
+untranslated text), `normal` or `low`. Version-2 and version-3 `localizationRules` may set their
+own `severity` too (`normal` when absent). Severity is never part of the finding's ID. Indexed
+scans store each finding's severity beside its other facts, so workspace pages list blocking
+findings first, then normal, then low, each in report order, and count findings by severity in
+`severityCounts` from what the scan reported, not from the check's default; summaries, focus and
+CSV exports carry the severity.
+
+<!-- check table: generated from localizationCheckCatalogue; do not edit -->
+
+| Check                         | Basis     | Severity | Reports                                                                                                                                            |
+| ----------------------------- | --------- | -------- | -------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `format_arguments`            | unreal    | normal   | Source arguments the translation drops, or arguments it adds                                                                                       |
+| `argument_modifiers`          | unreal    | normal   | Plural, ordinal, gender and Hangul modifier syntax and forms                                                                                       |
+| `rich_text`                   | unreal    | normal   | Unbalanced tags, as Unreal's compile validator counts them                                                                                         |
+| `po_escape_safety`            | unreal    | normal   | Literal `\n`, `\r`, `\t` that Unreal's PO round trip turns into control characters                                                                 |
+| `whitespace`                  | unreal    | normal   | Leading or trailing whitespace that differs from the source, or unsafe edge spaces                                                                 |
+| `empty_translation`           | unreal    | normal   | An existing empty PO or archive entry                                                                                                              |
+| `missing_translator_notes`    | heuristic | low      | No translator notes on any occurrence or manifest entry                                                                                            |
+| `duplicate_source`            | heuristic | low      | The same source text under different keys                                                                                                          |
+| `format_argument_renamed`     | unreal    | normal   | A dropped and an added argument paired in order, as `{qty}` → `{qté}`; one rename stages a change                                                  |
+| `rich_text_tags`              | unreal    | normal   | Tags (`<b>…</>`, `<Name>…</>`, `<img/>`) the translation drops, compared without case                                                              |
+| `rich_text_tag_case`          | heuristic | low      | The same tag in another case, as `<italic>` for `<Italic>`; Slate matches names without case                                                       |
+| `line_breaks`                 | heuristic | normal   | A different number of line breaks inside the text than the source; edges are `whitespace`'s                                                        |
+| `segment_separator`           | heuristic | normal   | The `separator` parameter used a different number of times than in the source; off until it is set                                                 |
+| `length_outlier`              | heuristic | normal   | A translation under a third (zh, ja, ko, th: a quarter) or over three times the source's length, for a source of 20 or more visible characters     |
+| `outdated_translation`        | unreal    | blocking | An archive translation recorded for older source text; Unreal ships the source instead                                                             |
+| `inconsistent_translation`    | heuristic | normal   | Short shared source text (3 or more visible characters, up to four words) translated differently in one culture                                    |
+| `rich_text_tags_added`        | heuristic | low      | Tags the translation adds and drops none                                                                                                           |
+| `source_line_endings_changed` | unreal    | low      | An archive translation recorded for the same source with other line endings (`\r\n`, `\n`)                                                         |
+| `placeholder_translation`     | heuristic | normal   | A translation that is only one of 13 placeholder words (such as "skip" or "TODO"), or only punctuation ("...") for a source of three words or more |
+| `culture_invariant_text`      | heuristic | low      | Culture-invariant player text in a property that is localizable elsewhere: never translated                                                        |
+| `placeholder_text`            | heuristic | normal   | `TODO`, `TBD`, `FIXME` (as written), "lorem ipsum", "to be translated", "placeholder" (any case)                                                   |
+| `source_whitespace`           | heuristic | low      | Whitespace at either end of a gathered source, or doubled spaces inside it                                                                         |
+| `source_markup`               | unreal    | normal   | Unclosed rich-text tags, `</Name>` closings or unpaired format braces in the source                                                                |
+| `number_only_text`            | heuristic | low      | Localizable text with digits and no letters or arguments, which could be culture invariant                                                         |
+| `string_table_key_collision`  | unreal    | normal   | One namespace and key declared by more than one String Table                                                                                       |
+
+<!-- end of check table -->
 
 `missing_translator_notes`, `duplicate_source` and the `SourceCheckId` checks are facts about the
 source line. Each reports once per line, under the target's native culture (or the line's first
@@ -349,11 +483,12 @@ lines the gather does not collect. `source_markup` reads tags as Slate does: att
 `name="value"` pairs, `<{Argument}>` opens a tag, and a tag right after an ASCII letter, digit or
 underscore is code (`GetSubsystem<UMySubsystem>()`).
 
-Shape checks leave an empty translation to `empty_translation`. Rule files can list
-`optionalTags`, tag names a translation may add or leave out (compared without case), and
-`optionalArguments`, argument names the game always supplies: a translation may add them, and the
-tags that wrap only such an argument (`<PlayerName>{ParentLabel}</>`), without a finding. An
-optional argument does not pair with a dropped one as a rename.
+Shape checks leave an empty translation to `empty_translation`. The tag checks take
+`optionalTags`, tag names a translation may add or leave out (compared without case), and the
+argument and tag checks take `optionalArguments`, argument names the game always supplies: a
+translation may add them, and the tags that wrap only such an argument
+(`<PlayerName>{ParentLabel}</>`), without a finding. An optional argument does not pair with a
+dropped one as a rename.
 
 `length_outlier` measures visible length: rich-text tags, argument modifiers and `{arguments}`
 removed, whitespace runs counted once; East Asian wide characters count two. A source shorter than
@@ -382,13 +517,18 @@ unavailable source/translation, unsupported cultures and syntax limits.
 Syntax is capped at one million code units and 16 nested modifier forms. Coverage is not upgraded
 when a syntax check succeeds on a partial corpus.
 
-An opened index model's `localizationQuality(options?, ruleDocument?)` runs the same checks over the
-index in pages of 256 lines, yielding between pages. Its options add
-`onProgress?: (progress: LocalizationQualityProgress) => void` to the check options. The callback
-receives `{ checkedLines, totalLines, findings }`: once before the scan with `checkedLines: 0` and
-`totalLines` already known, then after each page, the last call with every line checked and the
-scan's finding count. It does not change findings, their order or IDs. It runs inside the scan, so
-keep it cheap and do not throw from it.
+An opened index model's `localizationQuality(ruleDocument?, options?)` runs the same checks over the
+index in pages of 256 lines, yielding between pages. Like `sourceQuality`, it takes the rule
+document first. It reports `localization_quality` events to `GameTextIndexProgressReporter`: once
+before the scan with `completed: 0` and `total` already known, then after each page, the last with
+every line checked and the scan's finding count. Progress does not change findings, their order
+or IDs.
+
+**Progress.** Every Game Text operation reports progress the same way: provide
+`GameTextIndexProgressReporter` around the operation with `Effect.provideService`. Index refreshes
+report their build phases, `TextCorpusService` scans report `corpus` and quality scans report
+`localization_quality` or `source_quality`, all as `{ phase, completed, total, findings? }`. The
+reporter runs inside the operation, so keep it cheap and do not throw from it.
 
 `parseUnrealFormatPattern`, `unrealPluralForms`, and `unrealRichTextCounts` expose the verified
 Unreal grammar helpers. Required plural categories come from the identical ICU 64 category data

@@ -4,7 +4,7 @@ import type {
 	TextFilterClause,
 	TextFilterField,
 	TextGroupList
-} from "@ue-shed/game-text/browser";
+} from "@ue-shed/game-text/schema";
 import { AnchoredPopover, Button, ToolButton, ToolIcon } from "@ue-shed/ui";
 import { tokens } from "@ue-shed/ui-theme/tokens.stylex.js";
 import { For, Show, createMemo, createSignal, createUniqueId } from "solid-js";

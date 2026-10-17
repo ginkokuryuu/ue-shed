@@ -6,7 +6,7 @@ import {
 	createLocalizationBaseline,
 	decodeLocalizationBaselineJson,
 	localizationProgressReport
-} from "@ue-shed/game-text";
+} from "@ue-shed/game-text/corpus";
 import { observeCliOperation } from "../cli-operation.js";
 import { CliRuntime, printJson } from "../cli-runtime.js";
 import type { CliCommand } from "../command-model.js";

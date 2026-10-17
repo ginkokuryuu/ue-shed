@@ -322,6 +322,8 @@ export async function extractPluginArchiveToDirectory(
 			createGunzip()
 		);
 		// SAFETY: no text encoding is configured, so Node's readable stream yields Buffer chunks.
+		// Verified by: packages/plugin-distribution/src/distribution.integration.test.ts
+		// ("stores source and multiple exact compiled variants for one release")
 		const iterator = gunzip[Symbol.asyncIterator]() as AsyncIterator<Buffer>;
 		const reader = makeByteReader(iterator);
 		const seen = new Set<string>();

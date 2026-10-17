@@ -7,15 +7,21 @@ import {
 	type GameTextIndexRefreshRequest,
 	GameTextIndexError,
 	TextCorpusService,
+	type GameTextIndexRefreshResult
+} from "@ue-shed/game-text/index";
+import {
 	joinLocalizationTarget,
 	applyLocalizationReview,
 	applyLocalizationKeyChanges,
 	localizationKeyChanges,
 	mergeLocalizationKeyChanges,
 	textCorpusQuery,
-	type GameTextIndexRefreshResult,
-	type TextCorpus
-} from "@ue-shed/game-text";
+	localizationQuality,
+	textQualityQuery
+} from "@ue-shed/game-text/corpus";
+import { checkLocalizationTarget } from "@ue-shed/game-text/checks";
+import { evaluateGameTextSourceQuality } from "@ue-shed/game-text/rules";
+import { type TextCorpus } from "@ue-shed/game-text/schema";
 import {
 	LocalizationEvidence,
 	LocalizationFileAccessLive,
@@ -118,6 +124,28 @@ export function oracleGameTextIndexLayer<E>(
 						corpus,
 						query,
 						search: (request) => Effect.sync(() => query.search(request)),
+						// The in-memory checks are the oracle the indexed scans match.
+						localizationQuality: (ruleDocument, options) =>
+							Effect.sync(() => {
+								if (!join || !files)
+									throw new Error("No target in this oracle request");
+								return localizationQuality(
+									checkLocalizationTarget(
+										corpus,
+										join,
+										files,
+										options,
+										ruleDocument
+									),
+									join
+								);
+							}),
+						sourceQuality: (ruleDocument) =>
+							Effect.sync(() =>
+								textQualityQuery(
+									evaluateGameTextSourceQuality(corpus, ruleDocument)
+								)
+							),
 						get localizationJoin(): GameTextIndexRefreshResult["localizationJoin"] {
 							if (!join) throw new Error("No target in this oracle request");
 							return join;

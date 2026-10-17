@@ -129,6 +129,7 @@ export const EditorWindowActivationLive = Layer.effect(
 						endpoint,
 						objectPath: "/Script/UEShedCore.Default__UEShedCoreLibrary",
 						functionName: "GetCapabilityManifest",
+						idempotent: true,
 						operation: "editor.window.negotiate",
 						parameters: {}
 					})

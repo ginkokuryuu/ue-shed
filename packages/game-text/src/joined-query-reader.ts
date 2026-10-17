@@ -15,10 +15,24 @@ const read = <A>(operation: string, run: () => A) =>
 				: snapshotFailure(operation, String(cause))
 	});
 
+const synchronousViews = new WeakMap<JoinedTargetReader, JoinedTargetReader>();
+
 /** The existing synchronous query API uses the same pinned handles, codecs and column cache.
- * No Effect runtime crosses an asynchronous boundary during a page or focus request.
+ * No Effect runtime crosses an asynchronous boundary during a page or focus request. Each
+ * pinned reader has one view, so its chunk and patch caches are shared by every caller.
  */
 export function synchronousJoinedTarget(joined: JoinedTargetReader): JoinedTargetReader {
+	let view = synchronousViews.get(joined);
+	if (!view) {
+		view = makeSynchronousJoinedTarget(joined);
+		synchronousViews.set(joined, view);
+		// A view of a view is itself.
+		synchronousViews.set(view, view);
+	}
+	return view;
+}
+
+function makeSynchronousJoinedTarget(joined: JoinedTargetReader): JoinedTargetReader {
 	const layerSync = joined.reader.layerSync,
 		stringsSync = joined.reader.stringsSync;
 	snapshotCheck(

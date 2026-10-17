@@ -498,11 +498,12 @@ it.effect("concurrent launches for the same mode share one spawn", () =>
 		});
 		const fixtureProcess = FixtureProcess.of({
 			launch: () =>
-				Ref.update(launches, (count) => count + 1).pipe(
-					Effect.andThen(Deferred.await(gate)),
-					Effect.andThen(Ref.set(launchedFlag, true)),
-					Effect.as({ status: "ready" as const })
-				)
+				Effect.gen(function* () {
+					yield* Ref.update(launches, (count) => count + 1);
+					yield* Deferred.await(gate);
+					yield* Ref.set(launchedFlag, true);
+					return { status: "ready" as const };
+				})
 		});
 		const layer = FixtureLauncherLive.pipe(
 			Layer.provide(

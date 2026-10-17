@@ -7,14 +7,14 @@ import {
 	ReleaseVersion
 } from "@ue-shed/plugin-distribution";
 import { Schema } from "effect";
+import { LocalizationGateCheck } from "@ue-shed/game-text/checks";
 import {
 	BuiltInCheckId,
-	LocalizationGateCheck,
 	LocalizationReviewLens,
 	LocalizationState,
 	TextGroupBy,
 	TextOriginKind
-} from "@ue-shed/game-text/browser";
+} from "@ue-shed/game-text/schema";
 import { LocalizationOperation, LocalizationReviewFlag } from "@ue-shed/localization/browser";
 
 /**

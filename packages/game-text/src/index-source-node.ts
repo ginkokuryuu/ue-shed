@@ -2,6 +2,7 @@ import { stat } from "node:fs/promises";
 import { relative, resolve } from "node:path";
 import {
 	AssetReader,
+	batchProtocolPaths,
 	ProjectIndex,
 	ProjectIndexQuery,
 	projectIndexProcessLayerFromReader,
@@ -40,6 +41,26 @@ class InventoryKey extends Data.Class<{
 	readonly generation: ProjectIndexSummary["generation"];
 	readonly packageCount: number;
 }> {}
+
+/**
+ * Split selected packages into consecutive batches whose paths each fit in one native reader
+ * request, so hosts can hand the source a whole project without batching it themselves.
+ */
+export function packageTextReadBatches<Entry extends Pick<PackageTextInventoryEntry, "path">>(
+	entries: readonly Entry[],
+	maximumPathBytes?: number
+): readonly (readonly Entry[])[] {
+	const batches: Entry[][] = [];
+	let start = 0;
+	for (const paths of batchProtocolPaths(
+		entries.map((entry) => entry.path),
+		maximumPathBytes
+	)) {
+		batches.push(entries.slice(start, start + paths.length));
+		start += paths.length;
+	}
+	return batches;
+}
 
 /** The native scanner owns enumeration and header caching. Only selected bundles are stat-verified. */
 export function gameTextIndexSourceNodeLayer(
@@ -234,6 +255,8 @@ export function gameTextIndexSourceNodeLayer(
 				);
 			});
 			const extractPackages = reader.extractProjectTextPackages;
+			// One reader request per batch keeps each request inside the reader's frame limit. Each
+			// batch is verified before and after its own read and emits its own text summary.
 			const read = (root: string, entries: readonly PackageTextInventoryEntry[]) => {
 				if (!extractPackages)
 					return Stream.fail(
@@ -242,29 +265,33 @@ export function gameTextIndexSourceNodeLayer(
 							"The paired reader does not expose package-text extraction."
 						)
 					);
-				return Stream.fromEffect(verify(root, entries)).pipe(
-					Stream.flatMap(() =>
-						extractPackages({
-							projectRoot: root,
-							paths: entries.map((entry) => entry.path)
-						}).pipe(
-							Stream.map((event) =>
-								event.event === "text_summary"
-									? event
-									: {
-											...event,
-											path: relative(
-												root,
-												resolve(root, event.path)
-											).replaceAll("\\", "/")
-										}
-							),
-							Stream.mapError((cause) => failure("read", cause.message, cause)),
-							Stream.concat(
-								Stream.fromEffect(verify(root, entries)).pipe(Stream.drain)
+				const readBatch = (batch: readonly PackageTextInventoryEntry[]) =>
+					Stream.fromEffect(verify(root, batch)).pipe(
+						Stream.flatMap(() =>
+							extractPackages({
+								projectRoot: root,
+								paths: batch.map((entry) => entry.path)
+							}).pipe(
+								Stream.map((event) =>
+									event.event === "text_summary"
+										? event
+										: {
+												...event,
+												path: relative(
+													root,
+													resolve(root, event.path)
+												).replaceAll("\\", "/")
+											}
+								),
+								Stream.mapError((cause) => failure("read", cause.message, cause)),
+								Stream.concat(
+									Stream.fromEffect(verify(root, batch)).pipe(Stream.drain)
+								)
 							)
 						)
-					)
+					);
+				return Stream.fromIterable(packageTextReadBatches(entries)).pipe(
+					Stream.flatMap(readBatch)
 				);
 			};
 			return GameTextIndexSource.of({ inventory, read });

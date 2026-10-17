@@ -50,6 +50,7 @@ const negotiate = Effect.fn("MapCapture.inspect.negotiate")(function* (
 		.request({
 			endpoint,
 			functionName: "GetCapabilityManifest",
+			idempotent: true,
 			objectPath: "/Script/UEShedCore.Default__UEShedCoreLibrary",
 			operation: "map_capture.inspect.negotiate",
 			parameters: {}
@@ -74,6 +75,7 @@ export const inspectMapCaptureSelection = Effect.fn("MapCapture.inspect.selectio
 		.request({
 			endpoint,
 			functionName: "InspectMapCaptureSelection",
+			idempotent: true,
 			objectPath: "/Script/UEShedCamerasEditor.Default__UEShedCameraReviewLibrary",
 			operation: "map_capture.inspect.selection",
 			parameters: {}
@@ -98,6 +100,7 @@ export const inspectMapCaptureReadiness = Effect.fn("MapCapture.inspect.readines
 		.request({
 			endpoint,
 			functionName: "InspectMapCaptureReadiness",
+			idempotent: true,
 			objectPath: "/Script/UEShedCamerasEditor.Default__UEShedCameraReviewLibrary",
 			operation: "map_capture.inspect.readiness",
 			parameters: { ExpectedMapPath: expectedMapPath }

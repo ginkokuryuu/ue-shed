@@ -16,8 +16,12 @@ import { dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import { Readable, Transform } from "node:stream";
 import { pipeline } from "node:stream/promises";
 import { createGzip, type ZlibOptions } from "node:zlib";
-import { OwnedProcessTree, type OwnedProcessExit } from "@ue-shed/engine";
-import { Context, Duration, Effect, Layer, Schema } from "effect";
+import {
+	OwnedProcessTree,
+	type OwnedProcessExit,
+	type SupervisedEditorSessionError
+} from "@ue-shed/engine";
+import { Context, Duration, Effect, Exit, Layer, Option, Ref, Schema } from "effect";
 import { extractPluginArchive, verifyPluginArtifact } from "./archive.js";
 import {
 	PluginErrorGuidanceFields as ErrorGuidanceFields,
@@ -157,21 +161,22 @@ function sha256(bytes: Uint8Array) {
 
 /**
  * Builds run in a private random stage and publish with one final rename, so a failed build leaves
- * no published output and repeating it is idempotent. Most failures are input the caller can fix;
- * pass `escalate` when UAT or the builder itself produced the bad state.
+ * no published output. Repeating requires confirmed process cleanup as well as isolated artifacts.
+ * Most failures are input the caller can fix; pass `escalate` for a failed builder invariant.
  */
 function invalid(
 	stage: string,
 	message: string,
 	recovery: string,
 	nextStep: PluginErrorNextStep = "fix_input",
-	cause?: unknown
+	cause?: unknown,
+	retrySafe = true
 ) {
 	return new InvalidCompiledPluginBuild({
 		message,
 		nextStep,
 		recovery,
-		retrySafe: true,
+		retrySafe,
 		stage,
 		...(cause === undefined ? undefined : { cause })
 	});
@@ -796,10 +801,20 @@ export const compiledPluginBuilderLayer = (): Layer.Layer<
 										})
 										.pipe(
 											Effect.mapError((cause) =>
-												invalid("build", cause.message, cause.recovery)
+												invalid(
+													"build",
+													cause.message,
+													cause.recovery,
+													cause.nextStep,
+													cause,
+													cause.retrySafe
+												)
 											)
 										);
-									const completed = yield* Effect.acquireUseRelease(
+									const cleanupFailure = yield* Ref.make<
+										Option.Option<SupervisedEditorSessionError>
+									>(Option.none());
+									const completedExit = yield* Effect.acquireUseRelease(
 										Effect.succeed(handle),
 										(owned) => {
 											const awaited =
@@ -816,18 +831,40 @@ export const compiledPluginBuilderLayer = (): Layer.Layer<
 														: invalid(
 																"build",
 																cause.message,
-																cause.recovery
+																cause.recovery,
+																"escalate",
+																cause
 															)
 												),
 												Effect.timeoutOption(
 													Duration.seconds(
 														request.maximumBuildSeconds ?? 7_200
 													)
-												)
+												),
+												Effect.exit
 											);
 										},
-										(owned) => owned.terminate("cancelled").pipe(Effect.ignore)
+										(owned) =>
+											owned.terminate("cancelled").pipe(
+												Effect.catch((cause) =>
+													Ref.set(cleanupFailure, Option.some(cause))
+												),
+												Effect.asVoid
+											)
 									);
+									const cleanupError = yield* Ref.get(cleanupFailure);
+									if (Option.isSome(cleanupError))
+										return yield* invalid(
+											"build",
+											"RunUAT process cleanup could not be confirmed.",
+											"Inspect and terminate the remaining process group manually before retrying.",
+											"reconcile",
+											cleanupError.value,
+											false
+										);
+									if (Exit.isFailure(completedExit))
+										return yield* Effect.failCause(completedExit.cause);
+									const completed = completedExit.value;
 									if (completed._tag === "None") {
 										return yield* new CompiledPluginBuildFailed({
 											exitCode: null,

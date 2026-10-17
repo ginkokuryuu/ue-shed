@@ -51,7 +51,7 @@ export const LayerRecord = Schema.Struct({
 	idEncoding: Schema.optionalKey(Schema.Literal("delta32"))
 });
 export type SharedLayerRecord = typeof LayerRecord.Type;
-const Index = Schema.Struct({
+export const SharedIndexManifestSchema = Schema.Struct({
 	version: Schema.Literal(2),
 	generation: Schema.String,
 	garbageUpperBytes: Schema.optionalKey(Natural),
@@ -59,7 +59,7 @@ const Index = Schema.Struct({
 	segments: Schema.Array(SharedSegment).check(Schema.isMaxLength(maximumSharedSegments)),
 	layers: Schema.Record(Schema.String, LayerRecord)
 });
-export type SharedIndexManifest = typeof Index.Type;
+export type SharedIndexManifest = typeof SharedIndexManifestSchema.Type;
 type Failure = SnapshotStoreError | SnapshotFormatError;
 const boundary = <A>(operation: string, run: () => Promise<A>) =>
 	Effect.tryPromise({
@@ -197,7 +197,7 @@ function readIndex(reader: SnapshotReader) {
 		.section("index.meta")
 		.pipe(
 			Effect.flatMap((bytes) =>
-				Schema.decodeUnknownEffect(Schema.fromJsonString(Index))(
+				Schema.decodeUnknownEffect(Schema.fromJsonString(SharedIndexManifestSchema))(
 					new TextDecoder().decode(bytes)
 				).pipe(Effect.mapError((cause) => snapshotFailure("index.meta", String(cause))))
 			)
@@ -206,7 +206,10 @@ function readIndex(reader: SnapshotReader) {
 
 /** One lock and atomic root for segments and every layer; individual cache keys remain independent. */
 export function sharedIndexNodeLayer(options: SharedIndexOptions) {
-	return projectIndexViewLayer(options.projectView, makeSharedIndexNodeLayer(options));
+	const backing = makeSharedIndexNodeLayer(options);
+	return options.projectView
+		? projectIndexViewLayer(options.projectView).pipe(Layer.provide(backing))
+		: backing;
 }
 
 function makeSharedIndexNodeLayer(options: SharedIndexOptions) {
@@ -440,7 +443,7 @@ function makeSharedIndexNodeLayer(options: SharedIndexOptions) {
 					next: SharedIndexManifest
 				) {
 					const started = performance.now();
-					yield* Schema.decodeUnknownEffect(Index)(next).pipe(
+					yield* Schema.decodeUnknownEffect(SharedIndexManifestSchema)(next).pipe(
 						Effect.mapError((cause) => snapshotFailure("index.meta", String(cause)))
 					);
 					const bytes = new TextEncoder().encode(JSON.stringify(next));

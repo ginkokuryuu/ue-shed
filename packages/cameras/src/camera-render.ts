@@ -15,7 +15,11 @@ import {
 	Scope,
 	Stream
 } from "effect";
-import { RemoteControlClient, type RemoteControlClientApi } from "@ue-shed/unreal-connection";
+import {
+	RemoteControlClient,
+	RemoteControlClientError,
+	type RemoteControlClientApi
+} from "@ue-shed/unreal-connection";
 import {
 	decodeCompanionCapabilityManifest,
 	ErrorCauseFields,
@@ -140,9 +144,10 @@ function renderError(
 			operation,
 			sessionId,
 			message: `The editor's camera render ${operation} response for session ${sessionId} does not match camera render contract 1.0.`,
-			nextStep: readOnly ? "fix_input" : "reconcile",
-			recovery:
-				"Install matching UE Shed Cameras/Core plugins and package, and inspect the native session before retrying.",
+			nextStep: readOnly ? "escalate" : "reconcile",
+			recovery: readOnly
+				? "The editor returned an invalid camera rendering response. Install matching host/plugin versions or report the protocol failure."
+				: "Install matching UE Shed Cameras/Core plugins and package, and inspect the native session before retrying.",
 			retrySafe: readOnly,
 			cause
 		});
@@ -151,9 +156,16 @@ function renderError(
 		operation,
 		sessionId,
 		message: `The camera render ${operation} request for session ${sessionId} did not complete against the editor.`,
-		nextStep: readOnly ? "retry" : "reconcile",
-		recovery:
-			"Inspect the existing native operation before retrying. The native lease bounds abandoned ownership.",
+		nextStep: readOnly
+			? Schema.is(RemoteControlClientError)(cause)
+				? cause.nextStep
+				: "escalate"
+			: "reconcile",
+		recovery: readOnly
+			? Schema.is(RemoteControlClientError)(cause)
+				? cause.recovery
+				: "The editor returned an invalid camera rendering response. Install matching host/plugin versions or report the protocol failure."
+			: "Inspect the existing native operation before retrying. The native lease bounds abandoned ownership.",
 		retrySafe: readOnly,
 		cause
 	});
@@ -319,29 +331,33 @@ export function makeCameraRenderer(
 	client: RemoteControlClientApi,
 	endpoint: string
 ): CameraRendererApi {
-	const call = Effect.fn("CameraRenderer.remote")(function* (
-		operation: CameraRenderError["operation"],
-		sessionId: string,
-		functionName: string,
-		parameters: Record<string, string>
-	) {
-		return yield* client
-			.request({
+	const call = Effect.fn("CameraRenderer.remote")(
+		function* (
+			operation: CameraRenderError["operation"],
+			sessionId: string,
+			functionName: string,
+			parameters: Record<string, string>
+		) {
+			return yield* client.request({
 				endpoint,
 				objectPath: libraryPath,
 				functionName,
 				parameters,
 				operation: `camera.render.${operation}`,
+				idempotent: operation === "capabilities" || operation === "preflight",
 				timeout: "30 seconds"
-			})
-			.pipe(Effect.mapError((cause) => renderError(operation, sessionId, cause)));
-	});
+			});
+		},
+		(effect, operation, sessionId) =>
+			effect.pipe(Effect.mapError((cause) => renderError(operation, sessionId, cause)))
+	);
 	const capabilities = Effect.fn("CameraRenderer.capabilities")(function* () {
 		const manifest = yield* client
 			.request({
 				endpoint,
 				objectPath: "/Script/UEShedCore.Default__UEShedCoreLibrary",
 				functionName: "GetCapabilityManifest",
+				idempotent: true,
 				parameters: {},
 				operation: "camera.render.negotiate"
 			})
@@ -402,15 +418,14 @@ export function makeCameraRenderer(
 		yield* Effect.addFinalizer((exit) =>
 			!ownsOrUncertain
 				? Effect.void
-				: call("close", request.sessionId, "EndCameraRender", {
-						SessionId: request.sessionId
+				: Effect.gen(function* () {
+						const value = yield* call("close", request.sessionId, "EndCameraRender", {
+							SessionId: request.sessionId
+						});
+						const result = yield* decode(CameraRenderEndResult, value);
+						if (result.status === "failed" && result.code !== "session_unknown")
+							return yield* Effect.fail(nativeError("close", result));
 					}).pipe(
-						Effect.flatMap((value) => decode(CameraRenderEndResult, value)),
-						Effect.flatMap((result) =>
-							result.status === "failed" && result.code !== "session_unknown"
-								? Effect.fail(nativeError("close", result))
-								: Effect.void
-						),
 						Effect.mapError((cause) => renderError("close", request.sessionId, cause)),
 						Effect.catchCause((cleanup) =>
 							Effect.die(
@@ -454,16 +469,14 @@ export function makeCameraRenderer(
 				retrySafe: false,
 				nextStep: "escalate"
 			});
-		yield* Effect.sleep(request.leaseMs / 3).pipe(
-			Effect.andThen(
-				call("open", request.sessionId, "BeginCameraRender", {
-					RequestJson: JSON.stringify(request)
-				})
-			),
-			Effect.flatMap((value) => decode(CameraRenderBeginResult, value)),
-			Effect.flatMap((result) =>
-				result.status === "failed" ? Effect.fail(nativeError("open", result)) : Effect.void
-			),
+		yield* Effect.gen(function* () {
+			yield* Effect.sleep(request.leaseMs / 3);
+			const value = yield* call("open", request.sessionId, "BeginCameraRender", {
+				RequestJson: JSON.stringify(request)
+			});
+			const result = yield* decode(CameraRenderBeginResult, value);
+			if (result.status === "failed") return yield* Effect.fail(nativeError("open", result));
+		}).pipe(
 			Effect.repeat(Schedule.forever),
 			Effect.catch((cause) =>
 				Effect.sync(() => {

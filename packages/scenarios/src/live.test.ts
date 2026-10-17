@@ -4,7 +4,7 @@ import { Effect, Schema } from "effect";
 import { describe, expect, it } from "vitest";
 import { movementGymScenario } from "./demo.js";
 import {
-	decodeScenarioExecutionRequest,
+	parseScenarioExecutionRequest,
 	movementGymExecutionRequest,
 	ScenarioCancelResponse,
 	ScenarioExecutionRequest,
@@ -127,7 +127,7 @@ describe("live Movement Gym request", () => {
 
 	it("round-trips the language-neutral request fixture", async () => {
 		const input = await fixture("execution-request");
-		await Effect.runPromise(decodeScenarioExecutionRequest(input));
+		await Effect.runPromise(parseScenarioExecutionRequest(input));
 		await expectFixtureRoundTrip("execution-request", ScenarioExecutionRequest);
 	});
 

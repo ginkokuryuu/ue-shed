@@ -4,7 +4,7 @@ import { it } from "@effect/vitest";
 import { Effect, Layer, Ref, Schema } from "effect";
 import { LocalizationTargetsReport } from "@ue-shed/localization/browser";
 import { LocalizationEvidenceNodeLive } from "@ue-shed/localization";
-import { GameTextIndexRefresh, GameTextIndexError } from "@ue-shed/game-text";
+import { GameTextIndexRefresh, GameTextIndexError } from "@ue-shed/game-text/index";
 import { LocalizationError } from "@ue-shed/localization";
 import { expect } from "vitest";
 import { useSavedFixtureProject } from "../../../fixtures/unreal-project/saved-project.test-support.js";

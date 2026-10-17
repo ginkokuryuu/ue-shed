@@ -47,7 +47,8 @@ export const ueShedPluginIds = Object.freeze([
 	"UEShedObservatory",
 	"UEShedNiagara",
 	"UEShedAssetAudits",
-	"UEShedScenarios"
+	"UEShedScenarios",
+	"UEShedGameText"
 ]);
 
 export function unrealEngineVersion(engineRoot: string): UnrealEngineVersion | undefined {

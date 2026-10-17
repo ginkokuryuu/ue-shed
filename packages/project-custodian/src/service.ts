@@ -1,3 +1,4 @@
+import { ErrorGuidanceFields } from "./error-guidance.js";
 import { Context, Effect, Layer, Ref, Schema } from "effect";
 import {
 	custodianProposalStorageIsValid,
@@ -12,8 +13,8 @@ import {
 	CustodianProposal,
 	CustodianProposalId,
 	CustodianScanRequest,
-	decodeCustodianReceipt,
-	decodeCustodianReport,
+	parseCustodianReceipt,
+	parseCustodianReport,
 	type CustodianCancelResult,
 	type CustodianReceipt,
 	type CustodianReport
@@ -23,12 +24,6 @@ import {
  * The UE Shed error guidance shape, kept local because this package does not depend on
  * `@ue-shed/protocol`. `retry` is only valid when `retrySafe` is true.
  */
-const CustodianErrorGuidanceFields = {
-	message: Schema.String,
-	recovery: Schema.String,
-	retrySafe: Schema.Boolean,
-	nextStep: Schema.Literals(["fix_input", "retry", "reconcile", "escalate"])
-};
 
 export class CustodianError extends Schema.TaggedError<CustodianError>()("ProjectCustodian.Error", {
 	code: Schema.Literals([
@@ -39,7 +34,7 @@ export class CustodianError extends Schema.TaggedError<CustodianError>()("Projec
 		"execution_in_progress",
 		"execution_failed"
 	]),
-	...CustodianErrorGuidanceFields,
+	...ErrorGuidanceFields,
 	cause: Schema.Defect()
 }) {}
 const isCustodianError = Schema.is(CustodianError);
@@ -100,7 +95,7 @@ export const CustodianNodeLive = Layer.effect(
 						cause
 					})
 			});
-			return yield* decodeCustodianReport(report).pipe(
+			return yield* parseCustodianReport(report).pipe(
 				Effect.mapError(
 					(cause) =>
 						new CustodianError({
@@ -219,7 +214,7 @@ export const CustodianNodeLive = Layer.effect(
 						cause
 					})
 			}).pipe(
-				Effect.flatMap(decodeCustodianReceipt),
+				Effect.flatMap(parseCustodianReceipt),
 				Effect.mapError((cause) =>
 					isCustodianError(cause)
 						? cause

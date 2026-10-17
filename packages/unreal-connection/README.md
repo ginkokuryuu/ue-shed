@@ -48,3 +48,13 @@ Optional `identity` includes engine version, process ID, a Core session identifi
 and loaded modules for enabled UE Shed plugins. Versions describe loaded plugin descriptors;
 capabilities remain authoritative for feature negotiation. `ue-shed doctor --endpoint <url>`
 prints this evidence. Older producers may omit identity.
+
+## Remote call recovery
+
+`RemoteControlClient.request` never retries a call automatically. Set `idempotent: true` only when
+the caller knows repeating the read or operation has no new side effects. It defaults to false.
+A lost response, timeout or server failure can follow an applied mutation; those failures return
+`retrySafe: false` and `nextStep: "reconcile"`. Inspect editor state before sending the mutation
+again. An explicitly idempotent read can return `nextStep: "retry"` for transient transport errors.
+Permanent refusals and malformed producer responses retain correction/escalation guidance;
+replay safety alone does not make another identical call useful.

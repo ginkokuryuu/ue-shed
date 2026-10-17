@@ -12,6 +12,7 @@ import {
 	WorldId,
 	WorldLeaseId,
 	WorldRequest,
+	worldPreparationContract,
 	type WorldRequirements,
 	type WorldSnapshot
 } from "./schema.js";
@@ -400,3 +401,37 @@ it("guides each world failure to its next step", () => {
 		nextStep: "escalate"
 	});
 });
+
+it.effect("reconciles a retained lease identity acquired with different requirements", () =>
+	Effect.gen(function* () {
+		const h = harness((request) =>
+			request.action === "acquire"
+				? Effect.succeed({
+						status: "failed",
+						code: "lease_conflict",
+						message: "This identity retains another acquisition request.",
+						recovery:
+							"Inspect the retained lease and choose a new acquisition identity."
+					})
+				: undefined
+		);
+		const request = {
+			contract: worldPreparationContract,
+			action: "acquire" as const,
+			leaseId: id,
+			leaseMs: 1000,
+			requirements
+		};
+		for (let attempt = 0; attempt < 2; attempt += 1) {
+			const error = yield* Effect.flip(h.api.execute(request));
+			expect(error.code).toBe("lease_conflict");
+			expect(error.nextStep).toBe("reconcile");
+			expect(error.retrySafe).toBe(false);
+			expect(error.recovery).toContain("new acquisition identity");
+		}
+		expect(worldPreparationGuidance("active_lease_limit")).toEqual({
+			retrySafe: true,
+			nextStep: "retry"
+		});
+	})
+);

@@ -590,8 +590,8 @@ function makeProcessService(
 			return yield* Effect.tryPromise({
 				try: (signal) => collectStatus(configuration, cacheRoot, target, signal),
 				catch: (cause) => mapStreamFailure(cause, true)
-			}).pipe(Effect.withSpan("unreal_assets.project_index_status"));
-		});
+			});
+		}, Effect.withSpan("unreal_assets.project_index_status"));
 
 		return { count, query, rebuild, refresh, status };
 	});

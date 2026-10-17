@@ -13,8 +13,11 @@ import {
 } from "@ue-shed/protocol";
 import { describe, expect, it } from "vitest";
 import { Effect, Schema } from "effect";
-import { makeAuthoringSessionService } from "./session-service.js";
+import { AuthoringIdGeneratorLive, makeAuthoringSessionService } from "./session-service.js";
 import { fingerprintTable } from "./fingerprint.js";
+
+const sessionService = (config: Parameters<typeof makeAuthoringSessionService>[0]) =>
+	makeAuthoringSessionService(config).pipe(Effect.provide(AuthoringIdGeneratorLive));
 
 const decodeAuthoringApplyResult = <Input>(input: Input) =>
 	Effect.runSync(decodeAuthoringApplyResultEffect(input));
@@ -248,7 +251,7 @@ describe.skipIf(!enabled)("real Unreal authoring mutation", () => {
 				])
 			);
 			const service = await Effect.runPromise(
-				makeAuthoringSessionService({
+				sessionService({
 					projectId: "real-unreal",
 					projectRoot: repositoryRoot,
 					storageRoot: join(directory, "sessions")
@@ -313,7 +316,7 @@ describe.skipIf(!enabled)("real Unreal authoring mutation", () => {
 			expect(lookup).toEqual(committed);
 			await Effect.runPromise(service.markApplyIndeterminate("recovery", "transport lost"));
 			const restarted = await Effect.runPromise(
-				makeAuthoringSessionService({
+				sessionService({
 					projectId: "real-unreal",
 					projectRoot: repositoryRoot,
 					storageRoot: join(directory, "sessions")

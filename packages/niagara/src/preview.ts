@@ -997,31 +997,30 @@ export const NiagaraPreviewLive = Layer.effect(
 			if (options.onProgress) {
 				const publish = options.onProgress;
 				let last = "";
-				yield* readNiagaraPreviewProgress(
-					join(
-						projectRoot,
-						"Saved",
-						"UEShed",
-						"NiagaraPreviewStaging",
-						request.runId,
-						"progress.json"
-					),
-					request.runId
-				).pipe(
-					Effect.flatMap((progress) => {
-						if (!progress) return Effect.void;
-						const key = JSON.stringify(progress);
-						if (key === last) return Effect.void;
-						last = key;
-						return publish(progress);
-					}),
+				const progressPath = join(
+					projectRoot,
+					"Saved",
+					"UEShed",
+					"NiagaraPreviewStaging",
+					request.runId,
+					"progress.json"
+				);
+				const publishProgress = Effect.gen(function* () {
+					const progress = yield* readNiagaraPreviewProgress(progressPath, request.runId);
+					if (!progress) return;
+					const key = JSON.stringify(progress);
+					if (key === last) return;
+					last = key;
+					yield* publish(progress);
+				}).pipe(
 					Effect.catch((error) =>
 						Effect.logWarning("Niagara progress unavailable", error)
-					),
-					Effect.andThen(Effect.sleep("250 millis")),
-					Effect.forever,
-					Effect.forkScoped
+					)
 				);
+				yield* Effect.gen(function* () {
+					yield* publishProgress;
+					yield* Effect.sleep("250 millis");
+				}).pipe(Effect.forever, Effect.forkScoped);
 			}
 			const args = [
 				projectDescriptor,

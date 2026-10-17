@@ -320,19 +320,11 @@ export const ReviewAuthoringLive = Layer.effect(
 	})
 );
 
+/** A test layer over a complete fake; the test decides every operation. */
 export function makeReviewAuthoringTestLayer(
-	service: Omit<ReviewAuthoringApi, "inspectSubject"> &
-		Partial<Pick<ReviewAuthoringApi, "inspectSubject">>
+	service: ReviewAuthoringApi
 ): Layer.Layer<ReviewAuthoring> {
-	return Layer.succeed(
-		ReviewAuthoring,
-		ReviewAuthoring.of({
-			...service,
-			inspectSubject:
-				service.inspectSubject ??
-				(() => Effect.die("ReviewAuthoring test stub did not define inspectSubject"))
-		})
-	);
+	return Layer.succeed(ReviewAuthoring, ReviewAuthoring.of(service));
 }
 
 /** Compatibility accessors until Plans 012–014 compose ReviewAuthoring layers directly. */

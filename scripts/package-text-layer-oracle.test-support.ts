@@ -4,10 +4,8 @@ import type {
 	SavedAssetTextExtractionEvent,
 	SavedAssetPackageTextEvent
 } from "../packages/unreal-assets/dist/index.js";
-import {
-	textCorpusFromExtractionEvents,
-	textCorpusWithExcludedPackages
-} from "../packages/game-text/dist/index.js";
+import { textCorpusFromExtractionEvents } from "../packages/game-text/dist/index.js";
+import { textCorpusWithExcludedPackages } from "../packages/game-text/dist/package-text-candidates.js";
 import {
 	packageTextSelection,
 	textCorpusFromPackageTextLayer,
@@ -45,7 +43,7 @@ export function candidateCorpusFromEvents(input: {
 	);
 }
 
-/** Phase 5 can reuse this without changing the event-stream or eligibility oracles. */
+/** Compare a published package-text layer with the event-stream and eligibility oracles. */
 export const comparePackageTextLayerWithEvents = Effect.fn("PackageText.layerOracle")(
 	function* (input: {
 		projectRoot: string;

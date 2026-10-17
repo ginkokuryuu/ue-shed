@@ -158,6 +158,7 @@ export const EditorForegroundResponsivenessLive = Layer.effect(
 					endpoint,
 					objectPath: "/Script/UEShedCore.Default__UEShedCoreLibrary",
 					functionName: "GetCapabilityManifest",
+					idempotent: true,
 					operation: "editor.foreground.negotiate",
 					parameters: {}
 				})
@@ -202,46 +203,50 @@ export const EditorForegroundResponsivenessLive = Layer.effect(
 			request: EditorForegroundLeaseRequest,
 			timeout: Duration.Input
 		) =>
-			Schema.encodeEffect(EditorForegroundLeaseRequest)(request).pipe(
-				Effect.flatMap((encoded) =>
-					remote.request({
+			Effect.gen(function* () {
+				const json = yield* Effect.gen(function* () {
+					const encoded = yield* Schema.encodeEffect(EditorForegroundLeaseRequest)(
+						request
+					);
+					return yield* remote.request({
 						endpoint: target.endpoint,
 						objectPath: target.objectPath,
 						functionName: "UpdateForegroundLease",
 						operation: `editor.foreground.${request.operation}`,
 						parameters: { RequestJson: JSON.stringify(encoded) },
 						timeout
-					})
-				),
-				Effect.mapError((cause) =>
-					failure(
-						target.endpoint,
-						request.operation,
-						"transport",
-						`The ${request.operation} request did not complete: ${String(cause)}`,
-						"Check that the editor is still running; the lease is retried automatically.",
-						true,
-						"retry"
-					)
-				),
-				Effect.flatMap((json) =>
-					Schema.decodeUnknownEffect(EditorForegroundLeaseResult)(json).pipe(
-						Effect.mapError((cause) =>
-							failure(
-								target.endpoint,
-								request.operation,
-								"invalid_response",
-								`The editor returned an unrecognised lease result: ${String(cause)}`,
-								"Update UE Shed Core or this client so their contracts match.",
-								false,
-								"escalate"
-							)
+					});
+				}).pipe(
+					Effect.mapError((cause) =>
+						failure(
+							target.endpoint,
+							request.operation,
+							"transport",
+							`The ${request.operation} request did not complete: ${String(cause)}`,
+							"Check that the editor is still running; the lease is retried automatically.",
+							true,
+							"retry"
 						)
 					)
-				),
-				Effect.tap((result) =>
-					Metric.update(leaseOutcomes, `${request.operation}:${result.status}`)
-				),
+				);
+				const result = yield* Schema.decodeUnknownEffect(EditorForegroundLeaseResult)(
+					json
+				).pipe(
+					Effect.mapError((cause) =>
+						failure(
+							target.endpoint,
+							request.operation,
+							"invalid_response",
+							`The editor returned an unrecognised lease result: ${String(cause)}`,
+							"Update UE Shed Core or this client so their contracts match.",
+							false,
+							"escalate"
+						)
+					)
+				);
+				yield* Metric.update(leaseOutcomes, `${request.operation}:${result.status}`);
+				return result;
+			}).pipe(
 				Effect.tapError(() => Metric.update(leaseOutcomes, `${request.operation}:failed`)),
 				Effect.withSpan(`EditorForegroundResponsiveness.${request.operation}`, {
 					attributes: { "unreal.endpoint": target.endpoint }
@@ -444,6 +449,7 @@ export const EditorForegroundResponsivenessLive = Layer.effect(
 					endpoint,
 					objectPath: target.objectPath,
 					functionName: "GetForegroundResponsivenessState",
+					idempotent: true,
 					operation: "editor.foreground.state",
 					parameters: {
 						RequestJson: JSON.stringify({ expectedProcessId: target.editorProcessId })

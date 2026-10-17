@@ -120,6 +120,7 @@ export const ObservatoryLive = Layer.effect(
 				.request({
 					endpoint,
 					functionName: "GetActorSnapshot",
+					idempotent: true,
 					objectPath,
 					operation: "observatory.actor_snapshot",
 					parameters: {}

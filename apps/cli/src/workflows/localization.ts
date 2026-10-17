@@ -4,15 +4,14 @@ import { readChangedFiles } from "./changed-files.js";
 import { textWhere } from "../commands/localization-flags.js";
 import { LocalizationEvidence, LocalizationEvidenceNodeLive } from "@ue-shed/localization";
 import { Effect, FileSystem, Metric, Result, Schema } from "effect";
+import { localizationLinesCsv, pickedLocalizationCultures } from "@ue-shed/game-text/corpus";
+import { indexedLocalizationStatusReport } from "@ue-shed/game-text/index";
 import {
 	GameTextLocalizationError,
 	localizationManifestFailure,
 	LocalizationSelection,
-	localizationLinesCsv,
-	pickedLocalizationCultures,
-	indexedLocalizationStatusReport,
 	type TextCorpus
-} from "@ue-shed/game-text";
+} from "@ue-shed/game-text/schema";
 import { observeCliOperation } from "../cli-operation.js";
 import { CliRuntime, printJson } from "../cli-runtime.js";
 import type { CliCommand } from "../command-model.js";

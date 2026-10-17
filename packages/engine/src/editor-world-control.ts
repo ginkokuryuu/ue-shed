@@ -83,6 +83,7 @@ export const EditorWorldControlLive = Layer.effect(
 				.request({
 					endpoint,
 					functionName: "GetCapabilityManifest",
+					idempotent: true,
 					objectPath: coreObjectPath,
 					operation,
 					parameters: {}
@@ -150,7 +151,13 @@ export const EditorWorldControlLive = Layer.effect(
 					nextStep: "fix_input"
 				});
 			const value = yield* remote
-				.request({ ...target, functionName: "GetWorldState", operation, parameters: {} })
+				.request({
+					...target,
+					functionName: "GetWorldState",
+					idempotent: true,
+					operation,
+					parameters: {}
+				})
 				.pipe(
 					Effect.mapError((cause) =>
 						failure({

@@ -2,7 +2,7 @@ import {
 	GameTextRuleDocument,
 	decodeGameTextRuleDocumentJson,
 	evaluateGameTextSourceQuality
-} from "./quality-rules-v2.js";
+} from "./game-text-rules.js";
 import { Effect, Schema } from "effect";
 import {
 	InvestigationSource,

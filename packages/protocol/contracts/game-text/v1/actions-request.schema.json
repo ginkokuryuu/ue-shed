@@ -1,0 +1,254 @@
+{
+	"$schema": "https://json-schema.org/draft/2020-12/schema",
+	"$defs": {
+		"GameTextActionPlace": {
+			"type": "object",
+			"properties": {
+				"packageFile": {
+					"type": "string",
+					"allOf": [
+						{
+							"minLength": 1
+						},
+						{
+							"maxLength": 4096
+						}
+					]
+				},
+				"objectPath": {
+					"type": "string",
+					"allOf": [
+						{
+							"minLength": 1
+						},
+						{
+							"maxLength": 4096
+						}
+					]
+				},
+				"propertyPath": {
+					"type": "string",
+					"allOf": [
+						{
+							"minLength": 1
+						},
+						{
+							"maxLength": 4096
+						}
+					]
+				}
+			},
+			"required": ["packageFile", "objectPath", "propertyPath"],
+			"additionalProperties": false
+		},
+		"GameTextActionIdentity": {
+			"type": "object",
+			"properties": {
+				"namespace": {
+					"type": "string",
+					"allOf": [
+						{
+							"maxLength": 4096
+						}
+					]
+				},
+				"key": {
+					"type": "string",
+					"allOf": [
+						{
+							"minLength": 1
+						},
+						{
+							"maxLength": 4096
+						}
+					]
+				},
+				"source": {
+					"type": "string",
+					"allOf": [
+						{
+							"maxLength": 4096
+						}
+					]
+				}
+			},
+			"required": ["namespace", "key", "source"],
+			"additionalProperties": false
+		},
+		"GameTextActionEdit": {
+			"anyOf": [
+				{
+					"type": "object",
+					"properties": {
+						"kind": {
+							"type": "string",
+							"enum": ["change_key"]
+						},
+						"namespace": {
+							"type": "string",
+							"allOf": [
+								{
+									"maxLength": 4096
+								}
+							]
+						},
+						"key": {
+							"type": "string",
+							"allOf": [
+								{
+									"minLength": 1
+								},
+								{
+									"maxLength": 4096
+								}
+							]
+						}
+					},
+					"required": ["kind", "namespace", "key"],
+					"additionalProperties": false
+				},
+				{
+					"type": "object",
+					"properties": {
+						"kind": {
+							"type": "string",
+							"enum": ["regenerate_key"]
+						}
+					},
+					"required": ["kind"],
+					"additionalProperties": false
+				},
+				{
+					"type": "object",
+					"properties": {
+						"kind": {
+							"type": "string",
+							"enum": ["adopt_key"]
+						},
+						"namespace": {
+							"type": "string",
+							"allOf": [
+								{
+									"maxLength": 4096
+								}
+							]
+						},
+						"key": {
+							"type": "string",
+							"allOf": [
+								{
+									"minLength": 1
+								},
+								{
+									"maxLength": 4096
+								}
+							]
+						},
+						"source": {
+							"type": "string",
+							"allOf": [
+								{
+									"minLength": 1
+								},
+								{
+									"maxLength": 4096
+								}
+							]
+						}
+					},
+					"required": ["kind", "namespace", "key", "source"],
+					"additionalProperties": false
+				},
+				{
+					"type": "object",
+					"properties": {
+						"kind": {
+							"type": "string",
+							"enum": ["change_source"]
+						},
+						"source": {
+							"type": "string",
+							"allOf": [
+								{
+									"minLength": 1
+								},
+								{
+									"maxLength": 4096
+								}
+							]
+						}
+					},
+					"required": ["kind", "source"],
+					"additionalProperties": false
+				}
+			]
+		},
+		"GameTextAction": {
+			"type": "object",
+			"properties": {
+				"id": {
+					"type": "string",
+					"allOf": [
+						{
+							"minLength": 1
+						},
+						{
+							"maxLength": 4096
+						}
+					]
+				},
+				"place": {
+					"$ref": "#/$defs/GameTextActionPlace"
+				},
+				"expected": {
+					"$ref": "#/$defs/GameTextActionIdentity"
+				},
+				"edit": {
+					"$ref": "#/$defs/GameTextActionEdit"
+				}
+			},
+			"required": ["id", "place", "expected", "edit"],
+			"additionalProperties": false
+		},
+		"GameTextActionsRequest": {
+			"type": "object",
+			"properties": {
+				"contract": {
+					"type": "string",
+					"enum": ["ue-shed-game-text-actions"]
+				},
+				"version": {
+					"type": "string",
+					"enum": ["1.0"]
+				},
+				"mode": {
+					"type": "string",
+					"enum": ["dry_run", "apply"]
+				},
+				"compile": {
+					"type": "boolean"
+				},
+				"save": {
+					"type": "boolean"
+				},
+				"actions": {
+					"type": "array",
+					"items": {
+						"$ref": "#/$defs/GameTextAction"
+					},
+					"allOf": [
+						{
+							"minItems": 1
+						},
+						{
+							"maxItems": 256
+						}
+					]
+				}
+			},
+			"required": ["contract", "version", "mode", "actions"],
+			"additionalProperties": false
+		}
+	},
+	"$ref": "#/$defs/GameTextActionsRequest"
+}

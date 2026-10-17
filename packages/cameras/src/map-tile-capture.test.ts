@@ -659,10 +659,12 @@ describe("map capture orchestration", () => {
 							storeTile: (tile) => {
 								if (!blockFirstStore) return attempt.storeTile(tile);
 								blockFirstStore = false;
-								return Deferred.succeed(firstStoreStarted, undefined).pipe(
-									Effect.andThen(Deferred.await(releaseFirstStore)),
-									Effect.andThen(attempt.storeTile(tile))
-								);
+								const store = attempt.storeTile(tile);
+								return Effect.gen(function* () {
+									yield* Deferred.succeed(firstStoreStarted, undefined);
+									yield* Deferred.await(releaseFirstStore);
+									return yield* store;
+								});
 							}
 						}))
 					)

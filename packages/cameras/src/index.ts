@@ -489,6 +489,7 @@ const cameraRemoteCall = Effect.fn("CameraControl.remoteCall")(function* (
 			functionName,
 			objectPath: "/Script/UEShedCameras.Default__UEShedCameraLibrary",
 			operation: `camera.control.${operation}`,
+			idempotent: operation === "status",
 			parameters
 		})
 		.pipe(Effect.mapError((error) => cameraControlError(endpoint, operation, error)));
@@ -507,33 +508,31 @@ export function configureCameras(
 	endpoint: string,
 	config: CameraScheduleConfig
 ): Effect.Effect<CameraStatus, CameraControlError, RemoteControlClient> {
-	return decodeCameraScheduleConfig(config).pipe(
-		Effect.mapError((error) => cameraControlError(endpoint, "configure", error)),
-		Effect.flatMap((validConfig) =>
-			cameraRemoteCall(endpoint, "Configure", "configure", {
-				ConfigJson: JSON.stringify(validConfig)
-			})
-		),
-		Effect.flatMap(decodeCameraStatus),
-		Effect.flatMap((status) =>
+	return Effect.gen(function* () {
+		const validConfig = yield* decodeCameraScheduleConfig(config).pipe(
+			Effect.mapError((error) => cameraControlError(endpoint, "configure", error))
+		);
+		const response = yield* cameraRemoteCall(endpoint, "Configure", "configure", {
+			ConfigJson: JSON.stringify(validConfig)
+		});
+		const status = yield* decodeCameraStatus(response);
+		if (
 			config.editorBackgroundTicking === "while_streaming" &&
 			status.config.editorBackgroundTicking !== "while_streaming"
-				? Effect.fail(
-						new CameraControlError({
-							endpoint,
-							operation: "configure",
-							retrySafe: false,
-							nextStep: "fix_input",
-							recovery:
-								"Update the UEShedCameras plugin, or configure without interactive previews.",
-							message:
-								"This UEShedCameras plugin does not support scoped editor background ticking. Update the plugin before enabling interactive previews."
-						})
-					)
-				: Effect.succeed(status)
-		),
-		Effect.mapError((error) => cameraControlError(endpoint, "configure", error))
-	);
+		)
+			return yield* Effect.fail(
+				new CameraControlError({
+					endpoint,
+					operation: "configure",
+					retrySafe: false,
+					nextStep: "fix_input",
+					recovery: "Update UEShedCameras or configure without interactive previews.",
+					message:
+						"This UEShedCameras plugin does not support scoped editor background ticking. Update the plugin before enabling interactive previews."
+				})
+			);
+		return status;
+	}).pipe(Effect.mapError((error) => cameraControlError(endpoint, "configure", error)));
 }
 
 export * from "./map-capture-tools.js";

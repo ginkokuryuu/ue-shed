@@ -23,6 +23,8 @@ export interface RemoteControlRequest {
 	readonly operation?: string;
 	readonly parameters: Schema.JsonObject;
 	readonly timeout?: Duration.Input;
+	/** Explicit caller guarantee: repeating this read or idempotent operation has no new effects. Defaults to false. */
+	readonly idempotent?: boolean;
 }
 
 export interface RemoteControlClientApi {
@@ -73,14 +75,29 @@ function transportError(request: RemoteControlRequest, cause: unknown): RemoteCo
 		return clientError(request, {
 			message: `Remote Control transport failed: ${String(cause)}`,
 			recovery:
-				"Confirm the editor is running with the Remote Control API enabled; report the error if it persists.",
-			retrySafe: false,
-			nextStep: "escalate"
+				request.idempotent === true
+					? "Confirm the editor is running with the Remote Control API enabled; report the error if it persists."
+					: "The editor outcome is unknown. Inspect current editor state before sending this mutation again; report the transport failure if it persists.",
+			retrySafe: request.idempotent === true,
+			nextStep: request.idempotent === true ? "escalate" : "reconcile"
+		});
+	}
+
+	if (cause.kind === "decode") {
+		return clientError(request, {
+			message: `Invalid Remote Control HTTP JSON: ${cause.message}`,
+			recovery:
+				request.idempotent === true
+					? malformedResponseRecovery
+					: `The editor may have applied this request. Reconcile its state before sending it again. ${malformedResponseRecovery}`,
+			retrySafe: request.idempotent === true,
+			nextStep: request.idempotent === true ? "escalate" : "reconcile",
+			...(cause.statusCode === undefined ? undefined : { status: cause.statusCode })
 		});
 	}
 
 	const status = cause.statusCode;
-	const retrySafe =
+	const transient =
 		cause.kind === "connect" ||
 		cause.kind === "disconnect" ||
 		cause.kind === "timeout" ||
@@ -90,11 +107,14 @@ function transportError(request: RemoteControlRequest, cause: unknown): RemoteCo
 			status === undefined
 				? cause.message
 				: `Remote Control returned HTTP ${status}: ${cause.message}`,
-		recovery: retrySafe
-			? "Start the editor with the Remote Control API enabled at this endpoint, wait until it is responsive, then retry."
-			: "The editor rejected the call. Check the endpoint, object path and that the UE Shed editor plugin matches this host.",
-		retrySafe,
-		nextStep: retrySafe ? "retry" : "fix_input",
+		recovery:
+			!request.idempotent && transient
+				? "The editor may have applied this request. Inspect the current editor state and reconcile the outcome before sending it again."
+				: transient
+					? "Start the editor with the Remote Control API enabled at this endpoint, wait until it is responsive, then retry."
+					: "The editor rejected the call. Check the endpoint, object path and that the UE Shed editor plugin matches this host.",
+		retrySafe: request.idempotent === true,
+		nextStep: transient ? (request.idempotent === true ? "retry" : "reconcile") : "fix_input",
 		...(status === undefined ? undefined : { status })
 	});
 }
@@ -144,9 +164,12 @@ export function makeRemoteControlClient(options: {
 				Effect.mapError((cause) =>
 					clientError(request, {
 						message: `Invalid Remote Control envelope: ${String(cause)}`,
-						recovery: malformedResponseRecovery,
-						retrySafe: false,
-						nextStep: "escalate"
+						recovery:
+							request.idempotent === true
+								? malformedResponseRecovery
+								: `The editor may have applied this request. Reconcile its state before sending it again. ${malformedResponseRecovery}`,
+						retrySafe: request.idempotent === true,
+						nextStep: request.idempotent === true ? "escalate" : "reconcile"
 					})
 				)
 			);
@@ -155,9 +178,12 @@ export function makeRemoteControlClient(options: {
 				catch: (cause) =>
 					clientError(request, {
 						message: `Invalid Remote Control JSON: ${String(cause)}`,
-						recovery: malformedResponseRecovery,
-						retrySafe: false,
-						nextStep: "escalate"
+						recovery:
+							request.idempotent === true
+								? malformedResponseRecovery
+								: `The editor may have applied this request. Reconcile its state before sending it again. ${malformedResponseRecovery}`,
+						retrySafe: request.idempotent === true,
+						nextStep: request.idempotent === true ? "escalate" : "reconcile"
 					})
 			});
 		},

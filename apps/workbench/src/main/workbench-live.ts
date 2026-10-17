@@ -21,7 +21,7 @@ import {
 	gameTextIndexRefreshLayer,
 	gameTextIndexSourceNodeLayer,
 	typeScriptIndexBuilderLayer
-} from "@ue-shed/game-text";
+} from "@ue-shed/game-text/index";
 import {
 	EditorWindowActivationLive,
 	EditorForegroundPermissionLive,
@@ -187,7 +187,8 @@ function domainCatalogLayer(hosts: WorkbenchHosts) {
 				const cacheRoot = join(yield* app.getPath("userData"), "project-catalogs-v1");
 				return gameTextIndexRefreshLayer(cacheRoot, {
 					searchWorker: true,
-					latestSearchOnly: true
+					latestSearchOnly: true,
+					qualityWorker: true
 				}).pipe(
 					Layer.provide(
 						gameTextIndexSourceNodeLayer(cacheRoot, {

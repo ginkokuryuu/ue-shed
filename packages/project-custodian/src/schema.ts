@@ -1,4 +1,5 @@
-import { Schema } from "effect";
+import { ErrorGuidanceFields } from "./error-guidance.js";
+import { Effect, Schema } from "effect";
 
 const Bytes = Schema.Int.check(Schema.isGreaterThanOrEqualTo(0));
 const NonNegativeNumber = Schema.Number.check(Schema.isGreaterThanOrEqualTo(0));
@@ -270,9 +271,63 @@ export const CustodianReceipt = Schema.Struct({
 });
 export interface CustodianReceipt extends Schema.Schema.Type<typeof CustodianReceipt> {}
 
-export const decodeCustodianScanRequest = Schema.decodeUnknownEffect(CustodianScanRequest);
-export const decodeCustodianReport = Schema.decodeUnknownEffect(CustodianReport);
-export const decodeCustodianPrepareRequest = Schema.decodeUnknownEffect(CustodianPrepareRequest);
-export const decodeCustodianProposal = Schema.decodeUnknownEffect(CustodianProposal);
-export const decodeCustodianExecuteRequest = Schema.decodeUnknownEffect(CustodianExecuteRequest);
-export const decodeCustodianReceipt = Schema.decodeUnknownEffect(CustodianReceipt);
+/**
+ * A value that does not match the Project Custodian contract: the two sides disagree about the contract, so
+ * repeating the same call returns the same mismatch.
+ */
+export class CustodianContractError extends Schema.TaggedError<CustodianContractError>()(
+	"CustodianContractError",
+	{
+		code: Schema.Literal("invalid_contract"),
+		...ErrorGuidanceFields,
+		cause: Schema.optionalKey(Schema.Defect())
+	}
+) {}
+
+/**
+ * A unary parser for one Project Custodian contract value: it decodes the encoded value and fails with
+ * `CustodianContractError` naming `subject`, keeping the schema issue as its cause.
+ */
+function custodianContractParser<S extends Schema.Codec<unknown, unknown>>(
+	schema: S,
+	subject: string
+) {
+	const decode = Schema.decodeUnknownEffect(schema);
+	return (
+		// oxlint-disable-next-line anti-slop/no-unknown-parameters -- This parser is the boundary: it decodes its input here.
+		encoded: unknown
+	): Effect.Effect<S["Type"], CustodianContractError> =>
+		decode(encoded).pipe(
+			Effect.mapError(
+				(cause) =>
+					new CustodianContractError({
+						code: "invalid_contract",
+						message: `The ${subject} does not match the Project Custodian contract.`,
+						recovery:
+							"Run the host and client from the same UE Shed version, then retry.",
+						retrySafe: false,
+						nextStep: "escalate",
+						cause
+					})
+			)
+		);
+}
+
+export const parseCustodianScanRequest = custodianContractParser(
+	CustodianScanRequest,
+	"custodian scan request"
+);
+export const parseCustodianReport = custodianContractParser(CustodianReport, "custodian report");
+export const parseCustodianPrepareRequest = custodianContractParser(
+	CustodianPrepareRequest,
+	"custodian prepare request"
+);
+export const parseCustodianProposal = custodianContractParser(
+	CustodianProposal,
+	"custodian proposal"
+);
+export const parseCustodianExecuteRequest = custodianContractParser(
+	CustodianExecuteRequest,
+	"custodian execute request"
+);
+export const parseCustodianReceipt = custodianContractParser(CustodianReceipt, "custodian receipt");
