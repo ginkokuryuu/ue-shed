@@ -97,7 +97,8 @@ const parseCursor = (
 			new ProjectIndexInvalidRequest({
 				message: "Project Index cursor is not a stable page offset.",
 				recovery: "Restart the query without a cursor, then page forward from the result.",
-				retrySafe: false
+				retrySafe: false,
+				nextStep: "fix_input"
 			})
 		);
 	}
@@ -215,7 +216,8 @@ const makeMemoryService = (state: Ref.Ref<MemoryState>): ProjectIndexApi => {
 					message: "No committed Project Index generation matches that project identity.",
 					recovery:
 						"Refresh the Project Index for the project root, then retry the query.",
-					retrySafe: true
+					retrySafe: true,
+					nextStep: "reconcile"
 				})
 			);
 		}
@@ -226,7 +228,8 @@ const makeMemoryService = (state: Ref.Ref<MemoryState>): ProjectIndexApi => {
 					expectedGeneration: decoded.expectedGeneration,
 					message: "The Project Index generation changed since this query started.",
 					recovery: "Read status for the current generation, then retry the query.",
-					retrySafe: true
+					retrySafe: true,
+					nextStep: "reconcile"
 				})
 			);
 		}

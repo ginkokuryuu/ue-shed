@@ -1,4 +1,6 @@
 import {
+	ErrorCauseFields,
+	ErrorGuidanceFields,
 	BlueprintGraphRead,
 	LevelSequenceRead,
 	isHeaderScanEntry,
@@ -134,6 +136,7 @@ export class AssetReaderError extends Schema.TaggedError<AssetReaderError>()("As
 	code: Schema.optional(Schema.String),
 	kind: Schema.Literals(["timeout", "process", "contract", "discovery", "resource_limit"]),
 	operation: Schema.Literals([
+		"game_text_index",
 		"authoring",
 		"blueprint",
 		"level_sequence",
@@ -146,11 +149,53 @@ export class AssetReaderError extends Schema.TaggedError<AssetReaderError>()("As
 		"scan",
 		"saved_world"
 	]),
-	message: Schema.String,
-	retrySafe: Schema.Boolean,
 	path: Schema.optional(Schema.String),
-	exitCode: Schema.optional(Schema.Number)
+	exitCode: Schema.optional(Schema.Number),
+	...ErrorGuidanceFields,
+	...ErrorCauseFields
 }) {}
+
+/**
+ * @internal Recovery and next step for a reader failure of one kind. Only `retrySafe` failures
+ * suggest `retry`.
+ */
+export function assetReaderGuidance(
+	kind: AssetReaderError["kind"],
+	retrySafe: boolean
+): Pick<AssetReaderError, "nextStep" | "recovery"> {
+	switch (kind) {
+		case "timeout":
+			return {
+				recovery:
+					"The saved-asset reader timed out. Retry, or raise the reader timeout for large packages.",
+				nextStep: retrySafe ? "retry" : "escalate"
+			};
+		case "process":
+			return {
+				recovery:
+					"The saved-asset reader process failed. Check that the configured uasset executable starts, then retry.",
+				nextStep: retrySafe ? "retry" : "escalate"
+			};
+		case "contract":
+			return {
+				recovery:
+					"The saved-asset reader answered outside its protocol. Install the reader version paired with this host.",
+				nextStep: "escalate"
+			};
+		case "discovery":
+			return {
+				recovery:
+					"Check that the project root or asset path exists, is readable and is inside an Unreal project.",
+				nextStep: retrySafe ? "retry" : "fix_input"
+			};
+		case "resource_limit":
+			return {
+				recovery:
+					"Narrow the request to fewer packages, or raise the configured reader limit.",
+				nextStep: "fix_input"
+			};
+	}
+}
 
 export interface AssetReaderOptions {
 	readonly assetPath: string;
@@ -542,15 +587,17 @@ function makeAssetReader(
 	const savedWorldProgress = Effect.fn("AssetReader.savedWorldProgress")(() =>
 		Effect.sync(() => savedWorldStore.current)
 	);
-	const scanProject = Effect.fn("AssetReader.scanProject")(function* (
-		options: SavedAssetScanOptions
-	) {
-		return yield* invokeProtocolScan(configuration, options, scanStore).pipe(
-			Effect.withSpan("unreal_assets.scan_project", {
-				attributes: { "unreal.project_root": options.projectRoot }
-			})
-		);
-	});
+	const scanProject = Effect.fn("AssetReader.scanProject")(
+		function* (options: SavedAssetScanOptions) {
+			return yield* invokeProtocolScan(configuration, options, scanStore);
+		},
+		(effect, options) =>
+			effect.pipe(
+				Effect.withSpan("unreal_assets.scan_project", {
+					attributes: { "unreal.project_root": options.projectRoot }
+				})
+			)
+	);
 	const extractProjectText = (options: SavedAssetExtractionOptions) =>
 		options.paths?.length === 0
 			? Stream.empty
@@ -596,7 +643,8 @@ function makeAssetReader(
 				{
 					maximumOutputBytes: MAX_PROTOCOL_OUTPUT_BYTES,
 					timeoutMs: configuration.timeoutMs
-				}
+				},
+				{ contractMinor: 14 }
 			),
 			expected: "inspect",
 			select: (result) => (result.kind === "inspect" ? result.inspection : undefined)
@@ -713,7 +761,7 @@ function makeAssetReader(
 	const discoverTables = Effect.fn("AssetReader.discoverTables")(function* (
 		options: SavedTableCatalogOptions
 	) {
-		return yield* invokeProtocolScan(
+		const scan = yield* invokeProtocolScan(
 			configuration,
 			{
 				...(options.cachePath === undefined ? undefined : { cachePath: options.cachePath }),
@@ -725,7 +773,8 @@ function makeAssetReader(
 				projectRoot: options.projectRoot
 			},
 			catalogProgressBridge(progress)
-		).pipe(Effect.map(savedTableCatalogFromScan));
+		);
+		return savedTableCatalogFromScan(scan);
 	});
 	const source = Effect.fn("AssetReader.source")(() => Effect.succeed(configuration.source));
 	return AssetReader.of({
@@ -843,7 +892,9 @@ export function makeAssetReaderTestLayer(service: AssetReaderTestApi): Layer.Lay
 							operation: "extract_text",
 							message: "This test asset reader does not stub extractProjectText.",
 							path: options.projectRoot,
-							retrySafe: false
+							retrySafe: false,
+							recovery: "Pass this operation to makeAssetReaderTestLayer.",
+							nextStep: "escalate"
 						})
 					)),
 			extractProjectTextPackages:
@@ -856,7 +907,9 @@ export function makeAssetReaderTestLayer(service: AssetReaderTestApi): Layer.Lay
 							message:
 								"This test asset reader does not stub extractProjectTextPackages.",
 							path: options.projectRoot,
-							retrySafe: false
+							retrySafe: false,
+							recovery: "Pass this operation to makeAssetReaderTestLayer.",
+							nextStep: "escalate"
 						})
 					)),
 			extractProjectTextures:
@@ -868,7 +921,9 @@ export function makeAssetReaderTestLayer(service: AssetReaderTestApi): Layer.Lay
 							operation: "extract_texture",
 							message: "This test asset reader does not stub extractProjectTextures.",
 							path: options.projectRoot,
-							retrySafe: false
+							retrySafe: false,
+							recovery: "Pass this operation to makeAssetReaderTestLayer.",
+							nextStep: "escalate"
 						})
 					)),
 			readBlueprint:
@@ -880,7 +935,9 @@ export function makeAssetReaderTestLayer(service: AssetReaderTestApi): Layer.Lay
 							operation: "blueprint",
 							message: "This test asset reader does not stub readBlueprint.",
 							path: assetPath,
-							retrySafe: false
+							retrySafe: false,
+							recovery: "Pass this operation to makeAssetReaderTestLayer.",
+							nextStep: "escalate"
 						})
 					)),
 			readLevelSequence:
@@ -892,7 +949,9 @@ export function makeAssetReaderTestLayer(service: AssetReaderTestApi): Layer.Lay
 							operation: "level_sequence",
 							message: "This test asset reader does not stub readLevelSequence.",
 							path: assetPath,
-							retrySafe: false
+							retrySafe: false,
+							recovery: "Pass this operation to makeAssetReaderTestLayer.",
+							nextStep: "escalate"
 						})
 					)),
 			savedWorldProgress:
@@ -906,7 +965,9 @@ export function makeAssetReaderTestLayer(service: AssetReaderTestApi): Layer.Lay
 						operation: "saved_world",
 						message: "This test asset reader does not stub readSavedWorld.",
 						path: options.mapPath,
-						retrySafe: false
+						retrySafe: false,
+						recovery: "Pass this operation to makeAssetReaderTestLayer.",
+						nextStep: "escalate"
 					})),
 			scanProject:
 				service.scanProject ??
@@ -916,7 +977,9 @@ export function makeAssetReaderTestLayer(service: AssetReaderTestApi): Layer.Lay
 						operation: "scan",
 						message: "This test asset reader does not stub scanProject.",
 						path: options.projectRoot,
-						retrySafe: false
+						retrySafe: false,
+						recovery: "Pass this operation to makeAssetReaderTestLayer.",
+						nextStep: "escalate"
 					})),
 			...service
 		})
@@ -986,7 +1049,10 @@ export function extractProjectTextPackages(
 						operation: "extract_text_packages",
 						message: "This AssetReader does not provide the package-text capability.",
 						path: options.projectRoot,
-						retrySafe: false
+						retrySafe: false,
+						recovery:
+							"Use an asset reader with the uasset-io package-text capability (v1.8 or later).",
+						nextStep: "fix_input"
 					})
 				)
 		)

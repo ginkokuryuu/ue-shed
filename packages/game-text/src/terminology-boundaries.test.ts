@@ -7,13 +7,13 @@ import { termMatches } from "./quality.js";
 import { GameTextIndexRefresh } from "./index-refresh.js";
 import { makeIndexRegressionFixture } from "./index-refresh-regressions.test-support.js";
 import { expectSameSourceQuality } from "./source-quality-index.test-support.js";
-import { GameTextRuleDocument } from "./quality-rules-v2.js";
+import { GameTextRuleDocument } from "./game-text-rules.js";
 import { checkLocalizationTarget } from "./localization-checks.js";
 import {
 	localizationQualityWorkspace,
 	localizationQualityWorkspaceOf
 } from "./localization-workspace.js";
-import { evaluateGameTextSourceQuality } from "./quality-rules-v2.js";
+import { evaluateGameTextSourceQuality } from "./game-text-rules.js";
 
 it.each(["prefixTODOsuffix", "éTODO", "TODO界", "2TODO", "TODO٢", "𐐀TODO", "TODO𐐀"])(
 	"does not match a term beside a Unicode letter or number in %s",
@@ -115,7 +115,7 @@ effectIt.live(
 					document
 				);
 				expect(report.findings).toHaveLength(6);
-				const quality = yield* indexed.localizationQuality!({ checks: [] }, document);
+				const quality = yield* indexed.localizationQuality(document, { checks: [] });
 				expect(quality.findings.length).toBe(6);
 				const sourceReport = evaluateGameTextSourceQuality(indexed.corpus, document);
 				const memory = localizationQualityWorkspace(

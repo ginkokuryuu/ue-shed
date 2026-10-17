@@ -11,13 +11,16 @@ export default defineProject({
 		include: [
 			"{apps,extensions,fixtures,packages,tools}/**/*.{test,spec}.{ts,tsx}",
 			"scripts/game-text-scale.test.ts",
+			"scripts/game-text-stage-timings.test.ts",
 			"scripts/game-text-dictionary.test.ts",
 			"scripts/localization-import.test.ts",
 			"scripts/package-text-reader.test.ts",
+			"scripts/package-import-usages.test.ts",
 			"scripts/package-text-record.test.ts",
 			"scripts/package-text-layer.test.ts",
 			"scripts/columnar-join.test.ts",
 			"scripts/columnar-join-fuzz.test.ts",
+			"scripts/native-game-text-join.test.ts",
 			"scripts/columnar-join-regressions.test.ts",
 			"scripts/joined-column-chunks.test.ts"
 		],

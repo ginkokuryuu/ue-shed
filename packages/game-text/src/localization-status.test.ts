@@ -16,12 +16,16 @@ import { localizationReportPage } from "./localization-workspace.js";
 const missing = new LocalizationError({
 	code: "file_missing",
 	message: "Localization evidence could not be read (file_missing).",
-	recovery: "Restore the expected file."
+	recovery: "Restore the expected file.",
+	retrySafe: true,
+	nextStep: "fix_input"
 });
 const malformed = new LocalizationError({
 	code: "malformed_po",
 	message: "Line 4 is not a PO entry.",
-	recovery: "Export the PO file again."
+	recovery: "Export the PO file again.",
+	retrySafe: true,
+	nextStep: "fix_input"
 });
 const poPath = "Content/Localization/Game/de/Game.po";
 
@@ -108,7 +112,9 @@ describe("localization evidence file wording", () => {
 			new LocalizationError({
 				code: "malformed_manifest",
 				message: "Not a manifest.",
-				recovery: "Gather again."
+				recovery: "Gather again.",
+				retrySafe: true,
+				nextStep: "fix_input"
 			})
 		);
 		expect(unreadable.code).toBe("unreadable_manifest");
@@ -130,7 +136,9 @@ describe("localization evidence file wording", () => {
 								error: new LocalizationError({
 									code: "malformed_archive",
 									message: "Not an archive.",
-									recovery: "Gather again."
+									recovery: "Gather again.",
+									retrySafe: true,
+									nextStep: "fix_input"
 								})
 							}
 						}

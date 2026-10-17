@@ -1,10 +1,20 @@
 import * as stylex from "@stylexjs/stylex";
 import {
-	textLocationLabel,
-	textCountLabel,
-	textReviewSignalLabel,
 	staleRuntimeCopy,
 	type GameTextInvestigationPreset,
+	type TextQualityFindingId,
+	type TextQualityFilter,
+	type TextQualityQueryRunResult,
+	type TextQualityQuerySummary,
+	type TextQualityRuleUpdateResult
+} from "@ue-shed/game-text/corpus";
+import {
+	textLocationLabel,
+	textCountLabel,
+	textReviewSignalLabel
+} from "@ue-shed/game-text/labels";
+import { type GameTextRuleDocument } from "@ue-shed/game-text/rules";
+import {
 	type TextCorpusFocus,
 	type TextCorpusQueryRunResult,
 	type TextCorpusQuerySummary,
@@ -12,18 +22,12 @@ import {
 	type TextCorpusSearchRequest,
 	type TextCopyKind,
 	type TextOccurrence,
-	type TextQualityFindingId,
-	type TextQualityFilter,
-	type TextQualityQueryRunResult,
-	type TextQualityQuerySummary,
-	type GameTextRuleDocument,
-	type TextQualityRuleUpdateResult,
 	type TextFilter,
 	type TextGroupBy,
 	type TextUnitId,
 	type LocalizationState,
 	LocalizationReviewLens
-} from "@ue-shed/game-text/browser";
+} from "@ue-shed/game-text/schema";
 import {
 	Button,
 	Chip,

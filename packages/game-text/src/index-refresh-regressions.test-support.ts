@@ -111,9 +111,10 @@ export const makeIndexRegressionFixture = Effect.fn("Test.GameText.indexFixture"
 			});
 		})
 	).pipe(Layer.provide(LocalizationEvidenceNodeLive));
-	const layer = (worker = false, suppliedSource = source) =>
+	const layer = (worker = false, suppliedSource = source, qualityWorker = false) =>
 		gameTextIndexRefreshLayer(join(projectRoot, "cache"), {
-			searchWorker: worker
+			searchWorker: worker,
+			qualityWorker
 		}).pipe(
 			Layer.provide(suppliedSource),
 			Layer.provide(typeScriptIndexBuilderLayer),

@@ -1,15 +1,17 @@
 import * as stylex from "@stylexjs/stylex";
 import {
 	explainLocalizationFile,
-	localizationStates,
 	type LocalizationFileProblem,
 	type LocalizationFocus,
+	type LocalizationTranslation
+} from "@ue-shed/game-text/corpus";
+import {
+	localizationStates,
 	type LocalizationLinePreview,
 	type LocalizationState,
-	type LocalizationTranslation,
 	type LocalizationUnknownReason,
 	type TextCultureFacet
-} from "@ue-shed/game-text/browser";
+} from "@ue-shed/game-text/schema";
 import { Button, Chip } from "@ue-shed/ui";
 import { For, Show } from "solid-js";
 import { CopyButton } from "./game-text-copy-button.js";

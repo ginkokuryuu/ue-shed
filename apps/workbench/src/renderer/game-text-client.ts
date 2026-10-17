@@ -1,7 +1,7 @@
 import {
 	GameTextInvestigationPresetResult,
 	LocalizationLinesFileResult
-} from "@ue-shed/game-text/browser";
+} from "@ue-shed/game-text/corpus";
 import { InvestigationFileResult } from "@ue-shed/unreal-assets/investigation";
 import {
 	type WorkspaceQualityRequest,
@@ -21,25 +21,27 @@ import {
 	LocalizationTargetResult,
 	LocalizationFocusResult,
 	type LocalizationFocusRequest,
-	type LocalizationSelection,
-	decodeTextCorpusFocusResult,
-	decodeTextCorpusQueryRunResult,
-	decodeTextCorpusSearchResult,
-	decodeTextQualityFocusResult,
-	decodeTextQualityQueryRunResult,
-	decodeTextQualityRuleUpdateResult,
-	decodeTextQualitySearchResult,
-	type TextCorpusFocusRequest,
-	type TextCorpusFocusResult,
-	type TextCorpusSearchRequest,
-	type TextCorpusSearchResult,
+	parseTextQualityFocusResult,
+	parseTextQualityQueryRunResult,
+	parseTextQualityRuleUpdateResult,
+	parseTextQualitySearchResult,
 	type TextQualityFocusRequest,
 	type TextQualityFocusResult,
-	type GameTextRuleDocument,
 	type TextQualityRuleUpdateResult,
 	type TextQualitySearchRequest,
 	type TextQualitySearchResult
-} from "@ue-shed/game-text/browser";
+} from "@ue-shed/game-text/corpus";
+import {
+	type LocalizationSelection,
+	parseTextCorpusFocusResult,
+	parseTextCorpusQueryRunResult,
+	parseTextCorpusSearchResult,
+	type TextCorpusFocusRequest,
+	type TextCorpusFocusResult,
+	type TextCorpusSearchRequest,
+	type TextCorpusSearchResult
+} from "@ue-shed/game-text/schema";
+import { type GameTextRuleDocument } from "@ue-shed/game-text/rules";
 import { decodeEditorAssetLocateResult } from "@ue-shed/protocol";
 import {
 	GameTextClient,
@@ -52,12 +54,12 @@ import {
 } from "../shared/project-workspace-contract.js";
 import { Effect, Queue, Schema, Stream } from "effect";
 import {
-	WorkbenchOperationState,
-	WorkbenchOperationPlanResult,
-	WorkbenchOperationResult,
-	WorkbenchOperationFilesResult,
-	WorkbenchOperationProgress
-} from "@ue-shed/game-text/browser";
+	GameTextOperationState,
+	GameTextOperationPlanResult,
+	GameTextOperationResult,
+	GameTextOperationFilesResult,
+	GameTextOperationProgress
+} from "@ue-shed/game-text/schema";
 
 const recovery = "Restart Workbench. If the problem persists, verify package versions.";
 
@@ -81,33 +83,33 @@ export const gameTextClient: GameTextClientApi = GameTextClient.of({
 			invokeRequest(
 				"gameText.operationState",
 				() => window.ueShed.gameText.operationState(target),
-				Schema.decodeUnknownEffect(WorkbenchOperationState)
+				Schema.decodeUnknownEffect(GameTextOperationState)
 			),
 		plan: (request) =>
 			invokeRequest(
 				"gameText.operationPlan",
 				() => window.ueShed.gameText.operationPlan(request),
-				Schema.decodeUnknownEffect(WorkbenchOperationPlanResult)
+				Schema.decodeUnknownEffect(GameTextOperationPlanResult)
 			),
 		run: (id) =>
 			invokeRequest(
 				"gameText.operationRun",
 				() => window.ueShed.gameText.operationRun(id),
-				Schema.decodeUnknownEffect(WorkbenchOperationResult)
+				Schema.decodeUnknownEffect(GameTextOperationResult)
 			),
 		cancel: (id) =>
 			invokeRequest(
 				"gameText.operationCancel",
 				() => window.ueShed.gameText.operationCancel(id),
-				Schema.decodeUnknownEffect(WorkbenchOperationResult)
+				Schema.decodeUnknownEffect(GameTextOperationResult)
 			),
 		files: (request) =>
 			invokeRequest(
 				"gameText.operationFiles",
 				() => window.ueShed.gameText.operationFiles(request),
-				Schema.decodeUnknownEffect(WorkbenchOperationFilesResult)
+				Schema.decodeUnknownEffect(GameTextOperationFilesResult)
 			),
-		progress: Stream.callback<WorkbenchOperationProgress>(
+		progress: Stream.callback<GameTextOperationProgress>(
 			(queue) =>
 				Effect.acquireRelease(
 					Effect.sync(() =>
@@ -120,7 +122,7 @@ export const gameTextClient: GameTextClientApi = GameTextClient.of({
 			{ bufferSize: 1, strategy: "sliding" }
 		).pipe(
 			Stream.mapEffect((progress) =>
-				Schema.decodeUnknownEffect(WorkbenchOperationProgress)(progress)
+				Schema.decodeUnknownEffect(GameTextOperationProgress)(progress)
 			),
 			Stream.mapError(
 				(cause) =>
@@ -223,7 +225,7 @@ export const gameTextClient: GameTextClientApi = GameTextClient.of({
 		invokeRequest(
 			"gameText.reloadQualityRules",
 			() => window.ueShed.gameText.reloadQualityRules(),
-			decodeTextQualityQueryRunResult
+			parseTextQualityQueryRunResult
 		)
 	),
 	projectKey: Effect.fn("GameTextClient.projectKey")(() =>
@@ -241,7 +243,7 @@ export const gameTextClient: GameTextClientApi = GameTextClient.of({
 		invokeRequest(
 			"gameText.createStarterRules",
 			() => window.ueShed.gameText.createStarterRules(loadExisting),
-			decodeTextQualityQueryRunResult
+			parseTextQualityQueryRunResult
 		)
 	),
 	investigations: {
@@ -268,7 +270,7 @@ export const gameTextClient: GameTextClientApi = GameTextClient.of({
 		invokeRequest(
 			"gameText.loadConfiguredProject",
 			() => window.ueShed.gameText.refreshConfiguredProject(refresh),
-			decodeTextCorpusQueryRunResult
+			parseTextCorpusQueryRunResult
 		)
 	),
 	progress: Effect.fn("GameTextClient.progress")(() =>
@@ -292,7 +294,7 @@ export const gameTextClient: GameTextClientApi = GameTextClient.of({
 			invokeRequest(
 				"gameText.search",
 				() => window.ueShed.gameText.search(input),
-				decodeTextCorpusSearchResult
+				parseTextCorpusSearchResult
 			)
 	),
 	focus: Effect.fn("GameTextClient.focus")(
@@ -302,14 +304,14 @@ export const gameTextClient: GameTextClientApi = GameTextClient.of({
 			invokeRequest(
 				"gameText.focus",
 				() => window.ueShed.gameText.focus(input),
-				decodeTextCorpusFocusResult
+				parseTextCorpusFocusResult
 			)
 	),
 	chooseQualityRules: Effect.fn("GameTextClient.chooseQualityRules")(() =>
 		invokeRequest(
 			"gameText.chooseQualityRules",
 			() => window.ueShed.gameText.chooseQualityRules(),
-			decodeTextQualityQueryRunResult
+			parseTextQualityQueryRunResult
 		)
 	),
 	previewQualityRules: Effect.fn("GameTextClient.previewQualityRules")(
@@ -319,7 +321,7 @@ export const gameTextClient: GameTextClientApi = GameTextClient.of({
 			invokeRequest(
 				"gameText.previewQualityRules",
 				() => window.ueShed.gameText.previewQualityRules(document),
-				decodeTextQualityRuleUpdateResult
+				parseTextQualityRuleUpdateResult
 			)
 	),
 	saveQualityRules: Effect.fn("GameTextClient.saveQualityRules")(
@@ -329,7 +331,7 @@ export const gameTextClient: GameTextClientApi = GameTextClient.of({
 			invokeRequest(
 				"gameText.saveQualityRules",
 				() => window.ueShed.gameText.saveQualityRules(document),
-				decodeTextQualityRuleUpdateResult
+				parseTextQualityRuleUpdateResult
 			)
 	),
 	qualitySearch: Effect.fn("GameTextClient.qualitySearch")(
@@ -339,7 +341,7 @@ export const gameTextClient: GameTextClientApi = GameTextClient.of({
 			invokeRequest(
 				"gameText.qualitySearch",
 				() => window.ueShed.gameText.qualitySearch(input),
-				decodeTextQualitySearchResult
+				parseTextQualitySearchResult
 			)
 	),
 	qualityFocus: Effect.fn("GameTextClient.qualityFocus")(
@@ -349,7 +351,7 @@ export const gameTextClient: GameTextClientApi = GameTextClient.of({
 			invokeRequest(
 				"gameText.qualityFocus",
 				() => window.ueShed.gameText.qualityFocus(input),
-				decodeTextQualityFocusResult
+				parseTextQualityFocusResult
 			)
 	)
 });

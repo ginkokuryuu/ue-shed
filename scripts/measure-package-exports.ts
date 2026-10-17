@@ -6,18 +6,18 @@
  *
  * A name is "used" when a file outside the package imports it by name from any of the package's
  * entry points, or re-exports it. A namespace import (`import * as x`) or `export *` from the
- * package counts every name of that entry point as used. Uses inside the package itself, and
+ * package counts every name of that entry point as used. Literal dynamic and type imports also
+ * count the whole entry point, since member attribution is conservative. Uses inside the package itself, and
  * uses in other repositories (downstream hosts), are not visible here.
  */
 import { readdirSync, readFileSync, statSync } from "node:fs";
-import { dirname, join, relative, resolve } from "node:path";
+import { dirname, join, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 import { Schema, SchemaGetter } from "effect";
 import ts from "typescript";
+import { packageImportUsages } from "./package-import-usages.ts";
 
-const root = resolve(
-	dirname(new URL(import.meta.url).pathname.replace(/^\/([A-Za-z]:)/u, "$1")),
-	".."
-);
+const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const defaults = [
 	"protocol",
 	"unreal-connection",
@@ -120,41 +120,19 @@ const rows = measured.map(({ folder, name, entries }) => {
 	/** Names used from each subpath, by consumer folder. */
 	const used = new Map<string, Set<string>>([...entries.keys()].map((key) => [key, new Set()]));
 	const all = new Set<string>();
-	const consumersOf = new Map<string, Set<string>>();
 	for (const file of consumers) {
 		if (file.startsWith(ownDirectory)) continue;
 		const text = readFileSync(file, "utf8");
 		if (!text.includes(name)) continue;
 		const source = ts.createSourceFile(file, text, ts.ScriptTarget.ESNext, false);
-		for (const statement of source.statements) {
-			if (
-				!(ts.isImportDeclaration(statement) || ts.isExportDeclaration(statement)) ||
-				!statement.moduleSpecifier ||
-				!ts.isStringLiteral(statement.moduleSpecifier)
-			)
-				continue;
-			const specifier = statement.moduleSpecifier.text;
-			if (specifier !== name && !specifier.startsWith(`${name}/`)) continue;
-			const subpath = specifier === name ? "." : `.${specifier.slice(name.length)}`;
-			const names = used.get(subpath);
+		for (const usage of packageImportUsages(source, name)) {
+			const names = used.get(usage.subpath);
 			if (!names) continue;
-			const consumer = relative(root, file).split(/[\\/]/u).slice(0, 2).join("/");
-			const record = (exported: string) => {
-				names.add(exported);
-				let users = consumersOf.get(`${subpath} ${exported}`);
-				if (!users) consumersOf.set(`${subpath} ${exported}`, (users = new Set()));
-				users.add(consumer);
-			};
-			if (ts.isImportDeclaration(statement)) {
-				const bindings = statement.importClause?.namedBindings;
-				if (bindings && ts.isNamespaceImport(bindings)) all.add(subpath);
-				else if (bindings)
-					for (const element of bindings.elements)
-						record((element.propertyName ?? element.name).text);
-			} else if (!statement.exportClause) all.add(subpath);
-			else if (ts.isNamedExports(statement.exportClause))
-				for (const element of statement.exportClause.elements)
-					record((element.propertyName ?? element.name).text);
+			if (usage.names === "all") {
+				all.add(usage.subpath);
+				continue;
+			}
+			for (const exported of usage.names) names.add(exported);
 		}
 	}
 	const subpaths = [...entries].map(([subpath, file]) => {
@@ -167,7 +145,7 @@ const rows = measured.map(({ folder, name, entries }) => {
 			exports: names.length,
 			used: usedNames.length,
 			unused: names.filter((exported) => !usedNames.includes(exported)).sort(),
-			namespaceImported: all.has(subpath)
+			wholeEntryPointImported: all.has(subpath)
 		};
 	});
 	return { package: name, subpaths };
@@ -183,6 +161,6 @@ else
 		);
 		for (const item of row.subpaths)
 			console.log(
-				`  ${item.subpath}: ${item.used}/${item.exports}${item.namespaceImported ? " (namespace import)" : ""}`
+				`  ${item.subpath}: ${item.used}/${item.exports}${item.wholeEntryPointImported ? " (namespace/dynamic/type import)" : ""}`
 			);
 	}

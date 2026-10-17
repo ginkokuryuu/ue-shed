@@ -4,11 +4,7 @@ import type {
 	EditorAssetLocateResult,
 	EditorAssetLocateUnavailableReason
 } from "@ue-shed/protocol";
-import {
-	locateUnrealAsset,
-	RemoteControlClient,
-	UnrealCapabilityError
-} from "@ue-shed/unreal-connection";
+import { locateUnrealAsset, RemoteControlClient } from "@ue-shed/unreal-connection";
 import { Context, Effect, Layer } from "effect";
 
 export interface WorkbenchAssetNavigationApi {
@@ -64,11 +60,11 @@ export const WorkbenchAssetNavigationLive = Layer.effect(
 							message: error.message,
 							objectPath,
 							reason:
-								error instanceof UnrealCapabilityError
+								error._tag === "UnrealCapabilityError"
 									? "capability_missing"
 									: "not_connected",
 							recovery:
-								error instanceof UnrealCapabilityError
+								error._tag === "UnrealCapabilityError"
 									? "Launch this project with UE Shed plugins enabled, then retry."
 									: "Start or attach the selected Unreal project, then retry."
 						})

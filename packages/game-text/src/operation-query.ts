@@ -18,20 +18,20 @@ export const OperationRelativePath = Schema.NonEmptyString.check(
 			!path.split("/").some((part) => part === ".." || part === ".")
 	)
 );
-export const WorkbenchOperationRequest = Schema.Struct({
+export const GameTextOperationRequest = Schema.Struct({
 	target: LocalizationTargetName,
 	operation: LocalizationOperation
 });
-export type WorkbenchOperationRequest = typeof WorkbenchOperationRequest.Type;
-export const WorkbenchOperationFailure = Schema.Struct({
+export type GameTextOperationRequest = typeof GameTextOperationRequest.Type;
+export const GameTextOperationFailure = Schema.Struct({
 	status: Schema.Literal("failed"),
 	code: Text,
 	message: Text,
 	recovery: Text,
 	details: Schema.Array(Text).check(Schema.isMaxLength(40))
 });
-export type WorkbenchOperationFailure = typeof WorkbenchOperationFailure.Type;
-export const WorkbenchOperationPlan = Schema.Struct({
+export type GameTextOperationFailure = typeof GameTextOperationFailure.Type;
+export const GameTextOperationPlan = Schema.Struct({
 	id: Id,
 	target: LocalizationTargetName,
 	operation: LocalizationOperation,
@@ -40,13 +40,13 @@ export const WorkbenchOperationPlan = Schema.Struct({
 	steps: Schema.Array(LocalizationStepKind).check(Schema.isMaxLength(1024)),
 	fileCount: Count
 });
-export type WorkbenchOperationPlan = typeof WorkbenchOperationPlan.Type;
-export const WorkbenchOperationPlanResult = Schema.Union([
-	Schema.Struct({ status: Schema.Literal("ready"), plan: WorkbenchOperationPlan }),
-	WorkbenchOperationFailure
+export type GameTextOperationPlan = typeof GameTextOperationPlan.Type;
+export const GameTextOperationPlanResult = Schema.Union([
+	Schema.Struct({ status: Schema.Literal("ready"), plan: GameTextOperationPlan }),
+	GameTextOperationFailure
 ]);
-export type WorkbenchOperationPlanResult = typeof WorkbenchOperationPlanResult.Type;
-export const WorkbenchOperationReceipt = Schema.Struct({
+export type GameTextOperationPlanResult = typeof GameTextOperationPlanResult.Type;
+export const GameTextOperationReceipt = Schema.Struct({
 	id: Id,
 	target: LocalizationTargetName,
 	operation: LocalizationOperation,
@@ -55,14 +55,14 @@ export const WorkbenchOperationReceipt = Schema.Struct({
 	translationsImported: Count,
 	refreshed: Schema.Boolean
 });
-export type WorkbenchOperationReceipt = typeof WorkbenchOperationReceipt.Type;
-export const WorkbenchOperationResult = Schema.Union([
-	Schema.Struct({ status: Schema.Literal("completed"), receipt: WorkbenchOperationReceipt }),
+export type GameTextOperationReceipt = typeof GameTextOperationReceipt.Type;
+export const GameTextOperationResult = Schema.Union([
+	Schema.Struct({ status: Schema.Literal("completed"), receipt: GameTextOperationReceipt }),
 	Schema.Struct({ status: Schema.Literal("cancelled") }),
-	WorkbenchOperationFailure
+	GameTextOperationFailure
 ]);
-export type WorkbenchOperationResult = typeof WorkbenchOperationResult.Type;
-export const WorkbenchOperationProgress = Schema.Struct({
+export type GameTextOperationResult = typeof GameTextOperationResult.Type;
+export const GameTextOperationProgress = Schema.Struct({
 	id: Id,
 	target: LocalizationTargetName,
 	operation: LocalizationOperation,
@@ -71,26 +71,26 @@ export const WorkbenchOperationProgress = Schema.Struct({
 	stepTotal: Count,
 	kind: Schema.optionalKey(LocalizationStepKind)
 });
-export type WorkbenchOperationProgress = typeof WorkbenchOperationProgress.Type;
-export const WorkbenchOperationState = Schema.Struct({
+export type GameTextOperationProgress = typeof GameTextOperationProgress.Type;
+export const GameTextOperationState = Schema.Struct({
 	operations: Schema.Array(LocalizationOperation).check(
 		Schema.isMaxLength(LocalizationOperation.literals.length)
 	),
 	wholeRecipe: Schema.Boolean,
 	busyReason: Schema.optionalKey(Text),
-	progress: Schema.optionalKey(WorkbenchOperationProgress),
-	result: Schema.optionalKey(WorkbenchOperationResult)
+	progress: Schema.optionalKey(GameTextOperationProgress),
+	result: Schema.optionalKey(GameTextOperationResult)
 });
-export type WorkbenchOperationState = typeof WorkbenchOperationState.Type;
-export const WorkbenchOperationId = Id;
-export const WorkbenchOperationTarget = LocalizationTargetName;
-export const WorkbenchOperationFilesRequest = Schema.Struct({
+export type GameTextOperationState = typeof GameTextOperationState.Type;
+export const GameTextOperationId = Id;
+export const GameTextOperationTarget = LocalizationTargetName;
+export const GameTextOperationFilesRequest = Schema.Struct({
 	id: Id,
 	kind: Schema.Literals(["planned", "changed"]),
 	offset: Schema.optionalKey(Count)
 });
-export type WorkbenchOperationFilesRequest = typeof WorkbenchOperationFilesRequest.Type;
-export const WorkbenchOperationFilesResult = Schema.Union([
+export type GameTextOperationFilesRequest = typeof GameTextOperationFilesRequest.Type;
+export const GameTextOperationFilesResult = Schema.Union([
 	Schema.Struct({
 		status: Schema.Literal("ready"),
 		files: Schema.Array(
@@ -99,6 +99,53 @@ export const WorkbenchOperationFilesResult = Schema.Union([
 		total: Count,
 		nextOffset: Schema.optionalKey(Count)
 	}),
-	WorkbenchOperationFailure
+	GameTextOperationFailure
 ]);
-export type WorkbenchOperationFilesResult = typeof WorkbenchOperationFilesResult.Type;
+export type GameTextOperationFilesResult = typeof GameTextOperationFilesResult.Type;
+
+// Deprecated Workbench names (Plan 058 D10). Hosts other than Workbench run these
+// operations too; use the GameTextOperation* names.
+/** @deprecated Use `GameTextOperationRequest`. */
+export const WorkbenchOperationRequest = GameTextOperationRequest;
+/** @deprecated Use `GameTextOperationRequest`. */
+export type WorkbenchOperationRequest = GameTextOperationRequest;
+/** @deprecated Use `GameTextOperationFailure`. */
+export const WorkbenchOperationFailure = GameTextOperationFailure;
+/** @deprecated Use `GameTextOperationFailure`. */
+export type WorkbenchOperationFailure = GameTextOperationFailure;
+/** @deprecated Use `GameTextOperationPlan`. */
+export const WorkbenchOperationPlan = GameTextOperationPlan;
+/** @deprecated Use `GameTextOperationPlan`. */
+export type WorkbenchOperationPlan = GameTextOperationPlan;
+/** @deprecated Use `GameTextOperationPlanResult`. */
+export const WorkbenchOperationPlanResult = GameTextOperationPlanResult;
+/** @deprecated Use `GameTextOperationPlanResult`. */
+export type WorkbenchOperationPlanResult = GameTextOperationPlanResult;
+/** @deprecated Use `GameTextOperationReceipt`. */
+export const WorkbenchOperationReceipt = GameTextOperationReceipt;
+/** @deprecated Use `GameTextOperationReceipt`. */
+export type WorkbenchOperationReceipt = GameTextOperationReceipt;
+/** @deprecated Use `GameTextOperationResult`. */
+export const WorkbenchOperationResult = GameTextOperationResult;
+/** @deprecated Use `GameTextOperationResult`. */
+export type WorkbenchOperationResult = GameTextOperationResult;
+/** @deprecated Use `GameTextOperationProgress`. */
+export const WorkbenchOperationProgress = GameTextOperationProgress;
+/** @deprecated Use `GameTextOperationProgress`. */
+export type WorkbenchOperationProgress = GameTextOperationProgress;
+/** @deprecated Use `GameTextOperationState`. */
+export const WorkbenchOperationState = GameTextOperationState;
+/** @deprecated Use `GameTextOperationState`. */
+export type WorkbenchOperationState = GameTextOperationState;
+/** @deprecated Use `GameTextOperationId`. */
+export const WorkbenchOperationId = GameTextOperationId;
+/** @deprecated Use `GameTextOperationTarget`. */
+export const WorkbenchOperationTarget = GameTextOperationTarget;
+/** @deprecated Use `GameTextOperationFilesRequest`. */
+export const WorkbenchOperationFilesRequest = GameTextOperationFilesRequest;
+/** @deprecated Use `GameTextOperationFilesRequest`. */
+export type WorkbenchOperationFilesRequest = GameTextOperationFilesRequest;
+/** @deprecated Use `GameTextOperationFilesResult`. */
+export const WorkbenchOperationFilesResult = GameTextOperationFilesResult;
+/** @deprecated Use `GameTextOperationFilesResult`. */
+export type WorkbenchOperationFilesResult = GameTextOperationFilesResult;

@@ -24,6 +24,7 @@ import {
 	NiagaraPreviewIntent as NiagaraPreviewIntentSchema
 } from "./niagara-preview-client.js";
 
+const isNiagaraPreviewClientError = Schema.is(NiagaraPreviewClientError);
 const defaultSystem = "/Niagara/DefaultAssets/Templates/Systems/SimpleExplosion.SimpleExplosion";
 
 type RouteState =
@@ -87,7 +88,7 @@ function firstClientError(
 	cause: Cause.Cause<NiagaraPreviewClientError>
 ): NiagaraPreviewClientError | undefined {
 	for (const reason of cause.reasons) {
-		if (Cause.isFailReason(reason) && reason.error instanceof NiagaraPreviewClientError) {
+		if (Cause.isFailReason(reason) && isNiagaraPreviewClientError(reason.error)) {
 			return reason.error;
 		}
 	}

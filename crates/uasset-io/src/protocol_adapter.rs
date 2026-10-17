@@ -300,6 +300,12 @@ impl Emitter {
         } else {
             result
         };
+        let error_compatible = if self.contract.version.minor < 14 {
+            legacy_decode_error_result(result)
+        } else {
+            None
+        };
+        let result = error_compatible.as_ref().unwrap_or(result);
         let event = ResultEvent {
             contract: &self.contract,
             kind: "result",
@@ -335,6 +341,36 @@ impl Emitter {
         };
         self.write_frame(&bytes).map_err(emission_failure)
     }
+}
+
+fn legacy_decode_error_result(result: &ResultFrame) -> Option<ResultFrame> {
+    use crate::protocol_result::SavedAssetScanEntry;
+    let (ResultFrame::Inspect { inspection }
+    | ResultFrame::ScanAsset {
+        entry: SavedAssetScanEntry::Full { inspection, .. },
+    }) = result
+    else {
+        return None;
+    };
+    if !inspection
+        .decode_errors
+        .iter()
+        .any(|error| error.field.is_some() || error.offset.is_some())
+    {
+        return None;
+    }
+    let mut compatible = result.clone();
+    if let ResultFrame::Inspect { inspection }
+    | ResultFrame::ScanAsset {
+        entry: SavedAssetScanEntry::Full { inspection, .. },
+    } = &mut compatible
+    {
+        for error in &mut inspection.decode_errors {
+            error.field = None;
+            error.offset = None;
+        }
+    }
+    Some(compatible)
 }
 
 fn legacy_header_result(result: &ResultFrame) -> ResultFrame {
@@ -374,6 +410,7 @@ fn contract_value(contract: &Contract) -> Value {
 
 fn operation_kind(operation: &Operation) -> &'static str {
     match operation {
+        Operation::GameTextIndex { .. } => "game_text_index",
         Operation::Inspect { .. } => "inspect",
         Operation::Blueprint { .. } => "blueprint",
         Operation::LevelSequence { .. } => "level_sequence",
@@ -406,6 +443,7 @@ fn execute_direct(
                 | Operation::Authoring { .. }
                 | Operation::ProjectIndexQuery { .. }
                 | Operation::ProjectIndexCount { .. }
+                | Operation::GameTextIndex { .. }
         )
     {
         return Err(Failure::new(
@@ -415,6 +453,28 @@ fn execute_direct(
         ));
     }
     match &request.operation {
+        Operation::GameTextIndex { request: build } => {
+            let outcome = if let Some(session) = query_session {
+                session.game_text.execute(build)
+            } else if matches!(build, game_text_index::builder::BuildRequest::Capabilities) {
+                game_text_index::builder::BuildSession::default().execute(build)
+            } else {
+                return Err(Failure::new(
+                    "unsupported_session_operation",
+                    "Game Text writes require protocol-session",
+                    false,
+                ));
+            }
+            .map_err(|error| {
+                Failure::new(
+                    game_text_index::builder::failure_code(error.as_ref()),
+                    error.to_string(),
+                    true,
+                )
+            })?;
+            emit_typed_result(emitter, &ResultFrame::GameTextIndex { outcome })?;
+            Ok(false)
+        }
         Operation::Inspect { asset_path } => {
             let (inspection, partial) =
                 direct_executor::inspect_with_cancellation(asset_path, cancellation)?;

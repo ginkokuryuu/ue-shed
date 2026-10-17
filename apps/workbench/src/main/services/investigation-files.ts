@@ -9,6 +9,7 @@ import {
 	writeInvestigationFile
 } from "@ue-shed/unreal-assets/investigation-files";
 import type { ElectronDialogApi } from "../adapters/electron-dialog.js";
+import type { WorkbenchWindowError } from "../adapters/electron-window.js";
 
 export const investigationFailure = (error: {
 	readonly message: string;
@@ -19,21 +20,23 @@ export const investigationFailure = (error: {
 	recovery: error.recovery ?? "Try the file operation again."
 });
 
-export const saveInvestigation = Effect.fn("Workbench.Investigation.save")(function* (
-	dialog: ElectronDialogApi,
-	options: {
-		readonly contents: string;
-		readonly extension: "json" | "csv";
-		readonly rowCount: number;
-		readonly projectRoot?: string;
-	}
-): Effect.fn.Return<InvestigationFileResult> {
-	return yield* Effect.gen(function* () {
+export const saveInvestigation = Effect.fn("Workbench.Investigation.save")(
+	function* (
+		dialog: ElectronDialogApi,
+		options: {
+			readonly contents: string;
+			readonly extension: "json" | "csv";
+			readonly rowCount: number;
+			readonly projectRoot?: string;
+		}
+	): Effect.fn.Return<InvestigationFileResult, InvestigationError | WorkbenchWindowError> {
 		if (options.projectRoot && Buffer.byteLength(options.contents, "utf8") > 4 * 1024 * 1024)
 			return yield* Effect.fail(
 				new InvestigationError({
 					message: "The preset exceeds 4 MiB.",
-					recovery: "Reduce the rule document before saving this preset."
+					recovery: "Reduce the rule document before saving this preset.",
+					retrySafe: true,
+					nextStep: "fix_input"
 				})
 			);
 		const choice = yield* dialog.chooseSaveFile({
@@ -53,8 +56,10 @@ export const saveInvestigation = Effect.fn("Workbench.Investigation.save")(funct
 				? { replayCommand: investigationReplayCommand(options.projectRoot, choice.path) }
 				: undefined)
 		};
-	}).pipe(Effect.catch((error) => Effect.succeed(investigationFailure(error))));
-});
+	},
+	(effect): Effect.Effect<InvestigationFileResult> =>
+		effect.pipe(Effect.catch((error) => Effect.succeed(investigationFailure(error))))
+);
 
 export const openInvestigation = Effect.fn("Workbench.Investigation.open")(function* <A, I>(
 	dialog: ElectronDialogApi,
@@ -70,7 +75,9 @@ export const openInvestigation = Effect.fn("Workbench.Investigation.open")(funct
 				(error) =>
 					new InvestigationError({
 						message: error.message,
-						recovery: "Try opening the preset again."
+						recovery: "Try opening the preset again.",
+						retrySafe: true,
+						nextStep: "retry"
 					})
 			)
 		);
@@ -81,7 +88,9 @@ export const openInvestigation = Effect.fn("Workbench.Investigation.open")(funct
 			(error) =>
 				new InvestigationError({
 					message: `Invalid investigation preset: ${error.message}`,
-					recovery: "Choose a version 1 preset for this workspace."
+					recovery: "Choose a version 1 preset for this workspace.",
+					retrySafe: true,
+					nextStep: "fix_input"
 				})
 		)
 	);

@@ -1,6 +1,8 @@
 import {
 	decodeCameraScheduleConfig,
 	decodeCameraStatus,
+	ErrorCauseFields,
+	ErrorGuidanceFields,
 	type CameraScheduleConfig,
 	type CameraStatus
 } from "@ue-shed/protocol";
@@ -64,10 +66,10 @@ export interface CameraFeedMetrics {
 }
 
 export class CameraFeedError extends Schema.TaggedError<CameraFeedError>()("CameraFeedError", {
-	message: Schema.String,
+	...ErrorGuidanceFields,
+	...ErrorCauseFields,
 	operation: Schema.Literal("listen"),
-	pipeName: Schema.String,
-	retrySafe: Schema.Boolean
+	pipeName: Schema.String
 }) {}
 
 function unrealGuidToDigits(buffer: Buffer, offset: number): string {
@@ -285,9 +287,17 @@ function listen(server: Server, pipeName: string): Effect.Effect<void, CameraFee
 			}),
 		catch: (cause) =>
 			new CameraFeedError({
-				message: String(cause),
+				message: `Could not listen on camera feed pipe ${pipeName}${
+					cause instanceof Error && "code" in cause && cause.code === "EADDRINUSE"
+						? " because another process is already listening on it"
+						: ""
+				}.`,
+				cause,
+				nextStep: "retry",
 				operation: "listen",
 				pipeName,
+				recovery:
+					"Stop any other process listening on this camera feed pipe, then open the feed again.",
 				retrySafe: true
 			})
 	});
@@ -316,8 +326,11 @@ function acquireCameraFeed(
 		return Effect.fail(
 			new CameraFeedError({
 				message: `Camera feed capacity must be a positive integer, received ${capacity}.`,
+				nextStep: "fix_input",
 				operation: "listen",
 				pipeName,
+				recovery:
+					"Pass a positive integer camera feed capacity, or omit it to use the default.",
 				retrySafe: false
 			})
 		);
@@ -424,33 +437,42 @@ export function makeCameraFeedTestLayer(
 export class CameraControlError extends Schema.TaggedError<CameraControlError>()(
 	"CameraControlError",
 	{
+		...ErrorGuidanceFields,
+		...ErrorCauseFields,
 		endpoint: Schema.String,
-		message: Schema.String,
 		operation: Schema.Literals(["configure", "status"]),
-		retrySafe: Schema.Boolean,
 		status: Schema.optional(Schema.Number)
 	}
 ) {}
+
+const isRemoteControlClientError = Schema.is(RemoteControlClientError);
 
 function cameraControlError(
 	endpoint: string,
 	operation: "configure" | "status",
 	cause: RemoteControlClientError | unknown
 ): CameraControlError {
-	if (cause instanceof RemoteControlClientError) {
+	if (isRemoteControlClientError(cause)) {
 		return new CameraControlError({
 			endpoint: cause.endpoint,
 			message: cause.message,
+			nextStep: cause.nextStep,
 			operation,
+			recovery: cause.recovery,
 			retrySafe: cause.retrySafe,
+			cause,
 			...(cause.status === undefined ? undefined : { status: cause.status })
 		});
 	}
 	return new CameraControlError({
 		endpoint,
-		message: `Invalid camera ${operation} response: ${String(cause)}`,
+		message: `The editor at ${endpoint} returned a camera ${operation} response that does not match this UE Shed version.`,
+		nextStep: "escalate",
 		operation,
-		retrySafe: false
+		recovery:
+			"Update the Core and Cameras plugins together so their response matches this UE Shed version.",
+		retrySafe: false,
+		cause
 	});
 }
 
@@ -467,6 +489,7 @@ const cameraRemoteCall = Effect.fn("CameraControl.remoteCall")(function* (
 			functionName,
 			objectPath: "/Script/UEShedCameras.Default__UEShedCameraLibrary",
 			operation: `camera.control.${operation}`,
+			idempotent: operation === "status",
 			parameters
 		})
 		.pipe(Effect.mapError((error) => cameraControlError(endpoint, operation, error)));
@@ -485,30 +508,31 @@ export function configureCameras(
 	endpoint: string,
 	config: CameraScheduleConfig
 ): Effect.Effect<CameraStatus, CameraControlError, RemoteControlClient> {
-	return decodeCameraScheduleConfig(config).pipe(
-		Effect.mapError((error) => cameraControlError(endpoint, "configure", error)),
-		Effect.flatMap((validConfig) =>
-			cameraRemoteCall(endpoint, "Configure", "configure", {
-				ConfigJson: JSON.stringify(validConfig)
-			})
-		),
-		Effect.flatMap(decodeCameraStatus),
-		Effect.flatMap((status) =>
+	return Effect.gen(function* () {
+		const validConfig = yield* decodeCameraScheduleConfig(config).pipe(
+			Effect.mapError((error) => cameraControlError(endpoint, "configure", error))
+		);
+		const response = yield* cameraRemoteCall(endpoint, "Configure", "configure", {
+			ConfigJson: JSON.stringify(validConfig)
+		});
+		const status = yield* decodeCameraStatus(response);
+		if (
 			config.editorBackgroundTicking === "while_streaming" &&
 			status.config.editorBackgroundTicking !== "while_streaming"
-				? Effect.fail(
-						new CameraControlError({
-							endpoint,
-							operation: "configure",
-							retrySafe: false,
-							message:
-								"This UEShedCameras plugin does not support scoped editor background ticking. Update the plugin before enabling interactive previews."
-						})
-					)
-				: Effect.succeed(status)
-		),
-		Effect.mapError((error) => cameraControlError(endpoint, "configure", error))
-	);
+		)
+			return yield* Effect.fail(
+				new CameraControlError({
+					endpoint,
+					operation: "configure",
+					retrySafe: false,
+					nextStep: "fix_input",
+					recovery: "Update UEShedCameras or configure without interactive previews.",
+					message:
+						"This UEShedCameras plugin does not support scoped editor background ticking. Update the plugin before enabling interactive previews."
+				})
+			);
+		return status;
+	}).pipe(Effect.mapError((error) => cameraControlError(endpoint, "configure", error)));
 }
 
 export * from "./map-capture-tools.js";

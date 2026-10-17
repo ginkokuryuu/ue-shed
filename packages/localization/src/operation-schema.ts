@@ -1,5 +1,10 @@
 import { Schema } from "effect";
-import { LocalizationTarget, LocalizationTargetName, CultureCode } from "./schema.js";
+import {
+	LocalizationErrorGuidanceFields as ErrorGuidanceFields,
+	LocalizationTarget,
+	LocalizationTargetName,
+	CultureCode
+} from "./schema.js";
 
 const Count = Schema.Int.check(Schema.isGreaterThanOrEqualTo(0));
 const ProcessPath = Schema.NonEmptyString.check(
@@ -112,14 +117,15 @@ export class LocalizationOperationError extends Schema.TaggedError<LocalizationO
 			"config_changed",
 			"target_not_found"
 		]),
-		message: Schema.String,
-		recovery: Schema.String,
-		retrySafe: Schema.Boolean,
+		...ErrorGuidanceFields,
 		logExcerpt: Schema.Array(Schema.String).check(Schema.isMaxLength(40)),
 		logPath: Schema.optionalKey(Schema.String),
-		exitCode: Schema.optionalKey(Schema.NullOr(Schema.Int))
+		exitCode: Schema.optionalKey(Schema.NullOr(Schema.Int)),
+		cause: Schema.optionalKey(Schema.Defect())
 	}
 ) {}
+/** Tag guard for localization operation failures; match by tag, not `instanceof`. */
+export const isLocalizationOperationError = Schema.is(LocalizationOperationError);
 export const LocalizationProgress = Schema.Struct({
 	schemaVersion: Schema.Literal(1),
 	type: Schema.Literal("progress"),

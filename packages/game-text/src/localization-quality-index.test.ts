@@ -8,18 +8,23 @@ import type { GameTextIndexRefreshResult } from "./index-contract.js";
 import { GameTextIndexRefresh } from "./index-refresh.js";
 import { makeIndexRegressionFixture } from "./index-refresh-regressions.test-support.js";
 import { checkLocalizationTarget } from "./localization-checks.js";
-import type { LocalizationQualityProgress } from "./localization-quality-index.js";
+import { GameTextIndexProgressReporter, type GameTextIndexProgress } from "./index-progress.js";
 import type { LocalizationCheckOptions } from "./localization-quality-schema.js";
 import { localizationLineFingerprint } from "./localization-review.js";
 import { SourceCheckId } from "./localization-check-ids.js";
 import {
+	BuiltInQualityFilter,
 	WorkspaceQualityFilter,
 	localizationQualityWorkspace,
 	localizationQualityWorkspaceOf,
 	type WorkspaceQualityRequest
 } from "./localization-workspace.js";
 import { TextQualityFindingId } from "./quality-query.js";
-import { GameTextRuleDocument, evaluateGameTextSourceQuality } from "./quality-rules-v2.js";
+import {
+	GameTextRuleDocument,
+	evaluateGameTextSourceQuality,
+	migrateGameTextRuleDocument
+} from "./game-text-rules.js";
 
 /**
  * One problem per key pattern; German carries the translation problems. `deSource` is the source
@@ -280,7 +285,7 @@ it.live(
 					);
 					// Placeholders the source terminology reports are left out from the scan's
 					// facts: building the workspace hydrates no finding.
-					const quality = yield* result.localizationQuality!(options, document);
+					const quality = yield* result.localizationQuality(document, options);
 					let hydrated = 0;
 					const indexed = localizationQualityWorkspaceOf(source, {
 						...quality,
@@ -294,7 +299,7 @@ it.live(
 					});
 					expect(hydrated).toBe(0);
 					const all = legacy.search({ target: join.target, filter: "all" });
-					for (const filter of WorkspaceQualityFilter.literals)
+					for (const filter of BuiltInQualityFilter.literals)
 						expect([filter, all.counts[filter]]).not.toEqual([filter, 0]);
 					expect(all.suggestedFixCount).toBeGreaterThan(0);
 					whitespace.push(all.counts.whitespace);
@@ -363,7 +368,7 @@ it.live(
 						);
 					}
 					for (const culture of [undefined, ...join.cultures])
-						for (const filter of WorkspaceQualityFilter.literals) {
+						for (const filter of BuiltInQualityFilter.literals) {
 							const request: WorkspaceQualityRequest = {
 								target: join.target,
 								filter,
@@ -414,10 +419,10 @@ const expectSameQuality = Effect.fn("Test.GameText.sameQuality")(function* (
 			);
 			const indexed = localizationQualityWorkspaceOf(
 				source,
-				yield* result.localizationQuality!(options, rules)
+				yield* result.localizationQuality(rules, options)
 			);
 			for (const culture of [undefined, ...join.cultures])
-				for (const filter of WorkspaceQualityFilter.literals) {
+				for (const filter of BuiltInQualityFilter.literals) {
 					const request: WorkspaceQualityRequest = {
 						target: join.target,
 						filter,
@@ -594,14 +599,16 @@ it.live("lines whose IDs compare equal keep the in-memory report's order", () =>
 			expect(total({ review })).toBe(total({}) - 2);
 			yield* expectSameQuality(result, [{}, { review }]);
 			// Lines checked as one block count once each.
-			let last: LocalizationQualityProgress | undefined;
-			const quality = yield* result.localizationQuality!({
-				review,
-				onProgress: (step) => (last = step)
-			});
+			let last: GameTextIndexProgress | undefined;
+			const quality = yield* result
+				.localizationQuality(undefined, { review })
+				.pipe(
+					Effect.provideService(GameTextIndexProgressReporter, (step) => (last = step))
+				);
 			expect(last).toEqual({
-				checkedLines: join.lines.length,
-				totalLines: join.lines.length,
+				phase: "localization_quality",
+				completed: join.lines.length,
+				total: join.lines.length,
 				findings: quality.findings.length
 			});
 		}).pipe(Effect.provide(fixture.layer()));
@@ -630,7 +637,7 @@ it.live("a scan across many pages equals the in-memory checks", () =>
 			);
 			const indexed = localizationQualityWorkspaceOf(
 				undefined,
-				yield* result.localizationQuality!()
+				yield* result.localizationQuality()
 			);
 			for (const culture of [undefined, ...join.cultures]) {
 				const request = {
@@ -645,26 +652,33 @@ it.live("a scan across many pages equals the in-memory checks", () =>
 			}
 
 			// Progress: once before the scan, then per page, ending at every line and finding.
-			const progress: LocalizationQualityProgress[] = [];
-			const reported = yield* result.localizationQuality!({
-				onProgress: (step) => progress.push(step)
-			});
+			const progress: GameTextIndexProgress[] = [];
+			const reported = yield* result
+				.localizationQuality()
+				.pipe(
+					Effect.provideService(GameTextIndexProgressReporter, (step) =>
+						progress.push(step)
+					)
+				);
 			const totalLines = join.lines.length;
-			expect(progress[0]).toEqual({ checkedLines: 0, totalLines, findings: 0 });
+			const phase = "localization_quality";
+			expect(progress[0]).toEqual({ phase, completed: 0, total: totalLines, findings: 0 });
 			expect(progress.length).toBeGreaterThan(3);
 			for (const [index, step] of progress.entries()) {
-				expect(step.totalLines).toBe(totalLines);
+				expect(step.phase).toBe(phase);
+				expect(step.total).toBe(totalLines);
 				if (index === 0) continue;
-				expect(step.checkedLines).toBeGreaterThan(progress[index - 1]!.checkedLines);
-				expect(step.findings).toBeGreaterThanOrEqual(progress[index - 1]!.findings);
+				expect(step.completed).toBeGreaterThan(progress[index - 1]!.completed);
+				expect(step.findings!).toBeGreaterThanOrEqual(progress[index - 1]!.findings!);
 			}
 			expect(progress.at(-1)).toEqual({
-				checkedLines: totalLines,
-				totalLines,
+				phase,
+				completed: totalLines,
+				total: totalLines,
 				findings: reported.findings.length
 			});
 			// The callback changes nothing: the same findings, order and IDs.
-			const plain = yield* result.localizationQuality!();
+			const plain = yield* result.localizationQuality();
 			expect(reported.findings.length).toBe(plain.findings.length);
 			const everyPosition = Array.from(
 				{ length: plain.findings.length },
@@ -675,6 +689,201 @@ it.live("a scan across many pages equals the in-memory checks", () =>
 			);
 			expect(reported.findings.limits(undefined)).toEqual(plain.findings.limits(undefined));
 			expect(reported.metadata.rules).toEqual(plain.metadata.rules);
+		}).pipe(Effect.provide(fixture.layer()));
+	}).pipe(Effect.scoped)
+);
+
+it.live("the indexed scan stores each finding's severity as the rule file rates it", () =>
+	Effect.gen(function* () {
+		const fixture = yield* makeIndexRegressionFixture();
+		yield* Effect.promise(() => writeLocalization(fixture.projectRoot, keys));
+		fixture.update(gathered.map(({ key, source }, index) => occurrence(key, source, index)));
+		const migrated = migrateGameTextRuleDocument(document);
+		const rated = Schema.decodeUnknownSync(GameTextRuleDocument)({
+			...migrated,
+			localizationRules: (migrated.localizationRules ?? []).map((rule) =>
+				rule.id === "translation.limit" ? { ...rule, severity: "blocking" } : rule
+			),
+			checks: {
+				...migrated.checks,
+				length_outlier: { severity: "blocking" },
+				outdated_translation: { severity: "low" },
+				// Scoped out of German: missing tags leave added tags to their own check.
+				rich_text_tags: { ...migrated.checks?.rich_text_tags, scope: { cultures: ["fr"] } }
+			}
+		});
+		yield* Effect.gen(function* () {
+			const result = yield* (yield* GameTextIndexRefresh).refresh(fixture.request);
+			const join = result.localizationJoin;
+			const legacy = localizationQualityWorkspace(
+				undefined,
+				checkLocalizationTarget(result.corpus, join, result.evidence, {}, rated),
+				join
+			);
+			const quality = yield* result.localizationQuality(rated);
+			const indexed = localizationQualityWorkspaceOf(undefined, quality);
+			const request = { target: join.target, filter: "all" as const };
+			expect(indexed.export(request)).toEqual(legacy.export(request));
+			const page = indexed.search(request);
+			expect(page).toEqual(legacy.search(request));
+			const severities = (filter: WorkspaceQualityFilter) =>
+				new Set(
+					indexed
+						.search({ ...request, filter })
+						.findings.map((finding) => finding.severity)
+				);
+			expect(severities("length_outlier")).toEqual(new Set(["blocking"]));
+			expect(severities("outdated_translation")).toEqual(new Set(["low"]));
+			expect(severities("character_budget")).toContain("blocking");
+			expect(page.counts.rich_text_tags).toBe(0);
+			expect(page.counts.rich_text_tags_added).toBeGreaterThan(0);
+			// Groups and positions agree on the stored severity.
+			for (const group of quality.findings.groups ?? [])
+				for (const position of group.positions)
+					expect(quality.findings.severity(position)).toBe(group.severity);
+			// Only the two re-rated kinds are blocking now; outdated translations are low.
+			expect(page.severityCounts.blocking).toBe(
+				page.counts.length_outlier + page.counts.character_budget
+			);
+		}).pipe(Effect.provide(fixture.layer()));
+	}).pipe(Effect.scoped)
+);
+
+it.live("custom checks scan as the in-memory checks do, past the old filter and rule bits", () =>
+	Effect.gen(function* () {
+		const fixture = yield* makeIndexRegressionFixture();
+		yield* Effect.promise(() => writeLocalization(fixture.projectRoot, keys));
+		fixture.update(gathered.map(({ key, source }, index) => occurrence(key, source, index)));
+		const migrated = migrateGameTextRuleDocument(document);
+		// More custom filters than six filter bits held, each with its own rule.
+		const lengths = Array.from({ length: 80 }, (_, index) => ({
+			id: `length.${index}`,
+			label: `Length ${index}`,
+			kind: "length",
+			subject: index % 2 ? "translation" : "source",
+			measure: "characters",
+			maximum: 4 + (index % 12),
+			severity: index % 3 ? "low" : "blocking",
+			recovery: "Shorten it.",
+			...(index % 5 === 0 ? { scope: { roles: ["menu"] } } : undefined)
+		}));
+		const custom = Schema.decodeUnknownSync(GameTextRuleDocument)({
+			...migrated,
+			customChecks: [
+				...lengths,
+				{
+					id: "no-hallo",
+					label: "No Hallo",
+					kind: "forbidden_term",
+					subject: "translation",
+					terms: ["Hallo"],
+					caseSensitive: false,
+					recovery: "Use the glossary."
+				},
+				{
+					id: "braces",
+					label: "Braces",
+					kind: "pattern",
+					subject: "source",
+					pattern: "\\{[A-Za-z]+\\}",
+					recovery: "Check the argument."
+				}
+			]
+		});
+		yield* Effect.gen(function* () {
+			const result = yield* (yield* GameTextIndexRefresh).refresh(fixture.request);
+			const join = result.localizationJoin;
+			const report = checkLocalizationTarget(
+				result.corpus,
+				join,
+				result.evidence,
+				{},
+				custom
+			);
+			const legacy = localizationQualityWorkspace(undefined, report, join);
+			const quality = yield* result.localizationQuality(custom);
+			const indexed = localizationQualityWorkspaceOf(undefined, quality);
+			expect(quality.metadata.rules).toEqual(report.rules.map((rule) => rule.ruleId));
+			for (const culture of [undefined, ...join.cultures]) {
+				const request = {
+					target: join.target,
+					filter: "all" as const,
+					...(culture ? { culture } : undefined)
+				};
+				const page = indexed.search(request);
+				expect(page).toEqual(legacy.search(request));
+				expect(indexed.export(request)).toEqual(legacy.export(request));
+				expect(page.customFilters).toHaveLength(82);
+				for (const filter of [
+					"custom.length.79",
+					"custom.no-hallo",
+					"custom.braces"
+				] as const) {
+					expect(indexed.search({ ...request, filter })).toEqual(
+						legacy.search({ ...request, filter })
+					);
+				}
+			}
+			const all = indexed.search({ target: join.target, filter: "all" });
+			expect(all.counts["custom.no-hallo"]).toBeGreaterThan(0);
+			expect(all.counts["custom.braces"]).toBeGreaterThan(0);
+			expect(all.counts["custom.length.79"]).toBeGreaterThan(0);
+		}).pipe(Effect.provide(fixture.layer()));
+	}).pipe(Effect.scoped)
+);
+
+it.live("custom regex checks preserve whitespace and zero-width truth in indexed scans", () =>
+	Effect.gen(function* () {
+		const fixture = yield* makeIndexRegressionFixture();
+		const entries = [
+			{ key: "Space", source: "Whitespace translation", de: "  " },
+			{ key: "Empty", source: "Empty translation", de: "" },
+			{ key: "Todo", source: "TODO", de: "TODO" }
+		];
+		yield* Effect.promise(() => writeLocalization(fixture.projectRoot, entries));
+		fixture.update(entries.map(({ key, source }, index) => occurrence(key, source, index)));
+		const checks = Schema.decodeUnknownSync(GameTextRuleDocument)({
+			schemaVersion: 3,
+			roles: [],
+			rules: [],
+			customChecks: ["source", "translation"].flatMap((subject) =>
+				[
+					{ id: `${subject}-space`, pattern: "^\\s*$" },
+					{ id: `${subject}-lookahead`, pattern: "(?=TODO)" },
+					{ id: `${subject}-no-match`, pattern: "(?=TODO)", report: "no_match" }
+				].map((check) => ({
+					...check,
+					subject,
+					kind: "pattern",
+					label: check.id,
+					recovery: "Review text."
+				}))
+			)
+		});
+		yield* Effect.gen(function* () {
+			const result = yield* (yield* GameTextIndexRefresh).refresh(fixture.request);
+			const join = result.localizationJoin;
+			const report = checkLocalizationTarget(
+				result.corpus,
+				join,
+				result.evidence,
+				{},
+				checks
+			);
+			const legacy = localizationQualityWorkspace(undefined, report, join);
+			const indexed = localizationQualityWorkspaceOf(
+				undefined,
+				yield* result.localizationQuality(checks)
+			);
+			const request = { target: join.target, filter: "all" as const };
+			expect(indexed.search(request)).toEqual(legacy.search(request));
+			expect(indexed.export(request)).toEqual(legacy.export(request));
+			const counts = indexed.search(request).counts;
+			for (const subject of ["source", "translation"] as const) {
+				expect(counts[`custom.${subject}-space`]).toBe(subject === "translation" ? 2 : 0);
+				expect(counts[`custom.${subject}-lookahead`]).toBe(1);
+				expect(counts[`custom.${subject}-no-match`]).toBe(2);
+			}
 		}).pipe(Effect.provide(fixture.layer()));
 	}).pipe(Effect.scoped)
 );
@@ -693,13 +902,13 @@ it.live("the indexed scan yields between pages and stops when interrupted", () =
 					step: () => undefined
 				})
 			);
-			const quality = yield* result.localizationQuality!();
+			const quality = yield* result.localizationQuality();
 			done = true;
 			yield* Fiber.join(other);
 			expect(quality.findings.length).toBeGreaterThan(0);
 			// Another fiber ran while the scan was in progress.
 			expect(turns).toBeGreaterThan(1);
-			const scan = yield* Effect.forkChild(result.localizationQuality!());
+			const scan = yield* Effect.forkChild(result.localizationQuality());
 			yield* Fiber.interrupt(scan);
 			const exit = yield* Fiber.await(scan);
 			expect(Exit.isFailure(exit) && Cause.hasInterruptsOnly(exit.cause)).toBe(true);
@@ -727,7 +936,7 @@ it.live("proposals past the first 100 count the rest without reading their lines
 			);
 			const indexed = localizationQualityWorkspaceOf(
 				undefined,
-				yield* result.localizationQuality!()
+				yield* result.localizationQuality()
 			);
 			for (const request of [
 				{ target: join.target, filter: "all" as const },

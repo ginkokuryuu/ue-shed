@@ -1,13 +1,13 @@
 import * as stylex from "@stylexjs/stylex";
+import { textReviewSignalLabel } from "@ue-shed/game-text/labels";
+import { manifestPathOrigin } from "@ue-shed/game-text/rules";
 import {
-	manifestPathOrigin,
-	textReviewSignalLabel,
 	type LocalizationLineId,
 	type LocalizationLinePreview,
 	type TextCorpusSearchPage,
 	type TextUnitId,
 	type TextUnitSearchResult
-} from "@ue-shed/game-text/browser";
+} from "@ue-shed/game-text/schema";
 import { tokens } from "@ue-shed/ui-theme/tokens.stylex.js";
 import { For, Show } from "solid-js";
 import { CultureStrip } from "./game-text-culture-strip.js";

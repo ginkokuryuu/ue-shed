@@ -330,7 +330,8 @@ it.effect("translates a typed scan failure into the failed result variant", () =
 										code: "scan_failed",
 										message: "boom",
 										recovery: "retry",
-										retrySafe: false
+										retrySafe: false,
+										nextStep: "escalate"
 									})
 								)
 						}),
@@ -371,7 +372,9 @@ it.effect("reports live preview unavailable when Remote Control fails", () =>
 									functionName: "GetCapabilityManifest",
 									message: "Remote Control unreachable",
 									operation: "asset_audits.live_manifest",
-									retrySafe: true
+									retrySafe: true,
+									recovery: "Test double: retry the Remote Control call.",
+									nextStep: "retry"
 								})
 							)
 						)

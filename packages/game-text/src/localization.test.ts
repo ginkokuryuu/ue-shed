@@ -614,7 +614,9 @@ describe("localization identity join and precedence", () => {
 					error: new LocalizationError({
 						code: "file_unreadable",
 						message: "Evidence is unreadable.",
-						recovery: "Repair file access."
+						recovery: "Repair file access.",
+						retrySafe: true,
+						nextStep: "fix_input"
 					})
 				}
 			}))

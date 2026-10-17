@@ -3,7 +3,8 @@ import { Deferred, Effect, Fiber, Layer, Metric, Ref } from "effect";
 import { writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { expect } from "vitest";
-import { GameTextIndexSteps, STARTER_GAME_TEXT_RULES } from "@ue-shed/game-text";
+import { GameTextIndexSteps } from "@ue-shed/game-text/index";
+import { STARTER_GAME_TEXT_RULES } from "@ue-shed/game-text/rules";
 import { makeIndexRegressionFixture } from "../../../../../packages/game-text/dist/index-refresh-regressions.test-support.js";
 import { WorkbenchGameText, WorkbenchGameTextLive } from "./game-text.js";
 import { makeWorkbenchProjectTestLayer } from "./project-workspace.js";
@@ -74,14 +75,23 @@ const makeHost = Effect.fn("Test.GameText.productionHost")(function* (
 						// The second model's source rules wait for the test before evaluating.
 						...(call === 2 && mode === "source" && sourceQuality
 							? {
-									sourceQuality: (...args: Parameters<typeof sourceQuality>) =>
-										Deferred.succeed(evaluating, undefined).pipe(
-											Effect.andThen(Deferred.await(allowEvaluation)),
-											Effect.onInterrupt(() =>
-												Deferred.succeed(evaluationInterrupted, undefined)
-											),
-											Effect.andThen(sourceQuality(...args))
-										)
+									sourceQuality: (...args: Parameters<typeof sourceQuality>) => {
+										const evaluate = sourceQuality(...args);
+										return Effect.gen(function* () {
+											yield* Effect.gen(function* () {
+												yield* Deferred.succeed(evaluating, undefined);
+												yield* Deferred.await(allowEvaluation);
+											}).pipe(
+												Effect.onInterrupt(() =>
+													Deferred.succeed(
+														evaluationInterrupted,
+														undefined
+													)
+												)
+											);
+											return yield* evaluate;
+										});
+									}
 								}
 							: undefined),
 						search: Effect.fn("Test.GameText.productionSearch")(function* (request) {

@@ -11,7 +11,8 @@ import {
 	localizationOperationError,
 	type LocalizationError
 } from "@ue-shed/localization";
-import { localizationKeyChangesAcross, type LocalizationJoin } from "@ue-shed/game-text";
+import { localizationKeyChangesAcross } from "@ue-shed/game-text/corpus";
+import { type LocalizationJoin } from "@ue-shed/game-text/schema";
 import { LocalizationChangeSet } from "@ue-shed/localization";
 import { CliRuntime, printJson } from "../cli-runtime.js";
 import {
@@ -109,7 +110,9 @@ export const runLocalizationOperation = Effect.fn("Cli.workflow.localization_run
 									...localizationOperationError("io_failed"),
 									message: cause.message,
 									recovery:
-										"Choose a listed target and a valid localization operation."
+										"Choose a listed target and a valid localization operation.",
+									retrySafe: true,
+									nextStep: "fix_input"
 								})
 						)
 					);
@@ -137,7 +140,9 @@ export const runLocalizationOperation = Effect.fn("Cli.workflow.localization_run
 									...localizationOperationError("io_failed"),
 									message: cause.message,
 									recovery:
-										"Choose a listed target and a valid localization operation."
+										"Choose a listed target and a valid localization operation.",
+									retrySafe: true,
+									nextStep: "fix_input"
 								})
 						)
 					);
@@ -161,7 +166,9 @@ export const runLocalizationOperation = Effect.fn("Cli.workflow.localization_run
 											new LocalizationOperationError({
 												...localizationOperationError("io_failed"),
 												message: cause.message,
-												recovery: cause.recovery
+												recovery: cause.recovery,
+												// No Unreal process has started yet.
+												retrySafe: true
 											})
 									)
 								)).localizationJoin;

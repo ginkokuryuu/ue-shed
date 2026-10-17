@@ -1,8 +1,15 @@
 import {
+	AuthoringIdGeneratorLive,
 	authoringSessionLivePortLayer,
 	authoringSessionServiceLayer,
 	makeAuthoringSessionService,
 	AuthoringSessionLiveError,
+	type AuthoringSessionStorageError,
+	type AuthoringSessionTransitionError,
+	type DraftIntentError,
+	type InvalidSessionIdError,
+	type SessionCorruptError,
+	type SessionNotFoundError,
 	fingerprintTable,
 	reviewAuthoringSession,
 	workingTable,
@@ -33,7 +40,19 @@ import {
 	type UnrealCapabilityError,
 	type UnrealConnectionError
 } from "@ue-shed/unreal-connection";
-import { Cache, Context, Data, Duration, Effect, Exit, Layer, Option, Ref, Result } from "effect";
+import {
+	Cache,
+	Context,
+	Data,
+	Duration,
+	Effect,
+	Exit,
+	Layer,
+	Option,
+	Predicate,
+	Ref,
+	Result
+} from "effect";
 import { ShedHostConfiguration, type ConfiguredProject } from "./configuration.js";
 import { AuthoringFilePicker } from "./file-picker.js";
 import { SavedTableIndex } from "./saved-table-index.js";
@@ -91,7 +110,7 @@ export const ShedAuthoringSessionsLive = Layer.unwrap(
 						...(project.sessionStorageRoot === undefined
 							? undefined
 							: { storageRoot: project.sessionStorageRoot })
-					})
+					}).pipe(Layer.provide(AuthoringIdGeneratorLive))
 				: Layer.empty
 		)
 	)
@@ -135,21 +154,69 @@ function documentView(document: AuthoringSessionDocument): AuthoringSessionResul
 	return { status: "ready", view: sessionView(document, objectPath) };
 }
 
-function sessionFailure(cause: {
-	readonly _tag?: string;
-	readonly message: string;
-	readonly recovery?: string;
-}): AuthoringSessionFailure {
+/** Every expected session failure. A new failure type in a session pipe is a compile error. */
+type SessionFailureCause =
+	| AuthoringSessionLiveError
+	| AuthoringSessionStorageError
+	| AuthoringSessionTransitionError
+	| DraftIntentError
+	| InvalidSessionIdError
+	| SessionCorruptError
+	| SessionNotFoundError
+	| UnrealCapabilityError
+	| UnrealConnectionError;
+
+/**
+ * Public session failure codes. Internal error tags are translated here on purpose, so renaming an
+ * error class never changes what hosts receive.
+ */
+function sessionFailureCode(cause: SessionFailureCause): string {
+	switch (cause._tag) {
+		case "AuthoringSessionLiveError":
+			return "session_live_failed";
+		case "AuthoringSessionStorageError":
+			return "session_storage_failed";
+		case "AuthoringSessionTransitionError":
+			return "session_transition_refused";
+		case "DraftIntentError":
+			return "draft_intent_rejected";
+		case "InvalidSessionIdError":
+			return "invalid_session_id";
+		case "SessionCorruptError":
+			return "session_corrupt";
+		case "SessionNotFoundError":
+			return "session_not_found";
+		case "UnrealCapabilityError":
+			return "editor_capability_missing";
+		case "UnrealConnectionError":
+			return "editor_connection_failed";
+	}
+}
+
+function sessionFailure(
+	cause: SessionFailureCause | { readonly message: string }
+): AuthoringSessionFailure {
+	const tagged = "_tag" in cause ? cause : undefined;
 	return {
 		error: {
-			code: cause._tag ?? "authoring_session_failure",
+			code: tagged === undefined ? "authoring_session_failure" : sessionFailureCode(tagged),
 			message: cause.message,
-			recovery: cause.recovery ?? "Retry the operation or create a new draft session.",
-			retrySafe: cause._tag === "AuthoringSessionStorageError"
+			recovery:
+				tagged !== undefined && "recovery" in tagged
+					? tagged.recovery
+					: "Retry the operation or create a new draft session.",
+			retrySafe:
+				tagged?._tag === "AuthoringSessionStorageError" ||
+				((tagged?._tag === "AuthoringSessionLiveError" ||
+					tagged?._tag === "UnrealConnectionError") &&
+					tagged.retrySafe)
 		},
 		status: "failed"
 	};
 }
+
+/** Translate an expected session failure into the public result. */
+const toSessionFailure = (cause: SessionFailureCause) => Effect.succeed(sessionFailure(cause));
 
 function readerFailure(message: string, recovery: string, retrySafe = true): AuthoringLoadResult {
 	return {
@@ -201,7 +268,7 @@ const makeShedAuthoring = Effect.gen(function* () {
 						...(project.sessionStorageRoot === undefined
 							? undefined
 							: { storageRoot: project.sessionStorageRoot })
-					})
+					}).pipe(Effect.provide(AuthoringIdGeneratorLive))
 				)
 			: Option.none();
 
@@ -211,29 +278,29 @@ const makeShedAuthoring = Effect.gen(function* () {
 	});
 
 	const invalidateConnectionOnLiveFailure = (cause: unknown) =>
-		cause instanceof AuthoringSessionLiveError
+		Predicate.isTagged(cause, "AuthoringSessionLiveError")
 			? configurationService
 					.remoteControlEndpoint()
 					.pipe(Effect.flatMap((endpoint) => Cache.invalidate(connectionCache, endpoint)))
 			: Effect.void;
 
-	const loadSavedTable = Effect.fn("ShedAuthoring.loadSavedTable")(function* (assetPath: string) {
-		return yield* assetReader.readTable(assetPath).pipe(
-			Effect.flatMap((snapshot) =>
-				Ref.update(snapshots, (current) =>
-					new Map(current).set(snapshot.table.objectPath, snapshot)
-				).pipe(Effect.as({ snapshot, status: "ready" as const }))
-			),
-			Effect.catch((error) =>
-				Effect.succeed(
-					readerFailure(
-						`Could not read the saved DataTable: ${error.message}`,
-						"Choose a DataTable .uasset from a supported Unreal project and verify the saved-asset reader is available."
-					)
+	const loadSavedTable = Effect.fn("ShedAuthoring.loadSavedTable")(
+		function* (assetPath: string) {
+			const snapshot = yield* assetReader.readTable(assetPath);
+			yield* Ref.update(snapshots, (current) =>
+				new Map(current).set(snapshot.table.objectPath, snapshot)
+			);
+			return { snapshot, status: "ready" as const };
+		},
+		Effect.catch((error) =>
+			Effect.succeed(
+				readerFailure(
+					`Could not read the saved DataTable: ${error.message}`,
+					"Choose a DataTable .uasset from a supported Unreal project and verify the saved-asset reader is available."
 				)
 			)
-		);
-	});
+		)
+	);
 
 	const loadLiveTable = Effect.fn("ShedAuthoring.loadLiveTable")(function* (objectPath: string) {
 		const connectionResult = yield* getConnectionResult();
@@ -381,8 +448,11 @@ const makeShedAuthoring = Effect.gen(function* () {
 					(error) =>
 						new AuthoringClientError({
 							cause: error,
+							message: error.message,
 							operation: "authoring.chooseTable",
-							recovery: error.recovery
+							recovery: error.recovery,
+							retrySafe: error.retrySafe,
+							nextStep: error.nextStep
 						})
 				)
 			);
@@ -462,7 +532,7 @@ const makeShedAuthoring = Effect.gen(function* () {
 			}
 			const document = yield* service.create([snapshot]);
 			return { status: "ready" as const, view: sessionView(document, objectPath) };
-		}).pipe(Effect.catch((cause) => Effect.succeed(sessionFailure(cause))));
+		}).pipe(Effect.catch(toSessionFailure));
 	});
 
 	const listSessions = Effect.fn("ShedAuthoring.listSessions")(function* () {
@@ -477,7 +547,7 @@ const makeShedAuthoring = Effect.gen(function* () {
 				),
 				status: "ready" as const
 			})),
-			Effect.catch((cause) => Effect.succeed(sessionFailure(cause)))
+			Effect.catch(toSessionFailure)
 		);
 	});
 
@@ -493,7 +563,7 @@ const makeShedAuthoring = Effect.gen(function* () {
 					: Effect.succeed(document)
 			),
 			Effect.map(documentView),
-			Effect.catch((cause) => Effect.succeed(sessionFailure(cause)))
+			Effect.catch(toSessionFailure)
 		);
 	});
 
@@ -503,7 +573,7 @@ const makeShedAuthoring = Effect.gen(function* () {
 		}
 		return yield* sessions.value.discard(sessionId).pipe(
 			Effect.flatMap(() => listSessions()),
-			Effect.catch((cause) => Effect.succeed(sessionFailure(cause)))
+			Effect.catch(toSessionFailure)
 		);
 	});
 
@@ -563,7 +633,7 @@ const makeShedAuthoring = Effect.gen(function* () {
 				status: "ready" as const,
 				view: sessionView(document, intent.tableObjectPath)
 			})),
-			Effect.catch((cause) => Effect.succeed(sessionFailure(cause)))
+			Effect.catch(toSessionFailure)
 		);
 	});
 
@@ -573,7 +643,7 @@ const makeShedAuthoring = Effect.gen(function* () {
 		}
 		return yield* sessions.value.review(sessionId).pipe(
 			Effect.map((review) => ({ review, status: "ready" as const })),
-			Effect.catch((cause) => Effect.succeed(sessionFailure(cause)))
+			Effect.catch(toSessionFailure)
 		);
 	});
 
@@ -581,20 +651,18 @@ const makeShedAuthoring = Effect.gen(function* () {
 		if (Option.isNone(sessions)) {
 			return sessionFailure({ message: "UE_SHED_PROJECT_ROOT is not configured" });
 		}
-		return yield* sessions.value.undo(sessionId).pipe(
-			Effect.map(documentView),
-			Effect.catch((cause) => Effect.succeed(sessionFailure(cause)))
-		);
+		return yield* sessions.value
+			.undo(sessionId)
+			.pipe(Effect.map(documentView), Effect.catch(toSessionFailure));
 	});
 
 	const redoSession = Effect.fn("ShedAuthoring.redoSession")(function* (sessionId: string) {
 		if (Option.isNone(sessions)) {
 			return sessionFailure({ message: "UE_SHED_PROJECT_ROOT is not configured" });
 		}
-		return yield* sessions.value.redo(sessionId).pipe(
-			Effect.map(documentView),
-			Effect.catch((cause) => Effect.succeed(sessionFailure(cause)))
-		);
+		return yield* sessions.value
+			.redo(sessionId)
+			.pipe(Effect.map(documentView), Effect.catch(toSessionFailure));
 	});
 
 	const requireLiveConnection = (): Effect.Effect<
@@ -625,7 +693,7 @@ const makeShedAuthoring = Effect.gen(function* () {
 					Effect.map(documentView)
 				);
 		}).pipe(
-			Effect.catch((cause) =>
+			Effect.catch((cause: SessionFailureCause) =>
 				invalidateConnectionOnLiveFailure(cause).pipe(Effect.as(sessionFailure(cause)))
 			)
 		);
@@ -647,7 +715,7 @@ const makeShedAuthoring = Effect.gen(function* () {
 					Effect.map(documentView)
 				);
 		}).pipe(
-			Effect.catch((cause) =>
+			Effect.catch((cause: SessionFailureCause) =>
 				invalidateConnectionOnLiveFailure(cause).pipe(Effect.as(sessionFailure(cause)))
 			)
 		);
@@ -667,7 +735,7 @@ const makeShedAuthoring = Effect.gen(function* () {
 					Effect.map(documentView)
 				);
 		}).pipe(
-			Effect.catch((cause) =>
+			Effect.catch((cause: SessionFailureCause) =>
 				invalidateConnectionOnLiveFailure(cause).pipe(Effect.as(sessionFailure(cause)))
 			)
 		);

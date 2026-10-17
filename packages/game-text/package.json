@@ -31,6 +31,34 @@
 		"./browser": {
 			"types": "./dist/browser.d.ts",
 			"import": "./dist/browser.js"
+		},
+		"./schema": {
+			"types": "./dist/entry-schema.d.ts",
+			"import": "./dist/entry-schema.js"
+		},
+		"./rules": {
+			"types": "./dist/entry-rules.d.ts",
+			"import": "./dist/entry-rules.js"
+		},
+		"./checks": {
+			"types": "./dist/entry-checks.d.ts",
+			"import": "./dist/entry-checks.js"
+		},
+		"./labels": {
+			"types": "./dist/entry-labels.d.ts",
+			"import": "./dist/entry-labels.js"
+		},
+		"./corpus": {
+			"types": "./dist/entry-corpus.d.ts",
+			"import": "./dist/entry-corpus.js"
+		},
+		"./index": {
+			"types": "./dist/entry-index.d.ts",
+			"import": "./dist/entry-index.js"
+		},
+		"./workspace": {
+			"types": "./dist/entry-workspace.d.ts",
+			"import": "./dist/entry-workspace.js"
 		}
 	},
 	"publishConfig": {
@@ -43,7 +71,9 @@
 	},
 	"dependencies": {
 		"@ue-shed/localization": "workspace:0.16.2",
+		"@ue-shed/protocol": "workspace:0.16.2",
 		"@ue-shed/unreal-assets": "workspace:0.16.2",
+		"@ue-shed/unreal-connection": "workspace:0.16.2",
 		"linebreak": "1.1.0"
 	},
 	"devDependencies": {

@@ -5,7 +5,7 @@ import {
 	type EnhancedInputRunResult as EnhancedInputRunResultValue
 } from "@ue-shed/enhanced-input";
 import { TEXTURE_CLASS } from "@ue-shed/asset-audits";
-import { STRING_TABLE_CLASS, TEXT_PROPERTY_NAME } from "@ue-shed/game-text";
+import { STRING_TABLE_CLASS, TEXT_PROPERTY_NAME } from "@ue-shed/game-text/index";
 import { NIAGARA_SYSTEM_CLASS } from "@ue-shed/niagara";
 import type { SavedWorldMap as SavedWorldMapValue } from "@ue-shed/protocol";
 import {
@@ -208,7 +208,7 @@ export const WorkbenchProjectLive = Layer.effect(
 				).pipe(
 					Stream.runCollect,
 					Effect.mapError((error) =>
-						error instanceof WorkbenchProjectUnavailable ||
+						error._tag === "WorkbenchProjectUnavailable" ||
 						error._tag === "ProjectIndexStaleGeneration"
 							? error
 							: new WorkbenchProjectUnavailable({
@@ -426,7 +426,10 @@ export const WorkbenchProjectLive = Layer.effect(
 
 		const recoverInventory = Effect.fn("Workbench.WorkbenchProject.recoverInventory")(
 			function* (projectRoot: string, summary: ProjectIndexSummary) {
-				return yield* inventoryFromSummary(projectRoot, summary).pipe(
+				return yield* inventoryFromSummary(projectRoot, summary);
+			},
+			(effect, projectRoot) =>
+				effect.pipe(
 					Effect.catchTag("ProjectIndexStaleGeneration", () =>
 						getProjectIndexStatus({ projectRoot }).pipe(
 							Effect.provideService(ProjectIndex, projectIndexImplementation),
@@ -449,15 +452,14 @@ export const WorkbenchProjectLive = Layer.effect(
 						)
 					),
 					Effect.mapError((error) =>
-						error instanceof WorkbenchProjectUnavailable
+						error._tag === "WorkbenchProjectUnavailable"
 							? error
 							: new WorkbenchProjectUnavailable({
 									message: error.message,
 									recovery: error.recovery
 								})
 					)
-				);
-			}
+				)
 		);
 
 		const loadSummaryUncached = Effect.fn("Workbench.WorkbenchProject.loadSummaryUncached")(
@@ -753,43 +755,37 @@ export const WorkbenchProjectLive = Layer.effect(
 				}
 				return yield* read(summary.project.projectRoot, summary.indexSummary).pipe(
 					Effect.catchTag("ProjectIndexStaleGeneration", () =>
-						getProjectIndexStatus({ projectRoot: summary.project.projectRoot }).pipe(
-							Effect.provideService(ProjectIndex, projectIndexImplementation),
-							Effect.mapError(
-								(error) =>
-									new WorkbenchProjectUnavailable({
-										message: error.message,
-										recovery: error.recovery
-									})
-							),
-							Effect.flatMap((status) =>
-								status.status === "ready"
-									? recoverInventory(summary.project.projectRoot, status.summary)
-									: refreshSummary(summary.project.projectRoot).pipe(
-											Effect.flatMap((latest) =>
-												recoverInventory(
-													summary.project.projectRoot,
-													latest
-												)
-											)
-										)
-							),
-							Effect.flatMap((latest) => {
-								if (latest.indexSummary === undefined) {
-									return Effect.fail(
+						Effect.gen(function* () {
+							const projectRoot = summary.project.projectRoot;
+							const status = yield* getProjectIndexStatus({ projectRoot }).pipe(
+								Effect.provideService(ProjectIndex, projectIndexImplementation),
+								Effect.mapError(
+									(error) =>
 										new WorkbenchProjectUnavailable({
-											message: "Project Index summary is unavailable.",
-											recovery:
-												"Refresh the Project Index, then retry the feature."
+											message: error.message,
+											recovery: error.recovery
 										})
-									);
-								}
-								return read(latest.project.projectRoot, latest.indexSummary);
-							})
-						)
+								)
+							);
+							const indexSummary =
+								status.status === "ready"
+									? status.summary
+									: yield* refreshSummary(projectRoot);
+							const latest = yield* recoverInventory(projectRoot, indexSummary);
+							if (latest.indexSummary === undefined) {
+								return yield* Effect.fail(
+									new WorkbenchProjectUnavailable({
+										message: "Project Index summary is unavailable.",
+										recovery:
+											"Refresh the Project Index, then retry the feature."
+									})
+								);
+							}
+							return yield* read(latest.project.projectRoot, latest.indexSummary);
+						})
 					),
 					Effect.mapError((error) =>
-						error instanceof WorkbenchProjectUnavailable
+						error._tag === "WorkbenchProjectUnavailable"
 							? error
 							: new WorkbenchProjectUnavailable({
 									message: error.message,
@@ -893,30 +889,38 @@ export type WorkbenchProjectTestApi = Omit<
 	Partial<
 		Pick<
 			WorkbenchProjectApi,
-			| "candidates"
-			| "openRecent"
-			| "progress"
-			| "recent"
-			| "selectedProject"
-			| "refresh"
-			| "count"
-			| "sample"
+			"candidates" | "progress" | "selectedProject" | "refresh" | "count" | "sample"
 		>
-	>;
+	> &
+	(
+		| { readonly recent?: undefined; readonly openRecent?: WorkbenchProjectApi["openRecent"] }
+		| Pick<WorkbenchProjectApi, "recent" | "openRecent">
+	);
 
+/**
+ * A project workspace over the test's `current` state, with no Project Index unless the test
+ * supplies one: counts and candidates fail as an unindexed project does. A supplied recent list
+ * requires an explicit openRecent transition; current alone cannot open another root.
+ */
 export function makeWorkbenchProjectTestLayer(
 	service: WorkbenchProjectTestApi
 ): Layer.Layer<WorkbenchProject> {
+	const unindexed = () =>
+		Effect.fail(
+			new WorkbenchProjectUnavailable({
+				message: "This project has no Project Index.",
+				recovery: "Refresh the project to build its Project Index."
+			})
+		);
+	const recent = service.recent ?? (() => Effect.succeed([]));
 	return Layer.succeed(
 		WorkbenchProject,
 		WorkbenchProject.of({
 			...service,
 			sample: service.sample ?? (() => Effect.succeed({ status: "not_configured" })),
 			refresh: service.refresh ?? service.current,
-			count: service.count ?? (() => Effect.die("project counts are not used by this test")),
-			candidates:
-				service.candidates ??
-				(() => Effect.die("project candidates are not used by this test")),
+			count: service.count ?? unindexed,
+			candidates: service.candidates ?? unindexed,
 			progress:
 				service.progress ??
 				(() =>
@@ -928,11 +932,32 @@ export function makeWorkbenchProjectTestLayer(
 					})),
 			openRecent:
 				service.openRecent ??
-				(() => Effect.die("recent project selection is not used by this test")),
-			recent: service.recent ?? (() => Effect.succeed([])),
+				(() =>
+					Effect.succeed({
+						status: "failed" as const,
+						error: mapProjectFailure(
+							"Recent project opening is not configured.",
+							"Provide openRecent when the test supplies recent projects."
+						)
+					})),
+			recent,
 			selectedProject:
 				service.selectedProject ??
-				(() => Effect.die("selected project identity is not used by this test"))
+				(() =>
+					Effect.gen(function* () {
+						const state = yield* service.current();
+						if (state.status === "ready")
+							return {
+								projectName: state.project.projectName,
+								projectRoot: state.project.projectRoot
+							};
+						return yield* Effect.fail(
+							new WorkbenchProjectUnavailable({
+								message: "No Workbench project is selected.",
+								recovery: "Choose a project from the Workbench header, then retry."
+							})
+						);
+					}))
 		})
 	);
 }

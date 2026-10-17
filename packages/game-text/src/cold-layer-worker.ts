@@ -2,8 +2,7 @@ import { parentPort } from "node:worker_threads";
 import { Schema } from "effect";
 import { ColdLayerTask, coldLayerReply } from "./cold-layer-pool.js";
 import { convertColdLayer } from "./shared-index.js";
-import { SnapshotFormatError } from "./snapshot-format.js";
-import { SnapshotStoreError } from "./snapshot-store.js";
+import { snapshotStoreFailure } from "./snapshot-store.js";
 
 if (!parentPort) throw new Error("Cold layer conversion requires its owning worker pool.");
 parentPort.on("message", async (input: typeof ColdLayerTask.Encoded) => {
@@ -11,15 +10,7 @@ parentPort.on("message", async (input: typeof ColdLayerTask.Encoded) => {
 		const task = Schema.decodeUnknownSync(ColdLayerTask)(input);
 		parentPort!.postMessage({ ok: true, ...(await convertColdLayer(task)) });
 	} catch (cause) {
-		const error =
-			cause instanceof SnapshotFormatError || cause instanceof SnapshotStoreError
-				? cause
-				: new SnapshotStoreError({
-						operation: "cold.layer",
-						code: "unavailable",
-						message: String(cause),
-						recovery: "Retry the cold layer conversion."
-					});
+		const error = snapshotStoreFailure("cold.layer", cause, "Retry the cold layer conversion.");
 		parentPort!.postMessage(Schema.encodeUnknownSync(coldLayerReply())({ ok: false, error }));
 	}
 });

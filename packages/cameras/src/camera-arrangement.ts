@@ -1,4 +1,5 @@
 import { CameraRenderPolicy } from "./camera-render-schema.js";
+import { ErrorCauseFields, ErrorGuidanceFields } from "@ue-shed/protocol";
 import { Schema } from "effect";
 import {
 	CameraActorEntry,
@@ -748,10 +749,31 @@ export class CameraArrangementError extends Schema.TaggedError<CameraArrangement
 			"storage",
 			"operation_reused"
 		]),
-		message: Schema.String,
-		recovery: Schema.String
+		...ErrorGuidanceFields,
+		...ErrorCauseFields
 	}
 ) {}
+/**
+ * Arrangement failures are rejected before any write, and committed writes are keyed by operation
+ * ID, so repeating the same request never duplicates a change.
+ */
+function arrangementNextStep(
+	code: (typeof CameraArrangementError.Type)["code"]
+): (typeof CameraArrangementError.Type)["nextStep"] {
+	switch (code) {
+		case "busy":
+		case "storage":
+			return "retry";
+		case "stale":
+		case "scope_mismatch":
+		case "camera_missing":
+			return "reconcile";
+		case "customization_at_risk":
+		case "invalid":
+		case "operation_reused":
+			return "fix_input";
+	}
+}
 export function arrangementFailure(
 	code: (typeof CameraArrangementError.Type)["code"],
 	message: string
@@ -759,8 +781,10 @@ export function arrangementFailure(
 	return new CameraArrangementError({
 		code,
 		message,
+		nextStep: arrangementNextStep(code),
 		recovery:
-			"Inspect the latest arrangement and retry with its revision and an explicit camera scope."
+			"Inspect the latest arrangement and retry with its revision and an explicit camera scope.",
+		retrySafe: true
 	});
 }
 

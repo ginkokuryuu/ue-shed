@@ -28,17 +28,19 @@ import {
 import {
 	GameTextInvestigationQuery,
 	GameTextInvestigationPresetResult,
-	WorkbenchOperationRequest,
-	WorkbenchOperationPlanResult,
-	WorkbenchOperationId,
-	WorkbenchOperationTarget,
-	WorkbenchOperationState,
-	WorkbenchOperationResult,
-	WorkbenchOperationFilesRequest,
-	WorkbenchOperationFilesResult,
-	WorkbenchOperationProgress,
 	LocalizationLinesFileResult
-} from "@ue-shed/game-text/browser";
+} from "@ue-shed/game-text/corpus";
+import {
+	GameTextOperationRequest,
+	GameTextOperationPlanResult,
+	GameTextOperationId,
+	GameTextOperationTarget,
+	GameTextOperationState,
+	GameTextOperationResult,
+	GameTextOperationFilesRequest,
+	GameTextOperationFilesResult,
+	GameTextOperationProgress
+} from "@ue-shed/game-text/schema";
 import { InvestigationFileResult, InvestigationFormat } from "@ue-shed/unreal-assets/investigation";
 import {
 	AuthoringAuthority,
@@ -115,20 +117,22 @@ import {
 	LocalizationTargetResult,
 	LocalizationFocusRequest,
 	LocalizationFocusResult,
+	TextQualityFocusRequest,
+	TextQualityFocusResult,
+	TextQualityQueryRunResult,
+	TextQualityRuleUpdateResult,
+	TextQualitySearchRequest,
+	TextQualitySearchResult
+} from "@ue-shed/game-text/corpus";
+import { GameTextRuleDocument } from "@ue-shed/game-text/rules";
+import {
 	LocalizationSelection,
 	TextCorpusFocusRequest,
 	TextCorpusFocusResult,
 	TextCorpusQueryRunResult,
 	TextCorpusSearchRequest,
-	TextCorpusSearchResult,
-	TextQualityFocusRequest,
-	TextQualityFocusResult,
-	TextQualityQueryRunResult,
-	GameTextRuleDocument,
-	TextQualityRuleUpdateResult,
-	TextQualitySearchRequest,
-	TextQualitySearchResult
-} from "@ue-shed/game-text/browser";
+	TextCorpusSearchResult
+} from "@ue-shed/game-text/schema";
 import { RuntimeHealth } from "@ue-shed/observability/health";
 import {
 	ScenarioDocument,
@@ -737,28 +741,28 @@ export const invokeContracts = {
 	}),
 	"game-text:localization:operation-state": invoke({
 		channel: "game-text:localization:operation-state",
-		args: Schema.Tuple([WorkbenchOperationTarget]),
-		result: WorkbenchOperationState
+		args: Schema.Tuple([GameTextOperationTarget]),
+		result: GameTextOperationState
 	}),
 	"game-text:localization:operation-plan": invoke({
 		channel: "game-text:localization:operation-plan",
-		args: Schema.Tuple([WorkbenchOperationRequest]),
-		result: WorkbenchOperationPlanResult
+		args: Schema.Tuple([GameTextOperationRequest]),
+		result: GameTextOperationPlanResult
 	}),
 	"game-text:localization:operation-run": invoke({
 		channel: "game-text:localization:operation-run",
-		args: Schema.Tuple([WorkbenchOperationId]),
-		result: WorkbenchOperationResult
+		args: Schema.Tuple([GameTextOperationId]),
+		result: GameTextOperationResult
 	}),
 	"game-text:localization:operation-cancel": invoke({
 		channel: "game-text:localization:operation-cancel",
-		args: Schema.Tuple([WorkbenchOperationId]),
-		result: WorkbenchOperationResult
+		args: Schema.Tuple([GameTextOperationId]),
+		result: GameTextOperationResult
 	}),
 	"game-text:localization:operation-files": invoke({
 		channel: "game-text:localization:operation-files",
-		args: Schema.Tuple([WorkbenchOperationFilesRequest]),
-		result: WorkbenchOperationFilesResult
+		args: Schema.Tuple([GameTextOperationFilesRequest]),
+		result: GameTextOperationFilesResult
 	}),
 	"game-text:localization:quality-search": invoke({
 		channel: "game-text:localization:quality-search",
@@ -1236,10 +1240,12 @@ export const mapCaptureProgressEvent = {
 
 export const gameTextOperationProgressEvent = {
 	channel: "game-text:localization:operation-progress",
-	payload: WorkbenchOperationProgress
+	payload: GameTextOperationProgress
 } as const;
 
 // SAFETY: invokeContracts is the sole source of keys, so Object.keys cannot produce another channel.
+// Verified by: apps/workbench/src/main/ipc-contracts.test.ts ("registers exactly 138 invoke
+// channels plus renderer events", "keeps contract channels in exact preload parity")
 const invokeContractKeys = Object.keys(invokeContracts) as Array<InvokeChannel>;
 export const invokeChannelNames = invokeContractKeys;
 

@@ -1,4 +1,5 @@
-import type { GameTextRuleDocument, TextQualityRuleUpdateResult } from "@ue-shed/game-text/browser";
+import type { TextQualityRuleUpdateResult } from "@ue-shed/game-text/corpus";
+import type { GameTextRuleDocument } from "@ue-shed/game-text/rules";
 import { createEffectAction } from "@ue-shed/ui";
 import { createMemo, createSignal } from "solid-js";
 import { failureText } from "./game-text-failure.js";
@@ -198,7 +199,7 @@ export function draftProblems(
 	const problems: RuleDraftProblem[] = [];
 	const rules = [
 		...document.rules,
-		...(document.schemaVersion === 2 ? (document.localizationRules ?? []) : [])
+		...(document.schemaVersion !== 1 ? (document.localizationRules ?? []) : [])
 	];
 	for (const rule of rules) {
 		const add = (field: string, message: string) =>

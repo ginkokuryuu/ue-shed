@@ -83,8 +83,12 @@ export function readScaleCorpus(root: string) {
 						kind: "contract",
 						operation: "scan",
 						code: "reader_output_invalid",
-						message: String(cause),
-						retrySafe: false
+						message: "The replayed reader output could not be decoded.",
+						cause,
+						retrySafe: false,
+						recovery:
+							"Regenerate the replayed reader output, then rerun the measurement.",
+						nextStep: "escalate"
 					})
 			)
 	});

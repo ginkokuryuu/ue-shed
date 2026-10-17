@@ -1,6 +1,8 @@
 import { Effect, Schema } from "effect";
+import { ErrorCauseFields, ErrorGuidanceFields } from "@ue-shed/protocol";
 import { recordReviewAssessment } from "@ue-shed/observability";
 import { RemoteControlClient, RemoteControlClientError } from "@ue-shed/unreal-connection";
+import { CameraRenderError } from "./camera-render.js";
 import { captureRenderedReviewView } from "./review-render.js";
 import { ReviewCaptureRequestCurrent } from "./review-schema.js";
 import {
@@ -11,21 +13,48 @@ import {
 	type ReviewCaptureResponse
 } from "./review-schema.js";
 
+const isCameraRenderError = Schema.is(CameraRenderError);
+const isRemoteControlClientError = Schema.is(RemoteControlClientError);
 const reviewLibraryPath = "/Script/UEShedCamerasEditor.Default__UEShedCameraReviewLibrary";
 
 export class ReviewCaptureConnectionError extends Schema.TaggedError<ReviewCaptureConnectionError>()(
 	"ReviewCaptureConnectionError",
-	{ endpoint: Schema.String, message: Schema.String, retrySafe: Schema.Boolean }
+	{ ...ErrorGuidanceFields, ...ErrorCauseFields, endpoint: Schema.String }
 ) {}
 
 function connectionError(
 	endpoint: string,
 	cause: RemoteControlClientError | unknown
 ): ReviewCaptureConnectionError {
+	// These already carry a classified message and truthful guidance; keep both.
+	if (isRemoteControlClientError(cause) || isCameraRenderError(cause)) {
+		return new ReviewCaptureConnectionError({
+			endpoint,
+			message: cause.message,
+			nextStep: cause.nextStep,
+			recovery: cause.recovery,
+			retrySafe: cause.retrySafe,
+			cause
+		});
+	}
+	const recovery =
+		"Update the Core and Cameras plugins together so the capture response matches this UE Shed version.";
+	if (Schema.isSchemaError(cause))
+		return new ReviewCaptureConnectionError({
+			endpoint,
+			message: `A review capture request or response at ${endpoint} does not match the review capture contract.`,
+			nextStep: "escalate",
+			recovery,
+			retrySafe: false,
+			cause
+		});
 	return new ReviewCaptureConnectionError({
 		endpoint,
-		message: cause instanceof RemoteControlClientError ? cause.message : String(cause),
-		retrySafe: cause instanceof RemoteControlClientError ? cause.retrySafe : false
+		message: `Review capture at ${endpoint} failed unexpectedly.`,
+		nextStep: "escalate",
+		recovery,
+		retrySafe: false,
+		cause
 	});
 }
 

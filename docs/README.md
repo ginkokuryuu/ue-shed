@@ -88,6 +88,7 @@ should follow [Website and illustrated guides](engineering/website.md).
 | [0008](decisions/0008-editor-world-camera-preview-stream.md)                 | Stream Map Review from the editor world         |
 | [0009](decisions/0009-localization-change-sets-and-review-state.md)          | Localization change sets and review state       |
 | [0010](decisions/0010-game-text-performance-policy.md)                       | Bounded Game Text preparation and query caching |
+| [0011](decisions/0011-game-text-actions.md)                                  | Game Text actions run in Unreal (proposed)      |
 
 ## Research
 

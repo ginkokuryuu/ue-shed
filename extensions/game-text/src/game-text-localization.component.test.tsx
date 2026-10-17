@@ -5,27 +5,29 @@ import {
 	joinLocalizationTarget,
 	localizationFocusPage,
 	textCorpusQuery,
-	makeTextOccurrenceId,
-	LocalizationJoin,
-	LocalizationSelection,
 	GameTextInvestigationPreset,
 	type GameTextInvestigationQuery,
-	type LocalizationCultureState,
 	type LocalizationEditRequest,
 	type LocalizationEditResult,
 	type LocalizationReviewRequest,
-	type TextCorpusSearchRequest,
-	type TextFilter,
 	applyLocalizationKeyChanges,
 	applyLocalizationReview,
 	localizationKeyChanges,
 	localizationLineFingerprint,
-	type LocalizationLinePreview,
 	type LocalizationFocusResult,
 	type LocalizationTranslation,
 	type LocalizationTargetResult,
 	type LocalizationFileProblem
-} from "@ue-shed/game-text/browser";
+} from "@ue-shed/game-text/corpus";
+import {
+	makeTextOccurrenceId,
+	LocalizationJoin,
+	LocalizationSelection,
+	type LocalizationCultureState,
+	type TextCorpusSearchRequest,
+	type TextFilter,
+	type LocalizationLinePreview
+} from "@ue-shed/game-text/schema";
 import {
 	corpus,
 	unit,

@@ -4,9 +4,9 @@ import { Effect } from "effect";
 import { assetReaderLayer, scanSavedProject } from "../packages/unreal-assets/dist/index.js";
 import {
 	isPackageTextCandidate,
-	textCorpusWithExcludedPackages,
-	textCorpusFromExtractionEvents
-} from "../packages/game-text/dist/index.js";
+	textCorpusWithExcludedPackages
+} from "../packages/game-text/dist/package-text-candidates.js";
+import { textCorpusFromExtractionEvents } from "../packages/game-text/dist/index.js";
 import { compareTextCandidateCorpora } from "./package-text-oracle.test-support.ts";
 import { committedPackagePaths, measureNativeText } from "./package-text-reader.test-support.ts";
 

@@ -2,7 +2,10 @@ import { Schema } from "effect";
 import { CultureCode } from "@ue-shed/localization/browser";
 import type { TextCorpus, TextUnit } from "./schema.js";
 import type { LocalizationJoin, LocalizationLine } from "./localization-schema.js";
-import type { TextQualityRuleDocumentV2 } from "./quality-rules-v2.js";
+import type { TextQualityRuleDocumentV2, TextQualityRuleDocumentV3 } from "./game-text-rules.js";
+
+/** A rule file with localization rules: version 2 or later. */
+type PolicyDocument = TextQualityRuleDocumentV2 | TextQualityRuleDocumentV3;
 import type {
 	LocalizationCheckOptions,
 	LocalizationPolicyFinding,
@@ -12,14 +15,14 @@ import { localizationShippedTranslation } from "./localization-shipped-translati
 import { matchesTextRole, termMatches } from "./quality.js";
 import { localizationLineUnits } from "./gathered-text.js";
 
-type LocalizationRule = NonNullable<TextQualityRuleDocumentV2["localizationRules"]>[number];
-type TextRole = TextQualityRuleDocumentV2["roles"][number];
+type LocalizationRule = NonNullable<PolicyDocument["localizationRules"]>[number];
+type TextRole = PolicyDocument["roles"][number];
 export type LocalizationPolicyRule = { readonly rule: LocalizationRule; readonly role: TextRole };
 
 /** Rules in evaluation order with their roles, and the diagnostics that need no lines. */
 export function localizationPolicyRules(
 	cultures: LocalizationJoin["cultures"],
-	document: TextQualityRuleDocumentV2
+	document: PolicyDocument
 ) {
 	const diagnostics: LocalizationRuleDiagnostic[] = [];
 	const rules: LocalizationPolicyRule[] = [];
@@ -85,7 +88,7 @@ export function localizationLinePolicyFindings(
 			ruleId: rule.id,
 			recovery: rule.recovery,
 			translationOrigin: shipped.origin,
-			severity: "normal" as const,
+			severity: rule.severity ?? "normal",
 			affectedOccurrences: occurrences.map(({ id, location, packageFile }) => ({
 				id,
 				location,
@@ -139,7 +142,7 @@ export function localizationLinePolicyFindings(
 export function evaluateLocalizationPolicy(
 	corpus: TextCorpus,
 	join: LocalizationJoin,
-	document: TextQualityRuleDocumentV2,
+	document: PolicyDocument,
 	options: LocalizationCheckOptions
 ) {
 	const findings: LocalizationPolicyFinding[] = [];

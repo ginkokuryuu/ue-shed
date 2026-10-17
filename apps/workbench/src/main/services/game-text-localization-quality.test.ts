@@ -3,7 +3,8 @@ import { Deferred, Effect, Fiber, Layer, Ref, Schema } from "effect";
 import { expect } from "vitest";
 import { LocalizationTarget, makeLocalizationEvidenceTestLayer } from "@ue-shed/localization";
 import { corpus, evidence, cultureCode } from "./game-text-localization.test-support.js";
-import { GameTextIndexSteps, GameTextRuleDocument } from "@ue-shed/game-text";
+import { GameTextIndexSteps } from "@ue-shed/game-text/index";
+import { GameTextRuleDocument } from "@ue-shed/game-text/rules";
 import {
 	makeGameTextLocalizationOracle as makeGameTextLocalization,
 	oracleGameTextIndexLayer,

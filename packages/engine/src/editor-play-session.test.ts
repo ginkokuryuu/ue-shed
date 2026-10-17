@@ -1,5 +1,8 @@
 import { it } from "@effect/vitest";
-import { makeRemoteControlClientTestLayer } from "@ue-shed/unreal-connection";
+import {
+	makeRemoteControlClientTestLayer,
+	RemoteControlClientError
+} from "@ue-shed/unreal-connection";
 import { Effect, Layer } from "effect";
 import { expect } from "vitest";
 import {
@@ -86,6 +89,60 @@ it.effect("reports a typed error when the capability is absent", () =>
 					producerKind: "unreal_editor",
 					schemaVersion: 1
 				})
+			)
+		)
+	)
+);
+
+const manifest = {
+	capabilities: ["editor.play-session.v1"],
+	playSessionObjectPath: "/Script/Fixture.PlaySession",
+	producerKind: "unreal_editor",
+	schemaVersion: 1
+};
+
+const lostResponse = (functionName: string) =>
+	new RemoteControlClientError({
+		endpoint: "http://editor",
+		functionName,
+		message: "The request timed out.",
+		operation: "editor.play_session",
+		recovery: "Retry.",
+		retrySafe: true,
+		nextStep: "retry"
+	});
+
+it.effect("asks for a status read before resending a command whose response was lost", () =>
+	Effect.gen(function* () {
+		const session = yield* EditorPlaySession;
+		const error = yield* session.stop("http://editor").pipe(Effect.flip);
+		expect(error).toMatchObject({
+			code: "transport_failure",
+			retrySafe: false,
+			nextStep: "reconcile"
+		});
+	}).pipe(
+		Effect.provide(
+			layer((request) =>
+				request.functionName === "GetCapabilityManifest"
+					? Effect.succeed(manifest)
+					: Effect.fail(lostResponse(request.functionName))
+			)
+		)
+	)
+);
+
+it.effect("keeps the transport's retry guidance for a lost status read", () =>
+	Effect.gen(function* () {
+		const session = yield* EditorPlaySession;
+		const error = yield* session.status("http://editor").pipe(Effect.flip);
+		expect(error).toMatchObject({ retrySafe: true, nextStep: "retry" });
+	}).pipe(
+		Effect.provide(
+			layer((request) =>
+				request.functionName === "GetCapabilityManifest"
+					? Effect.succeed(manifest)
+					: Effect.fail(lostResponse(request.functionName))
 			)
 		)
 	)

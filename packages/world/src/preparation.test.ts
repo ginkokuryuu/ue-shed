@@ -5,12 +5,14 @@ import {
 	makeWorldPreparation,
 	WorldPreparation,
 	WorldPreparationError,
-	withPreparedWorld
+	withPreparedWorld,
+	worldPreparationGuidance
 } from "./preparation.js";
 import {
 	WorldId,
 	WorldLeaseId,
 	WorldRequest,
+	worldPreparationContract,
 	type WorldRequirements,
 	type WorldSnapshot
 } from "./schema.js";
@@ -93,7 +95,9 @@ const connectionLost = new RemoteControlClientError({
 	functionName: "ExecuteWorldPreparation",
 	operation: "world",
 	retrySafe: false,
-	message: "Response lost after dispatch"
+	message: "Response lost after dispatch",
+	recovery: "Test double: retry the Remote Control call.",
+	nextStep: "escalate"
 });
 
 it.effect("reports failed restoration even when the work succeeds", () =>
@@ -257,7 +261,9 @@ it.effect("reports work and restoration failures through the scoped public bound
 					code: "work_failed",
 					operation: "test",
 					message: "Work failed",
-					recovery: "Inspect work"
+					recovery: "Inspect work",
+					retrySafe: false,
+					nextStep: "escalate"
 				})
 			)
 		).pipe(Effect.provideService(WorldPreparation, service), Effect.result);
@@ -374,5 +380,58 @@ it.effect("rejects unrelated response evidence and cleans up uncertain ownership
 		if (result._tag !== "Failure") throw new Error("Expected failure");
 		expect(result.failure.code).toBe("correlation_mismatch");
 		expect(h.calls.at(-1)?.action).toBe("release");
+	})
+);
+
+it("guides each world failure to its next step", () => {
+	expect(worldPreparationGuidance("connection_failed")).toEqual({
+		retrySafe: true,
+		nextStep: "retry"
+	});
+	expect(worldPreparationGuidance("revision_conflict")).toEqual({
+		retrySafe: false,
+		nextStep: "reconcile"
+	});
+	expect(worldPreparationGuidance("layer_missing")).toEqual({
+		retrySafe: false,
+		nextStep: "fix_input"
+	});
+	expect(worldPreparationGuidance("restoration_failed")).toEqual({
+		retrySafe: false,
+		nextStep: "escalate"
+	});
+});
+
+it.effect("reconciles a retained lease identity acquired with different requirements", () =>
+	Effect.gen(function* () {
+		const h = harness((request) =>
+			request.action === "acquire"
+				? Effect.succeed({
+						status: "failed",
+						code: "lease_conflict",
+						message: "This identity retains another acquisition request.",
+						recovery:
+							"Inspect the retained lease and choose a new acquisition identity."
+					})
+				: undefined
+		);
+		const request = {
+			contract: worldPreparationContract,
+			action: "acquire" as const,
+			leaseId: id,
+			leaseMs: 1000,
+			requirements
+		};
+		for (let attempt = 0; attempt < 2; attempt += 1) {
+			const error = yield* Effect.flip(h.api.execute(request));
+			expect(error.code).toBe("lease_conflict");
+			expect(error.nextStep).toBe("reconcile");
+			expect(error.retrySafe).toBe(false);
+			expect(error.recovery).toContain("new acquisition identity");
+		}
+		expect(worldPreparationGuidance("active_lease_limit")).toEqual({
+			retrySafe: true,
+			nextStep: "retry"
+		});
 	})
 );

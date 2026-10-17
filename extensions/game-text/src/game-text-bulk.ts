@@ -1,11 +1,10 @@
+import type { LocalizationEdit, LocalizationReviewChange } from "@ue-shed/game-text/corpus";
 import type {
-	LocalizationEdit,
 	LocalizationLineId,
 	LocalizationLinePreview,
-	LocalizationReviewChange,
 	LocalizationSelection,
 	TextCorpusSearchRequest
-} from "@ue-shed/game-text/browser";
+} from "@ue-shed/game-text/schema";
 
 /** The most lines a selection holds; exports and reviews pick lines out by id. */
 export const MAX_SELECTED_LINES = 5000;

@@ -223,7 +223,9 @@ function makeRemote(options: {
 						functionName: request.functionName,
 						message: `Unexpected function ${request.functionName}`,
 						operation: request.operation ?? request.functionName,
-						retrySafe: false
+						retrySafe: false,
+						recovery: "Test double: retry the Remote Control call.",
+						nextStep: "escalate"
 					})
 				);
 			}
@@ -397,20 +399,15 @@ describe("observeActorFeed", () => {
 				pipeName: name
 			}).pipe(
 				Stream.tap((state) =>
-					Effect.sync(() => {
-						states.push(state);
-					}).pipe(
-						Effect.andThen(
-							state.status === "live" && state.sample.lastSequence === 0n
-								? Deferred.succeed(catalogReady, undefined).pipe(Effect.ignore)
-								: Effect.void
-						),
-						Effect.andThen(
-							state.status === "live" && state.sample.lastSequence >= 1n
-								? Deferred.succeed(transformed, undefined).pipe(Effect.ignore)
-								: Effect.void
-						)
-					)
+					Effect.gen(function* () {
+						yield* Effect.sync(() => {
+							states.push(state);
+						});
+						if (state.status === "live" && state.sample.lastSequence === 0n)
+							yield* Deferred.succeed(catalogReady, undefined).pipe(Effect.ignore);
+						if (state.status === "live" && state.sample.lastSequence >= 1n)
+							yield* Deferred.succeed(transformed, undefined).pipe(Effect.ignore);
+					})
 				),
 				Stream.runDrain
 			)

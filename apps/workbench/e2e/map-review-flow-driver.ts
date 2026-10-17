@@ -97,8 +97,9 @@ export interface MapReviewFlowHarness {
 
 function flowError(operation: string, cause: unknown): MapReviewFlowExecutionError {
 	return new MapReviewFlowExecutionError({
-		message: `${operation}: ${cause instanceof Error ? cause.message : String(cause)}`,
-		operation
+		message: `Map Review flow step ${operation} failed.`,
+		operation,
+		cause
 	});
 }
 

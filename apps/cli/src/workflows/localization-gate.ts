@@ -1,8 +1,6 @@
 import { LocalizationEvidence, LocalizationEvidenceNodeLive } from "@ue-shed/localization";
 import { Effect, Metric, Result, Schema } from "effect";
 import {
-	GameTextLocalizationError,
-	localizationManifestFailure,
 	localizationGateFailures,
 	localizationGateResult,
 	localizationGateTarget,
@@ -10,7 +8,8 @@ import {
 	localizationGateUnreadPackages,
 	type LocalizationGateCheck,
 	type LocalizationGateResult
-} from "@ue-shed/game-text";
+} from "@ue-shed/game-text/checks";
+import { GameTextLocalizationError, localizationManifestFailure } from "@ue-shed/game-text/schema";
 import { observeCliOperation } from "../cli-operation.js";
 import { CliCommandError, CliRuntime, printJson } from "../cli-runtime.js";
 import type { CliCommand } from "../command-model.js";

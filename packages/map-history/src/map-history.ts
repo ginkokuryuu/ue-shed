@@ -3,7 +3,7 @@ import { AssetReader, AssetReaderLive, type AssetReaderError } from "@ue-shed/un
 import type { SavedWorld } from "@ue-shed/protocol";
 import { materializeBaseline } from "./baseline-materialization.js";
 import { diffSavedWorldSnapshots } from "./diff.js";
-import { MapHistoryError } from "./errors.js";
+import { MapHistoryError, mapHistoryNextStep } from "./errors.js";
 import { resolvePerforceFastMapScope } from "./fast-history-target.js";
 import { acquireHistoricalProjectTree } from "./historical-project-tree.js";
 import { findUnclassifiedPackageChanges } from "./package-correlation.js";
@@ -66,14 +66,16 @@ function progress(
 }
 
 function savedWorldError(operation: string, error: AssetReaderError): MapHistoryError {
+	const kind = error.kind === "resource_limit" ? "resource_limit" : "saved_world_decode";
 	return new MapHistoryError({
-		kind: error.kind === "resource_limit" ? "resource_limit" : "saved_world_decode",
+		kind,
 		message: `${operation}: ${error.message}`,
 		recovery:
 			error.kind === "resource_limit"
 				? "Narrow the map scope or raise maxPackages explicitly."
 				: "Confirm the historical map files can be read and retry.",
-		retrySafe: error.retrySafe
+		retrySafe: error.retrySafe,
+		nextStep: mapHistoryNextStep(kind, error.retrySafe)
 	});
 }
 
@@ -86,7 +88,8 @@ function historicalLayoutError(
 		message: `Historical map storage is ${world.sourceKind}, but the selected map currently uses ${scope.sourceKind}.`,
 		recovery:
 			"Choose a range that does not cross a conventional-level and World Partition conversion.",
-		retrySafe: false
+		retrySafe: false,
+		nextStep: "fix_input"
 	});
 }
 
@@ -95,7 +98,8 @@ function evidenceError(file: PerforceChangedFile): MapHistoryError {
 		kind: "perforce_command",
 		message: `Perforce reported no exact revision for changed map file ${file.depotPath}.`,
 		recovery: "Check the submitted changelist metadata and retry.",
-		retrySafe: false
+		retrySafe: false,
+		nextStep: "escalate"
 	});
 }
 
@@ -182,7 +186,8 @@ function assertResolvedMove(options: {
 			kind: "ambiguous_map_lineage",
 			message: `Changelist ${options.change} moves ${options.before.mapDepotPath}, but Perforce did not provide one bounded direct destination.`,
 			recovery: "Inspect the map's direct Perforce move records and retry.",
-			retrySafe: false
+			retrySafe: false,
+			nextStep: "fix_input"
 		})
 	);
 }
@@ -319,7 +324,8 @@ function reconstructScopedMapHistory(options: {
 						kind: "perforce_command",
 						message: `Changelist ${selected.change} is not submitted.`,
 						recovery: "Select submitted Perforce history and retry.",
-						retrySafe: false
+						retrySafe: false,
+						nextStep: "escalate"
 					})
 				);
 			}
@@ -468,7 +474,8 @@ function durationError(maxDurationMs: number): MapHistoryError {
 		kind: "resource_limit",
 		message: `Map history exceeded its ${maxDurationMs}ms duration limit.`,
 		recovery: "Narrow the history range or raise maxDurationMs explicitly.",
-		retrySafe: true
+		retrySafe: true,
+		nextStep: "fix_input"
 	});
 }
 

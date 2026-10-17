@@ -1,3 +1,4 @@
+import { ErrorGuidanceFields } from "@ue-shed/protocol";
 import { Context, Effect, Layer, Schema } from "effect";
 
 export type AuthoringFilePickerChoice =
@@ -13,8 +14,7 @@ export class AuthoringFilePickerError extends Schema.TaggedError<AuthoringFilePi
 	"AuthoringFilePickerError",
 	{
 		cause: Schema.Defect(),
-		message: Schema.String,
-		recovery: Schema.String
+		...ErrorGuidanceFields
 	}
 ) {}
 

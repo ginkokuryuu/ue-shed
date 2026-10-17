@@ -1,4 +1,4 @@
-import type { LocalizationCultureMark, LocalizationState } from "@ue-shed/game-text/browser";
+import type { LocalizationCultureMark, LocalizationState } from "@ue-shed/game-text/schema";
 
 /** What one culture's cell says: shipped, missing, to update, not synced, or something else. */
 export type CultureCell = "shipped" | "missing" | "to_update" | "not_synced" | "other";

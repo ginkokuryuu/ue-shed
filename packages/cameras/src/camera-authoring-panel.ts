@@ -1,6 +1,6 @@
 import { CameraVisibilityPreset } from "./camera-visibility.js";
 import { legacyReviewRenderPolicy } from "./camera-render-schema.js";
-import { Effect, Ref } from "effect";
+import { Effect, Ref, Schema } from "effect";
 import { ReviewViewId } from "./review-schema.js";
 import {
 	ArrangementCameraId,
@@ -34,6 +34,8 @@ import {
 	type CameraAuthoringStore,
 	type CameraAuthoringDocument
 } from "./camera-authoring-store.js";
+
+const isCameraArrangementError = Schema.is(CameraArrangementError);
 
 export function cameraAuthoringPanelState(
 	document: CameraAuthoringDocument,
@@ -116,7 +118,7 @@ export const makeCameraAuthoringPanelSession = Effect.fn("CameraAuthoringPanel.m
 			Effect.try({
 				try: operation,
 				catch: (cause) =>
-					cause instanceof CameraArrangementError
+					isCameraArrangementError(cause)
 						? cause
 						: arrangementFailure("invalid", String(cause))
 			});
@@ -188,7 +190,7 @@ export const makeCameraAuthoringPanelSession = Effect.fn("CameraAuthoringPanel.m
 				yield* Effect.try({
 					try: () => resolveArrangementCamera(document.arrangement, action.cameraId),
 					catch: (cause) =>
-						cause instanceof CameraArrangementError
+						isCameraArrangementError(cause)
 							? cause
 							: arrangementFailure("invalid", String(cause))
 				});

@@ -153,6 +153,8 @@ try {
 	assert.ok(gameTextFiles.includes("package/dist/search-worker.js"));
 	assert.ok(gameTextFiles.includes("package/dist/search-worker-node.js"));
 	assert.ok(gameTextFiles.includes("package/dist/search-worker-protocol.js"));
+	assert.ok(gameTextFiles.includes("package/dist/quality-worker.js"));
+	assert.ok(gameTextFiles.includes("package/dist/quality-worker-node.js"));
 	const gameTextAdoption = JSON.parse(
 		run(
 			"tar",
@@ -161,6 +163,7 @@ try {
 		)
 	);
 	assert.equal(gameTextAdoption.feature, "game-text");
+	assert.equal(gameTextAdoption.entrypoints.workspace, "@ue-shed/game-text/workspace");
 	assert.equal(gameTextAdoption.release.versionSource, "package.json");
 	assert.equal(gameTextAdoption.release.nativeBinaryBundled, false);
 	assert.equal(gameTextAdoption.release.uiBundled, false);
@@ -436,7 +439,12 @@ try {
 			"import { ConfigExplanation } from '@ue-shed/config-explorer/browser';",
 			"import { LocalizationEvidence, LocalizationEvidenceNodeLive } from '@ue-shed/localization';",
 			"import { LocalizationTargetEvidence, LocalizationChangeSet, decodeLocalizationChangeSet, parsePO, serializePO, planLocalizationOperation, LocalizationOperationPlan, availableLocalizationOperations } from '@ue-shed/localization/browser';",
-			"import { joinLocalizationTarget, checkLocalizationTarget, LocalizationQualityReport, textCorpusQuery, TextCorpus, decodeGameTextRuleDocumentJson, localizationProgressReport, LocalizationProgressReport, createLocalizationBaseline, decodeLocalizationBaselineJson, diffLocalizationBaselines } from '@ue-shed/game-text/browser';",
+			"import { joinLocalizationTarget, textCorpusQuery, localizationProgressReport, LocalizationProgressReport, createLocalizationBaseline, decodeLocalizationBaselineJson, diffLocalizationBaselines } from '@ue-shed/game-text/corpus';",
+			"import { checkLocalizationTarget } from '@ue-shed/game-text/checks';",
+			"import { decodeGameTextRuleDocumentJson } from '@ue-shed/game-text/rules';",
+			"import { LocalizationQualityReport, TextCorpus } from '@ue-shed/game-text/schema';",
+			"import { TEXT_AUDIENCE_LABELS } from '@ue-shed/game-text/labels';",
+			"if (TEXT_AUDIENCE_LABELS === undefined) throw new Error('bad game-text labels export');",
 			"import { Custodian, CustodianNodeLive } from '@ue-shed/project-custodian';",
 			"import { CustodianReceipt } from '@ue-shed/project-custodian/browser';",
 			"if (protocol.CURRENT_PROTOCOL_VERSION.major !== 0) throw new Error('bad protocol');",
@@ -665,8 +673,15 @@ try {
 				"import { resolveUassetExecutable } from '@ue-shed/uasset';",
 				"import { assetReaderLayer } from '@ue-shed/unreal-assets';",
 				"import { LocalizationEvidenceNodeLive } from '@ue-shed/localization';",
-				"import { scanTextCorpus, GameTextIndexSteps, gameTextIndexStepsLayer, gameTextIndexSourceNodeLayer, typeScriptIndexBuilderLayer } from '@ue-shed/game-text';",
-				"import { textCorpusQuery } from '@ue-shed/game-text/browser';",
+				"import { scanTextCorpus, GameTextIndexSteps, gameTextIndexStepsLayer, gameTextIndexSourceNodeLayer, typeScriptIndexBuilderLayer, nativeIndexBuilderLayer, gameTextActionsRequest } from '@ue-shed/game-text/index';",
+				"import { textCorpusQuery } from '@ue-shed/game-text/corpus';",
+				"import { makeGameTextWorkspace, makeGameTextOperations } from '@ue-shed/game-text/workspace';",
+				"import { GameTextOperationRequest, WorkbenchOperationRequest } from '@ue-shed/game-text/schema';",
+				"if (GameTextOperationRequest !== WorkbenchOperationRequest) throw new Error('packed deprecated operation alias differs');",
+				"if (typeof makeGameTextOperations !== 'function') throw new Error('packed operations entry is missing');",
+				"if (!Layer.isLayer(nativeIndexBuilderLayer({ executable: resolveUassetExecutable() }))) throw new Error('packed native builder entry is missing');",
+				"const actionRequest = gameTextActionsRequest({ mode: 'dry_run', actions: [{ id: 'text', place: { packageFile: 'Content/Notes.uasset', objectPath: '/Game/Notes.Notes', propertyPath: 'Title' }, expected: { namespace: '', key: 'k', source: 'Notes' }, edit: { kind: 'regenerate_key' } }] });",
+				"if (actionRequest.actions[0].place.packageFile !== 'Content/Notes.uasset') throw new Error('packed actions entry lost file provenance');",
 				"const corpus = await Effect.runPromise(",
 				"  scanTextCorpus({ projectRoot: resolve('./game-text-project') }).pipe(",
 				"    Effect.provide(assetReaderLayer({ executable: resolveUassetExecutable() }))",
@@ -698,10 +713,23 @@ try {
 				"  if (indexedPage.total !== page.total || !model.query.focus({ id: indexedPage.units[0].id, pageSize: 50 })) {",
 				"    throw new Error('packed Game Text steps/worker differ from the saved-package oracle');",
 				"  }",
+				"  const projectRoot = resolve('./game-text-project');",
+				"  const ready = { status: 'ready', project: { projectRoot, generation: 1 } };",
+				"  const cancelled = () => Effect.succeed({ status: 'cancelled' });",
+				"  const unavailable = () => Effect.fail({ message: 'No file selected.', recovery: 'Choose a file.' });",
+				"  const workspace = yield* makeGameTextWorkspace({",
+				"    project: { current: () => Effect.succeed(ready), refresh: () => Effect.succeed(ready), candidates: () => Effect.succeed({ generation: 1, summary: { projectRoot } }), progress: () => Effect.succeed({ completed: 0, total: 0, phase: 'idle', stage: 'host' }) },",
+				"    files: { chooseFile: cancelled, chooseSaveFile: cancelled, readFile: unavailable, readFileWithin: unavailable, writeFile: unavailable }",
+				"  });",
+				"  const refreshed = yield* workspace.configuredRefresh();",
+				"  const searched = yield* workspace.search({ capability: 'all', pageSize: 50, query: '' });",
+				"  if (refreshed.status !== 'completed' || searched.status !== 'ready' || searched.page.total !== page.total) throw new Error('packed workspace scan/search differs from oracle');",
+				"  const focused = yield* workspace.focus({ id: searched.page.units[0].id, pageSize: 50 });",
+				"  if (focused.status !== 'found' || focused.focus.totalOccurrences < 1) throw new Error('packed workspace lost focus evidence');",
 				"})).pipe(Effect.provide(gameTextIndexStepsLayer(cache, { searchWorker: true }).pipe(",
 				"  Layer.provide(gameTextIndexSourceNodeLayer(cache)),",
 				"  Layer.provide(typeScriptIndexBuilderLayer),",
-				"  Layer.provide(LocalizationEvidenceNodeLive),",
+				"  Layer.provideMerge(LocalizationEvidenceNodeLive),",
 				"  Layer.provide(assetReaderLayer({ executable: resolveUassetExecutable() }))",
 				"))));",
 				"console.log('game-text-packed-ok');"

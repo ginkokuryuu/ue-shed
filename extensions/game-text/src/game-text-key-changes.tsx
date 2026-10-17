@@ -1,5 +1,6 @@
 import * as stylex from "@stylexjs/stylex";
-import type { LocalizationFocus, LocalizationKeyChangeMatch } from "@ue-shed/game-text/browser";
+import type { LocalizationFocus } from "@ue-shed/game-text/corpus";
+import type { LocalizationKeyChangeMatch } from "@ue-shed/game-text/schema";
 import { Button, Chip } from "@ue-shed/ui";
 import { For, Show } from "solid-js";
 import type { GameTextLocalizationState } from "./game-text-localization-state.js";
