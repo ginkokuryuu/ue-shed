@@ -74,14 +74,23 @@ const makeHost = Effect.fn("Test.GameText.productionHost")(function* (
 						// The second model's source rules wait for the test before evaluating.
 						...(call === 2 && mode === "source" && sourceQuality
 							? {
-									sourceQuality: (...args: Parameters<typeof sourceQuality>) =>
-										Deferred.succeed(evaluating, undefined).pipe(
-											Effect.andThen(Deferred.await(allowEvaluation)),
-											Effect.onInterrupt(() =>
-												Deferred.succeed(evaluationInterrupted, undefined)
-											),
-											Effect.andThen(sourceQuality(...args))
-										)
+									sourceQuality: (...args: Parameters<typeof sourceQuality>) => {
+										const evaluate = sourceQuality(...args);
+										return Effect.gen(function* () {
+											yield* Effect.gen(function* () {
+												yield* Deferred.succeed(evaluating, undefined);
+												yield* Deferred.await(allowEvaluation);
+											}).pipe(
+												Effect.onInterrupt(() =>
+													Deferred.succeed(
+														evaluationInterrupted,
+														undefined
+													)
+												)
+											);
+											return yield* evaluate;
+										});
+									}
 								}
 							: undefined),
 						search: Effect.fn("Test.GameText.productionSearch")(function* (request) {

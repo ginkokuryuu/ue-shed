@@ -27,6 +27,8 @@ const materializer = join(
 // An external workspace cannot inherit dependencies from the source checkout.
 const targetRoot = await mkdtemp(join(tmpdir(), "ue-shed-data-authoring-adoption-"));
 const cargoTargetDirectory = process.env.CARGO_TARGET_DIR ?? join(targetRoot, "target");
+// Twelve authoring tables, one localization table and five Game Text fixture tables.
+const expectedFixtureTableCount = 18;
 
 function fail(message: string): never {
 	throw new Error(`Data Authoring adoption conformance failed: ${message}`);
@@ -167,9 +169,9 @@ async function verifyFunctionalHost(remoteControlEndpoint: string) {
 		if (catalog.status !== "success" || catalog.value?.status !== "ready") {
 			fail(`functional host catalog failed: ${JSON.stringify(catalog)}`);
 		}
-		if (catalog.value?.tables?.length !== 13) {
+		if (catalog.value?.tables?.length !== expectedFixtureTableCount) {
 			fail(
-				`functional host discovered ${catalog.value?.tables?.length ?? 0} fixture tables, expected 13`
+				`functional host discovered ${catalog.value?.tables?.length ?? 0} fixture tables, expected ${expectedFixtureTableCount}`
 			);
 		}
 		const objectPath = catalog.value.tables[0]?.objectPath;
@@ -278,7 +280,7 @@ runPnpm([
 		"release",
 		process.platform === "win32" ? "uasset.exe" : "uasset"
 	)}`,
-	"--expected-table-count=13"
+	`--expected-table-count=${expectedFixtureTableCount}`
 ]);
 
 console.log(

@@ -56,6 +56,7 @@ const { values } = parseArgs({
 		cache: { type: "string" },
 		records: { type: "string" },
 		profile: { type: "boolean", default: false },
+		stages: { type: "boolean", default: false },
 		worker: { type: "boolean", default: false },
 		"max-rss-gib": { type: "string", default: String(maximumRssBytes / 2 ** 30) },
 		"stage-timeout-seconds": { type: "string", default: String(maximumStageSeconds) }
@@ -151,14 +152,20 @@ if (values.worker) {
 	async function qualityStages() {
 		const { openScaleIndex, scaleQuality, scaleSourceQuality } =
 			await import("./game-text-scale-quality.ts");
+		// --stages: span wall times and in-step stages of the open and quality stages.
+		const recorder = values.stages
+			? (await import("./game-text-stage-timings.ts")).makeStageRecorder()
+			: undefined;
 		// Reuses the index in --cache, or builds it there when the cache is empty.
-		const index = await measure("open", () => openScaleIndex(project, cache!, records!));
+		const index = await measure("open", () =>
+			openScaleIndex(project, cache!, records!, recorder?.tracer)
+		);
 		try {
 			const scan =
 				select === "quality"
-					? await measure("quality", () => scaleQuality(index.result)).then(
-							({ quality: _, ...counts }) => counts
-						)
+					? await measure("quality", () =>
+							scaleQuality(index.result, recorder?.tracer)
+						).then(({ quality: _, ...counts }) => counts)
 					: await measure("source_quality", () =>
 							scaleSourceQuality(
 								index.result,
@@ -169,7 +176,8 @@ if (values.worker) {
 				counts: {
 					heapLimitBytes: getHeapStatistics().heap_size_limit,
 					lines: index.lines,
-					...scan
+					...scan,
+					...recorder?.counts()
 				}
 			});
 		} finally {
@@ -261,7 +269,8 @@ if (values.worker) {
 				"--select",
 				select,
 				...(cache === undefined ? [] : ["--cache", cache]),
-				...(records === undefined ? [] : ["--records", records])
+				...(records === undefined ? [] : ["--records", records]),
+				...(values.stages ? ["--stages"] : [])
 			],
 			{
 				execArgv: [

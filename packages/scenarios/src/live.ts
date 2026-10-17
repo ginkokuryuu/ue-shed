@@ -1,5 +1,6 @@
 import { Schema } from "effect";
 import { ScenarioRun, type ScenarioDocument, type SemanticActionClip } from "./schema.js";
+import { scenarioContractParser } from "./schema.js";
 
 const NonNegativeInt = Schema.Int.check(Schema.isGreaterThanOrEqualTo(0));
 const PositiveInt = Schema.Int.check(Schema.isGreaterThan(0));
@@ -128,11 +129,26 @@ export const ScenarioCancelResponse = Schema.TaggedUnion({
 });
 export type ScenarioCancelResponse = typeof ScenarioCancelResponse.Type;
 
-export const decodeScenarioStartResponse = Schema.decodeUnknownEffect(ScenarioStartResponse);
-export const decodeScenarioPrepareResponse = Schema.decodeUnknownEffect(ScenarioPrepareResponse);
-export const decodeScenarioStatusResponse = Schema.decodeUnknownEffect(ScenarioStatusResponse);
-export const decodeScenarioCancelResponse = Schema.decodeUnknownEffect(ScenarioCancelResponse);
-export const decodeScenarioExecutionRequest = Schema.decodeUnknownEffect(ScenarioExecutionRequest);
+export const parseScenarioStartResponse = scenarioContractParser(
+	ScenarioStartResponse,
+	"scenario start response"
+);
+export const parseScenarioPrepareResponse = scenarioContractParser(
+	ScenarioPrepareResponse,
+	"scenario prepare response"
+);
+export const parseScenarioStatusResponse = scenarioContractParser(
+	ScenarioStatusResponse,
+	"scenario status response"
+);
+export const parseScenarioCancelResponse = scenarioContractParser(
+	ScenarioCancelResponse,
+	"scenario cancel response"
+);
+export const parseScenarioExecutionRequest = scenarioContractParser(
+	ScenarioExecutionRequest,
+	"scenario execution request"
+);
 
 interface ScenarioActionIdsByPath {
 	readonly [actionPath: string]: LiveScenarioActionId;

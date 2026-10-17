@@ -38,22 +38,23 @@ export const WorkbenchCustodianLive = Layer.effect(
 		const project = yield* WorkbenchProject;
 		const electronApp = yield* ElectronApp;
 
-		const scan = Effect.fn("Workbench.ProjectCustodian.scan")(function* (scanRoot: string) {
-			return yield* custodian.scan({ root: scanRoot }).pipe(
-				Effect.map((report) => ({ status: "completed" as const, report })),
-				Effect.catch((error) =>
-					Effect.succeed({
-						status: "failed" as const,
-						error: {
-							code: "scan_failed" as const,
-							message: error.message,
-							recovery: error.recovery,
-							retrySafe: error.retrySafe
-						}
-					})
-				)
-			);
-		});
+		const scan = Effect.fn("Workbench.ProjectCustodian.scan")(
+			function* (scanRoot: string) {
+				const report = yield* custodian.scan({ root: scanRoot });
+				return { status: "completed" as const, report };
+			},
+			Effect.catch((error) =>
+				Effect.succeed({
+					status: "failed" as const,
+					error: {
+						code: "scan_failed" as const,
+						message: error.message,
+						recovery: error.recovery,
+						retrySafe: error.retrySafe
+					}
+				})
+			)
+		);
 
 		// An explicit custodian root may span several projects; otherwise the shell's project is scanned.
 		const configuredScan = Effect.fn("Workbench.ProjectCustodian.configuredScan")(function* () {
@@ -65,68 +66,63 @@ export const WorkbenchCustodianLive = Layer.effect(
 				: ({ status: "not_configured" } as const);
 		});
 
-		const prepare = Effect.fn("Workbench.ProjectCustodian.prepare")(function* (
-			intent: CustodianPrepareIntent
-		) {
-			return yield* Effect.gen(function* () {
+		const prepare = Effect.fn("Workbench.ProjectCustodian.prepare")(
+			function* (intent: CustodianPrepareIntent) {
 				const userData = yield* electronApp.getPath("userData");
 				const proposal = yield* custodian.prepare({
 					...intent,
 					proposalDirectory: join(userData, "custodian")
 				});
 				return { status: "completed" as const, proposal };
-			}).pipe(
-				Effect.catch((error) =>
-					Effect.succeed({
-						status: "failed" as const,
-						error: {
-							code: "prepare_failed" as const,
-							message: error.message,
-							recovery: error.recovery,
-							retrySafe: error.retrySafe
-						}
-					})
-				)
-			);
-		});
+			},
+			Effect.catch((error) =>
+				Effect.succeed({
+					status: "failed" as const,
+					error: {
+						code: "prepare_failed" as const,
+						message: error.message,
+						recovery: error.recovery,
+						retrySafe: error.retrySafe
+					}
+				})
+			)
+		);
 
-		const execute = Effect.fn("Workbench.ProjectCustodian.execute")(function* (
-			intent: CustodianExecuteRequest
-		) {
-			return yield* custodian.execute(intent).pipe(
-				Effect.map((receipt) => ({ status: "completed" as const, receipt })),
-				Effect.catch((error) =>
-					Effect.succeed({
-						status: "failed" as const,
-						error: {
-							code: "execution_failed" as const,
-							message: error.message,
-							recovery: error.recovery,
-							retrySafe: error.retrySafe
-						}
-					})
-				)
-			);
-		});
+		const execute = Effect.fn("Workbench.ProjectCustodian.execute")(
+			function* (intent: CustodianExecuteRequest) {
+				const receipt = yield* custodian.execute(intent);
+				return { status: "completed" as const, receipt };
+			},
+			Effect.catch((error) =>
+				Effect.succeed({
+					status: "failed" as const,
+					error: {
+						code: "execution_failed" as const,
+						message: error.message,
+						recovery: error.recovery,
+						retrySafe: error.retrySafe
+					}
+				})
+			)
+		);
 
-		const cancel = Effect.fn("Workbench.ProjectCustodian.cancel")(function* (
-			proposalId: CustodianProposalId
-		) {
-			return yield* custodian.cancel(proposalId).pipe(
-				Effect.map((result) => ({ status: "completed" as const, result })),
-				Effect.catch((error) =>
-					Effect.succeed({
-						status: "failed" as const,
-						error: {
-							code: "execution_failed" as const,
-							message: error.message,
-							recovery: error.recovery,
-							retrySafe: error.retrySafe
-						}
-					})
-				)
-			);
-		});
+		const cancel = Effect.fn("Workbench.ProjectCustodian.cancel")(
+			function* (proposalId: CustodianProposalId) {
+				const result = yield* custodian.cancel(proposalId);
+				return { status: "completed" as const, result };
+			},
+			Effect.catch((error) =>
+				Effect.succeed({
+					status: "failed" as const,
+					error: {
+						code: "execution_failed" as const,
+						message: error.message,
+						recovery: error.recovery,
+						retrySafe: error.retrySafe
+					}
+				})
+			)
+		);
 
 		return WorkbenchCustodian.of({ configuredScan, prepare, execute, cancel });
 	})
