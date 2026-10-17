@@ -574,6 +574,15 @@ TSharedPtr<FJsonObject> FUEShedCameraAuthoringBridge::InspectSetup()
 }
 TSharedPtr<FJsonObject> FUEShedCameraAuthoringBridge::Execute(const TSharedPtr<FJsonObject> &Q)
 {
+    TSharedPtr<FJsonObject> Response = ExecuteRequest(Q);
+    bool CodedFailures = false;
+    if (Q) Q->TryGetBoolField(TEXT("codedFailures"), CodedFailures);
+    // Existing v1 clients decode failures strictly. This covers native setup replies as well.
+    if (!CodedFailures && Response) Response->RemoveField(TEXT("code"));
+    return Response;
+}
+TSharedPtr<FJsonObject> FUEShedCameraAuthoringBridge::ExecuteRequest(const TSharedPtr<FJsonObject> &Q)
+{
     // An invariant input cannot reach: Remote Control runs function calls on the game thread, and the
     // other callers are the arrangement panel (Slate) and automation tests, both on the same thread.
     check(IsInGameThread());

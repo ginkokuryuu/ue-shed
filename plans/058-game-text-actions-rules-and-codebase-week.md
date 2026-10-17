@@ -35,7 +35,7 @@
 | A1   | Name packages by file location                 | A    | TODO                                    |
 | A2   | Graph pin text as Game Text places             | A    | TODO                                    |
 | A3   | Game Text actions: editor plugin and API       | A    | IN PROGRESS — #112; graph pins await A2 |
-| A4   | Identity fixture, slice 2                      | A    | TODO                                    |
+| A4   | Identity fixture, slice 2                      | A    | DONE — #120; UE 5.7 and UE 5.8          |
 | A5   | UE 4.27 identity slice                         | A    | TODO                                    |
 | A6   | Stretch: text diff of two package versions     | A    | DONE — #104                             |
 | B1   | Check catalogue                                | B    | DONE — #106                             |

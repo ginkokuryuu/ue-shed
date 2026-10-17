@@ -4,63 +4,85 @@
 	"engineVersion": "5.8",
 	"packages": [
 		{
+			"package": "/Game/__ExternalActors__/Fixture/GameTextActions/Slice2/L_IdentityWorld/7/VE/YK9VMF17WKVGD2DKN098YX",
+			"packageNamespace": "FE8E71B6EB41EBE692BA21A12DC321DA",
+			"texts": [
+				{
+					"site": "/Game/Fixture/GameTextActions/Slice2/L_IdentityWorld.L_IdentityWorld:PersistentLevel.TextRenderActor_UAID_00FF6B7B14D7210C03_1618706312.NewTextRenderComponent.Text",
+					"namespace": "",
+					"key": "BDF0B04148034B8831BBF7926E2A1606",
+					"source": "Lighthouse",
+					"devNotes": "",
+					"editorOnly": false
+				}
+			]
+		},
+		{
 			"package": "/Game/Fixture/GameTextActions/BP_ActionSign",
-			"packageNamespace": "DA56B5A8A32A79135AE0AC7775845E63",
+			"packageNamespace": "5492127F77E152516023D93F466F7664",
 			"texts": [
 				{
 					"site": "/Game/Fixture/GameTextActions/BP_ActionSign.BP_ActionSign:EventGraph.K2Node_CallFunction_0.InText",
 					"namespace": "",
-					"key": "5C4C8C0547179408EC8D44990325F971",
+					"key": "40D55AE84876B07CFEB1D19439AE2E9D",
 					"source": "The door is barred",
+					"devNotes": "",
 					"editorOnly": true
 				},
 				{
 					"site": "/Game/Fixture/GameTextActions/BP_ActionSign.BP_ActionSign:EventGraph.K2Node_CallFunction_1.InText",
 					"namespace": "",
-					"key": "F7A6E4254ED305B7D6A2BAABC6B62C1C",
+					"key": "881601B345E865FA930116B5C22650AD",
 					"source": "The door is locked",
+					"devNotes": "",
 					"editorOnly": true
 				},
 				{
 					"site": "/Game/Fixture/GameTextActions/BP_ActionSign.BP_ActionSign:EventGraph.K2Node_CallFunction_2.InText",
 					"namespace": "",
-					"key": "F7A6E4254ED305B7D6A2BAABC6B62C1C",
+					"key": "881601B345E865FA930116B5C22650AD",
 					"source": "The door is locked",
+					"devNotes": "",
 					"editorOnly": true
 				},
 				{
 					"site": "/Game/Fixture/GameTextActions/BP_ActionSign.BP_ActionSign_C:ExecuteUbergraph_BP_ActionSign [Script Bytecode]",
 					"namespace": "",
-					"key": "5C4C8C0547179408EC8D44990325F971",
+					"key": "40D55AE84876B07CFEB1D19439AE2E9D",
 					"source": "The door is barred",
+					"devNotes": "",
 					"editorOnly": false
 				},
 				{
 					"site": "/Game/Fixture/GameTextActions/BP_ActionSign.BP_ActionSign_C:ExecuteUbergraph_BP_ActionSign [Script Bytecode]",
 					"namespace": "",
-					"key": "5C4C8C0547179408EC8D44990325F971",
+					"key": "40D55AE84876B07CFEB1D19439AE2E9D",
 					"source": "The door is barred",
+					"devNotes": "",
 					"editorOnly": true
 				},
 				{
 					"site": "/Game/Fixture/GameTextActions/BP_ActionSign.BP_ActionSign_C:ExecuteUbergraph_BP_ActionSign [Script Bytecode]",
 					"namespace": "",
-					"key": "F7A6E4254ED305B7D6A2BAABC6B62C1C",
+					"key": "881601B345E865FA930116B5C22650AD",
 					"source": "The door is locked",
+					"devNotes": "",
 					"editorOnly": false
 				},
 				{
 					"site": "/Game/Fixture/GameTextActions/BP_ActionSign.BP_ActionSign_C:ExecuteUbergraph_BP_ActionSign [Script Bytecode]",
 					"namespace": "",
-					"key": "F7A6E4254ED305B7D6A2BAABC6B62C1C",
+					"key": "881601B345E865FA930116B5C22650AD",
 					"source": "The door is locked",
+					"devNotes": "",
 					"editorOnly": true
 				},
 				{
 					"site": "/Game/Fixture/GameTextActions/BP_ActionSign.BP_ActionSign_C:Plate_GEN_VARIABLE.Text",
 					"namespace": "",
-					"key": "3B54657E4FC4CBCAB37EA2A3AF7B6B37",
+					"key": "32054A3D427E70D9B970829126152DCA",
 					"source": "Harbor Road",
+					"devNotes": "",
 					"editorOnly": false
 				},
 				{
@@ -68,6 +90,7 @@
 					"namespace": "SCS",
 					"key": "Default",
 					"source": "Default",
+					"devNotes": "",
 					"editorOnly": true
 				},
 				{
@@ -75,89 +98,101 @@
 					"namespace": "SCS",
 					"key": "Default",
 					"source": "Default",
+					"devNotes": "",
 					"editorOnly": true
 				},
 				{
 					"site": "/Game/Fixture/GameTextActions/BP_ActionSign.Default__BP_ActionSign_C.Greeting",
 					"namespace": "",
-					"key": "54EEAB124178398D92E3479D1BAAA180",
+					"key": "8BB6AB4D44EC5F3793F3BBB7EECB7372",
 					"source": "Welcome, traveler",
+					"devNotes": "",
 					"editorOnly": false
 				}
 			]
 		},
 		{
 			"package": "/Game/Fixture/GameTextActions/BP_ActionSign_Duplicate",
-			"packageNamespace": "D8733D02C140571ED0F909C83B908BD7",
+			"packageNamespace": "A133A501BB0916D31C437BFBC4445838",
 			"texts": [
 				{
 					"site": "/Game/Fixture/GameTextActions/BP_ActionSign_Duplicate.BP_ActionSign_Duplicate:EventGraph.K2Node_CallFunction_0.InText",
 					"namespace": "",
-					"key": "030E9887441264FDA4A77499CEA7B7B7",
+					"key": "E4BB0EBC426F395B2F7C2AB01F1E74C8",
 					"source": "The door is barred",
+					"devNotes": "",
 					"editorOnly": true
 				},
 				{
 					"site": "/Game/Fixture/GameTextActions/BP_ActionSign_Duplicate.BP_ActionSign_Duplicate:EventGraph.K2Node_CallFunction_1.InText",
 					"namespace": "",
-					"key": "36A936AB4732CA7F544C3B85C0B8E593",
+					"key": "7B84B6A44CAA339D2561CC918D2CA537",
 					"source": "The door is locked",
+					"devNotes": "",
 					"editorOnly": true
 				},
 				{
 					"site": "/Game/Fixture/GameTextActions/BP_ActionSign_Duplicate.BP_ActionSign_Duplicate:EventGraph.K2Node_CallFunction_2.InText",
 					"namespace": "",
-					"key": "69229E4746BBC7A21FCCA5BB40335241",
+					"key": "D4BF12944E0FFD57E0F0498E2EBDE390",
 					"source": "The door is locked",
+					"devNotes": "",
 					"editorOnly": true
 				},
 				{
 					"site": "/Game/Fixture/GameTextActions/BP_ActionSign_Duplicate.BP_ActionSign_Duplicate_C:ExecuteUbergraph_BP_ActionSign_Duplicate [Script Bytecode]",
 					"namespace": "",
-					"key": "030E9887441264FDA4A77499CEA7B7B7",
+					"key": "7B84B6A44CAA339D2561CC918D2CA537",
+					"source": "The door is locked",
+					"devNotes": "",
+					"editorOnly": true
+				},
+				{
+					"site": "/Game/Fixture/GameTextActions/BP_ActionSign_Duplicate.BP_ActionSign_Duplicate_C:ExecuteUbergraph_BP_ActionSign_Duplicate [Script Bytecode]",
+					"namespace": "",
+					"key": "7B84B6A44CAA339D2561CC918D2CA537",
+					"source": "The door is locked",
+					"devNotes": "",
+					"editorOnly": false
+				},
+				{
+					"site": "/Game/Fixture/GameTextActions/BP_ActionSign_Duplicate.BP_ActionSign_Duplicate_C:ExecuteUbergraph_BP_ActionSign_Duplicate [Script Bytecode]",
+					"namespace": "",
+					"key": "D4BF12944E0FFD57E0F0498E2EBDE390",
+					"source": "The door is locked",
+					"devNotes": "",
+					"editorOnly": true
+				},
+				{
+					"site": "/Game/Fixture/GameTextActions/BP_ActionSign_Duplicate.BP_ActionSign_Duplicate_C:ExecuteUbergraph_BP_ActionSign_Duplicate [Script Bytecode]",
+					"namespace": "",
+					"key": "D4BF12944E0FFD57E0F0498E2EBDE390",
+					"source": "The door is locked",
+					"devNotes": "",
+					"editorOnly": false
+				},
+				{
+					"site": "/Game/Fixture/GameTextActions/BP_ActionSign_Duplicate.BP_ActionSign_Duplicate_C:ExecuteUbergraph_BP_ActionSign_Duplicate [Script Bytecode]",
+					"namespace": "",
+					"key": "E4BB0EBC426F395B2F7C2AB01F1E74C8",
 					"source": "The door is barred",
+					"devNotes": "",
 					"editorOnly": false
 				},
 				{
 					"site": "/Game/Fixture/GameTextActions/BP_ActionSign_Duplicate.BP_ActionSign_Duplicate_C:ExecuteUbergraph_BP_ActionSign_Duplicate [Script Bytecode]",
 					"namespace": "",
-					"key": "030E9887441264FDA4A77499CEA7B7B7",
+					"key": "E4BB0EBC426F395B2F7C2AB01F1E74C8",
 					"source": "The door is barred",
-					"editorOnly": true
-				},
-				{
-					"site": "/Game/Fixture/GameTextActions/BP_ActionSign_Duplicate.BP_ActionSign_Duplicate_C:ExecuteUbergraph_BP_ActionSign_Duplicate [Script Bytecode]",
-					"namespace": "",
-					"key": "36A936AB4732CA7F544C3B85C0B8E593",
-					"source": "The door is locked",
-					"editorOnly": false
-				},
-				{
-					"site": "/Game/Fixture/GameTextActions/BP_ActionSign_Duplicate.BP_ActionSign_Duplicate_C:ExecuteUbergraph_BP_ActionSign_Duplicate [Script Bytecode]",
-					"namespace": "",
-					"key": "36A936AB4732CA7F544C3B85C0B8E593",
-					"source": "The door is locked",
-					"editorOnly": true
-				},
-				{
-					"site": "/Game/Fixture/GameTextActions/BP_ActionSign_Duplicate.BP_ActionSign_Duplicate_C:ExecuteUbergraph_BP_ActionSign_Duplicate [Script Bytecode]",
-					"namespace": "",
-					"key": "69229E4746BBC7A21FCCA5BB40335241",
-					"source": "The door is locked",
-					"editorOnly": false
-				},
-				{
-					"site": "/Game/Fixture/GameTextActions/BP_ActionSign_Duplicate.BP_ActionSign_Duplicate_C:ExecuteUbergraph_BP_ActionSign_Duplicate [Script Bytecode]",
-					"namespace": "",
-					"key": "69229E4746BBC7A21FCCA5BB40335241",
-					"source": "The door is locked",
+					"devNotes": "",
 					"editorOnly": true
 				},
 				{
 					"site": "/Game/Fixture/GameTextActions/BP_ActionSign_Duplicate.BP_ActionSign_Duplicate_C:Plate_GEN_VARIABLE.Text",
 					"namespace": "",
-					"key": "F2AD77F342B112BEDE7E0A9964069E1F",
+					"key": "4E9D8153482765E0ED9CE9A10EA006BE",
 					"source": "Harbor Road",
+					"devNotes": "",
 					"editorOnly": false
 				},
 				{
@@ -165,6 +200,7 @@
 					"namespace": "SCS",
 					"key": "Default",
 					"source": "Default",
+					"devNotes": "",
 					"editorOnly": true
 				},
 				{
@@ -172,75 +208,85 @@
 					"namespace": "SCS",
 					"key": "Default",
 					"source": "Default",
+					"devNotes": "",
 					"editorOnly": true
 				},
 				{
 					"site": "/Game/Fixture/GameTextActions/BP_ActionSign_Duplicate.Default__BP_ActionSign_Duplicate_C.Greeting",
 					"namespace": "",
-					"key": "BF8ECC80446183EAE446958C449C97EA",
+					"key": "2C608D2444698E3CDB1DCFA795BD0E7C",
 					"source": "Welcome, traveler",
+					"devNotes": "",
 					"editorOnly": false
 				}
 			]
 		},
 		{
 			"package": "/Game/Fixture/GameTextActions/Branched/BP_ActionSign",
-			"packageNamespace": "DA56B5A8A32A79135AE0AC7775845E63",
+			"packageNamespace": "5492127F77E152516023D93F466F7664",
 			"texts": [
 				{
 					"site": "/Game/Fixture/GameTextActions/Branched/BP_ActionSign.BP_ActionSign:EventGraph.K2Node_CallFunction_0.InText",
 					"namespace": "",
-					"key": "5C4C8C0547179408EC8D44990325F971",
+					"key": "40D55AE84876B07CFEB1D19439AE2E9D",
 					"source": "The door is barred",
+					"devNotes": "",
 					"editorOnly": true
 				},
 				{
 					"site": "/Game/Fixture/GameTextActions/Branched/BP_ActionSign.BP_ActionSign:EventGraph.K2Node_CallFunction_1.InText",
 					"namespace": "",
-					"key": "F7A6E4254ED305B7D6A2BAABC6B62C1C",
+					"key": "881601B345E865FA930116B5C22650AD",
 					"source": "The door is locked",
+					"devNotes": "",
 					"editorOnly": true
 				},
 				{
 					"site": "/Game/Fixture/GameTextActions/Branched/BP_ActionSign.BP_ActionSign:EventGraph.K2Node_CallFunction_2.InText",
 					"namespace": "",
-					"key": "F7A6E4254ED305B7D6A2BAABC6B62C1C",
+					"key": "881601B345E865FA930116B5C22650AD",
 					"source": "The door is locked",
+					"devNotes": "",
 					"editorOnly": true
 				},
 				{
 					"site": "/Game/Fixture/GameTextActions/Branched/BP_ActionSign.BP_ActionSign_C:ExecuteUbergraph_BP_ActionSign [Script Bytecode]",
 					"namespace": "",
-					"key": "5C4C8C0547179408EC8D44990325F971",
+					"key": "40D55AE84876B07CFEB1D19439AE2E9D",
 					"source": "The door is barred",
+					"devNotes": "",
 					"editorOnly": false
 				},
 				{
 					"site": "/Game/Fixture/GameTextActions/Branched/BP_ActionSign.BP_ActionSign_C:ExecuteUbergraph_BP_ActionSign [Script Bytecode]",
 					"namespace": "",
-					"key": "5C4C8C0547179408EC8D44990325F971",
+					"key": "40D55AE84876B07CFEB1D19439AE2E9D",
 					"source": "The door is barred",
+					"devNotes": "",
 					"editorOnly": true
 				},
 				{
 					"site": "/Game/Fixture/GameTextActions/Branched/BP_ActionSign.BP_ActionSign_C:ExecuteUbergraph_BP_ActionSign [Script Bytecode]",
 					"namespace": "",
-					"key": "F7A6E4254ED305B7D6A2BAABC6B62C1C",
+					"key": "881601B345E865FA930116B5C22650AD",
 					"source": "The door is locked",
+					"devNotes": "",
 					"editorOnly": false
 				},
 				{
 					"site": "/Game/Fixture/GameTextActions/Branched/BP_ActionSign.BP_ActionSign_C:ExecuteUbergraph_BP_ActionSign [Script Bytecode]",
 					"namespace": "",
-					"key": "F7A6E4254ED305B7D6A2BAABC6B62C1C",
+					"key": "881601B345E865FA930116B5C22650AD",
 					"source": "The door is locked",
+					"devNotes": "",
 					"editorOnly": true
 				},
 				{
 					"site": "/Game/Fixture/GameTextActions/Branched/BP_ActionSign.BP_ActionSign_C:Plate_GEN_VARIABLE.Text",
 					"namespace": "",
-					"key": "3B54657E4FC4CBCAB37EA2A3AF7B6B37",
+					"key": "32054A3D427E70D9B970829126152DCA",
 					"source": "Harbor Road",
+					"devNotes": "",
 					"editorOnly": false
 				},
 				{
@@ -248,6 +294,7 @@
 					"namespace": "SCS",
 					"key": "Default",
 					"source": "Default",
+					"devNotes": "",
 					"editorOnly": true
 				},
 				{
@@ -255,193 +302,364 @@
 					"namespace": "SCS",
 					"key": "Default",
 					"source": "Default",
+					"devNotes": "",
 					"editorOnly": true
 				},
 				{
 					"site": "/Game/Fixture/GameTextActions/Branched/BP_ActionSign.Default__BP_ActionSign_C.Greeting",
 					"namespace": "",
-					"key": "54EEAB124178398D92E3479D1BAAA180",
+					"key": "8BB6AB4D44EC5F3793F3BBB7EECB7372",
 					"source": "Welcome, traveler",
+					"devNotes": "",
 					"editorOnly": false
 				}
 			]
 		},
 		{
 			"package": "/Game/Fixture/GameTextActions/Branched/DA_ActionNotes",
-			"packageNamespace": "9B90C04DBF4E2213EE10EE361A405648",
+			"packageNamespace": "B143EA6C1F2C8374799A56BE6B86BA84",
 			"texts": [
 				{
 					"site": "/Game/Fixture/GameTextActions/Branched/DA_ActionNotes.DA_ActionNotes.SharedPrimary",
 					"namespace": "",
-					"key": "CDD3C37641F97FA4F0B392A640B24A1A",
+					"key": "2965A34E4BB89D4BE0E2C7B33D780DF0",
 					"source": "Keep the lamp lit at night",
+					"devNotes": "",
 					"editorOnly": false
 				}
 			]
 		},
 		{
 			"package": "/Game/Fixture/GameTextActions/Branched/DT_ActionRows",
-			"packageNamespace": "F0CA0D220E7EC0ADA1D4CB809CE07070",
+			"packageNamespace": "79EC8DDC49D1E0EA99AEEE38259FA4FF",
 			"texts": [
 				{
 					"site": "/Game/Fixture/GameTextActions/Branched/DT_ActionRows.DT_ActionRows.Lantern.DisplayName",
 					"namespace": "",
-					"key": "439BFC534009A29FCDB674897C4EE261",
+					"key": "A07D1F874D62E28B87862F8BEE794B38",
 					"source": "Brass ship lantern",
+					"devNotes": "",
 					"editorOnly": false
 				},
 				{
 					"site": "/Game/Fixture/GameTextActions/Branched/DT_ActionRows.DT_ActionRows.Lantern_Copy.DisplayName",
 					"namespace": "",
-					"key": "3DB6A67C4549F1FC5C8FCAA3A3BE676D",
+					"key": "B17CDE0B4128FE7D78507A87FC810E9B",
 					"source": "Brass lantern",
+					"devNotes": "",
 					"editorOnly": false
 				},
 				{
 					"site": "/Game/Fixture/GameTextActions/Branched/DT_ActionRows.DT_ActionRows.Rope.DisplayName",
 					"namespace": "",
-					"key": "6309128644988144A330D0830D01120D",
+					"key": "40689F3C41188C64473AE290435AD703",
 					"source": "Coil of rope",
+					"devNotes": "",
 					"editorOnly": false
 				},
 				{
 					"site": "/Game/Fixture/GameTextActions/Branched/DT_ActionRows.DT_ActionRows.Rope_Copy.DisplayName",
 					"namespace": "",
-					"key": "19C23135422321F4DA28B9982228B692",
+					"key": "B31B0F734B9B3539A2AB2B8B2120AFE6",
 					"source": "Coil of old rope",
+					"devNotes": "",
 					"editorOnly": false
 				}
 			]
 		},
 		{
 			"package": "/Game/Fixture/GameTextActions/Branched/WBP_ActionPanel",
-			"packageNamespace": "D7687443243E8B5278BD27C9B8066647",
+			"packageNamespace": "FD773EC8445EFDDD4B6576B4FCE2FB96",
 			"texts": [
 				{
 					"site": "/Game/Fixture/GameTextActions/Branched/WBP_ActionPanel.WBP_ActionPanel_C:WidgetTree.Heading.Text",
 					"namespace": "",
-					"key": "C5C2CB92455E73AC8C1A9C80E641AFEC",
+					"key": "51EDCE954DDF6DB3E30D98AD7D93BFC7",
 					"source": "Harbor master's office",
+					"devNotes": "",
 					"editorOnly": false
 				}
 			]
 		},
 		{
 			"package": "/Game/Fixture/GameTextActions/DA_ActionNotes",
-			"packageNamespace": "9B90C04DBF4E2213EE10EE361A405648",
+			"packageNamespace": "B143EA6C1F2C8374799A56BE6B86BA84",
 			"texts": [
 				{
 					"site": "/Game/Fixture/GameTextActions/DA_ActionNotes.DA_ActionNotes.SharedPrimary",
 					"namespace": "",
-					"key": "CDD3C37641F97FA4F0B392A640B24A1A",
+					"key": "2965A34E4BB89D4BE0E2C7B33D780DF0",
 					"source": "Keep the lamp lit",
+					"devNotes": "",
 					"editorOnly": false
 				}
 			]
 		},
 		{
 			"package": "/Game/Fixture/GameTextActions/DA_ActionNotes_Duplicate",
-			"packageNamespace": "3B1A3F72EFBDB927FEF0048FD274474B",
+			"packageNamespace": "3DE58E2D6E520FE353347ED909F71A43",
 			"texts": [
 				{
 					"site": "/Game/Fixture/GameTextActions/DA_ActionNotes_Duplicate.DA_ActionNotes_Duplicate.SharedPrimary",
 					"namespace": "",
-					"key": "0039D6244835708BFFDD68A74ABE3302",
+					"key": "C9EEBF1E44B9FA6C1AE584B487BF29AF",
 					"source": "Keep the lamp lit",
+					"devNotes": "",
 					"editorOnly": false
 				}
 			]
 		},
 		{
 			"package": "/Game/Fixture/GameTextActions/DT_ActionRows",
-			"packageNamespace": "F0CA0D220E7EC0ADA1D4CB809CE07070",
+			"packageNamespace": "79EC8DDC49D1E0EA99AEEE38259FA4FF",
 			"texts": [
 				{
 					"site": "/Game/Fixture/GameTextActions/DT_ActionRows.DT_ActionRows.Lantern.DisplayName",
 					"namespace": "",
-					"key": "3DB6A67C4549F1FC5C8FCAA3A3BE676D",
+					"key": "B17CDE0B4128FE7D78507A87FC810E9B",
 					"source": "Brass lantern",
+					"devNotes": "",
 					"editorOnly": false
 				},
 				{
 					"site": "/Game/Fixture/GameTextActions/DT_ActionRows.DT_ActionRows.Lantern_Copy.DisplayName",
 					"namespace": "",
-					"key": "3DB6A67C4549F1FC5C8FCAA3A3BE676D",
+					"key": "B17CDE0B4128FE7D78507A87FC810E9B",
 					"source": "Brass lantern",
+					"devNotes": "",
 					"editorOnly": false
 				},
 				{
 					"site": "/Game/Fixture/GameTextActions/DT_ActionRows.DT_ActionRows.Rope.DisplayName",
 					"namespace": "",
-					"key": "6309128644988144A330D0830D01120D",
+					"key": "40689F3C41188C64473AE290435AD703",
 					"source": "Coil of rope",
+					"devNotes": "",
 					"editorOnly": false
 				},
 				{
 					"site": "/Game/Fixture/GameTextActions/DT_ActionRows.DT_ActionRows.Rope_Copy.DisplayName",
 					"namespace": "",
-					"key": "19C23135422321F4DA28B9982228B692",
+					"key": "B31B0F734B9B3539A2AB2B8B2120AFE6",
 					"source": "Coil of old rope",
+					"devNotes": "",
 					"editorOnly": false
 				}
 			]
 		},
 		{
 			"package": "/Game/Fixture/GameTextActions/DT_ActionRows_Duplicate",
-			"packageNamespace": "0B004A28E7D03407CC48BF6951470231",
+			"packageNamespace": "28665F2E15E2C0EAC59CD27CE794D571",
 			"texts": [
 				{
 					"site": "/Game/Fixture/GameTextActions/DT_ActionRows_Duplicate.DT_ActionRows_Duplicate.Lantern.DisplayName",
 					"namespace": "",
-					"key": "39124B83492246C8342697BF7C6CB61C",
+					"key": "C57A934E470B256ABBDFAEAD445063AE",
 					"source": "Brass lantern",
+					"devNotes": "",
 					"editorOnly": false
 				},
 				{
 					"site": "/Game/Fixture/GameTextActions/DT_ActionRows_Duplicate.DT_ActionRows_Duplicate.Lantern_Copy.DisplayName",
 					"namespace": "",
-					"key": "54BE3FDE4E2DC551AD2900924DD9EEAB",
+					"key": "7938A48D43659A18CE0513949B960B20",
 					"source": "Brass lantern",
+					"devNotes": "",
 					"editorOnly": false
 				},
 				{
 					"site": "/Game/Fixture/GameTextActions/DT_ActionRows_Duplicate.DT_ActionRows_Duplicate.Rope.DisplayName",
 					"namespace": "",
-					"key": "55CDB992456CB78511F9318D5BEF75DF",
+					"key": "A9EFF086418BB501D47F46AC42D6A84E",
 					"source": "Coil of rope",
+					"devNotes": "",
 					"editorOnly": false
 				},
 				{
 					"site": "/Game/Fixture/GameTextActions/DT_ActionRows_Duplicate.DT_ActionRows_Duplicate.Rope_Copy.DisplayName",
 					"namespace": "",
-					"key": "3986FF50493BEF43C896AD95A71AAB17",
+					"key": "43CE86024411D3C1A91731893FEE5DF2",
 					"source": "Coil of old rope",
+					"devNotes": "",
+					"editorOnly": false
+				}
+			]
+		},
+		{
+			"package": "/Game/Fixture/GameTextActions/Slice2/BP_IdentityChildInherits",
+			"packageNamespace": "337918C999AE94187C8153F024BEB1E4",
+			"texts": [
+				{
+					"site": "/Game/Fixture/GameTextActions/Slice2/BP_IdentityChildInherits.BP_IdentityChildInherits_C:SimpleConstructionScript_0.SCS_Node_0.CategoryName",
+					"namespace": "SCS",
+					"key": "Default",
+					"source": "Default",
+					"devNotes": "",
+					"editorOnly": true
+				}
+			]
+		},
+		{
+			"package": "/Game/Fixture/GameTextActions/Slice2/BP_IdentityChildOverrides",
+			"packageNamespace": "DB5D57F4086BC5D5B2E8D89177128C38",
+			"texts": [
+				{
+					"site": "/Game/Fixture/GameTextActions/Slice2/BP_IdentityChildOverrides.BP_IdentityChildOverrides_C:SimpleConstructionScript_0.SCS_Node_0.CategoryName",
+					"namespace": "SCS",
+					"key": "Default",
+					"source": "Default",
+					"devNotes": "",
+					"editorOnly": true
+				},
+				{
+					"site": "/Game/Fixture/GameTextActions/Slice2/BP_IdentityChildOverrides.Default__BP_IdentityChildOverrides_C.Motto",
+					"namespace": "",
+					"key": "0EDBF953459FB09EF244358CDE83439A",
+					"source": "Full speed ahead",
+					"devNotes": "",
+					"editorOnly": false
+				}
+			]
+		},
+		{
+			"package": "/Game/Fixture/GameTextActions/Slice2/BP_IdentityLiterals",
+			"packageNamespace": "3BE9E45D1B74AEA7ABC60358BD965C70",
+			"texts": [
+				{
+					"site": "/Game/Fixture/GameTextActions/Slice2/BP_IdentityLiterals.BP_IdentityLiterals:EventGraph.K2Node_CallFunction_0.InText",
+					"namespace": "",
+					"key": "9AFEEBDA41075D77A6E17FACCFD921EA",
+					"source": "Lamp lit",
+					"devNotes": "A lit lantern, not a command",
+					"editorOnly": true
+				},
+				{
+					"site": "/Game/Fixture/GameTextActions/Slice2/BP_IdentityLiterals.BP_IdentityLiterals_C:ExecuteUbergraph_BP_IdentityLiterals [Script Bytecode]",
+					"namespace": "",
+					"key": "9AFEEBDA41075D77A6E17FACCFD921EA",
+					"source": "Lamp lit",
+					"devNotes": "A lit lantern, not a command",
+					"editorOnly": true
+				},
+				{
+					"site": "/Game/Fixture/GameTextActions/Slice2/BP_IdentityLiterals.BP_IdentityLiterals_C:ExecuteUbergraph_BP_IdentityLiterals [Script Bytecode]",
+					"namespace": "",
+					"key": "9AFEEBDA41075D77A6E17FACCFD921EA",
+					"source": "Lamp lit",
+					"devNotes": "A lit lantern, not a command",
+					"editorOnly": false
+				},
+				{
+					"site": "/Game/Fixture/GameTextActions/Slice2/BP_IdentityLiterals.BP_IdentityLiterals_C:SimpleConstructionScript_0.SCS_Node_0.CategoryName",
+					"namespace": "SCS",
+					"key": "Default",
+					"source": "Default",
+					"devNotes": "",
+					"editorOnly": true
+				}
+			]
+		},
+		{
+			"package": "/Game/Fixture/GameTextActions/Slice2/BP_IdentityParent",
+			"packageNamespace": "9A6780D3C56C0E7C00B788A7A3DE2905",
+			"texts": [
+				{
+					"site": "/Game/Fixture/GameTextActions/Slice2/BP_IdentityParent.BP_IdentityParent_C:SimpleConstructionScript_0.SCS_Node_0.CategoryName",
+					"namespace": "SCS",
+					"key": "Default",
+					"source": "Default",
+					"devNotes": "",
+					"editorOnly": true
+				},
+				{
+					"site": "/Game/Fixture/GameTextActions/Slice2/BP_IdentityParent.Default__BP_IdentityParent_C.Motto",
+					"namespace": "",
+					"key": "D2F3DF68411A094D16C82EB8E0BCBD12",
+					"source": "Steady as she goes",
+					"devNotes": "",
+					"editorOnly": false
+				}
+			]
+		},
+		{
+			"package": "/Game/Fixture/GameTextActions/Slice2/DA_IdentityReferences",
+			"packageNamespace": "305ADA5E8740D2E8D828AC8E2BDEADF4",
+			"texts": [
+				{
+					"site": "/Game/Fixture/GameTextActions/Slice2/DA_IdentityReferences.DA_IdentityReferences.SharedPrimary",
+					"namespace": "",
+					"key": "5D913AEB4B4D088E58D2078A93A60EE0",
+					"source": "Welcome aboard",
+					"devNotes": "",
+					"editorOnly": false
+				}
+			]
+		},
+		{
+			"package": "/Game/Fixture/GameTextActions/Slice2/L_IdentityLevel",
+			"packageNamespace": "0D8EB8E70A4F852DB8A42A902F947E94",
+			"texts": [
+				{
+					"site": "/Game/Fixture/GameTextActions/Slice2/L_IdentityLevel.L_IdentityLevel:PersistentLevel.TextRenderActor_0.NewTextRenderComponent.Text",
+					"namespace": "",
+					"key": "C75420BC457C3EF9BE8D729A7ADE8F83",
+					"source": "Harbor gate",
+					"devNotes": "",
+					"editorOnly": false
+				}
+			]
+		},
+		{
+			"package": "/Game/Fixture/GameTextActions/Slice2/L_IdentityWorld",
+			"packageNamespace": "6D510EB8FFC46E40861D96CB4DC718F4",
+			"texts": []
+		},
+		{
+			"package": "/Game/Fixture/GameTextActions/Slice2/ST_IdentityTable",
+			"packageNamespace": "BFF03A042E05FFBDA4F97FED20A9541C",
+			"texts": [
+				{
+					"site": "/Game/Fixture/GameTextActions/Slice2/ST_IdentityTable.ST_IdentityTable",
+					"namespace": "IdentityTable",
+					"key": "Farewell",
+					"source": "Fair winds",
+					"devNotes": "",
+					"editorOnly": false
+				},
+				{
+					"site": "/Game/Fixture/GameTextActions/Slice2/ST_IdentityTable.ST_IdentityTable",
+					"namespace": "IdentityTable",
+					"key": "Welcome",
+					"source": "Welcome aboard",
+					"devNotes": "",
 					"editorOnly": false
 				}
 			]
 		},
 		{
 			"package": "/Game/Fixture/GameTextActions/WBP_ActionPanel",
-			"packageNamespace": "D7687443243E8B5278BD27C9B8066647",
+			"packageNamespace": "FD773EC8445EFDDD4B6576B4FCE2FB96",
 			"texts": [
 				{
 					"site": "/Game/Fixture/GameTextActions/WBP_ActionPanel.WBP_ActionPanel_C:WidgetTree.Heading.Text",
 					"namespace": "",
-					"key": "C5C2CB92455E73AC8C1A9C80E641AFEC",
+					"key": "51EDCE954DDF6DB3E30D98AD7D93BFC7",
 					"source": "Harbor master",
+					"devNotes": "",
 					"editorOnly": false
 				}
 			]
 		},
 		{
 			"package": "/Game/Fixture/GameTextActions/WBP_ActionPanel_Duplicate",
-			"packageNamespace": "E45D6B1FBF9A10BE2EB2C2F097BCAE93",
+			"packageNamespace": "7C5C35D955CF14718EC939EBBC674419",
 			"texts": [
 				{
 					"site": "/Game/Fixture/GameTextActions/WBP_ActionPanel_Duplicate.WBP_ActionPanel_Duplicate_C:WidgetTree.Heading.Text",
 					"namespace": "",
-					"key": "94B3ADBA4AA66123B91F6E93DD1C606D",
+					"key": "1ECB7DC946813305715A73A1FC223799",
 					"source": "Harbor mistress",
+					"devNotes": "",
 					"editorOnly": false
 				}
 			]

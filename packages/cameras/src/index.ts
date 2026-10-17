@@ -456,6 +456,7 @@ function cameraStatusOrFailure(endpoint: string, operation: "configure" | "statu
 			Effect.flatMap((response) => {
 				if (!("error" in response)) return Effect.succeed(response);
 				const retrySafe = response.error === "no-renderable-world";
+				const invalidInput = response.error.startsWith("invalid-");
 				return Effect.fail(
 					new CameraControlError({
 						endpoint,
@@ -464,10 +465,12 @@ function cameraStatusOrFailure(endpoint: string, operation: "configure" | "statu
 						message:
 							response.message ?? `The camera plugin reported ${response.error}.`,
 						retrySafe,
-						nextStep: retrySafe ? "retry" : "fix_input",
+						nextStep: retrySafe ? "retry" : invalidInput ? "fix_input" : "escalate",
 						recovery: retrySafe
 							? "Open an editor world, then retry the camera request."
-							: "Check the camera configuration and plugin response before retrying."
+							: invalidInput
+								? "Check the camera configuration before retrying."
+								: "Inspect the plugin failure and capability support before retrying."
 					})
 				);
 			})

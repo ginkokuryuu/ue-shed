@@ -86,11 +86,12 @@ describe.skipIf(!executable)("loc gate with the real reader", () => {
 				const before = yield* gate("--files", table);
 				expect(before.text).not.toContain("not_checked");
 				const unchanged = yield* verdict(before.text);
-				// Check the authoring, problem-case and Game Text action fixture targets.
+				// Check authoring, problem cases, action assets and the gather-only C++ target.
 				expect(unchanged.targets.map((target) => target.target)).toEqual([
 					"FixtureGame",
 					"Game",
-					"GameTextActions"
+					"GameTextActions",
+					"GameTextActionsSource"
 				]);
 				expect(unchanged.skipped).toEqual([]);
 				expect(unchanged.targets[0]?.checks.key_changed).toBe(0);

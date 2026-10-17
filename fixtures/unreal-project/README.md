@@ -188,8 +188,10 @@ a Perforce branch or integrate makes.
 
 `pnpm fixture:generate-game-text-actions` builds the editor and runs each stage in a fresh process:
 author the assets and target settings, copy inside packages, duplicate assets, branch, edit the
-branch, gather, reports, then record evidence. It resets only `Content/Localization/GameTextActions`
-and `Content/Fixture/GameTextActions`. The committed packages are generated with UE 5.7. For 5.8,
+branch, slice 2, gather, reports, source gather, then record evidence. It resets only
+`Content/Localization/GameTextActions`, `Content/Localization/GameTextActionsSource`,
+`Content/Fixture/GameTextActions` and its `Content/__ExternalActors__` folder. The committed
+content packages are generated with UE 5.7. For 5.8,
 set `UE_SHED_LOCALIZATION_FIXTURE_ROOT` to a disposable copy and pass this checkout's
 `FixtureExpected/game-text-actions` as the output directory.
 
@@ -211,7 +213,50 @@ runtime text Unreal gathers, apart from pinned gaps.
 | `*_Duplicate`     | Content Browser Duplicate of each; the widget's copy is retyped        |
 | `Branched/*`      | File copy of each; the data asset, a row and the widget are retyped    |
 
-What UE 5.7 does:
+Slice 2 (`Slice2/`, Plan 058 A4) adds the places slice 1 leaves out:
+
+| Assets                      | Where the text lives                                                                |
+| --------------------------- | ----------------------------------------------------------------------------------- |
+| `ST_IdentityTable`          | String Table `IdentityTable` with entries `Welcome` and `Farewell`                  |
+| `DA_IdentityReferences`     | Typed text, a String Table reference and culture-invariant text                     |
+| `BP_IdentityLiterals`       | Print Text literals of each saved kind: typed, culture invariant, table             |
+| `BP_IdentityParent`         | A text variable default                                                             |
+| `BP_IdentityChildInherits`  | A child Blueprint that inherits the parent's default unchanged                      |
+| `BP_IdentityChildOverrides` | A child Blueprint whose Class Defaults retype it                                    |
+| `L_IdentityLevel`           | A TextRender actor in a level                                                       |
+| `L_IdentityWorld`           | A TextRender actor saved as a World Partition external actor (`__ExternalActors__`) |
+
+The slice-2 stage runs after `EditBranch`, and `Evidence` also records the folder's maps and their
+external actor packages. `expected-cases.json` marks slice-2 cases with `"slice": 2`, lists the
+places Unreal does not gather in `notGathered`, and records in `evidenceSlices` which slices each
+engine's evidence covers. Both engines' evidence covers slice 2. Slice 2 was added to the committed
+content by running only its stage, the gather, reports and evidence on UE 5.7, so slice 1's packages
+and evidence are unchanged. The UE 5.8 evidence comes from a separate complete generation in a
+disposable project; its GUIDs are independent of the committed UE 5.7 content.
+
+To compare newly generated saves with their own engine's evidence, set
+`UE_SHED_GAME_TEXT_ACTIONS_FIXTURE_ROOT` to that disposable project and
+`UE_SHED_GAME_TEXT_ACTIONS_FIXTURE_ENGINE` to `5.7` or `5.8`, then run
+`node scripts/test.ts packages/game-text/src/game-text-actions-fixture.integration.test.ts`.
+Each disposable project must also contain the other engine's evidence file, because the relation
+checks cover both files. The default test uses committed UE 5.7 content and evidence.
+
+C++ `LOCTEXT` is gather-only: `FixtureSource/GameTextActions/GameTextActionsLoctext.cpp` is not
+compiled, and `GameTextActions_Source.ini` gathers it with `GatherTextFromSource` into its own
+`Content/Localization/GameTextActionsSource` manifest, so the asset gather and its evidence are
+unchanged. The saved-package reader never sees C++ text; the test checks only what Unreal gathers.
+Unreal joins a dotted `LOCTEXT` namespace into one id namespace and records a repeated `LOCTEXT`
+with the same id and text once, at its first place.
+
+`FixtureExpected/game-text-actions/ue5.8-saved/BP_IdentityLiterals.uasset` retains the small Blueprint
+from the separate UE 5.8 generation. Its typed literal includes the translator note
+"A lit lantern, not a command". The portable Rust regression reads both engines' real saved
+Blueprints, checks complete graph-pin decoding, and checks typed, culture-invariant and String
+Table literals in compiled bytecode, including the UE 5.8 translator note. Synthetic malformed
+and framing tests remain separate. Slice 2 found that the graph pin reader did not decode a pin
+holding a String Table reference (FText history 11); it now does, as tagged text properties do.
+
+What UE 5.7 and UE 5.8 do:
 
 - **A duplicated row and a pasted node keep their ids.** Retyping one copy gives it a new key.
 - **Content Browser Duplicate gives every text a new key** in a new package namespace, and splits
@@ -222,6 +267,15 @@ What UE 5.7 does:
   because `Lantern_Copy` uses the same id in that package.
 - **A compiled literal follows its pin.** The Print Text pin and the compiled BeginPlay bytecode
   hold the same id.
+- **Only typed literals are gathered from bytecode.** A culture-invariant literal is not gathered,
+  and a String Table reference is gathered from the table, as are String Table references in
+  properties. A typed text with the same source as a table entry keeps its own id.
+- **A child Blueprint that inherits a default unchanged gathers nothing for it**; the parent's
+  package gathers it. Retyping it in the child's Class Defaults gives it a new key in the child's
+  package namespace.
+- **Level and World Partition actors are gathered where they are saved.** The external actor's
+  text is gathered from its own package under `__ExternalActors__` (with the map's path as its
+  site), and Unreal's gather picks it up even though the gather paths name only the map's folder.
 
 The reader finds every runtime text Unreal gathers here, including the Print Text literals it
 reads from `ExecuteUbergraph` bytecode; `readerGaps` pins any it misses and is empty. A file-level

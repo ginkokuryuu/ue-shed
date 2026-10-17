@@ -90,7 +90,22 @@ describe("coded camera control failures", () => {
 		).rejects.toMatchObject({
 			code: "invalid-resolution",
 			operation: "configure",
-			retrySafe: false
+			retrySafe: false,
+			nextStep: "fix_input"
+		});
+	});
+
+	it("preserves an unfamiliar native cause without directing a blind retry", async () => {
+		await expect(
+			Effect.runPromise(
+				getCameraStatus("http://localhost:30117").pipe(
+					respond({ schemaVersion: 1, error: "future-native-failure" })
+				)
+			)
+		).rejects.toMatchObject({
+			code: "future-native-failure",
+			retrySafe: false,
+			nextStep: "escalate"
 		});
 	});
 });

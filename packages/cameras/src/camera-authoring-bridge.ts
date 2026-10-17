@@ -1,4 +1,4 @@
-import { Effect, Schema } from "effect";
+import { Effect, Schema, Tuple } from "effect";
 import { CameraSetupRequest, CameraSetupState } from "./camera-setup-schema.js";
 import {
 	decodeCompanionCapabilityManifest,
@@ -61,8 +61,11 @@ export function arrangementBridgeCameras(arrangement: CameraArrangement) {
 		pose: resolveArrangementCamera(arrangement, camera.id)
 	}));
 }
-export const CameraBridgeRequest = Schema.Union([
-	CameraSetupRequest,
+const withCodedFailures = Schema.fieldsAssign({
+	/** Opt in per request; older strict v1 clients must receive failures without code. */
+	codedFailures: Schema.optionalKey(Schema.Boolean)
+});
+const CameraSessionRequest = Schema.Union([
 	Schema.Struct({
 		...Scope,
 		operation: Schema.Literal("select_cameras"),
@@ -136,6 +139,10 @@ export const CameraBridgeRequest = Schema.Union([
 		sequence: Counter,
 		pose: ApprovedPose
 	})
+]).mapMembers(Tuple.map(withCodedFailures));
+export const CameraBridgeRequest = Schema.Union([
+	CameraSetupRequest.mapMembers(Tuple.map(withCodedFailures)),
+	...CameraSessionRequest.members
 ]);
 export type CameraBridgeRequest = typeof CameraBridgeRequest.Type;
 export const CameraBridgeSnapshot = Schema.Struct({
@@ -308,7 +315,12 @@ export function makeCameraAuthoringBridge(
 						"/Script/UEShedCameraAuthoringBridge.Default__UEShedCameraAuthoringBridgeLibrary",
 					functionName: "ExecuteCameraAuthoring",
 					operation: `camera.authoring.${request.operation}`,
-					parameters: { RequestJson: JSON.stringify(request) }
+					parameters: {
+						RequestJson: JSON.stringify({
+							...request,
+							codedFailures: request.codedFailures ?? true
+						})
+					}
 				})
 				.pipe(
 					Effect.mapError(
