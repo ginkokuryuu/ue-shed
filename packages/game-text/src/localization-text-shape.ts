@@ -1,7 +1,15 @@
 /**
  * Pure text measurements behind the built-in shape and source checks. Each works on one string or
- * one source/translation pair, so in-memory and indexed scans share them line by line.
+ * one source/translation pair, so in-memory and indexed scans share them line by line. Heuristic
+ * thresholds and word lists are parameters, defaulting to the check catalogue's.
  */
+import {
+	localizationCheckDefaults,
+	type InconsistentTranslationParams,
+	type LengthOutlierParams,
+	type PlaceholderTextParams,
+	type PlaceholderTranslationParams
+} from "./localization-check-catalogue.js";
 
 /**
  * Opening and self-closing Slate rich-text tags: `<b>`, `<Name attr="x">`, `<img id="x"/>`. As in
@@ -219,106 +227,132 @@ export function visibleTextLength(text: string): number {
 	return length;
 }
 
-/**
- * Length outliers: a source of at least 20 visible characters whose translation is under a third
- * or over three times as long. Ordinary expansion stays far inside (German and French run about
- * 1.2–1.4×, East Asian scripts near 1× with wide characters counted twice), so an outlier is
- * likely a truncated, untranslated-and-padded or wrong-line translation. Shorter sources are
- * skipped: a few characters swing their ratios too far to mean anything.
- */
-export const LENGTH_OUTLIER = { minimumSourceLength: 20, minimumRatio: 1 / 3, maximumRatio: 3 };
-
-/**
- * Chinese, Japanese, Korean and Thai translations often run shorter than wide characters counted
- * twice allow for, so their minimum ratio is a quarter.
- */
-const COMPACT_CULTURE = /^(?:zh|ja|ko|th)(?:-|$)/iu;
-export const COMPACT_MINIMUM_RATIO = 0.25;
-
 /** The shortest translation, relative to its source, that is not a length outlier. */
-export function lengthOutlierMinimumRatio(culture: string): number {
-	return COMPACT_CULTURE.test(culture) ? COMPACT_MINIMUM_RATIO : LENGTH_OUTLIER.minimumRatio;
+export function lengthOutlierMinimumRatio(
+	culture: string,
+	params: LengthOutlierParams = localizationCheckDefaults.length_outlier
+): number {
+	const lower = culture.toLowerCase();
+	return params.compactCultures.some((prefix) => {
+		const code = prefix.toLowerCase();
+		return lower === code || lower.startsWith(`${code}-`);
+	})
+		? params.compactMinimumRatio
+		: params.minimumRatio;
 }
 
-/** `sourceLength` lets a caller measure one source once for every culture. */
+/**
+ * A translation under `minimumRatio` or over the parameters' maximum ratio of its source's visible
+ * length, for a source long enough to judge: a few characters swing their ratios too far to mean
+ * anything. `sourceLength` lets a caller measure one source once for every culture.
+ */
 export function lengthOutlier(
 	source: string,
 	translation: string,
 	sourceLength = visibleTextLength(source),
-	minimumRatio = LENGTH_OUTLIER.minimumRatio
+	minimumRatio?: number,
+	params: LengthOutlierParams = localizationCheckDefaults.length_outlier
 ) {
-	if (sourceLength < LENGTH_OUTLIER.minimumSourceLength) return undefined;
+	if (sourceLength < params.minimumSourceLength) return undefined;
 	const length = visibleTextLength(translation);
 	if (length === 0) return undefined;
 	const ratio = length / sourceLength;
-	if (ratio >= minimumRatio && ratio <= LENGTH_OUTLIER.maximumRatio) return undefined;
+	if (ratio >= (minimumRatio ?? params.minimumRatio) && ratio <= params.maximumRatio)
+		return undefined;
 	return { length, sourceLength, ratio: Math.round(ratio * 100) / 100 };
 }
 
-/**
- * Words translators leave in place of a translation, compared trimmed, lower-cased and without
- * trailing punctuation. "script lama" is Indonesian for "old script". "todo" is Spanish and
- * Portuguese for "all", so only an upper-case `TODO` counts.
- */
-const PLACEHOLDER_TRANSLATIONS = new Set([
-	"skip",
-	"skipped",
-	"script lama",
-	"tbd",
-	"tba",
-	"fixme",
-	"placeholder",
-	"to be translated",
-	"untranslated",
-	"not translated",
-	"n/a",
-	"xxx"
-]);
 const LETTER_OR_NUMBER = /[\p{L}\p{N}]/u;
+const TRAILING_PUNCTUATION = /[\p{P}\s]+$/u;
+
+/** Parameters prepared once: word sets are built on first use of a parameter object. */
+const placeholderWordSets = new WeakMap<PlaceholderTranslationParams, ReadonlySet<string>>();
+function placeholderWords(params: PlaceholderTranslationParams): ReadonlySet<string> {
+	let words = placeholderWordSets.get(params);
+	if (!words) {
+		words = new Set(params.words.map((word) => word.toLowerCase()));
+		placeholderWordSets.set(params, words);
+	}
+	return words;
+}
 
 /**
  * A translation that is only a placeholder word, or only punctuation ("...", ".", "-") for a
- * source of three words or more, as written; undefined otherwise. A source with no letters, one
- * that is itself a placeholder (`placeholder_text`'s) and a translation equal to its source are
- * left out. Shorter sources may be answered with "..." on purpose, as a silent reply.
+ * long enough source, as written; undefined otherwise. A source with no letters, one that is
+ * itself a placeholder (`placeholder_text`'s, with `sourceParams`) and a translation equal to its
+ * source are left out. Shorter sources may be answered with "..." on purpose, as a silent reply.
  */
-export function placeholderTranslation(source: string, translation: string): string | undefined {
+export function placeholderTranslation(
+	source: string,
+	translation: string,
+	params: PlaceholderTranslationParams = localizationCheckDefaults.placeholder_translation,
+	sourceParams: PlaceholderTextParams = localizationCheckDefaults.placeholder_text
+): string | undefined {
 	const trimmed = translation.trim();
-	if (trimmed.length === 0 || trimmed.length > 24 || !LETTER.test(source)) return undefined;
+	if (trimmed.length === 0 || trimmed.length > params.maximumLength || !LETTER.test(source))
+		return undefined;
 	if (translationGroupKey(trimmed) === translationGroupKey(source)) return undefined;
+	const words = placeholderWords(params);
 	if (
-		placeholderMatches(source).length ||
-		PLACEHOLDER_TRANSLATIONS.has(
-			source
-				.trim()
-				.toLowerCase()
-				.replace(/[\p{P}\s]+$/u, "")
-		)
+		placeholderMatchRanges(source, sourceParams).length ||
+		words.has(source.trim().toLowerCase().replace(TRAILING_PUNCTUATION, ""))
 	)
 		return undefined;
-	if (!LETTER_OR_NUMBER.test(trimmed)) return visibleWordCount(source) >= 3 ? trimmed : undefined;
-	const word = trimmed.toLowerCase().replace(/[\p{P}\s]+$/u, "");
-	if (word === "todo") return trimmed.startsWith("TODO") ? trimmed : undefined;
-	return PLACEHOLDER_TRANSLATIONS.has(word) ? trimmed : undefined;
+	if (!LETTER_OR_NUMBER.test(trimmed))
+		return visibleWordCount(source) >= params.minimumPunctuationSourceWords
+			? trimmed
+			: undefined;
+	const word = trimmed.toLowerCase().replace(TRAILING_PUNCTUATION, "");
+	const caseSensitive = params.caseSensitiveWords.find(
+		(candidate) => candidate.toLowerCase() === word
+	);
+	if (caseSensitive !== undefined) return trimmed.startsWith(caseSensitive) ? trimmed : undefined;
+	return words.has(word) ? trimmed : undefined;
 }
 
-// Upper-case markers only: "todo" is Spanish and Portuguese for "all".
-const PLACEHOLDER_MARKERS = /\b(?:TODO|TBD|FIXME)\b/gu;
-const PLACEHOLDER_PHRASES = /lorem ipsum|\bto be translated\b|\bplaceholder\b/giu;
-/** Any of them, in any case: one test rules out nearly every line. */
-const PLACEHOLDER_ANY = /todo|tbd|fixme|lorem ipsum|to be translated|placeholder/iu;
+const escapeRegExp = (text: string) => text.replace(/[.*+?^${}()|[\]\\]/gu, "\\$&");
+interface PlaceholderPatterns {
+	/** Any marker or phrase, in any case: one test rules out nearly every line. */
+	readonly any: RegExp | undefined;
+	readonly markers: RegExp | undefined;
+	readonly phrases: RegExp | undefined;
+}
+const placeholderPatternSets = new WeakMap<PlaceholderTextParams, PlaceholderPatterns>();
+function placeholderPatterns(params: PlaceholderTextParams): PlaceholderPatterns {
+	let patterns = placeholderPatternSets.get(params);
+	if (!patterns) {
+		const words = (values: readonly string[]) => values.map(escapeRegExp).join("|");
+		const all = [...params.markers, ...params.phrases];
+		patterns = {
+			any: all.length ? new RegExp(words(all), "iu") : undefined,
+			markers: params.markers.length
+				? new RegExp(`\\b(?:${words(params.markers)})\\b`, "gu")
+				: undefined,
+			phrases: params.phrases.length
+				? new RegExp(`\\b(?:${words(params.phrases)})\\b`, "giu")
+				: undefined
+		};
+		placeholderPatternSets.set(params, patterns);
+	}
+	return patterns;
+}
 
 /** Placeholder markers and phrases in source text, in order of appearance. */
-export function placeholderMatches(text: string): string[] {
-	return placeholderMatchRanges(text).map(({ match }) => match);
+export function placeholderMatches(
+	text: string,
+	params: PlaceholderTextParams = localizationCheckDefaults.placeholder_text
+): string[] {
+	return placeholderMatchRanges(text, params).map(({ match }) => match);
 }
 
 /** `placeholderMatches` with each match's UTF-16 range in the text. */
 export function placeholderMatchRanges(
-	text: string
+	text: string,
+	params: PlaceholderTextParams = localizationCheckDefaults.placeholder_text
 ): Array<{ match: string; start: number; end: number }> {
-	if (!PLACEHOLDER_ANY.test(text)) return [];
-	return [...text.matchAll(PLACEHOLDER_MARKERS), ...text.matchAll(PLACEHOLDER_PHRASES)]
+	const { any, markers, phrases } = placeholderPatterns(params);
+	if (!any?.test(text)) return [];
+	return [...(markers ? text.matchAll(markers) : []), ...(phrases ? text.matchAll(phrases) : [])]
 		.sort((a, b) => a.index - b.index)
 		.map((match) => ({
 			match: match[0],
@@ -345,18 +379,18 @@ export function visibleWordCount(text: string): number {
 	return visible.match(/\S+/gu)?.length ?? 0;
 }
 
-/** The most words a source may have for `inconsistent_translation`: names, labels, short UI text. */
-export const CONSISTENT_TRANSLATION_MAXIMUM_WORDS = 4;
-
 /**
- * Sources whose translations should agree: letters, at least three visible characters and at
- * most four words. Longer sentences are often translated to fit their scene.
+ * Sources whose translations should agree: letters, and a visible length and word count within
+ * the parameters. Longer sentences are often translated to fit their scene.
  */
-export function consistentTranslationCandidate(text: string): boolean {
+export function consistentTranslationCandidate(
+	text: string,
+	params: InconsistentTranslationParams = localizationCheckDefaults.inconsistent_translation
+): boolean {
 	return (
 		LETTER.test(text) &&
-		visibleTextLength(text) >= 3 &&
-		visibleWordCount(text) <= CONSISTENT_TRANSLATION_MAXIMUM_WORDS
+		visibleTextLength(text) >= params.minimumLength &&
+		visibleWordCount(text) <= params.maximumWords
 	);
 }
 

@@ -874,7 +874,11 @@ files may add `disabledLocalizationChecks`, an array of built-in IDs; `segmentSe
 such as `"//"` that joins a line's segments and must appear as often in each translation;
 `optionalTags`, rich-text tags a translation may add or leave out; and `optionalArguments`,
 arguments the game always supplies, which a translation may add along with a tag around only
-them. None changes the source rules. The package README lists every check with its severity and rule.
+them. None changes the source rules. `localizationCheckCatalogue` describes every check: whether
+it models Unreal (`unreal`) or is a judgment (`heuristic`), its label, default severity, parameter
+schema with defaults and a condition text generated from those parameters. The package README's
+check table is generated from it, so hosts can show the same descriptions instead of writing their
+own.
 
 This falls short of [base, not constraints](../vision-and-architecture.md#base-not-constraints).
 The parsers follow Unreal, but every built-in's severity and the heuristics' thresholds and word
