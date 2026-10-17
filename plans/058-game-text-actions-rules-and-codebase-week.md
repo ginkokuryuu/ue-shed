@@ -16,7 +16,7 @@
 
 ## Status
 
-- **State**: TODO
+- **State**: IN PROGRESS (checkpoint 2026-10-17, see [Checkpoint](#checkpoint-2026-10-17))
 - **Priority**: P1
 - **Effort**: XL (four lanes, about a week; unfinished items are acceptable)
 - **Risk**: MEDIUM. Lane A adds the first asset writes for text outside DataTables, and A2 and lane D
@@ -34,40 +34,84 @@
 | ---- | ---------------------------------------------- | ---- | -------------------- |
 | A1   | Name packages by file location                 | A    | BLOCKED — waits #101 |
 | A2   | Graph pin text as Game Text places             | A    | BLOCKED — waits #101 |
-| A3   | Game Text actions: editor plugin and API       | A    | TODO                 |
-| A4   | Identity fixture, slice 2                      | A    | TODO                 |
+| A3   | Game Text actions: editor plugin and API       | A    | PR #105, #112 (5.7)  |
+| A4   | Identity fixture, slice 2                      | A    | PR #120 (5.7)        |
 | A5   | UE 4.27 identity slice                         | A    | BLOCKED — no UE 4.27 |
-| A6   | Stretch: text diff of two package versions     | A    | TODO                 |
-| B1   | Check catalogue                                | B    | TODO                 |
-| B2   | Rules file v3                                  | B    | TODO                 |
-| B3   | Parameterised, scoped checks                   | B    | TODO                 |
-| B4   | Severity stored per finding                    | B    | TODO                 |
+| A6   | Stretch: text diff of two package versions     | A    | PR #104              |
+| B1   | Check catalogue                                | B    | PR #106              |
+| B2   | Rules file v3                                  | B    | PR #109              |
+| B3   | Parameterised, scoped checks                   | B    | PR #111              |
+| B4   | Severity stored per finding                    | B    | PR #113              |
 | B5   | Host-supplied policies                         | B    | BLOCKED — waits #101 |
-| B6   | Studio-defined checks                          | B    | TODO                 |
+| B6   | Studio-defined checks                          | B    | PR #117              |
 | B7   | Intended marks                                 | B    | BLOCKED — waits #101 |
 | B8   | Scans keyed on the resolved rules              | B    | BLOCKED — waits #101 |
-| C1   | Stage breakdown on real projects               | C    | TODO                 |
-| C2   | Prepare the query once, off the main thread    | C    | TODO                 |
-| C3   | Quality scan in a worker                       | C    | TODO                 |
-| C4   | Column cache per reader                        | C    | TODO                 |
+| C1   | Stage breakdown on real projects               | C    | PARTIAL — #114       |
+| C2   | Prepare the query once, off the main thread    | C    | PR #110              |
+| C3   | Quality scan in a worker                       | C    | PR #119              |
+| C4   | Column cache per reader                        | C    | PR #116              |
 | C5   | Spike: binary package-text output              | C    | BLOCKED — waits #101 |
-| C6   | Electron vs Node build time                    | C    | TODO                 |
-| C7   | Bytecode reader cost                           | C    | TODO                 |
-| D1   | `game-text` entry points                       | D    | TODO                 |
-| D2   | Reader batching inside the index source        | D    | TODO                 |
-| D3   | Unreal path module                             | D    | TODO                 |
-| D4   | One error shape                                | D    | TODO                 |
-| D5   | Classified causes instead of prose             | D    | TODO                 |
-| D6   | Deliberate error translation                   | D    | TODO                 |
-| D7   | Domain parsers instead of raw decoders         | D    | TODO                 |
-| D8   | Layers and test layers                         | D    | TODO                 |
-| D9   | One progress mechanism, one completeness shape | D    | TODO                 |
-| D10  | Workspace orchestration as a package           | D    | TODO                 |
-| D11  | JSDoc on public exports                        | D    | TODO                 |
-| D12  | Small cleanups                                 | D    | TODO                 |
-| D13  | API surface of the other host-facing packages  | D    | TODO                 |
-| D14  | Native error audit                             | D    | TODO                 |
-| R    | 0.17.0 release preparation                     | —    | TODO                 |
+| C6   | Electron vs Node build time                    | C    | TODO — quiet machine |
+| C7   | Bytecode reader cost                           | C    | TODO — needs C1 data |
+| D1   | `game-text` entry points                       | D    | PR #115              |
+| D2   | Reader batching inside the index source        | D    | PR #108              |
+| D3   | Unreal path module                             | D    | TODO — pairs with A1 |
+| D4   | One error shape                                | D    | PARTIAL — #118, #122 |
+| D5   | Classified causes instead of prose             | D    | PR #122              |
+| D6   | Deliberate error translation                   | D    | PR #122              |
+| D7   | Domain parsers instead of raw decoders         | D    | PARTIAL — #127       |
+| D8   | Layers and test layers                         | D    | PR #125              |
+| D9   | One progress mechanism, one completeness shape | D    | PR #125              |
+| D10  | Workspace orchestration as a package           | D    | PR #124              |
+| D11  | JSDoc on public exports                        | D    | PARTIAL — #123       |
+| D12  | Small cleanups                                 | D    | PR #107              |
+| D13  | API surface of the other host-facing packages  | D    | PARTIAL — #123       |
+| D14  | Native error audit                             | D    | PR #123, #126 (5.7)  |
+| R    | 0.17.0 release preparation                     | —    | TODO — after merges  |
+
+## Checkpoint 2026-10-17
+
+One day of four-lane execution on a UE 5.7-only machine. Every PR comes from the
+`ginkokuryuu/ue-shed` fork and targets `main`; stacked PRs carry the commits below them, so merge
+from the bottom. Hosted CI has not run on any of them (fork workflow runs need maintainer
+approval). "PR #n" means pushed and locally checked, not merged. "(5.7)" means UE 5.8 checks are
+still owed.
+
+**Stacks.** B: #106 ← #109 ← #111 ← #113 ← #117. C: #110 ← #119 ← #125 (#125 needs a rebase).
+D: #118 ← #122; #115 ← #124. A: #105 ← #112. #127 is on `main` but conflicts textually with #122
+and #125 (keep both sides).
+
+**Suggested merge order.** #102 → #100, #101, then the small independent PRs (#103, #104, #108,
+#114, #116), then the bottoms of the stacks (#106, #110), then #107 early so later PRs rebase once,
+then the breaking API set in this order: #115 → #124, #118 → #122 → #127, #125.
+
+**Owed before merge.**
+
+- UE 5.8: `test:unreal-plugins`, `test:unreal-authoring` and `check:unreal` for #112, #120 and
+  #126; the `LOCTEXT` gather step in #120; `pnpm test:uasset-engine-matrix` for #123's Rust changes.
+- wasm-pack checks (not installed here): `uasset:check:wasm:libraries`, `test:uasset-wasm`,
+  `test:saved-review`, `test:release:packages` (exercises #115's subpaths from a packed tarball).
+- `test:unreal-authoring` rewrites 48 committed fixture assets in place; restore them after a run.
+- Two failures also occur on untouched `main` here: the CLI e2e session-lifecycle timeout and the
+  data-authoring locale-formatted progress test.
+
+**Left to do.**
+
+- A1, A2, B5, B7, B8, C5 after #101; D3 with A1; A5 needs UE 4.27.
+- A3: hosts must not act on file-copied packages until A1 lands.
+- C1, C6, C7: all measurements, on a quiet machine with the owner's real projects.
+- D4: game-text errors under the guard; a `code` on every error; named failure schemas. Remove the
+  temporary lint exemptions for lane B and C files (#107, #122) once those files are converted.
+- D6: the `mapError` sites that drop parse issues outside #122's commit.
+- D7: 88 allowlisted raw decoders (protocol, cameras, authoring-sdk, asset-audits,
+  config-explorer, enhanced-input, niagara, plugin-distribution, Workbench).
+- D9: completeness shapes in `unreal-assets` and saved-review.
+- D11: JSDoc beyond protocol and unreal-connection.
+- D12: the non-null-assertion lint rule (about 177 uses).
+- D13: cuts in published packages once the downstream host's imports are known.
+- D14: Authoring Apply command codes and two hard asserts (if not in #126); 30 `unreachable!`
+  sites; wasm-crate lints.
+- R: once the 0.17.0 set has merged.
 
 ## Context
 
