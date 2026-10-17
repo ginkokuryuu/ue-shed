@@ -160,6 +160,11 @@ export const CameraBridgeSnapshot = Schema.Struct({
 	pose: ApprovedPose
 });
 export type CameraBridgeSnapshot = typeof CameraBridgeSnapshot.Type;
+/** A bridge failure cause: lower snake case, bounded. */
+export const CameraBridgeFailureCode = Schema.String.check(
+	Schema.isMaxLength(64),
+	Schema.isPattern(/^[a-z][a-z0-9_]*$/u)
+);
 export const CameraBridgeResponse = Schema.Union([
 	CameraSetupState,
 	CameraActorSelectionResult,
@@ -184,7 +189,12 @@ export const CameraBridgeResponse = Schema.Union([
 	Schema.Struct({
 		version: Version,
 		status: Schema.Literals(["busy", "stale", "unavailable", "invalid", "detached"]),
-		message: Schema.String
+		message: Schema.String,
+		/**
+		 * The specific cause behind the coarse status, for example `scope_mismatch` or
+		 * `revision_conflict`. Plugins before 0.17 omit it.
+		 */
+		code: Schema.optionalKey(CameraBridgeFailureCode)
 	})
 ]);
 export type CameraBridgeResponse = typeof CameraBridgeResponse.Type;
@@ -201,7 +211,9 @@ export class CameraBridgeError extends Schema.TaggedError<CameraBridgeError>()(
 			"invalid"
 		]),
 		message: Schema.String,
-		recovery: Schema.String
+		recovery: Schema.String,
+		/** The bridge's specific cause, when it reported one (see `CameraBridgeFailureCode`). */
+		cause: Schema.optionalKey(CameraBridgeFailureCode)
 	}
 ) {}
 export interface CameraAuthoringBridge {
@@ -310,19 +322,19 @@ export function readyCameraBridge(
 	response: CameraBridgeResponse
 ): Effect.Effect<CameraBridgeSnapshot, CameraBridgeError> {
 	if (response.status === "ready") return Effect.succeed(response);
-	return Effect.fail(
-		new CameraBridgeError({
-			code:
-				response.status === "busy" ||
-				response.status === "stale" ||
-				response.status === "invalid"
-					? response.status
-					: "unavailable",
-			message: response.message,
-			recovery:
-				"Inspect the camera session. Resolve ownership or revision conflicts before retrying."
-		})
-	);
+	const fields = {
+		code:
+			response.status === "busy" ||
+			response.status === "stale" ||
+			response.status === "invalid"
+				? response.status
+				: ("unavailable" as const),
+		message: response.message,
+		recovery:
+			"Inspect the camera session. Resolve ownership or revision conflicts before retrying."
+	};
+	const cause = "code" in response ? response.code : undefined;
+	return Effect.fail(new CameraBridgeError(cause === undefined ? fields : { ...fields, cause }));
 }
 export const attachArrangementCamera = Effect.fn("CameraAuthoring.attach")(function* (
 	store: CameraAuthoringStore,
