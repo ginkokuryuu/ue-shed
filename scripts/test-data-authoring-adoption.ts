@@ -210,7 +210,7 @@ function digest(value: string) {
 	return createHash("sha256").update(value).digest("hex");
 }
 
-const commit = spawnSync("git.exe", ["rev-parse", "HEAD"], {
+const commit = spawnSync("git", ["rev-parse", "HEAD"], {
 	cwd: repositoryRoot,
 	encoding: "utf8",
 	windowsHide: true
