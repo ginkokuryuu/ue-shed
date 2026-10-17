@@ -31,15 +31,15 @@ import {
 	LocalizationLinesFileResult
 } from "@ue-shed/game-text/corpus";
 import {
-	WorkbenchOperationRequest,
-	WorkbenchOperationPlanResult,
-	WorkbenchOperationId,
-	WorkbenchOperationTarget,
-	WorkbenchOperationState,
-	WorkbenchOperationResult,
-	WorkbenchOperationFilesRequest,
-	WorkbenchOperationFilesResult,
-	WorkbenchOperationProgress
+	GameTextOperationRequest,
+	GameTextOperationPlanResult,
+	GameTextOperationId,
+	GameTextOperationTarget,
+	GameTextOperationState,
+	GameTextOperationResult,
+	GameTextOperationFilesRequest,
+	GameTextOperationFilesResult,
+	GameTextOperationProgress
 } from "@ue-shed/game-text/schema";
 import { InvestigationFileResult, InvestigationFormat } from "@ue-shed/unreal-assets/investigation";
 import {
@@ -741,28 +741,28 @@ export const invokeContracts = {
 	}),
 	"game-text:localization:operation-state": invoke({
 		channel: "game-text:localization:operation-state",
-		args: Schema.Tuple([WorkbenchOperationTarget]),
-		result: WorkbenchOperationState
+		args: Schema.Tuple([GameTextOperationTarget]),
+		result: GameTextOperationState
 	}),
 	"game-text:localization:operation-plan": invoke({
 		channel: "game-text:localization:operation-plan",
-		args: Schema.Tuple([WorkbenchOperationRequest]),
-		result: WorkbenchOperationPlanResult
+		args: Schema.Tuple([GameTextOperationRequest]),
+		result: GameTextOperationPlanResult
 	}),
 	"game-text:localization:operation-run": invoke({
 		channel: "game-text:localization:operation-run",
-		args: Schema.Tuple([WorkbenchOperationId]),
-		result: WorkbenchOperationResult
+		args: Schema.Tuple([GameTextOperationId]),
+		result: GameTextOperationResult
 	}),
 	"game-text:localization:operation-cancel": invoke({
 		channel: "game-text:localization:operation-cancel",
-		args: Schema.Tuple([WorkbenchOperationId]),
-		result: WorkbenchOperationResult
+		args: Schema.Tuple([GameTextOperationId]),
+		result: GameTextOperationResult
 	}),
 	"game-text:localization:operation-files": invoke({
 		channel: "game-text:localization:operation-files",
-		args: Schema.Tuple([WorkbenchOperationFilesRequest]),
-		result: WorkbenchOperationFilesResult
+		args: Schema.Tuple([GameTextOperationFilesRequest]),
+		result: GameTextOperationFilesResult
 	}),
 	"game-text:localization:quality-search": invoke({
 		channel: "game-text:localization:quality-search",
@@ -1240,7 +1240,7 @@ export const mapCaptureProgressEvent = {
 
 export const gameTextOperationProgressEvent = {
 	channel: "game-text:localization:operation-progress",
-	payload: WorkbenchOperationProgress
+	payload: GameTextOperationProgress
 } as const;
 
 // SAFETY: invokeContracts is the sole source of keys, so Object.keys cannot produce another channel.

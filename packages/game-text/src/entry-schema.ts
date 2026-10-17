@@ -47,17 +47,29 @@ export {
 } from "./localization-schema.js";
 export {
 	OperationRelativePath,
+	GameTextOperationFailure,
 	WorkbenchOperationFailure,
+	GameTextOperationFilesRequest,
 	WorkbenchOperationFilesRequest,
+	GameTextOperationFilesResult,
 	WorkbenchOperationFilesResult,
+	GameTextOperationId,
 	WorkbenchOperationId,
+	GameTextOperationPlan,
 	WorkbenchOperationPlan,
+	GameTextOperationPlanResult,
 	WorkbenchOperationPlanResult,
+	GameTextOperationProgress,
 	WorkbenchOperationProgress,
+	GameTextOperationReceipt,
 	WorkbenchOperationReceipt,
+	GameTextOperationRequest,
 	WorkbenchOperationRequest,
+	GameTextOperationResult,
 	WorkbenchOperationResult,
+	GameTextOperationState,
 	WorkbenchOperationState,
+	GameTextOperationTarget,
 	WorkbenchOperationTarget
 } from "./operation-query.js";
 export {

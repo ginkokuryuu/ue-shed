@@ -1,0 +1,120 @@
+import type { LocalizationFileAccess } from "@ue-shed/localization";
+import type { Effect, Layer } from "effect";
+
+/**
+ * The project a host has selected. The workspace never chooses or changes the project; it reads
+ * the host's selection and refuses to publish a scan once the selection or its generation moved.
+ */
+export type GameTextWorkspaceProjectState =
+	| { readonly status: "not_configured" }
+	| { readonly status: "cancelled" }
+	| {
+			readonly status: "failed";
+			readonly error: { readonly message: string; readonly recovery: string };
+	  }
+	| {
+			readonly status: "ready";
+			readonly project: { readonly projectRoot: string; readonly generation?: number };
+	  };
+
+/** How far a workspace scan has come. Today's progress mechanism; Plan 058 D9 may replace it. */
+export interface GameTextWorkspaceProgress {
+	readonly completed: number;
+	readonly total: number;
+	readonly phase: "idle" | "enumerating" | "scanning" | "ready" | "failed";
+	readonly stage: string;
+	readonly detail?: string;
+}
+
+/** A failure a host reports from one of its hooks, in words a user can act on. */
+export interface GameTextWorkspaceHostFailure {
+	readonly message: string;
+	readonly recovery: string;
+}
+
+export interface GameTextWorkspaceProject {
+	/** The selected project, as the host last published it. */
+	readonly current: () => Effect.Effect<GameTextWorkspaceProjectState>;
+	/** Re-reads the selected project from disk before a scan. */
+	readonly refresh: () => Effect.Effect<GameTextWorkspaceProjectState>;
+	/** The committed package inventory a scan reads, with the generation it belongs to. */
+	readonly candidates: () => Effect.Effect<
+		{ readonly generation: number; readonly summary: { readonly projectRoot: string } },
+		GameTextWorkspaceHostFailure
+	>;
+	/** The host's own project progress, shown while the host enumerates or scans the project. */
+	readonly progress: () => Effect.Effect<GameTextWorkspaceProgress>;
+}
+
+export type GameTextWorkspaceFileChoice =
+	| { readonly status: "selected"; readonly path: string }
+	| { readonly status: "cancelled" };
+
+export interface GameTextWorkspaceFileFilter {
+	readonly name: string;
+	readonly extensions: readonly string[];
+}
+
+/**
+ * Where the workspace reads and writes files that are not localization files. A desktop host shows
+ * dialogs; a headless host answers with fixed paths or `cancelled`.
+ */
+export interface GameTextWorkspaceFileHooks {
+	readonly chooseFile: (options: {
+		readonly title: string;
+		readonly filters?: readonly GameTextWorkspaceFileFilter[];
+	}) => Effect.Effect<GameTextWorkspaceFileChoice, GameTextWorkspaceHostFailure>;
+	readonly chooseSaveFile: (options: {
+		readonly title: string;
+		readonly defaultPath?: string;
+		readonly filters?: readonly GameTextWorkspaceFileFilter[];
+	}) => Effect.Effect<GameTextWorkspaceFileChoice, GameTextWorkspaceHostFailure>;
+	readonly readFile: (
+		path: string,
+		options?: { readonly maxBytes?: number }
+	) => Effect.Effect<Uint8Array, GameTextWorkspaceHostFailure>;
+	/** Reads a file under a directory, refusing paths that leave it. */
+	readonly readFileWithin: (
+		directory: string,
+		relativePath: string,
+		options?: { readonly maxBytes?: number }
+	) => Effect.Effect<Uint8Array, GameTextWorkspaceHostFailure>;
+	/**
+	 * The writable-file hook: every rules file, report, line export and investigation file the
+	 * workspace writes goes through it, so a host can check a file out, refuse it or redirect it.
+	 */
+	readonly writeFile: (
+		path: string,
+		bytes: Uint8Array,
+		/** `exclusive` refuses to replace an existing file. */
+		options?: { readonly maxBytes?: number; readonly exclusive?: boolean }
+	) => Effect.Effect<void, GameTextWorkspaceHostFailure>;
+}
+
+/** Everything a host supplies to run the Game Text workspace. */
+export interface GameTextWorkspaceHost {
+	readonly project: GameTextWorkspaceProject;
+	readonly files: GameTextWorkspaceFileHooks;
+	/**
+	 * Rules location: the project-relative path of the project's rules file, which starter rules
+	 * are written to and loaded from. Defaults to `GAME_TEXT_RULES_RELATIVE_PATH`.
+	 */
+	readonly rulesRelativePath?: string;
+	/**
+	 * Recovery copy: called with a file's previous bytes before the workspace overwrites it (a
+	 * saved rules file), so a host can keep a copy to restore. A failure stops the write.
+	 */
+	readonly recoveryCopy?: (
+		path: string,
+		previous: Uint8Array
+	) => Effect.Effect<void, GameTextWorkspaceHostFailure>;
+	/** Policy: the name review records carry for the person making them. */
+	readonly reviewer?: () => string;
+	/** Policy: the name change sets carry as their author. Defaults to `"game-text"`. */
+	readonly changeAuthor?: string;
+	/**
+	 * Writable-file hook for localization files: the file access that writes PO edits and review
+	 * files. Defaults to `LocalizationFileAccessLive`.
+	 */
+	readonly localizationFiles?: Layer.Layer<LocalizationFileAccess>;
+}

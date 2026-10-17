@@ -1,14 +1,14 @@
 import {
 	OperationRelativePath,
-	WorkbenchOperationProgress,
-	type WorkbenchOperationFailure,
-	type WorkbenchOperationFilesRequest,
-	type WorkbenchOperationFilesResult,
-	type WorkbenchOperationPlan,
-	type WorkbenchOperationPlanResult,
-	type WorkbenchOperationRequest,
-	type WorkbenchOperationResult,
-	type WorkbenchOperationState
+	GameTextOperationProgress,
+	type GameTextOperationFailure,
+	type GameTextOperationFilesRequest,
+	type GameTextOperationFilesResult,
+	type GameTextOperationPlan,
+	type GameTextOperationPlanResult,
+	type GameTextOperationRequest,
+	type GameTextOperationResult,
+	type GameTextOperationState
 } from "@ue-shed/game-text/schema";
 import {
 	LocalizationOperations,
@@ -41,15 +41,15 @@ import { WorkbenchProject } from "./project-workspace.js";
 import { WorkbenchGameText } from "./game-text.js";
 
 export interface WorkbenchGameTextOperationsApi {
-	readonly state: (target: LocalizationTargetName) => Effect.Effect<WorkbenchOperationState>;
+	readonly state: (target: LocalizationTargetName) => Effect.Effect<GameTextOperationState>;
 	readonly plan: (
-		request: WorkbenchOperationRequest
-	) => Effect.Effect<WorkbenchOperationPlanResult>;
-	readonly run: (id: string) => Effect.Effect<WorkbenchOperationResult>;
-	readonly cancel: (id: string) => Effect.Effect<WorkbenchOperationResult>;
+		request: GameTextOperationRequest
+	) => Effect.Effect<GameTextOperationPlanResult>;
+	readonly run: (id: string) => Effect.Effect<GameTextOperationResult>;
+	readonly cancel: (id: string) => Effect.Effect<GameTextOperationResult>;
 	readonly files: (
-		request: WorkbenchOperationFilesRequest
-	) => Effect.Effect<WorkbenchOperationFilesResult>;
+		request: GameTextOperationFilesRequest
+	) => Effect.Effect<GameTextOperationFilesResult>;
 }
 export class WorkbenchGameTextOperations extends Context.Service<
 	WorkbenchGameTextOperations,
@@ -65,7 +65,7 @@ export function safeLocalizationLogLine(line: string): string {
 		.replace(/[\u0000-\u0008\u000b-\u001f]/gu, "")
 		.slice(0, 2048);
 }
-function failed(code: string, message: string, recovery: string): WorkbenchOperationFailure {
+function failed(code: string, message: string, recovery: string): GameTextOperationFailure {
 	return { status: "failed", code, message, recovery, details: [] };
 }
 const failureMessages = {
@@ -91,7 +91,7 @@ const failureMessages = {
 	config_changed: "The target's configuration changed after the file list was prepared.",
 	target_not_found: "The selected localization target was not found."
 } satisfies Record<LocalizationOperationError["code"], string>;
-function failure(error: LocalizationOperationError): WorkbenchOperationFailure {
+function failure(error: LocalizationOperationError): GameTextOperationFailure {
 	const recovery =
 		error.code === "engine_not_found" || error.code === "engine_ambiguous"
 			? "Install the engine associated with this project, or set UE_SHED_UNREAL_ENGINE_ROOT before starting Workbench."
@@ -125,7 +125,7 @@ const stale = () =>
 
 interface RetainedPlan {
 	readonly used: boolean;
-	readonly view: WorkbenchOperationPlan;
+	readonly view: GameTextOperationPlan;
 	readonly request: LocalizationRunRequest;
 	readonly plan: LocalizationOperationPlan;
 	readonly generation: number;
@@ -134,7 +134,7 @@ interface RetainedReceipt {
 	readonly id: string;
 	readonly projectRoot: string;
 	readonly receipt: LocalizationOperationReceipt;
-	readonly result: WorkbenchOperationResult;
+	readonly result: GameTextOperationResult;
 }
 /** Compare only execution inputs; each planning call allocates a different private log path. */
 function planInputs(plan: LocalizationOperationPlan): string {
@@ -161,19 +161,19 @@ export const WorkbenchGameTextOperationsLive = Layer.effect(
 		const scope = yield* Effect.scope;
 		const confirmation = yield* Ref.make<RetainedPlan | undefined>(undefined);
 		const receipt = yield* Ref.make<RetainedReceipt | undefined>(undefined);
-		const progress = yield* Ref.make<WorkbenchOperationProgress | undefined>(undefined);
+		const progress = yield* Ref.make<GameTextOperationProgress | undefined>(undefined);
 		const lastResult = yield* Ref.make<
 			| {
 					projectRoot: string;
 					target: LocalizationTargetName;
-					result: WorkbenchOperationResult;
+					result: GameTextOperationResult;
 			  }
 			| undefined
 		>(undefined);
 		const capabilities = yield* Ref.make<
 			| {
 					target: LocalizationTarget;
-					operations: WorkbenchOperationState["operations"];
+					operations: GameTextOperationState["operations"];
 			  }
 			| undefined
 		>(undefined);
@@ -181,11 +181,11 @@ export const WorkbenchGameTextOperationsLive = Layer.effect(
 			| {
 					id: string;
 					fiber: Fiber.Fiber<void>;
-					done: Deferred.Deferred<WorkbenchOperationResult>;
+					done: Deferred.Deferred<GameTextOperationResult>;
 			  }
 			| undefined
 		>(undefined);
-		const publish = (value: WorkbenchOperationProgress) =>
+		const publish = (value: GameTextOperationProgress) =>
 			Effect.gen(function* () {
 				yield* Ref.set(progress, value);
 				const current = yield* project.current();
@@ -198,7 +198,7 @@ export const WorkbenchGameTextOperationsLive = Layer.effect(
 				yield* window
 					.send(
 						"game-text:localization:operation-progress",
-						Schema.encodeSync(WorkbenchOperationProgress)(value)
+						Schema.encodeSync(GameTextOperationProgress)(value)
 					)
 					.pipe(Effect.ignore);
 			});
@@ -214,7 +214,7 @@ export const WorkbenchGameTextOperationsLive = Layer.effect(
 			});
 		const state = Effect.fn("Workbench.GameText.operations.state")(function* (
 			target: LocalizationTargetName
-		): Effect.fn.Return<WorkbenchOperationState> {
+		): Effect.fn.Return<GameTextOperationState> {
 			const selected = yield* gameText.operationTarget(target);
 			const current = yield* project.current();
 			const pending = yield* Ref.get(progress);
@@ -246,8 +246,8 @@ export const WorkbenchGameTextOperationsLive = Layer.effect(
 			};
 		});
 		const plan = Effect.fn("Workbench.GameText.operations.plan")(function* (
-			request: WorkbenchOperationRequest
-		): Effect.fn.Return<WorkbenchOperationPlanResult> {
+			request: GameTextOperationRequest
+		): Effect.fn.Return<GameTextOperationPlanResult> {
 			return yield* Effect.uninterruptibleMask((restore) =>
 				Effect.gen(function* () {
 					if (!(yield* gameText.beginOperation())) return busy();
@@ -272,7 +272,7 @@ export const WorkbenchGameTextOperationsLive = Layer.effect(
 								).pipe(
 									Effect.mapError(() => localizationOperationError("unsafe_path"))
 								);
-							const view: WorkbenchOperationPlan = {
+							const view: GameTextOperationPlan = {
 								id: randomUUID(),
 								target: prepared.target,
 								operation: prepared.operation,
@@ -298,7 +298,7 @@ export const WorkbenchGameTextOperationsLive = Layer.effect(
 		});
 		const run = Effect.fn("Workbench.GameText.operations.run")(function* (
 			id: string
-		): Effect.fn.Return<WorkbenchOperationResult> {
+		): Effect.fn.Return<GameTextOperationResult> {
 			return yield* Effect.uninterruptibleMask((restore) =>
 				Effect.gen(function* () {
 					if (yield* Ref.get(active)) return busy();
@@ -307,8 +307,8 @@ export const WorkbenchGameTextOperationsLive = Layer.effect(
 						return stale();
 					if (!(yield* gameText.beginOperation())) return busy();
 					yield* Ref.set(confirmation, { ...saved, used: true });
-					const done = yield* Deferred.make<WorkbenchOperationResult>();
-					const initial: WorkbenchOperationProgress = {
+					const done = yield* Deferred.make<GameTextOperationResult>();
+					const initial: GameTextOperationProgress = {
 						id,
 						target: saved.view.target,
 						operation: saved.view.operation,
@@ -360,7 +360,7 @@ export const WorkbenchGameTextOperationsLive = Layer.effect(
 							: false;
 						const after = yield* gameText.localizationTarget(saved.view.target);
 						const imported = result.plan.steps.some((step) => step.kind === "import");
-						const completed: WorkbenchOperationResult = {
+						const completed: GameTextOperationResult = {
 							status: "completed",
 							receipt: {
 								id,
@@ -401,7 +401,7 @@ export const WorkbenchGameTextOperationsLive = Layer.effect(
 									stopped.success instanceof LocalizationOperationError
 										? stopped.success
 										: undefined;
-								const result: WorkbenchOperationResult = Exit.isSuccess(exit)
+								const result: GameTextOperationResult = Exit.isSuccess(exit)
 									? exit.value
 									: terminationError
 										? failure(terminationError)
@@ -456,8 +456,8 @@ export const WorkbenchGameTextOperationsLive = Layer.effect(
 			return yield* Deferred.await(current.done);
 		});
 		const files = Effect.fn("Workbench.GameText.operations.files")(function* (
-			request: WorkbenchOperationFilesRequest
-		): Effect.fn.Return<WorkbenchOperationFilesResult> {
+			request: GameTextOperationFilesRequest
+		): Effect.fn.Return<GameTextOperationFilesResult> {
 			const saved = yield* Ref.get(confirmation);
 			const completed = yield* Ref.get(receipt);
 			const current = yield* project.current();
