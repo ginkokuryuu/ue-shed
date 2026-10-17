@@ -97,6 +97,13 @@ Each write step owns and releases its lease. Stale package revisions or supersed
 publications fail with recovery guidance; opening a model pins its reader in the caller's scope.
 The compatibility `GameTextIndexRefresh.refresh()` composes these same steps.
 
+Hosts can replace `typeScriptIndexBuilderLayer` with
+`nativeIndexBuilderLayer(readerConfiguration)` to opt into native dictionary, publication and
+join construction through uasset-io protocol 1.13. Package extraction, localization import and
+JavaScript queries keep their existing interfaces. See the
+[native preparation guide](../../docs/engineering/native-game-text-index.md) for composition,
+incremental eligibility, limits and measurement scope. The default builder remains TypeScript.
+
 Retained desktop models separate preparation from publication. `makeRetainedGameTextIndex()`
 returns `refresh` and `release`; prepare inside an operation scope, publish the result and run
 its `retain` effect together, then borrow it in each operation that reads lazy projections.

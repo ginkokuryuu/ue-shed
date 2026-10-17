@@ -63,6 +63,9 @@ const approvedRuntimeExits = new Set([
 	"packages/unreal-assets/src/protocol-transport.ts"
 ]);
 const approvedPromiseAdapters = new Set([
+	// Native build staging adapts Node filesystem/snapshot Promise ports below the scoped
+	// Effect builder; leases, temporary files and the protocol process share its scope.
+	"packages/game-text/src/native-index-builder.ts",
 	// The search adapter bridges Node worker messages once; callers receive scoped Effects.
 	"packages/game-text/src/search-worker-node.ts",
 	// The cold importer adapts worker messages and staged snapshot handles below SharedIndex.

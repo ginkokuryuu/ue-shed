@@ -50,6 +50,13 @@ ordering, requested views, progress presentation, and cancellation; the package 
 leases, cache validity, immutable publication, and query reader resources.
 `gameTextIndexRefreshLayer` remains a compatible convenience workflow and also exposes the steps.
 
+For opt-in native preparation, replace `typeScriptIndexBuilderLayer` with
+`nativeIndexBuilderLayer(readerConfiguration)` and supply a reader supporting uasset-io protocol
+1.13. Keep the same source, evidence and query layers. Verify cold preparation, an incremental
+edit, failure recovery and pinned-reader queries in the adopting host. See the
+[native preparation guide](../../docs/engineering/native-game-text-index.md) for limits and
+supported incremental cases.
+
 A localization index also supplies the complete raw source query and corpus. Prepare the chosen
 target first when both views are needed, and use that model for requests without `localization` as
 well. Keep source-only preparation as recovery when target discovery or import is unavailable.

@@ -563,6 +563,7 @@ export function makeProtocolRequest(
 		requestId: `unreal-assets-${process.pid}-${protocolRequestCounter}`
 	};
 	// Narrow each branch to preserve the request union's operation/version correlation.
+	if (operation.kind === "game_text_index") return { ...fields, operation };
 	if (operation.kind === "extract_text_packages") return { ...fields, operation };
 	return { ...fields, operation };
 }

@@ -69,13 +69,15 @@ jobs:
                           packages/uasset-inspection-wasm/*)
                               uasset_libraries=true
                               ;;
-                          crates/uasset-io/* | \
-                              scripts/test-saved-review.ts | \
+                          crates/uasset-io/* | crates/game-text-index/* | \
+                              scripts/test-saved-review.ts | scripts/native-game-text-join.test.ts | \
+                              scripts/columnar-join-fuzz.test-support.ts | \
                               apps/cli/src/*investigation* | \
                               packages/uasset/* | packages/uasset-win32-x64/* | \
-                              packages/unreal-assets/* | packages/blueprints/* | \
+                              packages/unreal-assets/* | packages/blueprints/* | packages/game-text/* | \
                               packages/protocol/contracts/uasset-io/* | \
                               packages/protocol/src/uasset-* | \
+                              packages/protocol/src/game-text-index* | \
                               packages/protocol/src/blueprint-graph.ts | \
                               packages/protocol/src/level-sequence.ts)
                               uasset_io=true
@@ -273,6 +275,8 @@ jobs:
                       packages/unreal-assets/src/fixture.integration.test.ts \
                       packages/unreal-assets/src/project-index-process.test.ts \
                       packages/game-text/src/fixture.integration.test.ts \
+                      packages/game-text/src/native-index-builder.integration.test.ts \
+                      scripts/native-game-text-join.test.ts \
                       packages/enhanced-input/src/dogfood.integration.test.ts \
                       2>&1 | tee -a evidence/uasset-io-check.log
             - name: Collect compiler cache diagnostics
