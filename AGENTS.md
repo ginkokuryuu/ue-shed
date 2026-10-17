@@ -24,8 +24,8 @@ layer.
 
 ## Commands
 
-GitHub Actions runs the portable gate on Blacksmith runners. Repository checks run on every pull
-request. The UAsset library and IO lanes run only when their Rust, WASM, package, contract, script, or fixture inputs
+GitHub Actions runs the portable gate on GitHub-hosted Ubuntu 24.04 runners. Repository checks run
+on every pull request. The UAsset library and IO lanes run only when their Rust, WASM, package, contract, script, or fixture inputs
 change; parser and inspection changes also trigger downstream IO conformance. Use `pnpm check`
 for full local verification. During local iteration, use targeted checks for the surface you changed.
 Never describe a change as fully verified while a relevant targeted check or the portable CI gate is
