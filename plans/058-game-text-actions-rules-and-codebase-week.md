@@ -47,7 +47,7 @@
 | B7   | Intended marks                                 | B    | TODO               |
 | B8   | Scans keyed on the resolved rules              | B    | TODO               |
 | C1   | Stage breakdown on real projects               | C    | IN PROGRESS — #114 |
-| C2   | Prepare the query once, off the main thread    | C    | TODO               |
+| C2   | Prepare the query once, off the main thread    | C    | IN PROGRESS — #110 |
 | C3   | Quality scan in a worker                       | C    | TODO               |
 | C4   | Column cache per reader                        | C    | DONE — #116        |
 | C5   | Spike: binary package-text output              | C    | TODO               |

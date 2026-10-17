@@ -75,7 +75,14 @@ Compact-index hosts can select worker search with
 the worker and pinned reader together. `latestSearchOnly: true` cancels replaced pages and older
 filter selections while preserving concurrent group pages;
 independent callers should leave it false. Cancellation does not evict completed query results.
-The synchronous `query.search(request)` API remains available.
+The synchronous `query.search(request)` API remains available. With a search worker, the worker
+prepares the generation's query once, off the caller's thread, and the synchronous `query`
+methods borrow it: each call blocks the caller until the worker answers, and can wait behind a
+running search. A synchronous call waits at most 100 ms for the worker (configurable through
+`syncCallTimeoutMs` on the refresh and steps layers). If that deadline expires, the worker is
+retired and the call uses a local query over the model's pinned generation. Later synchronous
+calls reuse that local query. This also covers worker loss before its exit callback can run;
+a busy worker can take the same fallback. Asynchronous searches retain their 30-second deadline.
 
 For host-owned composition, use `GameTextIndexSteps` from `gameTextIndexStepsLayer(cacheRoot)`:
 

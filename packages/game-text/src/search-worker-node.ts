@@ -1,17 +1,27 @@
 import { existsSync } from "node:fs";
-import { Worker } from "node:worker_threads";
+import {
+	MessageChannel,
+	Worker,
+	receiveMessageOnPort,
+	type MessagePort
+} from "node:worker_threads";
 import { performance } from "node:perf_hooks";
 import { Effect, Metric, Schema } from "effect";
 import {
+	SearchWorkerCall,
+	SearchWorkerCallReply,
 	SearchWorkerInput,
 	SearchWorkerReply,
+	searchWorkerCallValues,
 	searchWorkerFailure
 } from "./search-worker-protocol.js";
 import {
 	TextCorpusSearchRequest as TextCorpusSearchRequestSchema,
+	type TextCorpusQuerySummary,
 	type TextCorpusSearchPage,
 	type TextCorpusSearchRequest
 } from "./schema.js";
+import type { ColumnarTextCorpusQuery } from "./columnar-query.js";
 import type { SnapshotFormatError } from "./snapshot-format.js";
 import { SnapshotStoreError } from "./snapshot-store.js";
 
@@ -29,33 +39,138 @@ type Pending = {
 	readonly resolve: (page: TextCorpusSearchPage) => void;
 	readonly reject: (cause: Failure) => void;
 };
-function launch(input: SearchWorkerInput) {
+interface Calls {
+	readonly port: MessagePort;
+	readonly signal: Int32Array;
+	readonly timeoutMs: number;
+}
+function launch(input: SearchWorkerInput, calls: MessagePort, signal: SharedArrayBuffer) {
+	const options = { workerData: { input, calls, signal }, transferList: [calls] };
 	const compiled = new URL("./search-worker.js", import.meta.url);
-	if (existsSync(compiled)) return new Worker(compiled, { workerData: input });
+	if (existsSync(compiled)) return new Worker(compiled, options);
 	const source = new URL("./search-worker.ts", import.meta.url);
 	return new Worker(
 		`import("tsx/esm/api").then(async ({ register }) => { register(); await import(${JSON.stringify(source.href)}); });`,
-		{ eval: true, workerData: input }
+		{ ...options, eval: true }
 	);
+}
+
+const callFailure = (message: string) =>
+	new SnapshotStoreError({
+		operation: "search.worker.call",
+		code: "unavailable",
+		message,
+		recovery: "Refresh the Game Text index and retry."
+	});
+
+/**
+ * Asks the worker's prepared query and blocks this thread until it answers. The worker answers
+ * between searches, so a call can wait behind a running search; searches are bounded and
+ * cancellable. Throws the worker's typed failure, as the in-process query would.
+ */
+function callSync<S extends Schema.ConstraintDecoder<unknown>>(
+	calls: Calls,
+	failed: () => Failure | undefined,
+	call: SearchWorkerCall,
+	value: S
+): S["Type"] {
+	const broken = failed();
+	if (broken) throw broken;
+	calls.port.postMessage(Schema.encodeSync(SearchWorkerCall)(call));
+	const deadline = performance.now() + calls.timeoutMs;
+	for (;;) {
+		// Read the counter before looking for the reply, so a reply posted in between moves it.
+		const seen = Atomics.load(calls.signal, 0);
+		const received = receiveMessageOnPort(calls.port);
+		if (received) {
+			const reply = Schema.decodeUnknownSync(SearchWorkerCallReply)(received.message);
+			// A reply to an earlier call that timed out; its caller has already failed.
+			if (reply.id !== call.id) continue;
+			if (reply.kind === "failed") throw reply.error;
+			return Schema.decodeUnknownSync(value)(reply.value);
+		}
+		const remaining = deadline - performance.now();
+		if (remaining <= 0) throw callFailure("The Game Text query worker did not answer.");
+		Atomics.wait(calls.signal, 0, seen, remaining);
+	}
+}
+
+/** The worker's prepared query, borrowed through synchronous calls. */
+function workerQuery(
+	calls: Calls,
+	summary: TextCorpusQuerySummary,
+	failed: () => Failure | undefined,
+	unavailable: (cause: Failure) => void
+): ColumnarTextCorpusQuery {
+	let sequence = 0;
+	const values = searchWorkerCallValues;
+	const execute = <S extends Schema.ConstraintDecoder<unknown>>(
+		call: SearchWorkerCall,
+		value: S
+	): S["Type"] => {
+		try {
+			return callSync(calls, failed, call, value);
+		} catch (cause) {
+			if (cause instanceof SnapshotStoreError && cause.operation === "search.worker.call")
+				unavailable(cause);
+			throw cause;
+		}
+	};
+	return {
+		summary: () => summary,
+		search: (request) => execute({ id: ++sequence, method: "search", request }, values.search),
+		focus: (request) => execute({ id: ++sequence, method: "focus", request }, values.focus),
+		localizationFocus: (lineId) =>
+			execute(
+				{ id: ++sequence, method: "localizationFocus", lineId },
+				values.localizationFocus
+			),
+		localizationLines: (request) =>
+			execute(
+				{ id: ++sequence, method: "localizationLines", request },
+				values.localizationLines
+			),
+		localizationRows: (request) =>
+			execute(
+				{ id: ++sequence, method: "localizationRows", request },
+				values.localizationRows
+			),
+		export: (request) => execute({ id: ++sequence, method: "export", request }, values.export)
+	};
 }
 
 /** A scope owns the worker and its separately pinned reader. Replacing a search can cancel
  * running scans through shared memory, without waiting for the worker's event loop. */
 export const makeGameTextSearchWorkerResource = Effect.fn("GameTextIndex.searchWorker")(function* (
 	input: SearchWorkerInput,
-	options: { readonly latestOnly?: boolean } = {}
+	options: { readonly latestOnly?: boolean; readonly syncCallTimeoutMs?: number } = {}
 ) {
+	// Sync callers cannot dispatch Worker exit callbacks while waiting. Treat a missed short
+	// reply deadline as unavailable, so pinned models can fall back without the async 30s wait.
+	const timeoutMs = options.syncCallTimeoutMs ?? 100;
+	if (!Number.isFinite(timeoutMs) || timeoutMs <= 0)
+		return yield* Effect.fail(
+			callFailure("The synchronous query deadline must be positive and finite.")
+		);
 	const boundary = yield* Schema.decodeUnknownEffect(SearchWorkerInput)(input).pipe(
 		Effect.mapError((cause) => searchWorkerFailure("search.worker.input", cause))
 	);
+	const channel = new MessageChannel(),
+		signal = new SharedArrayBuffer(4);
+	const calls: Calls = {
+		port: channel.port1,
+		signal: new Int32Array(signal),
+		timeoutMs
+	};
 	const worker = yield* Effect.acquireRelease(
 		Effect.try({
-			try: () => launch(boundary),
+			try: () => launch(boundary, channel.port2, signal),
 			catch: (cause) => searchWorkerFailure("search.worker.start", cause)
 		}),
 		(worker) =>
 			Effect.gen(function* () {
 				const start = performance.now();
+				calls.port.close();
 				yield* Effect.promise(() => worker.terminate());
 				yield* Metric.update(stopped, 1);
 				yield* Metric.update(retirementDuration, performance.now() - start);
@@ -65,9 +180,9 @@ export const makeGameTextSearchWorkerResource = Effect.fn("GameTextIndex.searchW
 	const pending = new Map<number, Pending>();
 	let sequence = 0;
 	let failed: Failure | undefined;
-	let readyResolve: () => void = () => {};
+	let readyResolve: (summary: TextCorpusQuerySummary) => void = () => {};
 	let readyReject: (cause: Failure) => void = () => {};
-	const ready = new Promise<void>((resolve, reject) => {
+	const ready = new Promise<TextCorpusQuerySummary>((resolve, reject) => {
 		readyResolve = resolve;
 		readyReject = reject;
 	});
@@ -83,7 +198,7 @@ export const makeGameTextSearchWorkerResource = Effect.fn("GameTextIndex.searchW
 		try {
 			const reply = Schema.decodeUnknownSync(SearchWorkerReply)(raw);
 			if (reply.kind === "ready") {
-				readyResolve();
+				readyResolve(reply.summary);
 				return;
 			}
 			if (reply.kind === "failed" && reply.id === undefined) {
@@ -104,7 +219,7 @@ export const makeGameTextSearchWorkerResource = Effect.fn("GameTextIndex.searchW
 			fail(cause);
 		}
 	});
-	yield* Effect.tryPromise({
+	const summary = yield* Effect.tryPromise({
 		try: () => ready,
 		catch: (cause) => searchWorkerFailure("search.worker.open", cause)
 	}).pipe(
@@ -215,13 +330,26 @@ export const makeGameTextSearchWorkerResource = Effect.fn("GameTextIndex.searchW
 				)
 			)
 	);
-	return { search, healthy: () => failed === undefined };
+	return {
+		search,
+		/** The worker's prepared query; each call blocks this thread until the worker answers. */
+		query: workerQuery(
+			calls,
+			summary,
+			() => failed,
+			(cause) => {
+				fail(cause);
+				void worker.terminate().catch(fail);
+			}
+		),
+		healthy: () => failed === undefined
+	};
 });
 
 /** Compatibility search adapter; resource health is owned by the index steps' worker pool. */
 export const makeGameTextSearchWorker = Effect.fn("GameTextIndex.searchWorker.adapter")(function* (
 	input: SearchWorkerInput,
-	options: { readonly latestOnly?: boolean } = {}
+	options: { readonly latestOnly?: boolean; readonly syncCallTimeoutMs?: number } = {}
 ) {
 	return (yield* makeGameTextSearchWorkerResource(input, options)).search;
 });

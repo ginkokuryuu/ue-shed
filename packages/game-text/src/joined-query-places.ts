@@ -6,6 +6,9 @@ import { StringArena } from "./shared-string-codec.js";
 import { encodeWtf8 } from "./wtf8.js";
 import { HostSliceClock, sortRowsInSlices } from "./host-slices.js";
 
+// Each string lookup is one synchronous read; this bounds how long one batch holds the host.
+const stringBatch = 1024;
+
 /** Persist predicates and UTF-16 label ranks; queries decode only the returned group labels. */
 export const joinedQueryPlaces = Effect.fn("JoinedTarget.queryPlaces")(function* (
 	writer: SharedIndexWriter,
@@ -51,8 +54,10 @@ export const joinedQueryPlaces = Effect.fn("JoinedTarget.queryPlaces")(function*
 			for (let id = 0; id < seen.length; id++) if (seen[id]) ids[row++] = id;
 			const arena = new StringArena(),
 				positions = new Uint32Array(maximum + 1);
-			for (let start = 0; start < ids.length; start += 8192) {
-				const values = yield* writer.strings(Array.from(ids.subarray(start, start + 8192)));
+			for (let start = 0; start < ids.length; start += stringBatch) {
+				const values = yield* writer.strings(
+					Array.from(ids.subarray(start, start + stringBatch))
+				);
 				for (let offset = 0; offset < values.length; offset++) {
 					positions[ids[start + offset]!] = start + offset;
 					arena.add(Buffer.from(encodeWtf8(values[offset]!)));
@@ -79,8 +84,8 @@ export const joinedQueryPlaces = Effect.fn("JoinedTarget.queryPlaces")(function*
 	const starts = new Uint32Array(ids.length + 1),
 		folders: number[] = [],
 		folderKeys: number[] = [];
-	for (let start = 0; start < ids.length; start += 8192) {
-		const values = yield* writer.strings(Array.from(ids.subarray(start, start + 8192)));
+	for (let start = 0; start < ids.length; start += stringBatch) {
+		const values = yield* writer.strings(Array.from(ids.subarray(start, start + stringBatch)));
 		for (let index = 0; index < values.length; index++) {
 			const row = start + index,
 				value = values[index]!;
@@ -104,16 +109,18 @@ export const joinedQueryPlaces = Effect.fn("JoinedTarget.queryPlaces")(function*
 	result["query.place.folder_keys"] = Uint32Array.from(folderKeys);
 	const namespaces = yield* unique([line.namespace!, query["query.raw.namespace"]!]);
 	const namespaceValues = new Uint32Array(namespaces.length);
-	for (let start = 0; start < namespaces.length; start += 8192) {
-		const values = yield* writer.strings(Array.from(namespaces.subarray(start, start + 8192)));
+	for (let start = 0; start < namespaces.length; start += stringBatch) {
+		const values = yield* writer.strings(
+			Array.from(namespaces.subarray(start, start + stringBatch))
+		);
 		for (let row = 0; row < values.length; row++)
 			namespaceValues[start + row] = intern(values[row]!);
 	}
 	vectors("namespace", namespaces, namespaceValues);
 	const scannedKeys = new Uint32Array(packages.paths.length);
-	for (let start = 0; start < packages.paths.length; start += 8192) {
+	for (let start = 0; start < packages.paths.length; start += stringBatch) {
 		const values = yield* writer.strings(
-			Array.from(packages.paths.subarray(start, start + 8192))
+			Array.from(packages.paths.subarray(start, start + stringBatch))
 		);
 		for (let row = 0; row < values.length; row++)
 			scannedKeys[start + row] = intern(textFileKey(values[row]!));
@@ -147,8 +154,10 @@ export const joinedQueryPlaces = Effect.fn("JoinedTarget.queryPlaces")(function*
 	// Paths are normalized in bounded batches. Their byte arena does not retain decoded strings.
 	const pathIds = yield* unique([packages.paths, packages.occurrence.object]);
 	const pathArena = new StringArena();
-	for (let start = 0; start < pathIds.length; start += 8192) {
-		const values = yield* writer.strings(Array.from(pathIds.subarray(start, start + 8192)));
+	for (let start = 0; start < pathIds.length; start += stringBatch) {
+		const values = yield* writer.strings(
+			Array.from(pathIds.subarray(start, start + stringBatch))
+		);
 		for (const value of values) {
 			pathArena.add(Buffer.from(encodeWtf8(normalizeTextPath(value))));
 			if (clock.step()) yield* Effect.yieldNow;
@@ -163,8 +172,10 @@ export const joinedQueryPlaces = Effect.fn("JoinedTarget.queryPlaces")(function*
 	pack("path", pathArena);
 	const manifestArena = new StringArena();
 	const paths = manifest.columns.path ?? new Uint32Array();
-	for (let start = 0; start < paths.length; start += 8192) {
-		const values = yield* writer.strings(Array.from(paths.subarray(start, start + 8192)));
+	for (let start = 0; start < paths.length; start += stringBatch) {
+		const values = yield* writer.strings(
+			Array.from(paths.subarray(start, start + stringBatch))
+		);
 		for (let row = 0; row < values.length; row++) {
 			const prefix =
 				manifest.columns.options![start + row]! & 1024 ? manifest.pathPrefix : "";

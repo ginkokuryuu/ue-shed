@@ -7,6 +7,7 @@ import {
 	Effect,
 	Exit,
 	Layer,
+	Metric,
 	Ref,
 	Schema,
 	Semaphore,
@@ -43,7 +44,7 @@ import { SnapshotStoreError } from "./snapshot-store.js";
 import { SnapshotFormatError } from "./snapshot-format.js";
 import { reuseJoinedQueryProjection, type JoinedQueryProjection } from "./joined-query-data.js";
 import { instrumentIndexQuery } from "./index-query.js";
-import { columnarTextCorpusQuery } from "./columnar-query.js";
+import { columnarTextCorpusQuery, type ColumnarTextCorpusQuery } from "./columnar-query.js";
 import { makeGameTextSearchWorkerResource } from "./search-worker-node.js";
 import { SearchWorkerInput } from "./search-worker-protocol.js";
 import {
@@ -54,7 +55,11 @@ import {
 } from "./index-context.js";
 import { indexedLocalizationQuality } from "./localization-quality-index.js";
 import { indexedSourceQuality } from "./source-quality-index.js";
-import { openJoinedTarget, readJoinedTarget } from "./joined-target-reader.js";
+import {
+	openJoinedTarget,
+	readJoinedTarget,
+	type JoinedTargetReader
+} from "./joined-target-reader.js";
 import type { TextCorpusSearchRequest } from "./schema.js";
 import type { importLocalizationTarget } from "./localization-import.js";
 import type { refreshPackageTextLayer } from "./package-text-layer.js";
@@ -144,6 +149,9 @@ export interface GameTextIndexModel extends GameTextIndexRefreshResult {
 	readonly project: GameTextProjectIndex;
 }
 
+/** Query preparations on the host's thread; with a search worker, the worker prepares instead. */
+const hostQueryPreparations = Metric.counter("game_text.index.host_query_preparations");
+
 const queryRevisionFor = (project: GameTextProject, generation: string, joinedKey: string) =>
 	JSON.stringify([project.cacheRoot, project.projectRoot, generation, joinedKey]);
 
@@ -211,9 +219,47 @@ const savedTarget = Schema.decodeUnknownSync(LocalizationTarget)({
 	collapseMode: "IdenticalTextIdAndSource"
 });
 
+/**
+ * The worker's prepared query. If the worker has died, the model stays usable: its first later
+ * call prepares the same immutable generation's query on this thread, once.
+ */
+function borrowWorkerQuery(
+	worker: {
+		readonly query: ColumnarTextCorpusQuery;
+		readonly healthy: () => boolean;
+	},
+	joined: JoinedTargetReader
+): ColumnarTextCorpusQuery {
+	let local: ColumnarTextCorpusQuery | undefined;
+	const execute = <A>(call: (query: ColumnarTextCorpusQuery) => A): A => {
+		if (!worker.healthy()) return call((local ??= columnarTextCorpusQuery(joined)));
+		try {
+			return call(worker.query);
+		} catch (cause) {
+			// A transport deadline can discover loss during dispatch, before an exit callback runs.
+			// Only retry failed transport calls; typed query/selection errors retain their meaning.
+			if (worker.healthy()) throw cause;
+			return call((local ??= columnarTextCorpusQuery(joined)));
+		}
+	};
+	return {
+		summary: () => worker.query.summary(),
+		search: (request) => execute((query) => query.search(request)),
+		focus: (request) => execute((query) => query.focus(request)),
+		localizationFocus: (id) => execute((query) => query.localizationFocus(id)),
+		localizationLines: (request) => execute((query) => query.localizationLines(request)),
+		localizationRows: (request) => execute((query) => query.localizationRows(request)),
+		export: (request) => execute((query) => query.export(request))
+	};
+}
+
 export const makeGameTextIndexSteps = (
 	cacheRoot: string,
-	options: { readonly searchWorker?: boolean; readonly latestSearchOnly?: boolean } = {}
+	options: {
+		readonly searchWorker?: boolean;
+		readonly latestSearchOnly?: boolean;
+		readonly syncCallTimeoutMs?: number;
+	} = {}
 ) =>
 	Effect.gen(function* () {
 		const source = yield* GameTextIndexSource;
@@ -240,7 +286,10 @@ export const makeGameTextIndexSteps = (
 					),
 					Effect.flatMap(({ input }) =>
 						makeGameTextSearchWorkerResource(input, {
-							latestOnly: options.latestSearchOnly ?? false
+							latestOnly: options.latestSearchOnly ?? false,
+							...(options.syncCallTimeoutMs === undefined
+								? undefined
+								: { syncCallTimeoutMs: options.syncCallTimeoutMs })
 						})
 					)
 				)
@@ -268,7 +317,7 @@ export const makeGameTextIndexSteps = (
 					),
 					Effect.onError(() => Scope.close(pin, Exit.void))
 				);
-				if (worker.healthy()) return worker.search;
+				if (worker.healthy()) return worker;
 				yield* Scope.close(pin, Exit.void);
 				// Failed instances retain their existing reader pins under a distinct key. Their
 				// eventual cleanup cannot evict the healthy replacement or affect other borrowers.
@@ -572,6 +621,39 @@ export const makeGameTextIndexSteps = (
 			);
 		});
 
+		/** Prepares the query on this thread, reusing the previous generation's projection. */
+		const prepareQuery = Effect.fn("GameTextIndex.prepareQuery")(function* (
+			joined: JoinedTargetReader
+		) {
+			const projectionKey = `${joined.reader.manifest.generation}:${joined.meta.base ?? joined.reader.manifest.active.joined}`;
+			const previousProjection = yield* Cache.get(projections, projectionKey);
+			const projection =
+				previousProjection &&
+				previousProjection.key === joined.reader.manifest.active.joined
+					? previousProjection
+					: reuseJoinedQueryProjection(joined, previousProjection);
+			const reusedColumns = projection.columns.size;
+			const reusedSources = Boolean(projection.sourceSeed);
+			const queryStarted = performance.now();
+			const columnar = yield* Effect.try({
+				try: () => columnarTextCorpusQuery(joined, undefined, projection),
+				catch: (cause) =>
+					failure(
+						"query",
+						String(cause),
+						"Clear the disposable Game Text index and refresh."
+					)
+			});
+			yield* Cache.set(projections, projectionKey, projection);
+			yield* Metric.update(hostQueryPreparations, 1);
+			yield* Effect.annotateCurrentSpan({
+				"game_text.index.query_columns_reused": reusedColumns,
+				"game_text.index.query_sources_reused": reusedSources,
+				"game_text.index.query_preparation_ms": performance.now() - queryStarted
+			});
+			return columnar;
+		});
+
 		const openTarget = Effect.fn("GameTextIndex.openTarget")(function* (
 			target: GameTextTargetIndex
 		): Effect.fn.Return<GameTextIndexModel, IndexFailure, Scope.Scope> {
@@ -606,35 +688,11 @@ export const makeGameTextIndexSteps = (
 				joined.reader.manifest.active["joined.invalidated"]
 			)
 				return yield* Effect.fail(stale("target"));
-			const projectionKey = `${joined.reader.manifest.generation}:${joined.meta.base ?? joined.reader.manifest.active.joined}`;
-			const previousProjection = yield* Cache.get(projections, projectionKey);
-			const projection =
-				previousProjection &&
-				previousProjection.key === joined.reader.manifest.active.joined
-					? previousProjection
-					: reuseJoinedQueryProjection(joined, previousProjection);
-			const reusedColumns = projection.columns.size;
-			const reusedSources = Boolean(projection.sourceSeed);
-			const queryStarted = performance.now();
-			const columnar = yield* Effect.try({
-				try: () => columnarTextCorpusQuery(joined, undefined, projection),
-				catch: (cause) =>
-					failure(
-						"query",
-						String(cause),
-						"Clear the disposable Game Text index and refresh."
-					)
-			});
-			const query = instrumentIndexQuery(columnar);
-			const queryPreparationMs = performance.now() - queryStarted;
-			yield* Cache.set(projections, projectionKey, projection);
 			yield* Effect.annotateCurrentSpan({
 				"game_text.index.packages_read": result.packages.readPackages,
 				"game_text.index.join_rebuilt": result.join.rebuilt,
 				"game_text.index.generation": joined.reader.manifest.generation,
-				"game_text.index.query_columns_reused": reusedColumns,
-				"game_text.index.query_sources_reused": reusedSources,
-				"game_text.index.query_preparation_ms": queryPreparationMs
+				"game_text.index.query_in_worker": Boolean(options.searchWorker)
 			});
 			const indexedEvidence = yield* readIndexedLocalizationEvidence(joined).pipe(
 				Effect.provide(LocalizationFileAccessLive),
@@ -647,10 +705,16 @@ export const makeGameTextIndexSteps = (
 				generation: joined.reader.manifest.generation,
 				joinedKey: joined.reader.manifest.active.joined!
 			};
+			// With a search worker, the worker prepares the generation's query once, off this
+			// thread, and the model borrows it; without one, the query is prepared here.
 			// Acquire the worker's reader before exposing the model: later compaction may unlink
 			// these files. Overlapping models pin one worker for the same immutable joined view.
-			const search = options.searchWorker
+			const { columnar, search } = options.searchWorker
 				? yield* acquireWorker(workerInput).pipe(
+						Effect.map((worker) => ({
+							columnar: borrowWorkerQuery(worker, joined),
+							search: worker.search
+						})),
 						Effect.mapError((cause) =>
 							cause instanceof GameTextIndexError ||
 							cause instanceof SnapshotStoreError ||
@@ -663,17 +727,24 @@ export const makeGameTextIndexSteps = (
 									)
 						)
 					)
-				: Effect.fn("GameTextIndex.search")((request: TextCorpusSearchRequest) =>
-						Effect.try({
-							try: () => query.search(request),
-							catch: (cause) =>
-								failure(
-									"query",
-									String(cause),
-									"Refresh the Game Text index and retry."
-								)
-						})
+				: yield* prepareQuery(joined).pipe(
+						Effect.map((columnar) => ({
+							columnar,
+							search: Effect.fn("GameTextIndex.search")(
+								(request: TextCorpusSearchRequest) =>
+									Effect.try({
+										try: () => query.search(request),
+										catch: (cause) =>
+											failure(
+												"query",
+												String(cause),
+												"Refresh the Game Text index and retry."
+											)
+									})
+							)
+						}))
 					);
+			const query = instrumentIndexQuery(columnar);
 			reportProgress({ phase: "ready", completed: 0, total: 0 });
 			const corpus = indexedTextCorpus(joined, query);
 			return {
@@ -763,5 +834,9 @@ export class GameTextIndexSteps extends Context.Service<
 
 export const gameTextIndexStepsLayer = (
 	cacheRoot: string,
-	options: { readonly searchWorker?: boolean; readonly latestSearchOnly?: boolean } = {}
+	options: {
+		readonly searchWorker?: boolean;
+		readonly latestSearchOnly?: boolean;
+		readonly syncCallTimeoutMs?: number;
+	} = {}
 ) => Layer.effect(GameTextIndexSteps, makeGameTextIndexSteps(cacheRoot, options));
