@@ -1,12 +1,11 @@
 import * as stylex from "@stylexjs/stylex";
 import {
-	LocalizationReviewFlag,
-	LocalizationReviewLens,
 	type LocalizationFocus,
-	type LocalizationSelection,
 	type LocalizationReviewChange,
 	type LocalizationTranslation
-} from "@ue-shed/game-text/browser";
+} from "@ue-shed/game-text/corpus";
+import { LocalizationReviewLens, type LocalizationSelection } from "@ue-shed/game-text/schema";
+import { LocalizationReviewFlag } from "@ue-shed/localization/browser";
 import { Chip, ToolButton, ToolIcon, createEffectAction, type ToolIconName } from "@ue-shed/ui";
 import { For, Show, createSignal } from "solid-js";
 import type { GameTextClientApi } from "./game-text-client.js";

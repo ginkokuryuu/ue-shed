@@ -4,10 +4,10 @@ import {
 	type LocalizationEditOutcome,
 	type LocalizationEditResult,
 	type LocalizationFocus,
-	type LocalizationSelection,
-	type LocalizationTranslation,
-	textCountLabel
-} from "@ue-shed/game-text/browser";
+	type LocalizationTranslation
+} from "@ue-shed/game-text/corpus";
+import { textCountLabel } from "@ue-shed/game-text/labels";
+import { type LocalizationSelection } from "@ue-shed/game-text/schema";
 import { Button, createEffectAction } from "@ue-shed/ui";
 import { Effect, Schema } from "effect";
 import { For, Show, createEffect, createMemo, createSignal } from "solid-js";

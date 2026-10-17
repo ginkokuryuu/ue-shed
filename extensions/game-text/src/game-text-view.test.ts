@@ -1,4 +1,4 @@
-import { makeTextOccurrenceId, makeTextUnitId, type TextCorpus } from "@ue-shed/game-text/browser";
+import { makeTextOccurrenceId, makeTextUnitId, type TextCorpus } from "@ue-shed/game-text/schema";
 import { describe, expect, it } from "vitest";
 import {
 	filterTextUnits,

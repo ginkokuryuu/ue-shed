@@ -764,6 +764,65 @@ function moduleSpecifiers(path: string, text: string): readonly string[] {
 }
 
 /** Localization formats are independently usable; browser consumers receive no Node authority. */
+/** Browser-safe Game Text entry points; the Node-only `entry-index.ts` is excluded. */
+const gameTextBrowserEntries = [
+	"browser.ts",
+	"entry-schema.ts",
+	"entry-rules.ts",
+	"entry-checks.ts",
+	"entry-labels.ts",
+	"entry-corpus.ts"
+];
+
+/**
+ * Game Text entry points list their exports by name, so a new module stays private until it is
+ * added on purpose, and first-party code imports the focused entry points instead of the
+ * deprecated root and `/browser` aggregates.
+ */
+export async function checkGameTextEntryPoints(root: string = repositoryRoot) {
+	const failures: string[] = [];
+	const source = join(root, "packages/game-text/src");
+	for (const entry of [...gameTextBrowserEntries, "index.ts", "entry-index.ts"]) {
+		let text: string;
+		try {
+			text = await readFile(join(source, entry), "utf8");
+		} catch {
+			continue;
+		}
+		if (
+			ts
+				.createSourceFile(entry, text, ts.ScriptTarget.Latest, true)
+				.statements.some(
+					(statement) =>
+						ts.isExportDeclaration(statement) &&
+						(!statement.exportClause || ts.isNamespaceExport(statement.exportClause))
+				)
+		)
+			failures.push(
+				`packages/game-text/src/${entry}: Game Text entry points use named exports only`
+			);
+	}
+	for (const directory of sourceRoots) {
+		for (const path of await filesUnder(root, directory)) {
+			if (!/\.tsx?$/u.test(path)) continue;
+			const label = relative(root, path).replaceAll("\\", "/");
+			if (label.startsWith("packages/game-text/")) continue;
+			const text = await readFile(path, "utf8");
+			if (
+				moduleSpecifiers(path, text).some(
+					(specifier) =>
+						specifier === "@ue-shed/game-text" ||
+						specifier === "@ue-shed/game-text/browser"
+				)
+			)
+				failures.push(
+					`${label}: import a focused @ue-shed/game-text entry point (/schema, /rules, /checks, /labels, /corpus or /index)`
+				);
+		}
+	}
+	return failures;
+}
+
 export async function checkLocalizationBoundaries(root: string = repositoryRoot) {
 	const failures: string[] = [];
 	const packageRoot = join(root, "packages/localization");
@@ -787,12 +846,14 @@ export async function checkLocalizationBoundaries(root: string = repositoryRoot)
 		}
 	}
 	const pending = [join(packageRoot, "src/browser.ts")];
-	const gameTextBrowser = join(root, "packages/game-text/src/browser.ts");
-	try {
-		await readFile(gameTextBrowser, "utf8");
-		pending.push(gameTextBrowser);
-	} catch {
-		// Focused boundary fixtures may contain only the independent format package.
+	for (const entry of gameTextBrowserEntries) {
+		const gameTextBrowser = join(root, "packages/game-text/src", entry);
+		try {
+			await readFile(gameTextBrowser, "utf8");
+			pending.push(gameTextBrowser);
+		} catch {
+			// Focused boundary fixtures may contain only the independent format package.
+		}
 	}
 	const visited = new Set<string>();
 	while (pending.length > 0) {
@@ -1015,6 +1076,7 @@ export async function checkArchitecture(root: string = repositoryRoot) {
 		...(await checkServiceStrategies(root)),
 		...(await checkDomainServices(root)),
 		...(await checkLocalizationBoundaries(root)),
+		...(await checkGameTextEntryPoints(root)),
 		...(await checkWorkbenchBoundaries(root)),
 		...(await checkDecoderExports(root)),
 		...(await checkCompositionPolicy(root))

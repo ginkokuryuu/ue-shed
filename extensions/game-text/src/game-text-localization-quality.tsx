@@ -3,20 +3,17 @@ import {
 	BuiltInQualityFilter,
 	type WorkspaceQualityFilter,
 	workspaceQualityLabel,
-	localizationCheckCatalogue,
-	parseLocalizationRuleId,
-	textCountLabel,
-	textLocationLabel,
 	type WorkspaceQualityPage,
 	type WorkspaceQualityFocusResult,
 	type TextQualityFindingId,
 	type TextQualityQuerySummary,
-	type TextUnitId,
-	type GameTextRuleDocument,
-	type LocalizationCheckDiagnostic,
 	type LocalizationFocus,
 	type LocalizationReviewChange
-} from "@ue-shed/game-text/browser";
+} from "@ue-shed/game-text/corpus";
+import { localizationCheckCatalogue, parseLocalizationRuleId } from "@ue-shed/game-text/checks";
+import { textCountLabel, textLocationLabel } from "@ue-shed/game-text/labels";
+import { type TextUnitId, type LocalizationCheckDiagnostic } from "@ue-shed/game-text/schema";
+import { type GameTextRuleDocument } from "@ue-shed/game-text/rules";
 import { Button, Chip, createEffectAction } from "@ue-shed/ui";
 import { Effect } from "effect";
 import { For, Show, createEffect, createSignal, untrack } from "solid-js";

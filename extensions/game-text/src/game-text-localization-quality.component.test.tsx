@@ -4,15 +4,14 @@ import { userEvent } from "@testing-library/user-event";
 import { EffectRuntimeProvider } from "@ue-shed/ui";
 import { Effect, Layer, ManagedRuntime, Schema } from "effect";
 import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { checkLocalizationTarget } from "@ue-shed/game-text/checks";
 import {
-	GameTextRuleDocument,
-	evaluateGameTextSourceQuality,
 	textCorpusQuery,
 	textQualityQuery,
 	localizationFocusPage,
-	localizationQualityWorkspace,
-	checkLocalizationTarget
-} from "@ue-shed/game-text/browser";
+	localizationQualityWorkspace
+} from "@ue-shed/game-text/corpus";
+import { GameTextRuleDocument, evaluateGameTextSourceQuality } from "@ue-shed/game-text/rules";
 import { qualityFixture } from "../../../packages/game-text/src/localization-workspace.test-support.js";
 import { cultureCode } from "../../../packages/game-text/src/localization.test-support.js";
 import { GameTextRoute } from "./game-text-query-route.js";

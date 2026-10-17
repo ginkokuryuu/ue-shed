@@ -11,6 +11,8 @@ import {
 	parseLocalizationRuleId
 } from "./localization-check-catalogue.js";
 import {
+	CHECK_TABLE_START,
+	CHECK_TABLE_END,
 	checkTableCells,
 	localizationCheckRows,
 	withLocalizationCheckTable
@@ -115,7 +117,12 @@ describe("localization check catalogue", () => {
 		// Padding is the formatter's: compare cells. To update, rerun this test with
 		// UE_SHED_UPDATE_CHECK_TABLE=1, then `pnpm exec oxfmt packages/game-text/README.md`.
 		const table = (text: string) =>
-			checkTableCells(text.slice(text.indexOf("| Check"), text.indexOf("<!-- end of check")));
+			checkTableCells(
+				text.slice(
+					text.indexOf(CHECK_TABLE_START) + CHECK_TABLE_START.length,
+					text.indexOf(CHECK_TABLE_END)
+				)
+			);
 		expect(table(readme)).toEqual(table(generated!));
 		expect(table(readme).slice(1)).toEqual(localizationCheckRows().map((row) => [...row]));
 	});

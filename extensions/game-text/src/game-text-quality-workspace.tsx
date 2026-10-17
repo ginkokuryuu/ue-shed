@@ -5,11 +5,11 @@ import type {
 	TextQualityFindingSummary,
 	TextQualityFocus,
 	TextQualityQuerySummary,
-	GameTextRuleDocument,
-	TextQualitySearchPage,
-	TextUnitId
-} from "@ue-shed/game-text/browser";
-import { textCountLabel, textLocationLabel } from "@ue-shed/game-text/browser";
+	TextQualitySearchPage
+} from "@ue-shed/game-text/corpus";
+import type { GameTextRuleDocument } from "@ue-shed/game-text/rules";
+import type { TextUnitId } from "@ue-shed/game-text/schema";
+import { textCountLabel, textLocationLabel } from "@ue-shed/game-text/labels";
 import { Button, Chip, createEffectAction } from "@ue-shed/ui";
 import { For, Show, createEffect, createSignal, untrack } from "solid-js";
 import type { JSX } from "@solidjs/web";

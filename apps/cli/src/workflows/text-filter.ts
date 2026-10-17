@@ -2,7 +2,7 @@ import {
 	GameTextLocalizationError,
 	TextFilterClause,
 	type TextFilter
-} from "@ue-shed/game-text/browser";
+} from "@ue-shed/game-text/schema";
 import { Effect, Schema } from "effect";
 
 const CLAUSE = /^\s*(\S+)\s+(is|is-not|is_not)\s+(.+?)\s*$/u;

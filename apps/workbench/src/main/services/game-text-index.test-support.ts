@@ -7,19 +7,21 @@ import {
 	type GameTextIndexRefreshRequest,
 	GameTextIndexError,
 	TextCorpusService,
+	type GameTextIndexRefreshResult
+} from "@ue-shed/game-text/index";
+import {
 	joinLocalizationTarget,
 	applyLocalizationReview,
 	applyLocalizationKeyChanges,
 	localizationKeyChanges,
 	mergeLocalizationKeyChanges,
 	textCorpusQuery,
-	checkLocalizationTarget,
 	localizationQuality,
-	evaluateGameTextSourceQuality,
-	textQualityQuery,
-	type GameTextIndexRefreshResult,
-	type TextCorpus
-} from "@ue-shed/game-text";
+	textQualityQuery
+} from "@ue-shed/game-text/corpus";
+import { checkLocalizationTarget } from "@ue-shed/game-text/checks";
+import { evaluateGameTextSourceQuality } from "@ue-shed/game-text/rules";
+import { type TextCorpus } from "@ue-shed/game-text/schema";
 import {
 	LocalizationEvidence,
 	LocalizationFileAccessLive,

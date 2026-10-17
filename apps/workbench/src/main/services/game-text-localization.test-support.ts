@@ -1,4 +1,9 @@
-import { TextCorpus, TextUnit, makeTextUnitId, makeTextOccurrenceId } from "@ue-shed/game-text";
+import {
+	TextCorpus,
+	TextUnit,
+	makeTextUnitId,
+	makeTextOccurrenceId
+} from "@ue-shed/game-text/schema";
 import {
 	CultureCode,
 	LocalizationTarget,

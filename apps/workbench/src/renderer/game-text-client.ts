@@ -1,7 +1,7 @@
 import {
 	GameTextInvestigationPresetResult,
 	LocalizationLinesFileResult
-} from "@ue-shed/game-text/browser";
+} from "@ue-shed/game-text/corpus";
 import { InvestigationFileResult } from "@ue-shed/unreal-assets/investigation";
 import {
 	type WorkspaceQualityRequest,
@@ -21,25 +21,27 @@ import {
 	LocalizationTargetResult,
 	LocalizationFocusResult,
 	type LocalizationFocusRequest,
-	type LocalizationSelection,
-	parseTextCorpusFocusResult,
-	parseTextCorpusQueryRunResult,
-	parseTextCorpusSearchResult,
 	parseTextQualityFocusResult,
 	parseTextQualityQueryRunResult,
 	parseTextQualityRuleUpdateResult,
 	parseTextQualitySearchResult,
-	type TextCorpusFocusRequest,
-	type TextCorpusFocusResult,
-	type TextCorpusSearchRequest,
-	type TextCorpusSearchResult,
 	type TextQualityFocusRequest,
 	type TextQualityFocusResult,
-	type GameTextRuleDocument,
 	type TextQualityRuleUpdateResult,
 	type TextQualitySearchRequest,
 	type TextQualitySearchResult
-} from "@ue-shed/game-text/browser";
+} from "@ue-shed/game-text/corpus";
+import {
+	type LocalizationSelection,
+	parseTextCorpusFocusResult,
+	parseTextCorpusQueryRunResult,
+	parseTextCorpusSearchResult,
+	type TextCorpusFocusRequest,
+	type TextCorpusFocusResult,
+	type TextCorpusSearchRequest,
+	type TextCorpusSearchResult
+} from "@ue-shed/game-text/schema";
+import { type GameTextRuleDocument } from "@ue-shed/game-text/rules";
 import { decodeEditorAssetLocateResult } from "@ue-shed/protocol";
 import {
 	GameTextClient,
@@ -57,7 +59,7 @@ import {
 	WorkbenchOperationResult,
 	WorkbenchOperationFilesResult,
 	WorkbenchOperationProgress
-} from "@ue-shed/game-text/browser";
+} from "@ue-shed/game-text/schema";
 
 const recovery = "Restart Workbench. If the problem persists, verify package versions.";
 

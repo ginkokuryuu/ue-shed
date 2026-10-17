@@ -1,4 +1,4 @@
-import type { TextCorpusSearchPage } from "@ue-shed/game-text/browser";
+import type { TextCorpusSearchPage } from "@ue-shed/game-text/schema";
 
 /** A further page appended to the rows already loaded; counts and cursors come from the newer. */
 export function mergePages(

@@ -21,7 +21,7 @@ import {
 	gameTextIndexRefreshLayer,
 	gameTextIndexSourceNodeLayer,
 	typeScriptIndexBuilderLayer
-} from "@ue-shed/game-text";
+} from "@ue-shed/game-text/index";
 import {
 	EditorWindowActivationLive,
 	EditorForegroundPermissionLive,

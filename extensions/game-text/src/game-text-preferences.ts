@@ -1,5 +1,11 @@
 import { Effect, Option, Schema } from "effect";
 import {
+	TextQualityFindingId,
+	WorkspaceQualityFilter,
+	LocalizationEdit
+} from "@ue-shed/game-text/corpus";
+import { GameTextRuleDocument, LocalizationProjectRule } from "@ue-shed/game-text/rules";
+import {
 	LocalizationSelection,
 	LocalizationLineId,
 	TextCapabilityFilter,
@@ -8,14 +14,9 @@ import {
 	TextReviewLens,
 	TextUnitId,
 	TextWhere,
-	TextQualityFindingId,
-	WorkspaceQualityFilter,
-	GameTextRuleDocument,
-	LocalizationEdit,
 	TextQualityRule,
-	TextTerminologyEntry,
-	LocalizationProjectRule
-} from "@ue-shed/game-text/browser";
+	TextTerminologyEntry
+} from "@ue-shed/game-text/schema";
 import { legacyFilter } from "./game-text-filter-model.js";
 import type { RuleEditorState } from "./game-text-rule-state.js";
 

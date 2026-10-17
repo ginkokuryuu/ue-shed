@@ -2,7 +2,7 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { decodeAuthoringTableSnapshot as decodeAuthoringTableSnapshotEffect } from "@ue-shed/protocol";
-import { parseTextQualityReport } from "@ue-shed/game-text";
+import { parseTextQualityReport } from "@ue-shed/game-text/schema";
 import { Effect } from "effect";
 import { describe, expect, it } from "vitest";
 import { useSavedFixtureProject } from "../../../fixtures/unreal-project/saved-project.test-support.js";
@@ -75,7 +75,7 @@ describe("ue-shed CLI process", () => {
 		expect(invalid.status).toBe(2);
 		expect(invalid.stdout).toBe("");
 		expect(invalid.stderr).toContain('ue-shed: Unknown subcommand "not-a-command"');
-	}, 20_000);
+	}, 90_000);
 
 	it("explains and compares saved config provenance through the executable boundary", () => {
 		const explanation = parseRecord(

@@ -1,7 +1,7 @@
 import { cleanup, fireEvent, render } from "@solidjs/testing-library";
 import { afterEach, expect, it, vi } from "vitest";
 import { createSignal, flush } from "solid-js";
-import { joinLocalizationTarget, textCorpusQuery } from "@ue-shed/game-text/browser";
+import { joinLocalizationTarget, textCorpusQuery } from "@ue-shed/game-text/corpus";
 import {
 	corpus,
 	evidence,

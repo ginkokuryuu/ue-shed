@@ -1,6 +1,7 @@
 import * as stylex from "@stylexjs/stylex";
 import { tokens } from "@ue-shed/ui-theme/tokens.stylex.js";
-import type { LocalizationProjectRule, TextTerminologyEntry } from "@ue-shed/game-text/browser";
+import type { LocalizationProjectRule } from "@ue-shed/game-text/rules";
+import type { TextTerminologyEntry } from "@ue-shed/game-text/schema";
 import { Button } from "@ue-shed/ui";
 import { For, Show, createSignal } from "solid-js";
 import {

@@ -1,13 +1,13 @@
 import * as stylex from "@stylexjs/stylex";
+import { TEXT_PROBLEM_LABELS } from "@ue-shed/game-text/labels";
 import {
-	TEXT_PROBLEM_LABELS,
 	TextOriginKind,
 	TextProblem,
 	type TextCorpusSearchPage,
 	type TextFilter,
 	type TextGroup,
 	type TextGroupBy
-} from "@ue-shed/game-text/browser";
+} from "@ue-shed/game-text/schema";
 import { tokens } from "@ue-shed/ui-theme/tokens.stylex.js";
 import { For, Show, createSignal, createUniqueId } from "solid-js";
 import { hasValue, toggleValue } from "./game-text-filter-model.js";

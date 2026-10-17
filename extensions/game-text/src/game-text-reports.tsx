@@ -1,13 +1,15 @@
 import * as stylex from "@stylexjs/stylex";
 import {
 	explainLocalizationFile,
-	LocalizationUnknownReason,
-	textCountLabel,
-	type TextCorpusQuerySummary,
 	type WorkspaceReportPage,
-	type WorkspaceReportFileRequest,
+	type WorkspaceReportFileRequest
+} from "@ue-shed/game-text/corpus";
+import { textCountLabel } from "@ue-shed/game-text/labels";
+import {
+	LocalizationUnknownReason,
+	type TextCorpusQuerySummary,
 	type LocalizationSelection
-} from "@ue-shed/game-text/browser";
+} from "@ue-shed/game-text/schema";
 import { Button, createEffectAction } from "@ue-shed/ui";
 import { For, Show, createEffect, createSignal } from "solid-js";
 import type { GameTextClientApi } from "./game-text-client.js";

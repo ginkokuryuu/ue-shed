@@ -1,11 +1,8 @@
 // @vitest-environment jsdom
 import { cleanup, render, screen, waitFor, within } from "@solidjs/testing-library";
 import { userEvent } from "@testing-library/user-event";
-import {
-	LocalizationEdit,
-	LocalizationSelection,
-	type LocalizationEditResult
-} from "@ue-shed/game-text/browser";
+import { LocalizationEdit, type LocalizationEditResult } from "@ue-shed/game-text/corpus";
+import { LocalizationSelection } from "@ue-shed/game-text/schema";
 import { EffectRuntimeProvider } from "@ue-shed/ui";
 import { Deferred, Effect, Layer, ManagedRuntime, Schema } from "effect";
 import { createSignal } from "solid-js";

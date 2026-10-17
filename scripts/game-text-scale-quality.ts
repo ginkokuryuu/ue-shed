@@ -6,14 +6,14 @@ import {
 	GameTextIndexRefresh,
 	GameTextIndexSource,
 	GameTextRuleDocument,
-	PackageTextStored,
 	evaluateGameTextSourceQuality,
 	gameTextIndexRefreshLayer,
-	packageTextShard,
 	textQualityQuery,
 	typeScriptIndexBuilderLayer,
 	type GameTextIndexRefreshResult
 } from "../packages/game-text/dist/index.js";
+import { PackageTextStored } from "../packages/game-text/dist/package-text-columns.js";
+import { packageTextShard } from "../packages/game-text/dist/package-text-layer.js";
 import { LocalizationEvidenceNodeLive } from "../packages/localization/dist/index.js";
 import { packageTextJsonLines } from "../packages/game-text/src/package-text-ndjson.ts";
 import { readGeneratedPackageInventory } from "./package-text-generated.ts";

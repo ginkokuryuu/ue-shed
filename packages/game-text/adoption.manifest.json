@@ -11,8 +11,12 @@
 		"uiBundled": false
 	},
 	"entrypoints": {
-		"host": "@ue-shed/game-text",
-		"browser": "@ue-shed/game-text/browser"
+		"host": "@ue-shed/game-text/index",
+		"browser": "@ue-shed/game-text/corpus",
+		"schema": "@ue-shed/game-text/schema",
+		"rules": "@ue-shed/game-text/rules",
+		"checks": "@ue-shed/game-text/checks",
+		"labels": "@ue-shed/game-text/labels"
 	},
 	"packageGraph": {
 		"dependencies": {

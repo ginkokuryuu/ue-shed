@@ -56,7 +56,7 @@ export const runTextRulesInit = Effect.fn("Cli.workflow.text_rules_init")(
 			command._tag,
 			Effect.gen(function* () {
 				const { createStarterTextRules } = yield* Effect.promise(
-					() => import("@ue-shed/game-text")
+					() => import("@ue-shed/game-text/index")
 				);
 				const path = yield* createStarterTextRules(
 					command.projectRoot,
@@ -150,7 +150,7 @@ export const runTextSearch = Effect.fn("Cli.workflow.text_search")((command: Tex
 				);
 			}
 			const { textCorpusDiagnosticSummary } = yield* Effect.promise(
-				() => import("@ue-shed/game-text")
+				() => import("@ue-shed/game-text/corpus")
 			);
 			const { corpus, query } = yield* refreshCliGameTextIndex(
 				{ projectRoot: command.projectRoot },
@@ -183,7 +183,7 @@ export const runTextReview = Effect.fn("Cli.workflow.text_review")((command: Tex
 		command._tag,
 		Effect.gen(function* () {
 			const { decodeGameTextRuleDocumentJson, evaluateGameTextSourceQuality } =
-				yield* Effect.promise(() => import("@ue-shed/game-text"));
+				yield* Effect.promise(() => import("@ue-shed/game-text/rules"));
 			const ruleJson = yield* Effect.tryPromise({
 				try: () => readFile(command.ruleFile, "utf8"),
 				catch: () =>

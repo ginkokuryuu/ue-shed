@@ -44,18 +44,36 @@ Use `scanFromProjectIndex` when the host already maintains a saved-project heade
 `scan` performs its own bounded project scan. Both paths preserve coverage and typed recovery
 guidance.
 
-The `@ue-shed/game-text/browser` entry point contains only schemas and pure query helpers. It does
-not expose filesystem, process, Electron, Perforce, or Unreal authority.
+## Entry points
 
-The package also exports a pure compact snapshot codec from both entry points and the Effect
-`SnapshotStore` with `snapshotStoreNodeLayer` from the Node entry point. Compact-index hosts use
+Import from a focused entry point. Each lists its exports by name; modules no entry point names
+are private to the package.
+
+| Entry point                 | Runtime      | Contents                                                                                      |
+| --------------------------- | ------------ | --------------------------------------------------------------------------------------------- |
+| `@ue-shed/game-text/schema` | browser-safe | Wire schemas, identifiers, check and rule ids, operation requests                             |
+| `@ue-shed/game-text/rules`  | browser-safe | Rule documents, starter rules, audience and origin policy, word counting                      |
+| `@ue-shed/game-text/checks` | browser-safe | Check catalogue and scopes, custom checks, the gate, text problems, Unreal text syntax        |
+| `@ue-shed/game-text/labels` | browser-safe | Display labels for states, problems, audiences, origins and quality                           |
+| `@ue-shed/game-text/corpus` | browser-safe | Corpus queries, search, localization join, reports, CSV, edits and package text diffs         |
+| `@ue-shed/game-text/index`  | Node         | `TextCorpus`, index layers/builders, workers, rules-file IO, progress and Unreal text actions |
+
+The browser-safe entry points do not expose filesystem, process, Electron, Perforce, or Unreal
+authority. The root `@ue-shed/game-text` and `@ue-shed/game-text/browser` aggregates still re-export
+the public names for one release and are deprecated. The compact snapshot codec, `SnapshotStore`,
+`SharedIndex`, joined-target readers, package-text storage/columns and cold-pool modules are private;
+`SnapshotStoreError` and `SnapshotFormatError` stay exported from `/index` because public index
+signatures name them.
+
+The index keeps its data in a compact snapshot format behind a private `SnapshotStore`; neither is
+part of the public API. Compact-index hosts use
 persistent package, localization and joined layers, bounded queries and lazy object projections;
 the in-memory corpus API remains available for batch consumers. See the
 [snapshot engineering guide](../../docs/engineering/game-text-snapshots.md) for the format, caps,
 immutable publication and recovery behavior. `reader.domain()` bulk-loads one source, identity,
 translation or path domain; `reader.strings()` keeps page reads limited to touched blocks.
-`SharedIndex` with `sharedIndexNodeLayer({ ...options, projectView })` shares package extraction
-and one deduplicated string ID space across explicit source and localization views. Each view keeps
+The private shared index shares package extraction and one deduplicated string ID space across
+explicit source and localization views. Each view keeps
 independent joined pointers; omitting `projectView` retains the separate-store behavior.
 Localization imports use independent content keys, immutable string segments and atomic
 generation publication; compaction remaps active layers while existing readers retain their handles.

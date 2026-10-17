@@ -1,12 +1,11 @@
+import { searchTextCorpus, textAssetName } from "@ue-shed/game-text/corpus";
 import {
-	searchTextCorpus,
-	textAssetName,
 	type TextCorpus,
 	type TextLocation,
 	type TextOccurrence,
 	type TextUnit,
 	type TextUnitSearchResult
-} from "@ue-shed/game-text/browser";
+} from "@ue-shed/game-text/schema";
 
 export type CapabilityFilter = "all" | "source_editable" | "read_only";
 

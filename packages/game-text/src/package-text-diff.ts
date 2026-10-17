@@ -1,5 +1,5 @@
 import { Schema } from "effect";
-import { SavedAssetTextOccurrence, type SavedAssetPackageTextRecord } from "@ue-shed/unreal-assets";
+import { SavedAssetTextOccurrence, type SavedAssetPackageTextRecord } from "@ue-shed/protocol";
 
 /**
  * Where one text lives inside its package, independent of the package's own name: the object path

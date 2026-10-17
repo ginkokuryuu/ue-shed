@@ -1,5 +1,5 @@
 import * as stylex from "@stylexjs/stylex";
-import { TextGroupBy } from "@ue-shed/game-text/browser";
+import { TextGroupBy } from "@ue-shed/game-text/schema";
 import { AnchoredPopover, ToolButton, ToolIcon } from "@ue-shed/ui";
 import { tokens } from "@ue-shed/ui-theme/tokens.stylex.js";
 import { For, createEffect, createSignal, createUniqueId } from "solid-js";

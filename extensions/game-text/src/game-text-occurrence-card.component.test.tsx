@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { cleanup, render, screen } from "@solidjs/testing-library";
-import { TextOccurrenceId, type TextOccurrence } from "@ue-shed/game-text/browser";
+import { TextOccurrenceId, type TextOccurrence } from "@ue-shed/game-text/schema";
 import { EffectRuntimeProvider } from "@ue-shed/ui";
 import { Effect, Layer, ManagedRuntime } from "effect";
 import { afterAll, afterEach, describe, expect, it } from "vitest";
