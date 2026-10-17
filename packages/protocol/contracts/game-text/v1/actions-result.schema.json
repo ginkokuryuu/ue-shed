@@ -1,0 +1,198 @@
+{
+	"$schema": "https://json-schema.org/draft/2020-12/schema",
+	"$defs": {
+		"GameTextActionIdentity": {
+			"type": "object",
+			"properties": {
+				"namespace": {
+					"type": "string",
+					"allOf": [
+						{
+							"maxLength": 4096
+						}
+					]
+				},
+				"key": {
+					"type": "string",
+					"allOf": [
+						{
+							"minLength": 1
+						},
+						{
+							"maxLength": 4096
+						}
+					]
+				},
+				"source": {
+					"type": "string",
+					"allOf": [
+						{
+							"maxLength": 4096
+						}
+					]
+				}
+			},
+			"required": ["namespace", "key", "source"],
+			"additionalProperties": false
+		},
+		"GameTextActionOutcomeIdentity": {
+			"type": "object",
+			"properties": {
+				"namespace": {
+					"type": "string"
+				},
+				"key": {
+					"type": "string"
+				},
+				"minted": {
+					"type": "boolean",
+					"enum": [true]
+				},
+				"source": {
+					"type": "string"
+				}
+			},
+			"required": ["namespace", "source"],
+			"additionalProperties": false
+		},
+		"GameTextActionOutcome": {
+			"type": "object",
+			"properties": {
+				"id": {
+					"type": "string"
+				},
+				"status": {
+					"type": "string",
+					"enum": ["applied", "planned", "unchanged"]
+				},
+				"before": {
+					"$ref": "#/$defs/GameTextActionIdentity"
+				},
+				"after": {
+					"$ref": "#/$defs/GameTextActionOutcomeIdentity"
+				}
+			},
+			"required": ["id", "status", "before", "after"],
+			"additionalProperties": false
+		},
+		"GameTextActionError": {
+			"type": "object",
+			"properties": {
+				"code": {
+					"type": "string",
+					"enum": [
+						"invalid_request",
+						"place_not_found",
+						"not_text",
+						"read_only_text",
+						"unsupported_place",
+						"stale_expected",
+						"key_conflict",
+						"compile_failed",
+						"not_persisted",
+						"save_failed"
+					]
+				},
+				"actionId": {
+					"type": "string"
+				},
+				"message": {
+					"type": "string"
+				},
+				"recovery": {
+					"type": "string"
+				},
+				"retrySafe": {
+					"type": "boolean"
+				},
+				"nextStep": {
+					"type": "string",
+					"enum": ["fix_input", "retry", "reconcile", "escalate"]
+				}
+			},
+			"required": ["code", "message", "recovery", "retrySafe", "nextStep"],
+			"additionalProperties": false
+		},
+		"GameTextActionsResult": {
+			"type": "object",
+			"properties": {
+				"contract": {
+					"type": "string",
+					"enum": ["ue-shed-game-text-actions"]
+				},
+				"version": {
+					"type": "string",
+					"enum": ["1.0"]
+				},
+				"mode": {
+					"type": "string",
+					"enum": ["dry_run", "apply"]
+				},
+				"status": {
+					"type": "string",
+					"enum": ["ok", "rejected", "failed"]
+				},
+				"rolledBack": {
+					"type": "boolean"
+				},
+				"actions": {
+					"type": "array",
+					"items": {
+						"$ref": "#/$defs/GameTextActionOutcome"
+					}
+				},
+				"blueprints": {
+					"type": "array",
+					"items": {
+						"type": "object",
+						"properties": {
+							"objectPath": {
+								"type": "string"
+							},
+							"compiled": {
+								"type": "boolean"
+							}
+						},
+						"required": ["objectPath", "compiled"],
+						"additionalProperties": false
+					}
+				},
+				"packages": {
+					"type": "array",
+					"items": {
+						"type": "object",
+						"properties": {
+							"packageName": {
+								"type": "string"
+							},
+							"saved": {
+								"type": "boolean"
+							}
+						},
+						"required": ["packageName", "saved"],
+						"additionalProperties": false
+					}
+				},
+				"errors": {
+					"type": "array",
+					"items": {
+						"$ref": "#/$defs/GameTextActionError"
+					}
+				}
+			},
+			"required": [
+				"contract",
+				"version",
+				"mode",
+				"status",
+				"rolledBack",
+				"actions",
+				"blueprints",
+				"packages",
+				"errors"
+			],
+			"additionalProperties": false
+		}
+	},
+	"$ref": "#/$defs/GameTextActionsResult"
+}

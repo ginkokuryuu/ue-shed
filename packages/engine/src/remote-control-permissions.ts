@@ -19,6 +19,7 @@ const remoteClasses = {
 	UEShedAutomation: ["UEShedAutomation.UEShedAutomationLibrary"],
 	UEShedObservatory: ["UEShedObservatoryEditor.UEShedObservatoryLibrary"],
 	UEShedAssetAudits: ["UEShedAssetAudits.UEShedAssetAuditsLibrary"],
+	UEShedGameText: ["UEShedGameText.UEShedGameTextLibrary"],
 	UEShedScenarios: ["UEShedScenariosEditor.UEShedScenarioLibrary"]
 };
 

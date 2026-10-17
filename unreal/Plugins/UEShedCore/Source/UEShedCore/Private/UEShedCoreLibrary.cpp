@@ -67,6 +67,12 @@ void UUEShedCoreLibrary::GetCapabilityManifest(FString& ResultJson)
 		Capabilities.Add(MakeShared<FJsonValueString>(TEXT("authoring.defaults.v1")));
 		Capabilities.Add(MakeShared<FJsonValueString>(TEXT("authoring.actor-references.v1")));
 	}
+	if (FModuleManager::Get().IsModuleLoaded(TEXT("UEShedGameText")))
+	{
+		Root->SetStringField(TEXT("gameTextObjectPath"),
+			TEXT("/Script/UEShedGameText.Default__UEShedGameTextLibrary"));
+		Capabilities.Add(MakeShared<FJsonValueString>(TEXT("game-text.actions.v1")));
+	}
 	if (FModuleManager::Get().IsModuleLoaded(TEXT("UEShedAutomation")))
 	{
 		Root->SetStringField(TEXT("automationObjectPath"),
