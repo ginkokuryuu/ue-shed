@@ -15,6 +15,7 @@ import {
 	searchWorkerFailure
 } from "./search-worker-protocol.js";
 import { GameTextLocalizationError } from "./localization-schema.js";
+import { postSyncReply } from "./worker-calls.js";
 
 const port = parentPort;
 if (!port) throw new Error("Game Text search requires its owning worker adapter.");
@@ -79,10 +80,7 @@ function answer(
 			error: Schema.encodeSync(SearchWorkerCallFailure)(error)
 		};
 	}
-	calls.postMessage(response);
-	// A counter, not a flag: the host waits until it moves past the value it saw before asking.
-	Atomics.add(signal, 0, 1);
-	Atomics.notify(signal, 0);
+	postSyncReply(calls, signal, response);
 }
 
 // This worker is a Node runtime boundary. Its scope pins the generation until shutdown.

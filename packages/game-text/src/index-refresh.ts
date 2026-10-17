@@ -5,7 +5,11 @@ import {
 	GameTextIndexRefreshRequest,
 	GameTextIndexError
 } from "./index-contract.js";
-import { GameTextIndexSteps, makeGameTextIndexSteps } from "./index-steps.js";
+import {
+	GameTextIndexSteps,
+	makeGameTextIndexSteps,
+	type GameTextIndexStepsOptions
+} from "./index-steps.js";
 export * from "./index-contract.js";
 
 const refreshes = Metric.counter("game_text.index.refreshes");
@@ -16,11 +20,7 @@ const refreshDuration = Metric.histogram("game_text.index.refresh_duration_ms", 
 /** Compatibility workflow, composed entirely from the independently usable project/target steps. */
 export const gameTextIndexRefreshLayer = (
 	cacheRoot: string,
-	options: {
-		readonly searchWorker?: boolean;
-		readonly latestSearchOnly?: boolean;
-		readonly syncCallTimeoutMs?: number;
-	} = {}
+	options: GameTextIndexStepsOptions = {}
 ) =>
 	Layer.effectContext(
 		Effect.gen(function* () {

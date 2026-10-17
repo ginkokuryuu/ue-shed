@@ -85,3 +85,34 @@ it.live.skipIf(!enabled)(
 		}),
 	180_000
 );
+
+it.live.skipIf(!enabled)(
+	"runs a localization quality scan in its worker without stalling the host",
+	() =>
+		Effect.gen(function* () {
+			const fixture = yield* makeSyntheticHostFixture(project);
+			const context = yield* Layer.build(fixture.layer);
+			const service = yield* GameTextIndexRefresh.pipe(Effect.provide(context));
+			yield* Effect.scoped(
+				Effect.gen(function* () {
+					const result = yield* service.refresh(fixture.request);
+					const scanned = yield* withEventLoopGaps(
+						result.localizationQuality!({ review: result.review.file }).pipe(
+							Effect.tap((quality) =>
+								Effect.sync(() => quality.findings.items([0, 1, 2]))
+							)
+						)
+					);
+					yield* Effect.logInfo("Quality scan event-loop gap").pipe(
+						Effect.annotateLogs({
+							scanMaxGapMs: scanned.maxGapMs,
+							findings: scanned.value.findings.length
+						})
+					);
+					expect(scanned.value.findings.length).toBeGreaterThan(0);
+					expect(scanned.maxGapMs).toBeLessThan(MAXIMUM_GAP_MS);
+				})
+			);
+		}),
+	180_000
+);
