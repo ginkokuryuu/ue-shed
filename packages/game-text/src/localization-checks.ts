@@ -861,14 +861,16 @@ export function checkLocalizationLine(
 		affected: TextQualityAffectedOccurrence[] | undefined;
 	const unitsOnce = () => (lineUnits ??= units());
 	const add = (finding: UnratedFinding) => {
-		if (enabled.includes(finding.kind))
-			// SAFETY: `finding` is one member of the union without its severity, and the severity
-			// added is the one the rule file gives that member's kind.
-			findings.push({
-				...finding,
-				affectedOccurrences: (affected ??= affectedOf(unitsOnce())),
-				severity: context.checks[finding.kind].severity
-			} as LocalizationQualityFinding);
+		if (!enabled.includes(finding.kind)) return false;
+		// SAFETY: `finding` is one member of the union without its severity, and the severity
+		// added is the one the rule file gives that member's kind.
+		// Verified by: localization-check-settings.test.ts — applies enabled, preset, severity and parameters.
+		findings.push({
+			...finding,
+			affectedOccurrences: (affected ??= affectedOf(unitsOnce())),
+			severity: context.checks[finding.kind].severity
+		} as LocalizationQualityFinding);
+		return true;
 	};
 	const sourceCulture = localizationSourceCulture(line, context.nativeCulture);
 	if (!line.identity) {
@@ -1181,20 +1183,28 @@ export function checkLocalizationLine(
 		const missingTags = tags?.missing.filter(required) ?? [],
 			addedTags = tags?.added.filter(required) ?? [];
 		const addedOnly = tagsWithout(richTextTagsAdded.arguments);
-		const addedOnlyTags =
-			addedOnly?.added.filter((name) => !richTextTagsAdded.tags.has(name.toLowerCase())) ??
-			[];
+		let reportedTagAdditions: readonly string[] = [];
 		if (tags && missingTags.length)
-			add({
-				...base,
-				ruleId: ruleIdOf("rich_text_tags"),
-				kind: "rich_text_tags",
-				actual: { tags: tags.translationTags, missing: missingTags, added: addedTags },
-				expectation: { tags: tags.sourceTags },
-				recovery:
-					"Keep the source's rich-text tags, such as <b>…</> and <img/>, around the matching words; don't add or drop any."
-			});
-		else if (addedOnly && addedOnlyTags.length)
+			if (
+				add({
+					...base,
+					ruleId: ruleIdOf("rich_text_tags"),
+					kind: "rich_text_tags",
+					actual: { tags: tags.translationTags, missing: missingTags, added: addedTags },
+					expectation: { tags: tags.sourceTags },
+					recovery:
+						"Keep the source's rich-text tags, such as <b>…</> and <img/>, around the matching words; don't add or drop any."
+				})
+			)
+				reportedTagAdditions = addedTags;
+		const reportedTags = new Set(reportedTagAdditions.map((name) => name.toLowerCase()));
+		const addedOnlyTags =
+			addedOnly?.added.filter(
+				(name) =>
+					!richTextTagsAdded.tags.has(name.toLowerCase()) &&
+					!reportedTags.has(name.toLowerCase())
+			) ?? [];
+		if (addedOnly && addedOnlyTags.length)
 			add({
 				...base,
 				ruleId: ruleIdOf("rich_text_tags_added"),
@@ -1231,6 +1241,7 @@ export function checkLocalizationLine(
 		const added = addedArguments(context.lists.renamedArguments);
 		// A dropped and an added name pair up, in order of appearance, as a rename.
 		const pairs = Math.min(missing.length, added.length);
+		let reportedPairs = 0;
 		if (canComparePattern && pairs > 0) {
 			const finding: Unrated<
 				Extract<LocalizationQualityFinding, { kind: "format_argument_renamed" }>
@@ -1285,10 +1296,10 @@ export function checkLocalizationLine(
 					changes.push(change);
 				}
 			}
-			add(finding);
+			if (add(finding)) reportedPairs = pairs;
 		}
-		const renamedFrom = new Set(added.slice(0, pairs));
-		const dropped = missing.slice(pairs).sort(),
+		const renamedFrom = new Set(added.slice(0, reportedPairs));
+		const dropped = missing.slice(reportedPairs).sort(),
 			extra = addedArguments(context.lists.formatArguments)
 				.filter((name) => !renamedFrom.has(name))
 				.sort();

@@ -12,6 +12,7 @@ import {
 import { joinLocalizationTarget } from "./localization.js";
 import { checkLocalizationTarget } from "./localization-checks.js";
 import { localizationCheckDefaults } from "./localization-check-catalogue.js";
+import { BuiltInCheckId } from "./localization-check-ids.js";
 import type {
 	LocalizationCheckOptions,
 	LocalizationQualityFinding,
@@ -75,6 +76,109 @@ const v1 = (fields: V1Fields) =>
 const harbour = "A fairly long sentence about the harbour";
 
 describe("rule file v3", () => {
+	it("resolves every check's own parameter schema and defaults", () => {
+		for (const id of BuiltInCheckId.literals) {
+			const resolved = resolveLocalizationChecks(
+				v3({ checks: { [id]: { severity: "low", params: {} } } })
+			);
+			expect(resolved[id].params).toEqual(localizationCheckDefaults[id]);
+			expect(resolved[id].severity).toBe("low");
+		}
+	});
+
+	it("reports added tags with their own policy when a sibling is disabled or ignores them", () => {
+		const source = "<b>Source</>",
+			translation = "<i>Übersetzung</>";
+		const checks = {
+			rich_text_tags: { enabled: false, params: { optionalTags: ["i"] } },
+			rich_text_tags_added: { enabled: true }
+		};
+		const added = german(line(source, translation, v3({ preset: "none", checks })));
+		expect(added).toMatchObject([{ kind: "rich_text_tags_added", actual: { added: ["i"] } }]);
+		expect(added).toHaveLength(1);
+		const independent = german(
+			line(
+				source,
+				translation,
+				v3({
+					preset: "none",
+					checks: {
+						...checks,
+						rich_text_tags: { enabled: true, params: { optionalTags: ["i"] } }
+					}
+				})
+			)
+		);
+		expect(independent.map((f) => f.kind)).toEqual(["rich_text_tags", "rich_text_tags_added"]);
+		expect(independent.find((f) => f.kind === "rich_text_tags_added")?.actual).toMatchObject({
+			added: ["i"]
+		});
+		const shared = v3({
+			preset: "none",
+			checks: {
+				rich_text_tags: { enabled: true },
+				rich_text_tags_added: { enabled: true }
+			}
+		});
+		expect(kinds(line(source, translation, shared))).toEqual(["rich_text_tags"]);
+		expect(
+			kinds(line(source, translation, shared, { disabledChecks: ["rich_text_tags"] }))
+		).toEqual(["rich_text_tags_added"]);
+		for (const schemaVersion of [1, 2]) {
+			const legacy = Schema.decodeUnknownSync(GameTextRuleDocument)({
+				...STARTER_GAME_TEXT_RULES,
+				schemaVersion,
+				disabledLocalizationChecks: ["rich_text_tags"]
+			});
+			expect(kinds(line(source, translation, legacy))).toContain("rich_text_tags_added");
+		}
+	});
+
+	it("reports argument differences when the rename check is disabled", () => {
+		const source = "Hello {Old}",
+			translation = "Hallo {New}";
+		const enabled = v3({
+			preset: "none",
+			checks: {
+				format_arguments: { enabled: true },
+				format_argument_renamed: { enabled: true }
+			}
+		});
+		expect(kinds(line(source, translation, enabled))).toEqual(["format_argument_renamed"]);
+		const disabled = v3({
+			preset: "none",
+			checks: {
+				format_arguments: { enabled: true },
+				format_argument_renamed: { enabled: false }
+			}
+		});
+		const findings = german(line(source, translation, disabled));
+		expect(findings).toMatchObject([
+			{ kind: "format_arguments", actual: { missing: ["Old"], added: ["New"] } }
+		]);
+		expect(findings).toHaveLength(1);
+		expect(
+			kinds(
+				line(source, translation, enabled, { disabledChecks: ["format_argument_renamed"] })
+			)
+		).toEqual(["format_arguments"]);
+		for (const schemaVersion of [1, 2]) {
+			const legacy = Schema.decodeUnknownSync(GameTextRuleDocument)({
+				...STARTER_GAME_TEXT_RULES,
+				schemaVersion,
+				disabledLocalizationChecks: ["format_argument_renamed"]
+			});
+			expect(german(line(source, translation, legacy))).toEqual(
+				expect.arrayContaining([
+					expect.objectContaining({
+						kind: "format_arguments",
+						actual: expect.objectContaining({ missing: ["Old"], added: ["New"] })
+					})
+				])
+			);
+		}
+	});
+
 	it("decodes a file of check settings alone and validates scopes and parameters", () => {
 		const document = v3({
 			checks: { length_outlier: { severity: "low", params: { maximumRatio: 4 } } }
