@@ -326,3 +326,39 @@ describe("save 1.2 package failure codes", () => {
 		).toThrow();
 	});
 });
+
+describe("apply 1.3 command failure causes", () => {
+	const rolledBack = (error: Readonly<Record<string, string | boolean>>) => ({
+		contract: { name: "unreal-authoring-apply", version: { major: 1, minor: 3 } },
+		errors: [error],
+		operationId: "op-1",
+		snapshots: [],
+		status: "rolled_back"
+	});
+	const decode = Schema.decodeUnknownSync(AuthoringApplyResult);
+	it("names the cause behind command_failed and still reads 1.2 errors without one", () => {
+		const failure = {
+			code: "command_failed",
+			cause: "stale_cell",
+			message: "field Name no longer matches oldValue",
+			retrySafe: false,
+			objectPath: "/Game/DT.DT",
+			commandId: "c-1"
+		};
+		expect(decode(rolledBack(failure)).errors[0]?.cause).toBe("stale_cell");
+		const { cause: _cause, ...legacy } = failure;
+		expect(decode(rolledBack(legacy)).errors[0]?.cause).toBeUndefined();
+	});
+	it("rejects a cause that is not a bounded snake-case code", () => {
+		expect(() =>
+			decode(
+				rolledBack({
+					code: "command_failed",
+					cause: "Field drifted",
+					message: "x",
+					retrySafe: false
+				})
+			)
+		).toThrow();
+	});
+});

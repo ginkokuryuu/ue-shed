@@ -520,6 +520,13 @@ export const AuthoringApplyRequest = Schema.Struct({
 export type AuthoringApplyRequest = Schema.Schema.Type<typeof AuthoringApplyRequest>;
 
 export const AuthoringOperationError = Schema.Struct({
+	/**
+	 * Apply 1.3: the specific cause behind `command_failed`, for example `stale_cell`,
+	 * `unknown_row` or `expected_enum`. Lower snake case.
+	 */
+	cause: Schema.optionalKey(
+		Schema.String.check(Schema.isMaxLength(64), Schema.isPattern(/^[a-z][a-z0-9_]*$/u))
+	),
 	code: Schema.String,
 	commandId: Schema.optionalKey(Schema.String),
 	message: Schema.String,
