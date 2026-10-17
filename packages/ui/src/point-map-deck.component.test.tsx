@@ -1,11 +1,15 @@
 // @vitest-environment jsdom
 
 import { cleanup, render, screen, waitFor } from "@solidjs/testing-library";
-import { afterEach, describe, expect, it } from "vitest";
+import { Deck } from "@deck.gl/core";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { PointMapCanvas, type PointMapController, type PointMapViewState } from "./point-map.js";
 import { PointMapDeckCanvas } from "./point-map-deck.js";
 
-afterEach(cleanup);
+afterEach(() => {
+	cleanup();
+	vi.restoreAllMocks();
+});
 
 Object.defineProperty(HTMLCanvasElement.prototype, "getContext", {
 	configurable: true,
@@ -102,5 +106,33 @@ describe("point map controllers", () => {
 		renderers.deck(map);
 		await waitFor(() => expect(map.controllers.length).toBeGreaterThan(0));
 		expect(screen.getByTestId("point-map-deck-root").dataset.renderer).toBe("deck.gl");
+	});
+
+	it("forwards the Canvas fallback controller for focus, zoom and reset", async () => {
+		// Deliver the public renderer failure during Deck initialization.
+		vi.spyOn(Deck.prototype, "setProps").mockImplementationOnce((props) => {
+			props.onError?.(new Error("WebGL unavailable"));
+		});
+		const map = probe();
+		renderers.deck(map);
+		const deckController = map.controllers.find((entry) => entry !== undefined);
+		await waitFor(() =>
+			expect(screen.getByTestId("point-map-deck-root").dataset.renderer).toBe(
+				"canvas-fallback"
+			)
+		);
+		const controller = map.controllers.findLast((entry) => entry !== undefined);
+		expect(controller).toBeDefined();
+		expect(controller).not.toBe(deckController);
+		if (controller === undefined) return;
+
+		controller.focusKey("mesh");
+		await waitFor(() =>
+			expect(map.views.at(-1)?.viewport).toMatchObject({ centerX: 10_000, centerY: 10_000 })
+		);
+		controller.setZoomFactor(2);
+		await waitFor(() => expect(map.views.at(-1)?.zoomFactor).toBeCloseTo(2));
+		controller.resetView();
+		await waitFor(() => expect(map.views.at(-1)?.zoomFactor).toBeCloseTo(1));
 	});
 });

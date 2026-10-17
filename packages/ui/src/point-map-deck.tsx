@@ -536,8 +536,8 @@ export function PointMapDeckCanvas(props: PointMapDeckProps) {
 							class={stylex.attrs(fallbackStyles.fallbackCanvas).class}
 							connections={props.connections}
 							// SAFETY: Deck and Canvas controllers are structurally compatible (focusKey/resetView/setZoomFactor).
-							// Verified by: packages/ui/src/point-map-deck.component.test.tsx ("%s controller
-							// focuses, zooms and resets through the shared controller contract")
+							// Verified by: packages/ui/src/point-map-deck.component.test.tsx ("forwards the
+							// Canvas fallback controller for focus, zoom and reset")
 							onController={props.onController as never}
 							onSelect={props.onSelect}
 							onViewChange={props.onViewChange}
