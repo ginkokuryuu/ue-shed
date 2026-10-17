@@ -3,9 +3,11 @@
 ## Status
 
 Proposed on 2026-10-17 for Plan 058 item A3 (decision 10 of that plan). The operation set, places,
-verification and failure model below are the contract the `UEShedGameText` editor plugin and the
-`@ue-shed/game-text` actions API implement. Engine APIs were checked against UE 5.7's
-`Engine/Source`; UE 5.8 still has to be checked (see [Engine APIs](#engine-apis)).
+verification and failure model below specify the intended contract for the `UEShedGameText` editor
+plugin and the `@ue-shed/game-text` actions API; this decision record does not ship the implementation.
+Engine API declarations were checked against both UE 5.7 and UE 5.8 `Engine/Source` (see
+[Engine APIs](#engine-apis)). Implementation acceptance still requires runtime evidence on both
+versions.
 
 ## Context
 
@@ -45,10 +47,25 @@ editor does.
 
 ### Places
 
-A place is an object path and a property chain, the same form the saved-package reader reports
-(`object_path`, `property_path`), so a host can pass a reader occurrence straight through. The
-chain may step into structs and fixed or dynamic arrays (`Lines[2]`, `Info.Title`); the last
-property must be an `FTextProperty`.
+A place carries the scanned `packageFile`, the reader's `object_path`, and `property_path`, bound to
+an explicitly selected project. `packageFile` identifies the actual file under a configured content
+mount, not the package name serialized inside it. A copied file can still contain the original
+package's object path and identical namespace, key and source; those values alone cannot identify
+the mutation target.
+
+Before loading or resolving an object, the host and plugin must agree on the mounted package name
+derived from that file's location (`Content/` maps to `/Game/`; plugin content uses its discovered or
+explicitly configured mount). The plugin verifies that Unreal resolves that mounted name to the
+same canonical file, resolves the object within that package, and checks its owning package before
+editing. A serialized absolute object path is evidence to translate within the selected package,
+never authority to load a different one. Missing, ambiguous or mismatched mappings reject the
+request with `package_mismatch`, without mutation; there is no fallback to the original path.
+Existing read-only path completion does not establish this guarantee. Until file-bound resolution
+is implemented, actions on file-copied packages remain unavailable.
+
+Original and branched places stay distinct in requests, receipts and saved-package verification
+through `packageFile` as well as the resolved object and property. The chain may step into structs
+and fixed or dynamic arrays (`Lines[2]`, `Info.Title`); the last property must be an `FTextProperty`.
 
 | Place                  | Object                                        | Compiled by                 |
 | ---------------------- | --------------------------------------------- | --------------------------- |
@@ -66,18 +83,22 @@ place back after compiling.
 
 ### Verification
 
-1. **Preflight.** Every place resolves, holds localizable text (not culture invariant, not a String
-   Table reference, not generated), and still holds the caller's expected namespace, key and source.
+1. **Preflight.** Verify every file-to-mount binding and owning package before resolving places.
+   Every place holds localizable text (not culture invariant, not a String Table reference, not
+   generated), and still holds the caller's expected namespace, key and source.
 2. **Edit.** Actions apply in request order, so a later action sees an earlier one.
 3. **Key check.** `change_key` and `adopt_key` fail with `key_conflict` when Unreal does not keep the
    requested key, which it does when another text in the package already uses that id with
    different source.
-4. **Compile.** Each owning Blueprint compiles once; a compile error fails the request.
+4. **Compile.** Each owning Blueprint compiles once with `EBlueprintCompileOptions::SkipSave`,
+   including rollback compiles. Editor Save on Compile preferences must not persist changes before
+   the explicit save step or when `save: false`; a compile error fails the request.
 5. **Read back.** Each place is read again after compiling and must hold the result the action
    reported.
 6. **Save** (optional), then the host re-reads the saved packages with the saved-package reader and
-   compares each place against the reported result. Unreal's gather stays the final reference: the
-   acceptance tests compare re-read ids with a gather of the fixture.
+   compares each file-bound place against the reported result. This verification also runs for
+   successfully saved packages when another package fails to save. Unreal's gather stays the final
+   reference: the acceptance tests compare re-read ids with a gather of the fixture.
 
 A dry run performs steps 1 to 3 against the live objects and then restores every edited value and
 each package's dirty flag, so it reports the same results and conflicts an apply would, without
@@ -85,44 +106,91 @@ compiling or saving. A key that would be minted is reported as `minted` with no 
 
 ### Failure model
 
-A request is all or nothing. A request that fails validation, preflight or the key check changes
-nothing (edits made before the failing action are restored, with each package's dirty flag) and
-reports `status: "rejected"`. When a compile or read-back fails, the plugin restores every edited
-value, recompiles the Blueprints it compiled and restores dirty flags, then reports
-`status: "failed"` with `rolledBack: true`. Save failures after a successful compile leave the
-edits in memory (the editor's state is still consistent), report `failed` with `rolledBack: false`
-and list which packages were saved.
+Before saving, a request either applies every edit or attempts to restore them all. A request that
+fails validation, preflight or the key check changes nothing (edits made before the failing action
+are restored, with each package's dirty flag) and reports `status: "rejected"`. When a compile or
+read-back fails, the plugin restores every edited value, recompiles the Blueprints it compiled with
+saving suppressed, and restores dirty flags. It reports `status: "failed"` with `rolledBack: true`
+only after verifying restoration; a failed rollback requires reconciliation and must report the
+remaining or unknown changes honestly.
+
+Saving several packages is not atomic. A save failure after successful compile and read-back leaves
+the edits applied in memory and reports `failed` with `rolledBack: false`. A receipt records each
+action's applied result, including any generated key, separately from each package's persistence
+state (`saved`, `unsaved`, or `unknown`) and saved-read verification. It retains file-bound places,
+before/after text and diagnostic evidence so a host can reconcile without replaying edits. A failed
+or interrupted save is never represented as an unapplied or merely planned action.
+
+For `save_failed`, `retrySafe` is `false` and `nextStep` is `reconcile`. This first contract does not
+provide an automatic save-only continuation. The host must inspect the receipt, current live text
+and saved bytes for every affected package, resolve checkout or disk failures, then explicitly
+persist the reviewed outstanding state through Unreal and re-read those files. It must account for
+packages already saved and any intervening unrelated changes before authorizing a package save.
+Replaying the original mutation request, or refreshing its expected values and replaying it, is not
+persistence recovery: the original preflight is stale and `regenerate_key` could mint another key.
+A lost reply or disconnected editor also has an unknown mutation outcome and requires
+reconciliation, not automatic replay. Any future save-only continuation needs its own operation and
+freshness checks rather than interpreting `retry` as permission to repeat the edits.
 
 Errors have a stable `code`, the action they belong to, `message`, `recovery`, `retrySafe` and a
 typed `nextStep` (`fix_input`, `retry`, `reconcile`, `escalate`), the error shape Plan 058 lane D
 adopts:
 
-| Code                | Next step   | Meaning                                                              |
-| ------------------- | ----------- | -------------------------------------------------------------------- |
-| `invalid_request`   | `fix_input` | The request does not match the contract or its bounds                |
-| `place_not_found`   | `reconcile` | The object or property chain no longer exists; rescan                |
-| `not_text`          | `fix_input` | The property chain does not end in a text property                   |
-| `read_only_text`    | `fix_input` | Culture-invariant, String Table or generated text has no key to edit |
-| `unsupported_place` | `fix_input` | DataTable cell (use authoring) or graph pin (not yet)                |
-| `stale_expected`    | `reconcile` | The live text differs from what the caller reviewed; rescan          |
-| `key_conflict`      | `fix_input` | Unreal would not keep the requested key in this package              |
-| `compile_failed`    | `escalate`  | An owning Blueprint failed to compile; edits were rolled back        |
-| `not_persisted`     | `escalate`  | A place did not hold its result after compiling; rolled back         |
-| `save_failed`       | `retry`     | A package could not be saved (for example a read-only file)          |
+| Code                | Next step   | Meaning                                                                       |
+| ------------------- | ----------- | ----------------------------------------------------------------------------- |
+| `invalid_request`   | `fix_input` | The request does not match the contract or its bounds                         |
+| `package_mismatch`  | `reconcile` | The scanned file cannot be bound to the resolved mounted package; no mutation |
+| `place_not_found`   | `reconcile` | The object or property chain no longer exists; rescan                         |
+| `not_text`          | `fix_input` | The property chain does not end in a text property                            |
+| `read_only_text`    | `fix_input` | Culture-invariant, String Table or generated text has no key to edit          |
+| `unsupported_place` | `fix_input` | DataTable cell (use authoring) or graph pin (not yet)                         |
+| `stale_expected`    | `reconcile` | The live text differs from what the caller reviewed; rescan                   |
+| `key_conflict`      | `fix_input` | Unreal would not keep the requested key in this package                       |
+| `compile_failed`    | `escalate`  | An owning Blueprint failed to compile; edits were rolled back                 |
+| `not_persisted`     | `escalate`  | A place did not hold its result after compiling; rolled back                  |
+| `save_failed`       | `reconcile` | Edits remain applied; inspect per-package persistence before an explicit save |
 
 UE Shed never checks files out (ADR 0009): a dry run lists the packages an apply may write so a
 host can check them out first.
 
 ### Engine APIs
 
-Checked in UE 5.7 `Engine/Source`; the UE 5.8 follow-up must check the same list:
+Declarations checked in both UE 5.7 and UE 5.8 `Engine/Source` on 2026-10-17:
+
+| Source check                                        | UE 5.7 | UE 5.8 |
+| --------------------------------------------------- | ------ | ------ |
+| Text edit and namespace APIs below                  | Passed | Passed |
+| Text inspection and Blueprint ownership/status APIs | Passed | Passed |
+| Compile with `SkipSave`; package save arguments     | Passed | Passed |
+
+These are source checks for a documentation-only design change, not plugin build or action runtime
+passes. The implementation must separately pass its fixture and recovery tests on both versions.
 
 - `TextNamespaceUtil::EditTextProperty_Direct`, `GetTextIdForEdit`, `ETextEditAction`,
   `GenerateRandomTextKey`, `GetPackageNamespace` (`CoreUObject/Public/Internationalization/TextPackageNamespaceUtil.h`);
 - `TextNamespaceUtil::StripPackageNamespace` (`Core/Public/Internationalization/TextNamespaceUtil.h`);
-- `FTextInspector::GetTextId`, `GetSourceString`, `FText::IsCultureInvariant`, `IsFromStringTable`;
-- `FKismetEditorUtilities::CompileBlueprint`, `UBlueprint::GetBlueprintFromClass`, `UBlueprint::Status`;
-- `UPackage::SavePackage` with `FSavePackageArgs`.
+- `FTextInspector::GetTextId`, `GetSourceString`, `FText::IsCultureInvariant`, `IsFromStringTable`
+  (`Core/Public/Internationalization/Text.h`);
+- `FKismetEditorUtilities::CompileBlueprint` and `EBlueprintCompileOptions::SkipSave`
+  (`UnrealEd/Public/Kismet2/KismetEditorUtilities.h`);
+- `UBlueprint::GetBlueprintFromClass`, `UBlueprint::Status` (`Engine/Classes/Engine/Blueprint.h`);
+- `UPackage::SavePackage` (`CoreUObject/Public/UObject/Package.h`) with `FSavePackageArgs`
+  (`CoreUObject/Public/UObject/SavePackage.h`).
+
+### Implementation acceptance
+
+In addition to the supported-place fixture cases, the implementation must prove on both engines:
+
+- Target only the branched Blueprint CDO when the original and copy have identical expected text
+  and the copy still reports the original serialized object path. Verify the original's saved bytes
+  and live text stay unchanged; verify the selected copy through its own file. Reject an unresolved
+  mount or wrong owning package before editing.
+- With Save on Compile enabled, applying with `save: false` and any rollback compile writes no
+  package files.
+- Force a save failure after a key regeneration, including a batch with one saved and one unsaved
+  package. Preserve the generated key and applied-result receipt, verify saved results, and report
+  reconciliation with `retrySafe: false`. Explicit persistence recovery must retain that key rather
+  than replay the edit. Intervening changes or a lost reply must require fresh inspection.
 
 ## Consequences
 
