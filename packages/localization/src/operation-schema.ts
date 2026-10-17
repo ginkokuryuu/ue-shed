@@ -120,7 +120,8 @@ export class LocalizationOperationError extends Schema.TaggedError<LocalizationO
 		...ErrorGuidanceFields,
 		logExcerpt: Schema.Array(Schema.String).check(Schema.isMaxLength(40)),
 		logPath: Schema.optionalKey(Schema.String),
-		exitCode: Schema.optionalKey(Schema.NullOr(Schema.Int))
+		exitCode: Schema.optionalKey(Schema.NullOr(Schema.Int)),
+		cause: Schema.optionalKey(Schema.Defect())
 	}
 ) {}
 /** Tag guard for localization operation failures; match by tag, not `instanceof`. */

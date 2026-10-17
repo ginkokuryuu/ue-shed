@@ -70,13 +70,14 @@ export const applyLocalizationChangeSet = Effect.fn("Localization.applyChangeSet
 		input
 	).pipe(
 		Effect.mapError(
-			() =>
+			(cause) =>
 				new LocalizationChangeSetError({
 					code: "invalid_change_set",
 					message: "The change-set request does not match version 1.",
 					recovery: "Provide a project root and a valid version 1 change set.",
 					retrySafe: true,
-					nextStep: "fix_input"
+					nextStep: "fix_input",
+					cause
 				})
 		)
 	);

@@ -318,7 +318,8 @@ export class PluginBundleManifestValidationError extends Schema.TaggedError<Plug
 	"PluginBundleManifestValidationError",
 	{
 		code: PluginBundleManifestValidationCode,
-		...ErrorGuidanceFields
+		...ErrorGuidanceFields,
+		cause: Schema.optionalKey(Schema.Defect())
 	}
 ) {}
 
@@ -333,7 +334,8 @@ export interface PluginBundleManifestValidationOptions {
 function validationError(
 	code: PluginBundleManifestValidationCode,
 	message: string,
-	recovery: string
+	recovery: string,
+	cause?: unknown
 ): PluginBundleManifestValidationError {
 	// Validation is pure: the manifest, its artifact or the requested engine must change.
 	return new PluginBundleManifestValidationError({
@@ -341,7 +343,8 @@ function validationError(
 		message,
 		nextStep: "fix_input",
 		recovery,
-		retrySafe: true
+		retrySafe: true,
+		...(cause === undefined ? undefined : { cause })
 	});
 }
 
@@ -676,11 +679,12 @@ export const validatePluginBundleManifest = <Input>(
 	options: PluginBundleManifestValidationOptions = {}
 ): Effect.Effect<PluginBundleManifest, PluginBundleManifestValidationError> =>
 	Schema.decodeUnknownEffect(PluginBundleManifest)(input, { onExcessProperty: "error" }).pipe(
-		Effect.mapError(() =>
+		Effect.mapError((cause) =>
 			validationError(
 				"schema_invalid",
 				"Plugin bundle manifest does not match the versioned manifest schema.",
-				"Use a manifest produced by the matching UE Shed release and check its JSON fields."
+				"Use a manifest produced by the matching UE Shed release and check its JSON fields.",
+				cause
 			)
 		),
 		Effect.flatMap((manifest) => validatePluginBundleManifestValue(manifest, options))

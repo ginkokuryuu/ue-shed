@@ -68,7 +68,8 @@ export class NiagaraPreviewError extends Schema.TaggedError<NiagaraPreviewError>
 		code: NiagaraPreviewFailure.fields.code,
 		...ErrorGuidanceFields,
 		runId: NiagaraPreviewFailure.fields.runId,
-		stage: NiagaraPreviewFailure.fields.stage
+		stage: NiagaraPreviewFailure.fields.stage,
+		cause: Schema.optionalKey(Schema.Defect())
 	}
 ) {}
 
@@ -120,7 +121,8 @@ function previewError(
 	message: string,
 	recovery: string,
 	retrySafe: boolean,
-	runId?: string
+	runId?: string,
+	cause?: unknown
 ): NiagaraPreviewError {
 	return new NiagaraPreviewError({
 		code,
@@ -129,7 +131,8 @@ function previewError(
 		recovery,
 		retrySafe,
 		stage,
-		...(runId === undefined ? undefined : { runId })
+		...(runId === undefined ? undefined : { runId }),
+		...(cause === undefined ? undefined : { cause })
 	});
 }
 
@@ -137,7 +140,21 @@ function safeIo<A>(
 	operation: Effect.Effect<A, unknown>,
 	error: NiagaraPreviewError
 ): Effect.Effect<A, NiagaraPreviewError> {
-	return operation.pipe(Effect.mapError(() => error));
+	return operation.pipe(
+		Effect.mapError(
+			(cause) =>
+				new NiagaraPreviewError({
+					code: error.code,
+					message: error.message,
+					nextStep: error.nextStep,
+					recovery: error.recovery,
+					retrySafe: error.retrySafe,
+					stage: error.stage,
+					...(error.runId === undefined ? undefined : { runId: error.runId }),
+					cause
+				})
+		)
+	);
 }
 
 function cameraOverridesMatch(
@@ -692,14 +709,15 @@ export function publishRun(
 			status: "complete",
 			systemObjectPath: options.receipt.systemObjectPath
 		}).pipe(
-			Effect.mapError(() =>
+			Effect.mapError((cause) =>
 				previewError(
 					"receipt_invalid",
 					"publication",
 					"The validated producer result could not form a published manifest.",
 					"Update UE Shed so the producer and host contracts match.",
 					false,
-					options.receipt.runId
+					options.receipt.runId,
+					cause
 				)
 			)
 		);
@@ -876,14 +894,15 @@ export const NiagaraPreviewLive = Layer.effect(
 				settings: options.settings ?? {},
 				systemObjectPath: options.systemObjectPath
 			}).pipe(
-				Effect.mapError(() =>
+				Effect.mapError((cause) =>
 					previewError(
 						"invalid_request",
 						"validation",
 						"The Niagara preview request is invalid.",
 						"Provide a /Game object path, a UUID run ID, and bounded capture settings.",
 						false,
-						runId
+						runId,
+						cause
 					)
 				)
 			);
@@ -1138,14 +1157,15 @@ export const NiagaraPreviewLive = Layer.effect(
 				)
 			);
 			const receipt = yield* decodeNiagaraPreviewProducerReceipt(receiptUnknown).pipe(
-				Effect.mapError(() =>
+				Effect.mapError((cause) =>
 					previewError(
 						"receipt_invalid",
 						"capture",
 						"The producer receipt does not match Niagara preview contract v1.",
 						"Update UE Shed so the producer and host contracts match.",
 						false,
-						request.runId
+						request.runId,
+						cause
 					)
 				)
 			);

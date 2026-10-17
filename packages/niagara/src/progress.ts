@@ -5,14 +5,22 @@ import { NiagaraErrorGuidanceFields as ErrorGuidanceFields } from "./schema.js";
 export * from "./progress-schema.js";
 export class NiagaraProgressError extends Schema.TaggedError<NiagaraProgressError>()(
 	"NiagaraProgressError",
-	ErrorGuidanceFields
+	{ ...ErrorGuidanceFields, cause: Schema.optionalKey(Schema.Defect()) }
 ) {}
 /** Progress is optional telemetry the producer rewrites; reading it again is always safe. */
 const progressError = (
 	message: string,
 	nextStep: NiagaraProgressError["nextStep"],
-	recovery: string
-) => new NiagaraProgressError({ message, recovery, retrySafe: true, nextStep });
+	recovery: string,
+	cause?: unknown
+) =>
+	new NiagaraProgressError({
+		message,
+		recovery,
+		retrySafe: true,
+		nextStep,
+		...(cause === undefined ? undefined : { cause })
+	});
 /** Optional telemetry; a missing file is normal with an older producer or before initialization. */
 export const readNiagaraPreviewProgress = Effect.fn("NiagaraPreview.readProgress")(function* (
 	path: string,
@@ -42,11 +50,12 @@ export const readNiagaraPreviewProgress = Effect.fn("NiagaraPreview.readProgress
 	const progress = yield* Schema.decodeUnknownEffect(
 		Schema.fromJsonString(NiagaraPreviewProgress)
 	)(text).pipe(
-		Effect.mapError(() =>
+		Effect.mapError((cause) =>
 			progressError(
 				"Invalid Niagara progress.",
 				"retry",
-				"Read progress again after the producer rewrites it."
+				"Read progress again after the producer rewrites it.",
+				cause
 			)
 		)
 	);

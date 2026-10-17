@@ -238,13 +238,14 @@ function corrupt(releaseVersion: string, cachePath: string, message: string, cau
 function decodeReleaseVersion(input: string) {
 	return Schema.decodeUnknownEffect(ReleaseVersion)(input).pipe(
 		Effect.mapError(
-			() =>
+			(cause) =>
 				new PluginDistributionValidationError({
 					field: "releaseVersion",
 					message: "Plugin release version must be an exact semantic version.",
 					recovery: "Provide an exact SemVer release such as 0.4.0.",
 					retrySafe: true,
-					nextStep: "fix_input"
+					nextStep: "fix_input",
+					cause
 				})
 		)
 	);
@@ -719,13 +720,14 @@ export const pluginStoreLayer = (options: PluginStoreLayerOptions): Layer.Layer<
 					onExcessProperty: "error"
 				}).pipe(
 					Effect.mapError(
-						() =>
+						(cause) =>
 							new PluginDistributionValidationError({
 								field: "variantIdentity",
 								message: "Cached plugin variant reference is invalid.",
 								recovery: "Use an exact reference returned by install or list.",
 								retrySafe: true,
-								nextStep: "fix_input"
+								nextStep: "fix_input",
+								cause
 							})
 					)
 				);

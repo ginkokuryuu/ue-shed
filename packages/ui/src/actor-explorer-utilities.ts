@@ -16,7 +16,8 @@ export class ActorUtilityError extends Schema.TaggedError<ActorUtilityError>()(
 		message: Schema.String,
 		recovery: Schema.String,
 		retrySafe: Schema.Boolean,
-		nextStep: Schema.Literals(["fix_input", "retry", "reconcile", "escalate"])
+		nextStep: Schema.Literals(["fix_input", "retry", "reconcile", "escalate"]),
+		cause: Schema.optionalKey(Schema.Defect())
 	}
 ) {}
 /** Reading presets, writing the whole preset list and copying text are all repeatable. */
@@ -38,12 +39,13 @@ export const readActorFilterPresets = Effect.fn("ActorFilters.read")(function* (
 	if (text === null) return [];
 	return (yield* Schema.decodeUnknownEffect(Schema.fromJsonString(Presets))(text).pipe(
 		Effect.mapError(
-			() =>
+			(cause) =>
 				new ActorUtilityError({
 					message: "Saved presets could not be read. Existing data has been preserved.",
 					recovery: "Repair or clear the saved actor filter presets.",
 					retrySafe: true,
-					nextStep: "escalate"
+					nextStep: "escalate",
+					cause
 				})
 		)
 	)).presets;
@@ -66,14 +68,15 @@ export const writeActorFilterPreset = Effect.fn("ActorFilters.write")(function* 
 					...retained,
 					yield* Schema.decodeUnknownEffect(Preset)(presetInput).pipe(
 						Effect.mapError(
-							() =>
+							(cause) =>
 								new ActorUtilityError({
 									message:
 										"Use a preset name of 1–80 characters and a search of at most 4096 characters.",
 									recovery:
 										"Use a preset name of 1–80 characters and a search of at most 4096 characters.",
 									retrySafe: true,
-									nextStep: "fix_input"
+									nextStep: "fix_input",
+									cause
 								})
 						)
 					)

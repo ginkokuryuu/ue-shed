@@ -68,7 +68,7 @@ export const LocalizationOperationsLive = Layer.effect(
 			input: LocalizationRunRequest
 		) {
 			const request = yield* Schema.decodeUnknownEffect(LocalizationRunRequest)(input).pipe(
-				Effect.mapError(() => localizationOperationError("invalid_request"))
+				Effect.mapError((cause) => localizationOperationError("invalid_request", cause))
 			);
 			const projectRoot = resolve(request.projectRoot);
 			const projectDescriptor = yield* Effect.tryPromise({
@@ -88,7 +88,9 @@ export const LocalizationOperationsLive = Layer.effect(
 			);
 			const engine = yield* Schema.decodeUnknownEffect(LocalizationEngine)(
 				`${installation.version.major}.${installation.version.minor}`
-			).pipe(Effect.mapError(() => localizationOperationError("unsupported_engine")));
+			).pipe(
+				Effect.mapError((cause) => localizationOperationError("unsupported_engine", cause))
+			);
 			const logPath = join(tmpdir(), "ue-shed-localization", randomUUID(), "Commandlet.log");
 			const plan = yield* Effect.try({
 				try: () =>
@@ -190,13 +192,15 @@ export const LocalizationOperationsLive = Layer.effect(
 							})
 							.pipe(
 								Effect.withTracerEnabled(false),
-								Effect.mapError(() => localizationOperationError("launch_failed"))
+								Effect.mapError((cause) =>
+									localizationOperationError("launch_failed", cause)
+								)
 							),
 						(handle) =>
 							handle.terminate("cancelled").pipe(
 								Effect.withTracerEnabled(false),
-								Effect.mapError(() =>
-									localizationOperationError("termination_failed")
+								Effect.mapError((cause) =>
+									localizationOperationError("termination_failed", cause)
 								),
 								Effect.orDie
 							)
@@ -257,7 +261,9 @@ export const LocalizationOperationsLive = Layer.effect(
 					const exit = yield* Effect.raceFirst(
 						handle.awaitExit.pipe(
 							Effect.withTracerEnabled(false),
-							Effect.mapError(() => localizationOperationError("commandlet_failed"))
+							Effect.mapError((cause) =>
+								localizationOperationError("commandlet_failed", cause)
+							)
 						),
 						consume().pipe(Effect.andThen(Effect.sleep("100 millis")), Effect.forever)
 					).pipe(
@@ -288,7 +294,9 @@ export const LocalizationOperationsLive = Layer.effect(
 					// End any owned descendants before taking the final durable-file snapshot.
 					yield* handle.terminate("cancelled").pipe(
 						Effect.withTracerEnabled(false),
-						Effect.mapError(() => localizationOperationError("termination_failed"))
+						Effect.mapError((cause) =>
+							localizationOperationError("termination_failed", cause)
+						)
 					);
 					const after = yield* Effect.tryPromise({
 						try: () => snapshotLocalizationProject(root, plan),

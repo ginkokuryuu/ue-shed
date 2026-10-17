@@ -40,7 +40,8 @@ export class LocalizationChangeSetError extends Schema.TaggedError<LocalizationC
 			"multiple_targets",
 			"unwritable_change"
 		]),
-		...ErrorGuidanceFields
+		...ErrorGuidanceFields,
+		cause: Schema.optionalKey(Schema.Defect())
 	}
 ) {}
 

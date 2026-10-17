@@ -75,7 +75,7 @@ const BuildErrorFields = {
 
 export class InvalidCompiledPluginBuild extends Schema.TaggedError<InvalidCompiledPluginBuild>()(
 	"InvalidCompiledPluginBuild",
-	BuildErrorFields
+	{ ...BuildErrorFields, cause: Schema.optionalKey(Schema.Defect()) }
 ) {}
 
 export class CompiledPluginBuildFailed extends Schema.TaggedError<CompiledPluginBuildFailed>()(
@@ -164,9 +164,17 @@ function invalid(
 	stage: string,
 	message: string,
 	recovery: string,
-	nextStep: PluginErrorNextStep = "fix_input"
+	nextStep: PluginErrorNextStep = "fix_input",
+	cause?: unknown
 ) {
-	return new InvalidCompiledPluginBuild({ message, nextStep, recovery, retrySafe: true, stage });
+	return new InvalidCompiledPluginBuild({
+		message,
+		nextStep,
+		recovery,
+		retrySafe: true,
+		stage,
+		...(cause === undefined ? undefined : { cause })
+	});
 }
 
 function cancelled(stage: CompiledPluginBuildStage) {
@@ -577,11 +585,13 @@ export const compiledPluginBuilderLayer = (): Layer.Layer<
 						onExcessProperty: "error"
 					}
 				).pipe(
-					Effect.mapError(() =>
+					Effect.mapError((cause) =>
 						invalid(
 							"validation",
 							"Compiled plugin build request is invalid.",
-							"Provide exact source digests, engine identity, graph, toolchain, and output settings."
+							"Provide exact source digests, engine identity, graph, toolchain, and output settings.",
+							"fix_input",
+							cause
 						)
 					)
 				);
@@ -969,12 +979,13 @@ export const compiledPluginBuilderLayer = (): Layer.Layer<
 										releaseVersion: state.sourceManifest.releaseVersion,
 										schemaVersion: 3
 									}).pipe(
-										Effect.mapError(() =>
+										Effect.mapError((cause) =>
 											invalid(
 												"manifest",
 												"Generated compiled manifest is invalid.",
 												"Inspect the validated build inputs and retry.",
-												"escalate"
+												"escalate",
+												cause
 											)
 										)
 									);

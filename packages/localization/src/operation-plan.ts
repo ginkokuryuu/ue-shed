@@ -47,7 +47,8 @@ export function localizationOperationNextStep(
 }
 
 export function localizationOperationError(
-	code: LocalizationOperationError["code"]
+	code: LocalizationOperationError["code"],
+	cause?: unknown
 ): LocalizationOperationError {
 	const recovery = {
 		missing_config:
@@ -100,7 +101,8 @@ export function localizationOperationError(
 			"limit_exceeded"
 		].includes(code),
 		nextStep: localizationOperationNextStep(code),
-		logExcerpt: []
+		logExcerpt: [],
+		...(cause === undefined ? undefined : { cause })
 	});
 }
 

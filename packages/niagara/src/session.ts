@@ -85,13 +85,17 @@ export const submitNiagaraSessionRequest = Effect.fn("NiagaraSession.submit")(fu
 			})
 		)
 	)(ready).pipe(
-		Effect.mapError(() =>
-			failure("Session is not ready.", {
-				recovery:
-					"Wait for the Niagara session to write its ready marker, or start a new session.",
-				retrySafe: true,
-				nextStep: "retry"
-			})
+		Effect.mapError((cause) =>
+			failure(
+				"Session is not ready.",
+				{
+					recovery:
+						"Wait for the Niagara session to write its ready marker, or start a new session.",
+					retrySafe: true,
+					nextStep: "retry"
+				},
+				cause
+			)
 		)
 	);
 	const prefix = join(input.directory, input.runId);
@@ -100,7 +104,11 @@ export const submitNiagaraSessionRequest = Effect.fn("NiagaraSession.submit")(fu
 		if (text !== undefined) {
 			const result = yield* Schema.decodeUnknownEffect(Schema.fromJsonString(resultSchema))(
 				text
-			).pipe(Effect.mapError(() => failure("Invalid session result.", producerMismatch)));
+			).pipe(
+				Effect.mapError((cause) =>
+					failure("Invalid session result.", producerMismatch, cause)
+				)
+			);
 			if (result.runId !== input.runId)
 				return yield* Effect.fail(
 					failure("Invalid session result identity.", producerMismatch)

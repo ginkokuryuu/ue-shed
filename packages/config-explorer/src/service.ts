@@ -41,7 +41,8 @@ export class ConfigExplorerError extends Schema.TaggedError<ConfigExplorerError>
 	{
 		code: ConfigExplorerPublicError.fields.code,
 		...ErrorGuidanceFields,
-		candidates: ConfigExplorerPublicError.fields.candidates
+		candidates: ConfigExplorerPublicError.fields.candidates,
+		cause: Schema.optionalKey(Schema.Defect())
 	}
 ) {}
 
@@ -118,7 +119,8 @@ function error(
 	message: string,
 	recovery: string,
 	retrySafe = true,
-	candidates?: readonly string[]
+	candidates?: readonly string[],
+	cause?: unknown
 ): ConfigExplorerError {
 	return new ConfigExplorerError({
 		code,
@@ -126,7 +128,8 @@ function error(
 		nextStep: configNextStep(code, retrySafe),
 		recovery,
 		retrySafe,
-		...(candidates === undefined ? undefined : { candidates: [...candidates] })
+		...(candidates === undefined ? undefined : { candidates: [...candidates] }),
+		...(cause === undefined ? undefined : { cause })
 	});
 }
 
@@ -369,12 +372,14 @@ export const ConfigExplorerLive = Layer.effect(
 			input: ConfigExplainRequest
 		) {
 			const request = yield* Schema.decodeUnknownEffect(ConfigExplainRequest)(input).pipe(
-				Effect.mapError(() =>
+				Effect.mapError((cause) =>
 					error(
 						"invalid_request",
 						"The config explanation request is invalid.",
 						"Provide non-empty project, platform, section, and key values.",
-						false
+						false,
+						undefined,
+						cause
 					)
 				)
 			);
@@ -456,12 +461,14 @@ export const ConfigExplorerLive = Layer.effect(
 			input: ConfigCompareRequest
 		) {
 			const request = yield* Schema.decodeUnknownEffect(ConfigCompareRequest)(input).pipe(
-				Effect.mapError(() =>
+				Effect.mapError((cause) =>
 					error(
 						"invalid_request",
 						"The config comparison request is invalid.",
 						"Provide explicit left and right platforms.",
-						false
+						false,
+						undefined,
+						cause
 					)
 				)
 			);
