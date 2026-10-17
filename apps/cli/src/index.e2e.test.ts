@@ -278,6 +278,7 @@ describe("ue-shed CLI process", () => {
 		30_000
 	);
 
+	// Every read and mutation starts a fresh CLI process; budget for the entire journey.
 	nativeIt(
 		"runs the persistent session lifecycle through separate CLI processes",
 		async () => {
@@ -473,7 +474,7 @@ describe("ue-shed CLI process", () => {
 				await rm(projectRoot, { force: true, recursive: true });
 			}
 		},
-		30_000
+		120_000
 	);
 
 	it("reports malformed input and typed Remote Control failures with usage exit status", () => {
