@@ -79,6 +79,7 @@
 			"packages/unreal-assets/src/asset-reader.ts",
 			"packages/unreal-assets/src/saved-review.ts",
 			"packages/unreal-assets/src/protocol-transport.ts",
+			"packages/unreal-assets/src/protocol-request-limit.ts",
 			"packages/unreal-assets/src/scan-target.ts",
 			"packages/unreal-assets/src/project-index.ts",
 			"packages/unreal-assets/src/project-index-memory.ts",
