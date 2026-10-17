@@ -43,6 +43,9 @@ export const nativeGameTextIndexClientLayer = (configuration: AssetReaderConfigu
 								new AssetReaderError({
 									kind: "contract",
 									operation: "game_text_index",
+									nextStep: "fix_input",
+									recovery:
+										"Validate the native Game Text index request before submitting it.",
 									message: String(cause),
 									retrySafe: false
 								})

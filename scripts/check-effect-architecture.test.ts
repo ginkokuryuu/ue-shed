@@ -5,6 +5,7 @@ import { join } from "node:path";
 import { after, before, test } from "node:test";
 import {
 	checkCatalogUsage,
+	checkErrorGuidance,
 	checkGameTextEntryPoints,
 	checkCompositionPolicy,
 	checkDecoderExports,
@@ -534,6 +535,30 @@ test("rejects layer factories taking a Layer and make* exports only their module
 			"packages/example/src/service.ts:2: serviceLayer takes a Layer; require its service instead",
 			"packages/example/src/service.ts:5: viewLayer takes a Layer; require its service instead",
 			"packages/example/src/service.ts:8: makeUnused is used only in its module; do not export it"
+		]);
+	} finally {
+		await rm(fixtureRoot, { recursive: true, force: true });
+	}
+});
+
+test("tagged errors in migrated packages carry the guidance fields", async () => {
+	const fixtureRoot = await mkdtemp(join(tmpdir(), "ue-shed-error-shape-"));
+	try {
+		const source = join(fixtureRoot, "packages/unreal-connection/src");
+		await mkdir(source, { recursive: true });
+		await writeFile(
+			join(source, "errors.ts"),
+			[
+				'import { Schema } from "effect";',
+				'import { ErrorGuidanceFields } from "@ue-shed/protocol";',
+				"const Shared = { ...ErrorGuidanceFields, message: Schema.String };",
+				'export class Good extends Schema.TaggedError<Good>()("Good", { id: Schema.String, ...ErrorGuidanceFields }) {}',
+				'export class Local extends Schema.TaggedError<Local>()("Local", Shared) {}',
+				'export class Bad extends Schema.TaggedError<Bad>()("Bad", { message: Schema.String, retrySafe: Schema.Boolean }) {}'
+			].join("\n")
+		);
+		assert.deepEqual(await checkErrorGuidance(fixtureRoot), [
+			"packages/unreal-connection/src/errors.ts: Bad must carry recovery, nextStep (spread ErrorGuidanceFields from @ue-shed/protocol)"
 		]);
 	} finally {
 		await rm(fixtureRoot, { recursive: true, force: true });

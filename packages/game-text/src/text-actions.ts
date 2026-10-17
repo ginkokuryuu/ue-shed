@@ -140,6 +140,7 @@ export const runGameTextActions = Effect.fn("game_text.actions.run")(function* (
 			endpoint,
 			objectPath: coreObjectPath,
 			functionName: "GetCapabilityManifest",
+			idempotent: true,
 			operation: "game_text.actions.manifest",
 			parameters: {}
 		})

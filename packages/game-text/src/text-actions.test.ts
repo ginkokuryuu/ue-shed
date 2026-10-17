@@ -206,6 +206,8 @@ describe("Game Text actions API", () => {
 					makeRemoteControlClientTestLayer((call) =>
 						Effect.fail(
 							new RemoteControlClientError({
+								recovery: "Inspect editor state before retrying.",
+								nextStep: "reconcile",
 								endpoint: call.endpoint,
 								functionName: call.functionName,
 								message: "connect ECONNREFUSED",
@@ -293,6 +295,8 @@ describe("Game Text mutation recovery", () => {
 							);
 						return Effect.fail(
 							new RemoteControlClientError({
+								recovery: "Inspect editor state before retrying.",
+								nextStep: "reconcile",
 								endpoint: call.endpoint,
 								functionName: call.functionName,
 								message: "reply timed out after mutation",

@@ -54,7 +54,9 @@ describe("replaceable native menu coordinator", () => {
 									new CameraBridgeError({
 										code: "disconnected",
 										message: "Lost activation reply",
-										recovery: "Retry"
+										recovery: "Retry",
+										retrySafe: false,
+										nextStep: "reconcile"
 									})
 								);
 							}

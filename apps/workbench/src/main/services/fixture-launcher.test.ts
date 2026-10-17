@@ -137,7 +137,9 @@ it.effect("FixtureHealth reports not_running when Remote Control is unreachable"
 									functionName: "GetCapabilityManifest",
 									message: "Editor is not connected",
 									operation: "fixture_health",
-									retrySafe: true
+									retrySafe: true,
+									recovery: "Test double: retry the Remote Control call.",
+									nextStep: "retry"
 								})
 							)
 						)
@@ -194,7 +196,10 @@ it.effect(
 												functionName: request.functionName,
 												message: "Map Review capture is not available",
 												operation: "fixture_health",
-												retrySafe: false
+												retrySafe: false,
+												recovery:
+													"Test double: retry the Remote Control call.",
+												nextStep: "escalate"
 											})
 										)
 							)

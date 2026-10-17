@@ -1778,7 +1778,8 @@ export const WorkbenchMapReviewLive = Layer.effect(
 									operation: "ensure_cameras",
 									recovery:
 										"Reconnect Unreal, then reframe the selected subject.",
-									retrySafe: true
+									retrySafe: true,
+									nextStep: "reconcile"
 								})
 							);
 						}
@@ -2286,7 +2287,9 @@ export const WorkbenchMapReviewLive = Layer.effect(
 						new CameraBridgeError({
 							code: "stale",
 							message: "The selected actor or map changed. Choose the subject again.",
-							recovery: "Retry from the current editor selection."
+							recovery: "Retry from the current editor selection.",
+							retrySafe: true,
+							nextStep: "reconcile"
 						})
 					);
 				if (!service.cameraWorkspace)
@@ -2294,7 +2297,9 @@ export const WorkbenchMapReviewLive = Layer.effect(
 						new CameraBridgeError({
 							code: "unavailable",
 							message: "Camera authoring is unavailable.",
-							recovery: "Enable the camera workspace."
+							recovery: "Enable the camera workspace.",
+							retrySafe: true,
+							nextStep: "fix_input"
 						})
 					);
 				const result = yield* service.cameraWorkspace({
@@ -2309,7 +2314,9 @@ export const WorkbenchMapReviewLive = Layer.effect(
 						new CameraBridgeError({
 							code: "unavailable",
 							message: result.error ?? "The camera set could not be opened.",
-							recovery: "Correct the error and retry."
+							recovery: "Correct the error and retry.",
+							retrySafe: false,
+							nextStep: "fix_input"
 						})
 					);
 			}),
@@ -2320,7 +2327,9 @@ export const WorkbenchMapReviewLive = Layer.effect(
 						new CameraBridgeError({
 							code: "unavailable",
 							message: "Camera authoring is unavailable.",
-							recovery: "Enable the camera workspace."
+							recovery: "Enable the camera workspace.",
+							retrySafe: true,
+							nextStep: "fix_input"
 						})
 					);
 				const result = yield* service.cameraWorkspace({
@@ -2333,7 +2342,9 @@ export const WorkbenchMapReviewLive = Layer.effect(
 						new CameraBridgeError({
 							code: "unavailable",
 							message: result.error ?? "The camera set could not be opened.",
-							recovery: "Choose the set again, or open it from Workbench."
+							recovery: "Choose the set again, or open it from Workbench.",
+							retrySafe: true,
+							nextStep: "reconcile"
 						})
 					);
 			}),
@@ -2365,7 +2376,9 @@ export const WorkbenchMapReviewLive = Layer.effect(
 					new CameraBridgeError({
 						code: "unavailable",
 						message: String(cause),
-						recovery: "Choose a readable Unreal project."
+						recovery: "Choose a readable Unreal project.",
+						retrySafe: true,
+						nextStep: "fix_input"
 					})
 			});
 			const descriptor = files.find((name) => name.endsWith(".uproject"));

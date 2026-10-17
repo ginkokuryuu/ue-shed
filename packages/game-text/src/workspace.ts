@@ -946,6 +946,8 @@ export const makeGameTextWorkspace = Effect.fn("GameText.workspace.make")(functi
 		)
 			return yield* Effect.fail(
 				new InvestigationError({
+					retrySafe: true,
+					nextStep: "fix_input",
 					message: "No current scan is available.",
 					recovery: "Refresh this workspace before saving or exporting."
 				})

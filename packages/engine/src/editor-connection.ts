@@ -1,5 +1,6 @@
 import {
 	decodeCompanionCapabilityManifest,
+	ErrorGuidanceFields,
 	type CompanionCapabilityManifest
 } from "@ue-shed/protocol";
 import { RemoteControlClient, type RemoteControlClientError } from "@ue-shed/unreal-connection";
@@ -17,9 +18,7 @@ export class EditorConnectionError extends Schema.TaggedError<EditorConnectionEr
 			"readiness_timeout"
 		]),
 		endpoint: Schema.String,
-		message: Schema.String,
-		recovery: Schema.String,
-		retrySafe: Schema.Boolean
+		...ErrorGuidanceFields
 	}
 ) {}
 
@@ -55,8 +54,9 @@ function transportError(endpoint: string, cause: RemoteControlClientError): Edit
 		code: "transport_failure",
 		endpoint,
 		message: cause.message,
-		recovery: "Confirm that Unreal Editor and Remote Control are reachable, then retry.",
-		retrySafe: cause.retrySafe
+		recovery: cause.recovery,
+		retrySafe: cause.retrySafe,
+		nextStep: cause.nextStep
 	});
 }
 
@@ -72,6 +72,7 @@ export const EditorConnectionLive = Layer.effect(
 				.request({
 					endpoint,
 					functionName: "GetCapabilityManifest",
+					idempotent: true,
 					objectPath: coreObjectPath,
 					operation: "editor.connection.connect",
 					parameters: {}
@@ -86,7 +87,8 @@ export const EditorConnectionLive = Layer.effect(
 							message: `The editor returned an invalid capability manifest: ${String(cause)}`,
 							recovery:
 								"Update UE Shed so the client and Unreal companion use compatible contracts.",
-							retrySafe: false
+							retrySafe: true,
+							nextStep: "escalate"
 						})
 				)
 			);
@@ -99,7 +101,8 @@ export const EditorConnectionLive = Layer.effect(
 					endpoint,
 					message: `The editor identifies project ${manifest.projectName ?? "unknown"}, not ${request.expectedProjectName}.`,
 					recovery: "Connect to the selected project's Remote Control endpoint.",
-					retrySafe: false
+					retrySafe: true,
+					nextStep: "fix_input"
 				});
 			}
 			return manifest;
@@ -112,7 +115,10 @@ export const EditorConnectionLive = Layer.effect(
 			return yield* connect(request).pipe(
 				Effect.retry({
 					schedule: Schedule.spaced(request.pollInterval ?? "500 millis"),
-					while: (error) => error.code === "transport_failure" && error.retrySafe
+					while: (error) =>
+						error.code === "transport_failure" &&
+						error.retrySafe &&
+						error.nextStep === "retry"
 				}),
 				Effect.timeoutOrElse({
 					duration: request.timeout ?? "3 minutes",
@@ -124,7 +130,8 @@ export const EditorConnectionLive = Layer.effect(
 								message: "Unreal Editor did not become ready before the deadline.",
 								recovery:
 									"Inspect the editor log, Remote Control port, and enabled UEShedCore plugin.",
-								retrySafe: true
+								retrySafe: true,
+								nextStep: "retry"
 							})
 						)
 				})

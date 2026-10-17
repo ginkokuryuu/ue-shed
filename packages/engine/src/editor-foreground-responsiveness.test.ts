@@ -52,7 +52,9 @@ function fakeEditor() {
 					functionName: request.functionName,
 					message: "connect ECONNREFUSED",
 					operation: request.operation ?? "",
-					retrySafe: true
+					retrySafe: true,
+					recovery: "Test double: retry the Remote Control call.",
+					nextStep: "retry"
 				})
 			);
 		if (request.functionName === "GetCapabilityManifest") {

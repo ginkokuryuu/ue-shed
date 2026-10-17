@@ -1,6 +1,7 @@
 import {
 	decodeCameraScheduleConfig,
 	decodeCameraStatus,
+	ErrorGuidanceFields,
 	type CameraScheduleConfig,
 	type CameraStatus
 } from "@ue-shed/protocol";
@@ -64,10 +65,9 @@ export interface CameraFeedMetrics {
 }
 
 export class CameraFeedError extends Schema.TaggedError<CameraFeedError>()("CameraFeedError", {
-	message: Schema.String,
+	...ErrorGuidanceFields,
 	operation: Schema.Literal("listen"),
-	pipeName: Schema.String,
-	retrySafe: Schema.Boolean
+	pipeName: Schema.String
 }) {}
 
 function unrealGuidToDigits(buffer: Buffer, offset: number): string {
@@ -286,8 +286,11 @@ function listen(server: Server, pipeName: string): Effect.Effect<void, CameraFee
 		catch: (cause) =>
 			new CameraFeedError({
 				message: String(cause),
+				nextStep: "retry",
 				operation: "listen",
 				pipeName,
+				recovery:
+					"Stop any other process listening on this camera feed pipe, then open the feed again.",
 				retrySafe: true
 			})
 	});
@@ -316,8 +319,11 @@ function acquireCameraFeed(
 		return Effect.fail(
 			new CameraFeedError({
 				message: `Camera feed capacity must be a positive integer, received ${capacity}.`,
+				nextStep: "fix_input",
 				operation: "listen",
 				pipeName,
+				recovery:
+					"Pass a positive integer camera feed capacity, or omit it to use the default.",
 				retrySafe: false
 			})
 		);
@@ -424,10 +430,9 @@ export function makeCameraFeedTestLayer(
 export class CameraControlError extends Schema.TaggedError<CameraControlError>()(
 	"CameraControlError",
 	{
+		...ErrorGuidanceFields,
 		endpoint: Schema.String,
-		message: Schema.String,
 		operation: Schema.Literals(["configure", "status"]),
-		retrySafe: Schema.Boolean,
 		status: Schema.optional(Schema.Number)
 	}
 ) {}
@@ -441,7 +446,9 @@ function cameraControlError(
 		return new CameraControlError({
 			endpoint: cause.endpoint,
 			message: cause.message,
+			nextStep: cause.nextStep,
 			operation,
+			recovery: cause.recovery,
 			retrySafe: cause.retrySafe,
 			...(cause.status === undefined ? undefined : { status: cause.status })
 		});
@@ -449,7 +456,10 @@ function cameraControlError(
 	return new CameraControlError({
 		endpoint,
 		message: `Invalid camera ${operation} response: ${String(cause)}`,
+		nextStep: "escalate",
 		operation,
+		recovery:
+			"Update the Core and Cameras plugins together so their response matches this UE Shed version.",
 		retrySafe: false
 	});
 }
@@ -467,6 +477,7 @@ const cameraRemoteCall = Effect.fn("CameraControl.remoteCall")(function* (
 			functionName,
 			objectPath: "/Script/UEShedCameras.Default__UEShedCameraLibrary",
 			operation: `camera.control.${operation}`,
+			idempotent: operation === "status",
 			parameters
 		})
 		.pipe(Effect.mapError((error) => cameraControlError(endpoint, operation, error)));
@@ -502,6 +513,8 @@ export function configureCameras(
 					endpoint,
 					operation: "configure",
 					retrySafe: false,
+					nextStep: "fix_input",
+					recovery: "Update UEShedCameras or configure without interactive previews.",
 					message:
 						"This UEShedCameras plugin does not support scoped editor background ticking. Update the plugin before enabling interactive previews."
 				})

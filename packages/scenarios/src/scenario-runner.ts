@@ -200,6 +200,7 @@ export const ScenarioRunnerLive = Layer.effect(
 			function* (options: {
 				readonly endpoint: string;
 				readonly functionName: string;
+				readonly idempotent?: boolean;
 				readonly objectPath: string;
 				readonly operation: string;
 				readonly parameters: Schema.JsonObject;
@@ -219,6 +220,7 @@ export const ScenarioRunnerLive = Layer.effect(
 			const value = yield* call({
 				endpoint,
 				functionName: "GetCapabilityManifest",
+				idempotent: true,
 				objectPath: coreObjectPath,
 				operation,
 				parameters: {}

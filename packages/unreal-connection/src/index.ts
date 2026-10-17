@@ -1,4 +1,5 @@
 import {
+	ErrorGuidanceFields,
 	AutomationCsvRequest,
 	AutomationInputRequest,
 	AutomationPlayersRequest,
@@ -50,17 +51,16 @@ export class UnrealConnectionError extends Schema.TaggedError<UnrealConnectionEr
 	{
 		endpoint: Schema.String,
 		operation: Schema.String,
-		message: Schema.String,
-		retrySafe: Schema.Boolean,
 		status: Schema.optional(Schema.Number),
 		/** Producer refusal code, such as `invalid_request` or `operation_not_found`. */
-		code: Schema.optional(Schema.String)
+		code: Schema.optional(Schema.String),
+		...ErrorGuidanceFields
 	}
 ) {}
 
 export class UnrealCapabilityError extends Schema.TaggedError<UnrealCapabilityError>()(
 	"UnrealCapabilityError",
-	{ capability: Schema.String, message: Schema.String }
+	{ capability: Schema.String, ...ErrorGuidanceFields }
 ) {}
 
 export interface UnrealAuthoringConnection {
@@ -104,7 +104,8 @@ function requireCapability(
 		return Effect.fail(
 			new UnrealCapabilityError({
 				capability,
-				message: `Connected producer does not advertise ${capability} with an object path.`
+				message: `Connected producer does not advertise ${capability} with an object path.`,
+				...missingCapabilityGuidance(capability)
 			})
 		);
 	}
@@ -124,7 +125,10 @@ function validateRequest<A, DecodeError>(
 					endpoint,
 					operation,
 					message: `Invalid ${operation} request: ${String(cause)}`,
-					retrySafe: false
+					recovery:
+						"Correct the request fields named in the message, then send it again.",
+					retrySafe: false,
+					nextStep: "fix_input"
 				})
 		),
 		Effect.flatMap((request) =>
@@ -135,11 +139,32 @@ function validateRequest<A, DecodeError>(
 							endpoint,
 							operation,
 							message: "Companion requests are limited to 16384 UTF-8 bytes.",
-							retrySafe: false
+							recovery:
+								"Split the request into smaller requests of at most 16384 UTF-8 bytes.",
+							retrySafe: false,
+							nextStep: "fix_input"
 						})
 					)
 		)
 	);
+}
+
+const producerContractRecovery =
+	"The editor plugin answered outside its contract. Install the UE Shed editor plugin version paired with this host, or report the response.";
+
+const invalidManifestGuidance = {
+	recovery:
+		"The editor plugin advertised an incomplete capability manifest. Install the UE Shed editor plugin version paired with this host.",
+	retrySafe: false,
+	nextStep: "escalate"
+} as const;
+
+function missingCapabilityGuidance(capability: string) {
+	return {
+		recovery: `Enable the UE Shed editor plugin that provides ${capability}, restart the editor, then reconnect.`,
+		retrySafe: true,
+		nextStep: "fix_input"
+	} as const;
 }
 
 function resultMismatch(endpoint: string, operation: string): UnrealConnectionError {
@@ -147,7 +172,9 @@ function resultMismatch(endpoint: string, operation: string): UnrealConnectionEr
 		endpoint,
 		operation,
 		message: "The producer response does not match the selected target or request limits.",
-		retrySafe: false
+		recovery: producerContractRecovery,
+		retrySafe: false,
+		nextStep: "escalate"
 	});
 }
 
@@ -168,7 +195,7 @@ export const findUnrealActorsReferencingRow = Effect.fn(
 	);
 	const client = yield* RemoteControlClient;
 	const manifest = yield* decodeResult(
-		remoteCall(client, endpoint, coreObjectPath, "GetCapabilityManifest", {}),
+		remoteCall(client, endpoint, coreObjectPath, "GetCapabilityManifest", {}, true),
 		endpoint,
 		"capability manifest",
 		decodeCompanionCapabilityManifest
@@ -179,9 +206,16 @@ export const findUnrealActorsReferencingRow = Effect.fn(
 		manifest.authoringObjectPath
 	);
 	const result = yield* decodeResult(
-		remoteCall(client, endpoint, objectPath, "FindActorsReferencingRow", {
-			RequestJson: JSON.stringify(request)
-		}),
+		remoteCall(
+			client,
+			endpoint,
+			objectPath,
+			"FindActorsReferencingRow",
+			{
+				RequestJson: JSON.stringify(request)
+			},
+			true
+		),
 		endpoint,
 		operation,
 		decodeAuthoringActorReferencesResult
@@ -206,7 +240,7 @@ export const connectUnrealAutomation = Effect.fn("UnrealConnection.connectAutoma
 	const endpoint = normalizedEndpoint(configuredEndpoint);
 	const client = yield* RemoteControlClient;
 	const manifest = yield* decodeResult(
-		remoteCall(client, endpoint, coreObjectPath, "GetCapabilityManifest", {}),
+		remoteCall(client, endpoint, coreObjectPath, "GetCapabilityManifest", {}, true),
 		endpoint,
 		"capability manifest",
 		decodeCompanionCapabilityManifest
@@ -221,14 +255,24 @@ export const connectUnrealAutomation = Effect.fn("UnrealConnection.connectAutoma
 		requireCapability(manifest, capability, manifest.automationObjectPath).pipe(
 			Effect.flatMap((objectPath) =>
 				decodeResult(
-					remoteCall(client, endpoint, objectPath, functionName, parameters).pipe(
+					remoteCall(
+						client,
+						endpoint,
+						objectPath,
+						functionName,
+						parameters,
+						!isMutation
+					).pipe(
 						Effect.mapError((cause) =>
 							isMutation
 								? new UnrealConnectionError({
 										endpoint: cause.endpoint,
 										operation: cause.operation,
 										message: cause.message,
+										recovery:
+											"The change may or may not have reached the editor. Read the current editor state before sending it again.",
 										retrySafe: false,
+										nextStep: "reconcile",
 										...(cause.status === undefined
 											? undefined
 											: { status: cause.status })
@@ -323,7 +367,9 @@ function connectionError(error: RemoteControlClientError): UnrealConnectionError
 		endpoint: error.endpoint,
 		message: error.message,
 		operation: error.operation,
+		recovery: error.recovery,
 		retrySafe: error.retrySafe,
+		nextStep: error.nextStep,
 		...(error.status === undefined ? undefined : { status: error.status })
 	});
 }
@@ -333,11 +379,12 @@ function remoteCall(
 	endpoint: string,
 	objectPath: string,
 	functionName: string,
-	parameters: Schema.JsonObject
+	parameters: Schema.JsonObject,
+	idempotent = false
 ): Effect.Effect<Schema.Json, UnrealConnectionError> {
 	const operation = `remote_control.${functionName}`;
 	return client
-		.request({ endpoint, functionName, objectPath, operation, parameters })
+		.request({ endpoint, functionName, objectPath, operation, parameters, idempotent })
 		.pipe(Effect.mapError(connectionError));
 }
 
@@ -356,7 +403,9 @@ function decodeResult<A, DecodeError>(
 							endpoint,
 							message: `Invalid ${operation} response: ${String(cause)}`,
 							operation,
-							retrySafe: false
+							recovery: producerContractRecovery,
+							retrySafe: false,
+							nextStep: "escalate"
 						})
 				)
 			)
@@ -383,7 +432,18 @@ function decodeAuthoringResult<A, DecodeError>(
 							message: `${operation} refused (${input.code}): ${input.message}`,
 							operation,
 							// The producer refused before acting. Only a missing table may appear later.
-							retrySafe: input.code === "table_not_found"
+							retrySafe: input.code === "table_not_found",
+							...(input.code === "table_not_found"
+								? {
+										recovery:
+											"Refresh the table list; retry once the table exists in the editor.",
+										nextStep: "reconcile" as const
+									}
+								: {
+										recovery:
+											"The editor refused the request before changing anything. Correct it using the refusal code, then send it again.",
+										nextStep: "fix_input" as const
+									})
 						})
 					)
 				: Effect.succeed(input)
@@ -405,7 +465,7 @@ export function locateUnrealAsset(options: {
 	return Effect.gen(function* () {
 		const client = yield* RemoteControlClient;
 		const manifest = yield* decodeResult(
-			remoteCall(client, endpoint, coreObjectPath, "GetCapabilityManifest", {}),
+			remoteCall(client, endpoint, coreObjectPath, "GetCapabilityManifest", {}, true),
 			endpoint,
 			"capability manifest",
 			decodeCompanionCapabilityManifest
@@ -414,7 +474,8 @@ export function locateUnrealAsset(options: {
 			return yield* Effect.fail(
 				new UnrealCapabilityError({
 					capability: assetNavigationCapability,
-					message: `Connected editor does not advertise ${assetNavigationCapability}`
+					message: `Connected editor does not advertise ${assetNavigationCapability}`,
+					...missingCapabilityGuidance(assetNavigationCapability)
 				})
 			);
 		}
@@ -422,7 +483,8 @@ export function locateUnrealAsset(options: {
 			return yield* Effect.fail(
 				new UnrealCapabilityError({
 					capability: "editor.asset-navigation.endpoint.v1",
-					message: "Connected editor advertises asset navigation without an object path"
+					message: "Connected editor advertises asset navigation without an object path",
+					...invalidManifestGuidance
 				})
 			);
 		}
@@ -453,7 +515,7 @@ export function connectUnrealAuthoring(
 	return Effect.gen(function* () {
 		const client = yield* RemoteControlClient;
 		const manifest = yield* decodeResult(
-			remoteCall(client, endpoint, coreObjectPath, "GetCapabilityManifest", {}),
+			remoteCall(client, endpoint, coreObjectPath, "GetCapabilityManifest", {}, true),
 			endpoint,
 			"capability manifest",
 			decodeCompanionCapabilityManifest
@@ -465,7 +527,8 @@ export function connectUnrealAuthoring(
 			return yield* Effect.fail(
 				new UnrealCapabilityError({
 					capability: missing,
-					message: `Connected editor does not advertise ${missing}`
+					message: `Connected editor does not advertise ${missing}`,
+					...missingCapabilityGuidance(missing)
 				})
 			);
 		}
@@ -474,7 +537,8 @@ export function connectUnrealAuthoring(
 				new UnrealCapabilityError({
 					capability: "authoring.endpoint.v1",
 					message:
-						"Connected editor advertises authoring capabilities without an object path"
+						"Connected editor advertises authoring capabilities without an object path",
+					...invalidManifestGuidance
 				})
 			);
 		}
@@ -487,26 +551,27 @@ export function connectUnrealAuthoring(
 			return yield* Effect.fail(
 				new UnrealCapabilityError({
 					capability: "authoring.limits.v1",
-					message: "Connected editor does not advertise valid authoring mutation limits"
+					message: "Connected editor does not advertise valid authoring mutation limits",
+					...invalidManifestGuidance
 				})
 			);
 		}
 		const authoringObjectPath = manifest.authoringObjectPath;
-		const call = (functionName: string, parameters: Schema.JsonObject) =>
-			remoteCall(client, endpoint, authoringObjectPath, functionName, parameters);
+		const call = (functionName: string, parameters: Schema.JsonObject, idempotent = false) =>
+			remoteCall(client, endpoint, authoringObjectPath, functionName, parameters, idempotent);
 		return {
 			endpoint,
 			manifest,
 			listTableObjectPaths: () =>
 				decodeAuthoringResult(
-					call("ListTableObjectPaths", {}),
+					call("ListTableObjectPaths", {}, true),
 					endpoint,
 					"table list",
 					decodeAuthoringTableList
 				).pipe(Effect.map((result) => result.objectPaths)),
 			getTableSnapshot: (objectPath) =>
 				decodeAuthoringResult(
-					call("GetTableSnapshot", { TableObjectPath: objectPath }),
+					call("GetTableSnapshot", { TableObjectPath: objectPath }, true),
 					endpoint,
 					"table snapshot",
 					decodeAuthoringTableSnapshot
@@ -520,7 +585,7 @@ export function connectUnrealAuthoring(
 				),
 			lookupApplyResult: (operationId) =>
 				decodeAuthoringResult(
-					call("LookupApplyResult", { OperationId: operationId }),
+					call("LookupApplyResult", { OperationId: operationId }, true),
 					endpoint,
 					"Apply lookup",
 					decodeAuthoringApplyResult
@@ -550,6 +615,7 @@ export const inspectUnrealProducer = Effect.fn("UnrealConnection.inspectProducer
 			endpoint,
 			objectPath: coreObjectPath,
 			functionName: "GetCapabilityManifest",
+			idempotent: true,
 			operation: "unreal.producer.inspect",
 			parameters: {}
 		})

@@ -55,7 +55,9 @@ export function textureInvestigationPreset(
 		? Effect.fail(
 				new InvestigationError({
 					message: "This scan did not retain its rule document.",
-					recovery: "Refresh the audit with a current reader before saving or exporting."
+					recovery: "Refresh the audit with a current reader before saving or exporting.",
+					retrySafe: true,
+					nextStep: "reconcile"
 				})
 			)
 		: Effect.succeed({

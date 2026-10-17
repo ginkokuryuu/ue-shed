@@ -181,7 +181,8 @@ it.effect(
 							return yield* new ProjectIndexRefreshFailed({
 								message: "Disk temporarily unavailable",
 								recovery: "Retry refresh",
-								retrySafe: true
+								retrySafe: true,
+								nextStep: "retry"
 							});
 						return ProjectIndexRefreshEvent.cases.Completed.make({
 							summary: {
@@ -539,7 +540,8 @@ it.effect("recovers a candidate query when the committed generation changes", ()
 							message:
 								"The Project Index generation changed since this query started.",
 							recovery: "Retry against the current generation.",
-							retrySafe: true
+							retrySafe: true,
+							nextStep: "reconcile"
 						})
 					);
 				}

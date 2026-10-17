@@ -223,7 +223,9 @@ const dyingAuthoringSessions: ReviewAuthoringSessionsApi = {
 					message: "The selected subject belongs to a different map.",
 					operation: "create",
 					path: args.reviewSetPath ?? reviewSetPath,
-					recovery: "Select an actor in the configured map."
+					recovery: "Select an actor in the configured map.",
+					retrySafe: true,
+					nextStep: "fix_input"
 				})
 			);
 		}

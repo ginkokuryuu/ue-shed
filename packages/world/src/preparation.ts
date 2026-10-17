@@ -132,6 +132,7 @@ export function makeWorldPreparation(
 				endpoint,
 				objectPath: "/Script/UEShedCore.Default__UEShedCoreLibrary",
 				functionName: "GetCapabilityManifest",
+				idempotent: true,
 				parameters: {},
 				operation: "world.negotiate"
 			})

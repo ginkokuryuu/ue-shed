@@ -95,7 +95,9 @@ effectIt.effect("preserves typed discovery failures from a test layer", () =>
 			message: "Content is unavailable",
 			operation: "discovery",
 			path: "C:/Fixture/Content",
-			retrySafe: true
+			retrySafe: true,
+			recovery: "Restore the Content folder, then retry.",
+			nextStep: "retry"
 		});
 		const layer = makeAssetReaderTestLayer({
 			catalogProgress: () => unexpected("catalogProgress"),

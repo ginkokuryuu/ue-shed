@@ -1,6 +1,6 @@
 import { createHash, randomUUID } from "node:crypto";
 import { resolve } from "node:path";
-import { decodeCompanionCapabilityManifest } from "@ue-shed/protocol";
+import { decodeCompanionCapabilityManifest, ErrorGuidanceFields } from "@ue-shed/protocol";
 import {
 	makeRemoteControlClient,
 	RemoteControlClient,
@@ -62,9 +62,8 @@ const maximumEnumeratedTiles = 1_000_000;
 export class MapCaptureRunError extends Schema.TaggedError<MapCaptureRunError>()(
 	"MapCaptureRunError",
 	{
-		message: Schema.String,
+		...ErrorGuidanceFields,
 		operation: Schema.Literals(["inspect", "prepare", "capture", "publish"]),
-		recovery: Schema.String,
 		runId: Schema.optionalKey(Schema.String)
 	}
 ) {}
@@ -127,6 +126,7 @@ export function makeMapTileCaptureRemotePort(
 				.request({
 					endpoint,
 					functionName: "GetCapabilityManifest",
+					idempotent: true,
 					objectPath: "/Script/UEShedCore.Default__UEShedCoreLibrary",
 					operation: "camera.map_tile.negotiate",
 					parameters: {}
@@ -161,7 +161,9 @@ export function makeMapTileCaptureRemotePort(
 						runId: request.runId,
 						message: "The connected editor does not support Lit camera tile capture.",
 						recovery:
-							"Update the UE Shed Cameras and Core plugins, or explicitly select scene_capture_tiles with a compatible plan."
+							"Update the UE Shed Cameras and Core plugins, or explicitly select scene_capture_tiles with a compatible plan.",
+						retrySafe: true,
+						nextStep: "fix_input"
 					})
 				);
 			}
@@ -180,7 +182,9 @@ export function makeMapTileCaptureRemotePort(
 											"Editor capture response belongs to a different operation.",
 										operation: "capture",
 										recovery:
-											"Reconnect and inspect the active editor capture before retrying."
+											"Reconnect and inspect the active editor capture before retrying.",
+										retrySafe: false,
+										nextStep: "reconcile"
 									})
 								);
 					})
@@ -285,7 +289,9 @@ export function inspectMapCapturePlan(
 			new MapCaptureRunError({
 				message: String(cause),
 				operation: "inspect",
-				recovery: "Reduce bounds or levels, or increase coarsest world-units-per-pixel."
+				recovery: "Reduce bounds or levels, or increase coarsest world-units-per-pixel.",
+				retrySafe: true,
+				nextStep: "fix_input"
 			})
 	});
 }
@@ -377,7 +383,9 @@ function selectedTileKeys(args: {
 			new MapCaptureRunError({
 				message: String(cause),
 				operation: "prepare",
-				recovery: "Inspect the plan grid and request a valid bounded level or tile subset."
+				recovery: "Inspect the plan grid and request a valid bounded level or tile subset.",
+				retrySafe: true,
+				nextStep: "fix_input"
 			})
 	});
 }
@@ -476,7 +484,9 @@ function viewportLevelBatches(args: {
 				message: String(cause),
 				operation: "prepare",
 				recovery:
-					"Capture complete levels no larger than 8 x 8 tiles, or use the tiled Scene Capture backend."
+					"Capture complete levels no larger than 8 x 8 tiles, or use the tiled Scene Capture backend.",
+				retrySafe: true,
+				nextStep: "fix_input"
 			})
 	});
 }
@@ -513,7 +523,9 @@ function runMapCaptureWith(args: {
 					message: backendIssue,
 					operation: "prepare",
 					recovery:
-						"Update the plan's render settings or select a compatible capture backend."
+						"Update the plan's render settings or select a compatible capture backend.",
+					retrySafe: true,
+					nextStep: "fix_input"
 				});
 			const projectRoot = yield* validateMapCaptureProjectRoot(args.options.projectRoot);
 			const inspected = yield* inspectMapCapturePlan(plan);
@@ -532,7 +544,9 @@ function runMapCaptureWith(args: {
 						new MapCaptureRunError({
 							message: String(cause),
 							operation: "prepare",
-							recovery: "Use a safe run identity of at most 128 characters."
+							recovery: "Use a safe run identity of at most 128 characters.",
+							retrySafe: true,
+							nextStep: "fix_input"
 						})
 				)
 			);
@@ -545,7 +559,9 @@ function runMapCaptureWith(args: {
 							message: String(cause),
 							operation: "prepare",
 							recovery: "Use a safe correlation identity of at most 128 characters.",
-							runId
+							runId,
+							retrySafe: true,
+							nextStep: "fix_input"
 						})
 				)
 			);
@@ -636,7 +652,9 @@ function runMapCaptureWith(args: {
 									operation: "capture",
 									recovery:
 										"Reconnect to the expected editor map and retry this run or tile subset.",
-									runId
+									runId,
+									retrySafe: false,
+									nextStep: "reconcile"
 								})
 						),
 						Effect.withSpan("camera.map_tile.capture_batch", {
@@ -729,7 +747,9 @@ function runMapCaptureWith(args: {
 										operation: "capture",
 										recovery:
 											"Quarantine the invalid staged artifact and retry its tile.",
-										runId
+										runId,
+										retrySafe: false,
+										nextStep: "escalate"
 									})
 							});
 							if (
@@ -813,7 +833,9 @@ function runMapCaptureWith(args: {
 								operation: "publish",
 								recovery:
 									"Editor restoration failed; artifacts were not published.",
-								runId
+								runId,
+								retrySafe: false,
+								nextStep: "escalate"
 							})
 					)
 				);
@@ -877,7 +899,9 @@ function runMapCaptureWith(args: {
 							operation: "publish",
 							recovery:
 								"Inspect grid and artifact inventory invariants before retrying.",
-							runId
+							runId,
+							retrySafe: false,
+							nextStep: "escalate"
 						})
 				)
 			);

@@ -34,7 +34,9 @@ export const saveInvestigation = Effect.fn("Workbench.Investigation.save")(
 			return yield* Effect.fail(
 				new InvestigationError({
 					message: "The preset exceeds 4 MiB.",
-					recovery: "Reduce the rule document before saving this preset."
+					recovery: "Reduce the rule document before saving this preset.",
+					retrySafe: true,
+					nextStep: "fix_input"
 				})
 			);
 		const choice = yield* dialog.chooseSaveFile({
@@ -73,7 +75,9 @@ export const openInvestigation = Effect.fn("Workbench.Investigation.open")(funct
 				(error) =>
 					new InvestigationError({
 						message: error.message,
-						recovery: "Try opening the preset again."
+						recovery: "Try opening the preset again.",
+						retrySafe: true,
+						nextStep: "retry"
 					})
 			)
 		);
@@ -84,7 +88,9 @@ export const openInvestigation = Effect.fn("Workbench.Investigation.open")(funct
 			(error) =>
 				new InvestigationError({
 					message: `Invalid investigation preset: ${error.message}`,
-					recovery: "Choose a version 1 preset for this workspace."
+					recovery: "Choose a version 1 preset for this workspace.",
+					retrySafe: true,
+					nextStep: "fix_input"
 				})
 		)
 	);

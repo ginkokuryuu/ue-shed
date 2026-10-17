@@ -144,6 +144,7 @@ export const EditorForegroundResponsivenessLive = Layer.effect(
 					endpoint,
 					objectPath: "/Script/UEShedCore.Default__UEShedCoreLibrary",
 					functionName: "GetCapabilityManifest",
+					idempotent: true,
 					operation: "editor.foreground.negotiate",
 					parameters: {}
 				})
@@ -425,6 +426,7 @@ export const EditorForegroundResponsivenessLive = Layer.effect(
 					endpoint,
 					objectPath: target.objectPath,
 					functionName: "GetForegroundResponsivenessState",
+					idempotent: true,
 					operation: "editor.foreground.state",
 					parameters: {
 						RequestJson: JSON.stringify({ expectedProcessId: target.editorProcessId })

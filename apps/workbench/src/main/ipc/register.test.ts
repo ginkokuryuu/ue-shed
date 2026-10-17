@@ -129,7 +129,9 @@ function buildRegistrationLayer(recorder: Recorder, options: RegistrationOptions
 					message: "Blueprint fixture failure",
 					operation: "blueprint",
 					path: assetPath,
-					retrySafe: false
+					retrySafe: false,
+					recovery: "Test double: narrow the request.",
+					nextStep: "escalate"
 				})
 			),
 		readLevelSequence: (assetPath) =>
@@ -140,7 +142,9 @@ function buildRegistrationLayer(recorder: Recorder, options: RegistrationOptions
 					message: "Sequence fixture failure",
 					operation: "level_sequence",
 					path: assetPath,
-					retrySafe: false
+					retrySafe: false,
+					recovery: "Test double: narrow the request.",
+					nextStep: "escalate"
 				})
 			),
 		readTable: () => Effect.die("not used"),

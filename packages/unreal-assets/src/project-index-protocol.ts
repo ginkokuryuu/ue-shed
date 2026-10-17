@@ -123,7 +123,8 @@ export function decodeProjectIndexDictionaryPage(
 		throw new ProjectIndexUnavailable({
 			message: "The Project Index adapter returned an unbounded or invalid page.",
 			recovery: "Rebuild the Catalog, then retry with a bounded query.",
-			retrySafe: true
+			retrySafe: true,
+			nextStep: "retry"
 		});
 	}
 	const page = decoded.value;
@@ -172,7 +173,8 @@ export function mapProjectIndexProtocolFailure(input: {
 				"The uasset worker rejected the Project Index request before accepting it.",
 			recovery:
 				"Upgrade to a paired uasset-io worker that supports the requested Project Index operation and encoding, then retry.",
-			retrySafe: false
+			retrySafe: false,
+			nextStep: "fix_input"
 		});
 	}
 	if (input.event?.kind === "rejected") {
@@ -182,13 +184,15 @@ export function mapProjectIndexProtocolFailure(input: {
 				message,
 				recovery:
 					"Upgrade to a paired uasset-io worker that supports the requested Project Index operation and encoding, then retry.",
-				retrySafe: false
+				retrySafe: false,
+				nextStep: "fix_input"
 			});
 		}
 		return new ProjectIndexInvalidRequest({
 			message,
 			recovery: "Correct the Project Index request and retry.",
-			retrySafe: false
+			retrySafe: false,
+			nextStep: "fix_input"
 		});
 	}
 	if (input.event?.kind === "failed") {
@@ -203,37 +207,43 @@ export function mapProjectIndexProtocolFailure(input: {
 					),
 					message: input.event.message,
 					recovery: "Read status for the current generation, then retry the query.",
-					retrySafe: true
+					retrySafe: true,
+					nextStep: "reconcile"
 				});
 			case "corrupt_catalog":
 				return new ProjectIndexCorruptCatalog({
 					message: input.event.message,
 					recovery: "Rebuild the Catalog, then retry.",
-					retrySafe: true
+					retrySafe: true,
+					nextStep: "reconcile"
 				});
 			case "invalid_request":
 				return new ProjectIndexInvalidRequest({
 					message: input.event.message,
 					recovery: "Correct the Project Index request and retry.",
-					retrySafe: false
+					retrySafe: false,
+					nextStep: "fix_input"
 				});
 			case "unavailable":
 				return new ProjectIndexUnavailable({
 					message: input.event.message,
 					recovery: "Retry after the Catalog coordinator is available, or rebuild.",
-					retrySafe: true
+					retrySafe: true,
+					nextStep: "retry"
 				});
 			case "cancelled":
 				return new ProjectIndexRefreshFailed({
 					message: input.event.message,
 					recovery: "Retry the refresh when ready.",
-					retrySafe: true
+					retrySafe: true,
+					nextStep: "retry"
 				});
 			default:
 				return new ProjectIndexRefreshFailed({
 					message: input.event.message,
 					recovery: "Retry the operation. If it keeps failing, rebuild the Catalog.",
-					retrySafe: input.event.retrySafe
+					retrySafe: input.event.retrySafe,
+					nextStep: input.event.retrySafe ? "retry" : "escalate"
 				});
 		}
 	}
@@ -242,6 +252,7 @@ export function mapProjectIndexProtocolFailure(input: {
 			input.stderr?.trim() ||
 			`Project Index worker exited ${input.exitCode ?? "unexpectedly"}`,
 		recovery: "Retry the operation. If it keeps failing, rebuild the Catalog.",
-		retrySafe: true
+		retrySafe: true,
+		nextStep: "retry"
 	});
 }

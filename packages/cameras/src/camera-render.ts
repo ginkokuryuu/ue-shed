@@ -15,8 +15,12 @@ import {
 	Scope,
 	Stream
 } from "effect";
-import { RemoteControlClient, type RemoteControlClientApi } from "@ue-shed/unreal-connection";
-import { decodeCompanionCapabilityManifest } from "@ue-shed/protocol";
+import {
+	RemoteControlClient,
+	RemoteControlClientError,
+	type RemoteControlClientApi
+} from "@ue-shed/unreal-connection";
+import { decodeCompanionCapabilityManifest, ErrorGuidanceFields } from "@ue-shed/protocol";
 import {
 	CameraRenderBeginResult,
 	CameraRenderCapabilities,
@@ -97,8 +101,7 @@ export class CameraRenderError extends Schema.TaggedError<CameraRenderError>()(
 			"artifact"
 		]),
 		sessionId: Schema.String,
-		message: Schema.String,
-		recovery: Schema.String,
+		...ErrorGuidanceFields,
 		nativeFailure: Schema.optionalKey(CameraRenderFailure)
 	}
 ) {}
@@ -118,20 +121,87 @@ function renderError(
 	cause: unknown
 ): CameraRenderError {
 	if (cause instanceof CameraRenderError) return cause;
+	// Capability and preflight reads hold no editor state; later operations may have acquired it.
+	const readOnly = operation === "capabilities" || operation === "preflight";
 	return new CameraRenderError({
 		code: "render_connection_failed",
 		operation,
 		sessionId,
 		message: String(cause),
-		recovery:
-			"Inspect the existing native operation before retrying. The native lease bounds abandoned ownership."
+		nextStep: readOnly
+			? cause instanceof RemoteControlClientError
+				? cause.nextStep
+				: "escalate"
+			: "reconcile",
+		recovery: readOnly
+			? cause instanceof RemoteControlClientError
+				? cause.recovery
+				: "The editor returned an invalid camera rendering response. Install matching host/plugin versions or report the protocol failure."
+			: "Inspect the existing native operation before retrying. The native lease bounds abandoned ownership.",
+		retrySafe: readOnly
 	});
+}
+/**
+ * Guidance for a failure the plugin reported. Repeating is safe only when nothing was acquired or
+ * the operation was a read; a restored capture still produced work, and failed restoration leaves
+ * the editor in an unknown state.
+ */
+function nativeRenderGuidance(
+	operation: CameraRenderError["operation"],
+	failure: CameraRenderFailure
+): Pick<CameraRenderError, "nextStep" | "retrySafe"> {
+	const retrySafe =
+		failure.restoration !== "failed" &&
+		(operation === "capabilities" ||
+			operation === "preflight" ||
+			failure.restoration === "not_acquired");
+	switch (failure.code) {
+		case "invalid_policy":
+		case "invalid_frame":
+		case "invalid_region":
+		case "unsupported_policy":
+		case "unsupported_size":
+		case "editor_required":
+		case "map_mismatch":
+		case "project_mismatch":
+		case "preparation_budget_exceeded":
+		case "frame_budget_exceeded":
+			return { nextStep: "fix_input", retrySafe };
+		case "editor_busy":
+		case "authoring_open":
+		case "rendering_unavailable":
+		case "viewport_unavailable":
+		case "viewport_locked":
+		case "settling_timeout":
+			return { nextStep: retrySafe ? "retry" : "reconcile", retrySafe };
+		case "world_changed":
+		case "lease_expired":
+		case "exposure_unavailable":
+		case "cancelled":
+		case "session_unknown":
+		case "session_closed":
+		case "session_conflict":
+		case "operation_unknown":
+		case "operation_expired":
+		case "operation_conflict":
+			return { nextStep: "reconcile", retrySafe };
+		case "preparation_failed":
+		case "capture_failed":
+		case "artifact_invalid":
+		case "restoration_failed":
+			return { nextStep: "escalate", retrySafe };
+	}
 }
 function nativeError(
 	operation: CameraRenderError["operation"],
 	failure: CameraRenderFailure
 ): CameraRenderError {
-	return new CameraRenderError({ ...failure, operation, nativeFailure: failure });
+	return new CameraRenderError({
+		...failure,
+		...nativeRenderGuidance(operation, failure),
+		operation,
+		nativeFailure: failure
+	});
 }
 function inputError(
 	operation: "preflight" | "open" | "capture",
@@ -143,7 +213,9 @@ function inputError(
 		operation,
 		sessionId,
 		message: String(cause),
-		recovery: "Correct the request to match camera render contract 1.0 before retrying."
+		recovery: "Correct the request to match camera render contract 1.0 before retrying.",
+		retrySafe: true,
+		nextStep: "fix_input"
 	});
 }
 const decode = <S extends Schema.Top, Input>(schema: S, input: Input) =>
@@ -169,7 +241,9 @@ function unsupportedRendererPolicy(
 			message:
 				"The connected plugin does not support the requested screenshot warmup frames.",
 			recovery:
-				"Choose a value within highResolutionScreenshot.maximumWarmupFrames, omit the setting, or install matching Cameras plugins."
+				"Choose a value within highResolutionScreenshot.maximumWarmupFrames, omit the setting, or install matching Cameras plugins.",
+			retrySafe: true,
+			nextStep: "fix_input"
 		});
 	if (renderer.editorPreviews === undefined) return undefined;
 	const support = capabilities.editorPreviews;
@@ -181,7 +255,9 @@ function unsupportedRendererPolicy(
 		sessionId: request.sessionId,
 		message: `The connected plugin does not support renderer.editorPreviews for ${renderer.kind}.`,
 		recovery:
-			"Omit renderer.editorPreviews or install a matching UE Shed Cameras plugin that advertises editorPreviews."
+			"Omit renderer.editorPreviews or install a matching UE Shed Cameras plugin that advertises editorPreviews.",
+		retrySafe: true,
+		nextStep: "fix_input"
 	});
 }
 
@@ -238,6 +314,7 @@ export function makeCameraRenderer(
 				functionName,
 				parameters,
 				operation: `camera.render.${operation}`,
+				idempotent: operation === "capabilities" || operation === "preflight",
 				timeout: "30 seconds"
 			});
 		},
@@ -250,6 +327,7 @@ export function makeCameraRenderer(
 				endpoint,
 				objectPath: "/Script/UEShedCore.Default__UEShedCoreLibrary",
 				functionName: "GetCapabilityManifest",
+				idempotent: true,
 				parameters: {},
 				operation: "camera.render.negotiate"
 			})
@@ -264,7 +342,9 @@ export function makeCameraRenderer(
 				sessionId: "none",
 				message: "The connected plugin does not provide shared camera rendering.",
 				recovery:
-					"Install a matching UE Shed Cameras/Core plugin bundle. Renderer substitution is never automatic."
+					"Install a matching UE Shed Cameras/Core plugin bundle. Renderer substitution is never automatic.",
+				retrySafe: true,
+				nextStep: "fix_input"
 			});
 		const extended = manifest.capabilities.includes("cameras.render-session.capabilities.v2");
 		return yield* call(
@@ -329,7 +409,9 @@ export function makeCameraRenderer(
 											: cleanup
 									),
 									recovery:
-										"Inspect the capture and restoration failures before reusing the editor."
+										"Inspect the capture and restoration failures before reusing the editor.",
+									retrySafe: false,
+									nextStep: "escalate"
 								})
 							)
 						)
@@ -354,7 +436,9 @@ export function makeCameraRenderer(
 				operation: "open",
 				sessionId: request.sessionId,
 				message: "The editor returned a different session or renderer policy.",
-				recovery: "Update the plugin and host together; inspect the native session."
+				recovery: "Update the plugin and host together; inspect the native session.",
+				retrySafe: false,
+				nextStep: "escalate"
 			});
 		yield* Effect.gen(function* () {
 			yield* Effect.sleep(request.leaseMs / 3);
@@ -385,7 +469,9 @@ export function makeCameraRenderer(
 					operation: "capture",
 					sessionId: request.sessionId,
 					message: "The frame belongs to another session.",
-					recovery: "Use the session ID returned by open."
+					recovery: "Use the session ID returned by open.",
+					retrySafe: true,
+					nextStep: "fix_input"
 				});
 			const decodeStatus = (value: Schema.Json) =>
 				decode(CameraFrameStatus, value).pipe(
@@ -400,7 +486,9 @@ export function makeCameraRenderer(
 										operation: "capture",
 										sessionId: request.sessionId,
 										message: "The frame response belongs to another operation.",
-										recovery: "Inspect the native session before retrying."
+										recovery: "Inspect the native session before retrying.",
+										retrySafe: false,
+										nextStep: "reconcile"
 									})
 								)
 					),
@@ -455,7 +543,9 @@ export function makeCameraRenderer(
 					sessionId: request.sessionId,
 					message:
 						"The effective camera, policy or output dimensions differ from the requested frame.",
-					recovery: "Inspect the capture evidence and matching plugin version."
+					recovery: "Inspect the capture evidence and matching plugin version.",
+					retrySafe: false,
+					nextStep: "escalate"
 				});
 			return result;
 		});
@@ -493,7 +583,9 @@ export const renderCamera = Effect.fn("CameraRenderer.renderCamera")(function* (
 		operation: "capture",
 		sessionId: args.session.sessionId,
 		message: Cause.pretty(outcome.cause),
-		recovery: "Inspect both capture and restoration failures before reusing the editor."
+		recovery: "Inspect both capture and restoration failures before reusing the editor.",
+		retrySafe: false,
+		nextStep: "escalate"
 	});
 });
 
@@ -550,7 +642,9 @@ export const readCameraFrameArtifact = Effect.fn("CameraRenderer.readArtifact")(
 				operation: "artifact",
 				sessionId: args.frame.sessionId,
 				message: String(cause),
-				recovery: "Check the matching local project and contained native staging artifact."
+				recovery: "Check the matching local project and contained native staging artifact.",
+				retrySafe: true,
+				nextStep: "escalate"
 			})
 	});
 });

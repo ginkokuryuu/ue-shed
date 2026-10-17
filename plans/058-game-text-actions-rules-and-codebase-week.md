@@ -56,7 +56,7 @@
 | D1   | `game-text` entry points                       | D    | DONE — #115                             |
 | D2   | Reader batching inside the index source        | D    | DONE — #108                             |
 | D3   | Unreal path module                             | D    | TODO                                    |
-| D4   | One error shape                                | D    | TODO                                    |
+| D4   | One error shape                                | D    | IN PROGRESS — #118; slice 2 in #122     |
 | D5   | Classified causes instead of prose             | D    | TODO                                    |
 | D6   | Deliberate error translation                   | D    | TODO                                    |
 | D7   | Domain parsers instead of raw decoders         | D    | IN PROGRESS — #127                      |

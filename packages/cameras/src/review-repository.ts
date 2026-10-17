@@ -13,6 +13,7 @@ import {
 	unlink
 } from "node:fs/promises";
 import { basename, dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
+import { ErrorGuidanceFields } from "@ue-shed/protocol";
 import { Context, Effect, Layer, Schema } from "effect";
 import {
 	decodeCaptureRun,
@@ -31,7 +32,7 @@ function hasErrorCode(cause: unknown, code: string): boolean {
 export class ReviewStorageError extends Schema.TaggedError<ReviewStorageError>()(
 	"ReviewStorageError",
 	{
-		message: Schema.String,
+		...ErrorGuidanceFields,
 		operation: Schema.Literals([
 			"create_set",
 			"discard_staging",
@@ -45,15 +46,14 @@ export class ReviewStorageError extends Schema.TaggedError<ReviewStorageError>()
 			"store_artifact",
 			"write_run"
 		]),
-		path: Schema.String,
-		recovery: Schema.String
+		path: Schema.String
 	}
 ) {}
 
 export class ReviewArtifactSourceRejected extends Schema.TaggedError<ReviewArtifactSourceRejected>()(
 	"ReviewArtifactSourceRejected",
 	{
-		message: Schema.String,
+		...ErrorGuidanceFields,
 		path: Schema.String,
 		root: Schema.String
 	}
@@ -86,7 +86,9 @@ function loadReviewSetWithNode(path: string): Effect.Effect<ReviewSet, ReviewSto
 				message: String(cause),
 				operation: "load_set",
 				path,
-				recovery: "Validate or repair the Review Set document, then retry."
+				recovery: "Validate or repair the Review Set document, then retry.",
+				retrySafe: true,
+				nextStep: "fix_input"
 			})
 	}).pipe(
 		Effect.flatMap((input) =>
@@ -97,7 +99,9 @@ function loadReviewSetWithNode(path: string): Effect.Effect<ReviewSet, ReviewSto
 							message: String(cause),
 							operation: "load_set",
 							path,
-							recovery: "Validate or repair the Review Set document, then retry."
+							recovery: "Validate or repair the Review Set document, then retry.",
+							retrySafe: true,
+							nextStep: "fix_input"
 						})
 				)
 			)
@@ -124,7 +128,9 @@ function findReviewSetWithNode(
 				message: String(cause),
 				operation: "load_set",
 				path,
-				recovery: "Check that the Review Set directory is readable."
+				recovery: "Check that the Review Set directory is readable.",
+				retrySafe: true,
+				nextStep: "retry"
 			})
 	}).pipe(
 		Effect.flatMap((exists) =>
@@ -147,7 +153,9 @@ function saveReviewSetWithNode(args: {
 				message: String(cause),
 				operation: "save_set",
 				path: args.path,
-				recovery: "Check that the Review Set directory is writable."
+				recovery: "Check that the Review Set directory is writable.",
+				retrySafe: true,
+				nextStep: "retry"
 			})
 	}).pipe(Effect.withSpan("camera.review.set.save", { attributes: { path: args.path } }));
 }
@@ -203,7 +211,9 @@ function listReviewSetsWithNode(
 					operation: "list_sets",
 					path: root,
 					recovery:
-						"Check the project Review Set directory and repair malformed documents."
+						"Check the project Review Set directory and repair malformed documents.",
+					retrySafe: true,
+					nextStep: "fix_input"
 				})
 		});
 		const sets = yield* Effect.forEach(entries, ({ input, path }) =>
@@ -215,7 +225,9 @@ function listReviewSetsWithNode(
 							message: String(cause),
 							operation: "list_sets",
 							path,
-							recovery: "Validate or repair the malformed Review Set document."
+							recovery: "Validate or repair the malformed Review Set document.",
+							retrySafe: true,
+							nextStep: "fix_input"
 						})
 				)
 			)
@@ -232,7 +244,9 @@ function listReviewSetsWithNode(
 					message: `Review Set ID ${duplicate.id} is used by more than one document.`,
 					operation: "list_sets",
 					path: root,
-					recovery: "Give every Review Set a unique ID, then reopen the set library."
+					recovery: "Give every Review Set a unique ID, then reopen the set library.",
+					retrySafe: true,
+					nextStep: "fix_input"
 				})
 			);
 		return sets.toSorted(
@@ -269,7 +283,9 @@ export function createReviewSetFromTemplate(args: {
 					message: "A Review Set display name is required.",
 					operation: "create_set",
 					path: reviewSetsRoot(args.projectRoot),
-					recovery: "Enter a name for the new Review Set."
+					recovery: "Enter a name for the new Review Set.",
+					retrySafe: true,
+					nextStep: "fix_input"
 				})
 			);
 		}
@@ -348,12 +364,16 @@ function destinationStorageError(args: {
 	readonly operation: ReviewStorageError["operation"];
 	readonly path: string;
 	readonly recovery: string;
+	readonly retrySafe: boolean;
+	readonly nextStep: ReviewStorageError["nextStep"];
 }): ReviewStorageError {
 	return new ReviewStorageError({
 		message: String(args.cause),
+		nextStep: args.nextStep,
 		operation: args.operation,
 		path: args.path,
-		recovery: args.recovery
+		recovery: args.recovery,
+		retrySafe: args.retrySafe
 	});
 }
 
@@ -470,7 +490,9 @@ function filesystemReviewCaptureDestination(
 					cause,
 					operation: "prepare_run",
 					path: options.destinationRoot,
-					recovery: options.recovery
+					recovery: options.recovery,
+					retrySafe: true,
+					nextStep: "fix_input"
 				})
 		});
 		const stagingRoot = join(destinationRoot, `.staging-${runId}`);
@@ -487,7 +509,9 @@ function filesystemReviewCaptureDestination(
 					cause,
 					operation: "prepare_run",
 					path: stagingRoot,
-					recovery: "Choose a new Capture Run identity or inspect the existing attempt."
+					recovery: "Choose a new Capture Run identity or inspect the existing attempt.",
+					retrySafe: false,
+					nextStep: "reconcile"
 				})
 		});
 
@@ -499,7 +523,9 @@ function filesystemReviewCaptureDestination(
 						cause,
 						operation: "discard_staging",
 						path: stagingRoot,
-						recovery: "Remove the owned .staging-* attempt manually if it remains."
+						recovery: "Remove the owned .staging-* attempt manually if it remains.",
+						retrySafe: true,
+						nextStep: "retry"
 					})
 			});
 		});
@@ -520,7 +546,9 @@ function filesystemReviewCaptureDestination(
 						cause,
 						operation: "write_run",
 						path: stagingRoot,
-						recovery: "Check the Capture Run destination and retry the attempt."
+						recovery: "Check the Capture Run destination and retry the attempt.",
+						retrySafe: true,
+						nextStep: "retry"
 					})
 			});
 		});
@@ -537,14 +565,20 @@ function filesystemReviewCaptureDestination(
 						cause,
 						operation: "store_artifact",
 						path: args.sourcePath,
-						recovery: "Inspect Unreal staging and retry the capture."
+						recovery: "Inspect Unreal staging and retry the capture.",
+						retrySafe: true,
+						nextStep: "retry"
 					})
 			});
 			if (sourcePath === undefined) {
 				return yield* Effect.fail(
 					new ReviewArtifactSourceRejected({
 						message: "Unreal returned an artifact outside its authorized staging root.",
+						nextStep: "escalate",
 						path: args.sourcePath,
+						recovery:
+							"Do not trust this capture; update the Core and Cameras plugins together and report the artifact path if it recurs.",
+						retrySafe: false,
 						root: args.sourceRoot
 					})
 				);
@@ -571,7 +605,9 @@ function filesystemReviewCaptureDestination(
 						cause,
 						operation: "store_artifact",
 						path: stagingRoot,
-						recovery: "Check Unreal staging and Capture Run destination permissions."
+						recovery: "Check Unreal staging and Capture Run destination permissions.",
+						retrySafe: false,
+						nextStep: "reconcile"
 					})
 			});
 		});
@@ -589,7 +625,9 @@ function filesystemReviewCaptureDestination(
 						cause,
 						operation: "finalize_run",
 						path: stagingRoot,
-						recovery: "Inspect the staged Capture Run and retry finalization safely."
+						recovery: "Inspect the staged Capture Run and retry finalization safely.",
+						retrySafe: false,
+						nextStep: "reconcile"
 					})
 			});
 		});
@@ -637,7 +675,9 @@ function loadCaptureRunWithNode(path: string): Effect.Effect<CaptureRun, ReviewS
 				operation: "load_run",
 				path,
 				recovery:
-					"Inspect the immutable Capture Run bundle or restore it from evidence storage."
+					"Inspect the immutable Capture Run bundle or restore it from evidence storage.",
+				retrySafe: true,
+				nextStep: "fix_input"
 			})
 	}).pipe(
 		Effect.flatMap((input) =>
@@ -649,7 +689,9 @@ function loadCaptureRunWithNode(path: string): Effect.Effect<CaptureRun, ReviewS
 							operation: "load_run",
 							path,
 							recovery:
-								"Inspect the immutable Capture Run bundle or restore it from evidence storage."
+								"Inspect the immutable Capture Run bundle or restore it from evidence storage.",
+							retrySafe: true,
+							nextStep: "escalate"
 						})
 				)
 			)
@@ -694,7 +736,9 @@ function listCaptureRunsWithNode(
 				message: String(cause),
 				operation: "list_runs",
 				path: root,
-				recovery: "Check the local review-run directory and repair malformed bundles."
+				recovery: "Check the local review-run directory and repair malformed bundles.",
+				retrySafe: true,
+				nextStep: "fix_input"
 			})
 	}).pipe(
 		Effect.flatMap((entries) =>
@@ -722,7 +766,9 @@ function listCaptureRunsWithNode(
 								message: String(cause),
 								operation: "list_runs",
 								path,
-								recovery: "Repair or remove the malformed Capture Run bundle."
+								recovery: "Repair or remove the malformed Capture Run bundle.",
+								retrySafe: true,
+								nextStep: "fix_input"
 							})
 					)
 				)
@@ -804,7 +850,9 @@ const makeReviewRepository = (): ReviewRepositoryApi => {
 					message: String(cause),
 					operation: "prepare_run",
 					path: args.stagingRoot,
-					recovery: "Check that the project review directory is writable."
+					recovery: "Check that the project review directory is writable.",
+					retrySafe: false,
+					nextStep: "reconcile"
 				})
 		});
 	});
@@ -826,7 +874,9 @@ const makeReviewRepository = (): ReviewRepositoryApi => {
 					message: String(cause),
 					operation: "store_artifact",
 					path: args.destinationPath,
-					recovery: "Check staging and evidence directory permissions, then retry."
+					recovery: "Check staging and evidence directory permissions, then retry.",
+					retrySafe: true,
+					nextStep: "retry"
 				})
 		});
 	});
@@ -841,7 +891,9 @@ const makeReviewRepository = (): ReviewRepositoryApi => {
 					message: String(cause),
 					operation: "write_run",
 					path: args.path,
-					recovery: "Check the evidence directory and retry the run."
+					recovery: "Check the evidence directory and retry the run.",
+					retrySafe: true,
+					nextStep: "retry"
 				})
 		});
 	});
@@ -860,7 +912,9 @@ const makeReviewRepository = (): ReviewRepositoryApi => {
 					message: String(cause),
 					operation: "finalize_run",
 					path: args.stagingRoot,
-					recovery: "Inspect the staged Capture Run and retry finalization safely."
+					recovery: "Inspect the staged Capture Run and retry finalization safely.",
+					retrySafe: false,
+					nextStep: "reconcile"
 				})
 		});
 	});
@@ -874,7 +928,9 @@ const makeReviewRepository = (): ReviewRepositoryApi => {
 					message: String(cause),
 					operation: "discard_staging",
 					path: stagingRoot,
-					recovery: "Remove the leftover .staging-* directory manually if it remains."
+					recovery: "Remove the leftover .staging-* directory manually if it remains.",
+					retrySafe: true,
+					nextStep: "retry"
 				})
 		});
 	});

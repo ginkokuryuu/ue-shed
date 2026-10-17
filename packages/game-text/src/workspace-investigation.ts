@@ -32,6 +32,8 @@ export const saveWorkspaceInvestigation = Effect.fn("GameText.workspace.investig
 		if (options.projectRoot && bytes.byteLength > PRESET_LIMIT)
 			return yield* Effect.fail(
 				new InvestigationError({
+					retrySafe: true,
+					nextStep: "fix_input",
 					message: "The preset exceeds 4 MiB.",
 					recovery: "Reduce the rule document before saving this preset."
 				})
@@ -71,6 +73,8 @@ export const openWorkspaceInvestigation = Effect.fn("GameText.workspace.investig
 				Effect.mapError(
 					(error) =>
 						new InvestigationError({
+							retrySafe: true,
+							nextStep: "fix_input",
 							message: error.message,
 							recovery: "Try opening the preset again."
 						})
@@ -81,6 +85,8 @@ export const openWorkspaceInvestigation = Effect.fn("GameText.workspace.investig
 			Effect.mapError(
 				(error) =>
 					new InvestigationError({
+						retrySafe: true,
+						nextStep: "fix_input",
 						message: error.message,
 						recovery: "Choose a preset of at most 4 MiB that can be read."
 					})
@@ -92,6 +98,8 @@ export const openWorkspaceInvestigation = Effect.fn("GameText.workspace.investig
 			Effect.mapError(
 				(error) =>
 					new InvestigationError({
+						retrySafe: true,
+						nextStep: "fix_input",
 						message: `Invalid investigation preset: ${error.message}`,
 						recovery: "Choose a version 1 preset for this workspace."
 					})

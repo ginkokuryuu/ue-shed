@@ -1,3 +1,4 @@
+import { ErrorGuidanceFields } from "@ue-shed/protocol";
 import { Result, Schema } from "effect";
 import { MapTilePixelRect, type MapTilePixelRect as PixelRect } from "./map-tile-source.js";
 
@@ -31,8 +32,7 @@ export class MapTileImageError extends Schema.TaggedError<MapTileImageError>()(
 	"MapTileImageError",
 	{
 		code: Schema.Literals(["invalid_image", "invalid_crop", "invalid_children"]),
-		message: Schema.String,
-		recovery: Schema.String
+		...ErrorGuidanceFields
 	}
 ) {}
 
@@ -47,6 +47,8 @@ function failure(code: MapTileImageError["code"], message: string) {
 		new MapTileImageError({
 			code,
 			message,
+			nextStep: "fix_input",
+			retrySafe: true,
 			recovery:
 				"Decode tightly packed RGBA8 sRGB pixels, use an in-bounds crop, and supply four equal even-sized child images in mapTileChildren order."
 		})

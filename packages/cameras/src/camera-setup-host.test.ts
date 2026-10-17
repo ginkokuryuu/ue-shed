@@ -47,7 +47,9 @@ it.effect("does not recreate cameras after a lost setup acknowledgement", () =>
 							new CameraBridgeError({
 								code: "disconnected",
 								message: "Reply lost",
-								recovery: "Poll again"
+								recovery: "Poll again",
+								retrySafe: true,
+								nextStep: "retry"
 							})
 						);
 					return {
@@ -181,7 +183,9 @@ it.effect("reopens a listed set once, even after a lost acknowledgement", () =>
 							new CameraBridgeError({
 								code: "disconnected",
 								message: "Reply lost",
-								recovery: "Poll again"
+								recovery: "Poll again",
+								retrySafe: true,
+								nextStep: "retry"
 							})
 						);
 					return setupState({ canOpen: true, sets: [savedSet], open: openIntent });

@@ -38,7 +38,9 @@ const transportFailure = (functionName: string) =>
 		functionName,
 		operation: "test",
 		message: "Editor game thread is loading",
-		retrySafe: true
+		retrySafe: true,
+		recovery: "Test double: retry the Remote Control call.",
+		nextStep: "retry"
 	});
 const layer = (handler: RemoteControlClientApi["request"]) =>
 	EditorWorldControlLive.pipe(Layer.provide(makeRemoteControlClientTestLayer(handler)));

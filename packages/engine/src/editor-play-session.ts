@@ -108,6 +108,7 @@ export const EditorPlaySessionLive = Layer.effect(
 				.request({
 					endpoint,
 					functionName: "GetCapabilityManifest",
+					idempotent: true,
 					objectPath: coreObjectPath,
 					operation,
 					parameters: {}
@@ -141,6 +142,7 @@ export const EditorPlaySessionLive = Layer.effect(
 				.request({
 					endpoint: target.endpoint,
 					functionName: "GetPlaySessionState",
+					idempotent: true,
 					objectPath: target.objectPath,
 					operation,
 					parameters: {}

@@ -124,7 +124,9 @@ function sessionLayer(args: {
 										message: "Fixture write conflict",
 										operation: "save_set",
 										path,
-										recovery: "Retry"
+										recovery: "Retry",
+										retrySafe: false,
+										nextStep: "reconcile"
 									})
 								)
 							: Effect.sync(() => args.onSave(reviewSet)),

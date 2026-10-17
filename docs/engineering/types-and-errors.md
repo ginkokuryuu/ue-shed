@@ -69,6 +69,18 @@ A useful error says:
 - whether any work completed;
 - what the caller can do next.
 
+Every tagged error carries the same guidance fields, spread from `ErrorGuidanceFields` in
+`@ue-shed/protocol`:
+
+- `message`: what failed, with the safe IDs and versions that matter;
+- `recovery`: prose the caller can follow;
+- `retrySafe`: whether repeating the same operation is idempotent;
+- `nextStep`: `fix_input`, `retry`, `reconcile` (state changed underneath; re-read first) or
+  `escalate` (the caller cannot fix it). `retry` is only valid when `retrySafe` is true.
+
+`pnpm effect:architecture` enforces the fields in each package listed in its error-guidance check;
+packages join that list as their errors are migrated.
+
 UI and CLI code must not parse error text to make decisions. Translate library errors at the service
 that owns the library. Keep the useful cause.
 
