@@ -116,6 +116,32 @@ describe("cold external string sort", () => {
 		}
 		expect(() => reader.stringsSync([0])).toThrow("Shared string scope is closed");
 	});
+	it("synchronous lookups follow appended segments and alternate blocks exactly", async () => {
+		const root = await mkdtemp(join(tmpdir(), "ue-shed-query-segments-"));
+		const files = await new SharedStringFiles(root, []).open();
+		try {
+			const first = Array.from({ length: 200 }, (_, row) => `first ${row} é`);
+			const firstIds = await files.intern("source", first);
+			// Caches the segment starts before the next append adds a segment.
+			expect(files.stringsSync([firstIds[0]!])).toEqual([first[0]]);
+			const second = Array.from({ length: 200 }, (_, row) => `second ${row} 😀`);
+			const secondIds = await files.intern("source", second);
+			expect(files.segments.length).toBeGreaterThan(1);
+			// Single lookups that leave a block and come back must not reuse the wrong block.
+			const picks = [0, 199, 1, 64, 0, 130, 63, 64, 199];
+			for (const row of picks) {
+				expect(files.bytesSync(firstIds[row]!).toString("utf8")).toBe(first[row]);
+				expect(files.bytesSync(secondIds[row]!).toString("utf8")).toBe(second[row]);
+				expect(files.bytesSync(firstIds[row]!).toString("utf8")).toBe(first[row]);
+			}
+			const all = [...secondIds, ...firstIds];
+			expect(files.stringsSync(all)).toEqual([...second, ...first]);
+		} finally {
+			await files.close();
+			await rm(root, { recursive: true, force: true });
+		}
+		expect(() => files.bytesSync(0)).toThrow("Shared string scope is closed");
+	});
 	it("scans packed bytes with entry bounds and folds Unicode only when needed", async () => {
 		const root = await mkdtemp(join(tmpdir(), "ue-shed-domain-scan-"));
 		const files = await new SharedStringFiles(root, []).open();
