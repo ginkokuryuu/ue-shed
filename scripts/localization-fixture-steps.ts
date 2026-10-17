@@ -96,6 +96,7 @@ export function gameTextActionsFixtureSteps(project: string, evidence: string) {
 		stage("DuplicateAssets"),
 		stage("Branch"),
 		stage("EditBranch"),
+		stage("Slice2"),
 		operation("Gather"),
 		operation("GenerateReports"),
 		stage("Evidence", `-GameTextActionsEvidence=${evidence}`)

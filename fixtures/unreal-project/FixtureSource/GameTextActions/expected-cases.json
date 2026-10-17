@@ -1,6 +1,10 @@
 {
 	"schemaVersion": 1,
 	"target": "GameTextActions",
+	"evidenceSlices": {
+		"5.7": 2,
+		"5.8": 1
+	},
 	"cases": [
 		{
 			"case": "Row duplicated",
@@ -227,6 +231,80 @@
 				"source": "Brass ship lantern"
 			},
 			"id": "different"
+		},
+		{
+			"case": "Child Blueprint overrides inherited text",
+			"slice": 2,
+			"a": {
+				"site": "Slice2/BP_IdentityParent.Default__BP_IdentityParent_C.Motto",
+				"source": "Steady as she goes"
+			},
+			"b": {
+				"site": "Slice2/BP_IdentityChildOverrides.Default__BP_IdentityChildOverrides_C.Motto",
+				"source": "Full speed ahead"
+			},
+			"id": "different",
+			"packageNamespace": "different"
+		},
+		{
+			"case": "String Table entry, typed text with the same source",
+			"slice": 2,
+			"a": {
+				"site": "Slice2/ST_IdentityTable.ST_IdentityTable",
+				"source": "Welcome aboard"
+			},
+			"b": {
+				"site": "Slice2/DA_IdentityReferences.DA_IdentityReferences.SharedPrimary",
+				"source": "Welcome aboard"
+			},
+			"id": "different",
+			"packageNamespace": "different"
+		},
+		{
+			"case": "Typed compiled literal follows its pin",
+			"slice": 2,
+			"a": {
+				"site": "Slice2/BP_IdentityLiterals.BP_IdentityLiterals:EventGraph.K2Node_CallFunction_0.InText",
+				"source": "Lamp lit"
+			},
+			"b": {
+				"site": "Slice2/BP_IdentityLiterals.BP_IdentityLiterals_C:ExecuteUbergraph_BP_IdentityLiterals [Script Bytecode]",
+				"source": "Lamp lit"
+			},
+			"id": "same",
+			"packageNamespace": "same"
+		}
+	],
+	"notGathered": [
+		{
+			"site": "Slice2/BP_IdentityChildInherits.Default__BP_IdentityChildInherits_C.Motto",
+			"source": "Steady as she goes",
+			"slice": 2,
+			"reason": "inherited unchanged; gathered from the parent only"
+		},
+		{
+			"site": "Slice2/BP_IdentityLiterals.BP_IdentityLiterals_C:ExecuteUbergraph_BP_IdentityLiterals [Script Bytecode]",
+			"source": "v1.0",
+			"slice": 2,
+			"reason": "culture-invariant compiled literal"
+		},
+		{
+			"site": "Slice2/BP_IdentityLiterals.BP_IdentityLiterals_C:ExecuteUbergraph_BP_IdentityLiterals [Script Bytecode]",
+			"source": "Fair winds",
+			"slice": 2,
+			"reason": "String Table reference; gathered from the table"
+		},
+		{
+			"site": "Slice2/DA_IdentityReferences.DA_IdentityReferences.StringTableReference",
+			"source": "Welcome aboard",
+			"slice": 2,
+			"reason": "String Table reference; gathered from the table"
+		},
+		{
+			"site": "Slice2/DA_IdentityReferences.DA_IdentityReferences.SharedSecondary",
+			"source": "Deck 3",
+			"slice": 2,
+			"reason": "culture-invariant text"
 		}
 	],
 	"readerGaps": []

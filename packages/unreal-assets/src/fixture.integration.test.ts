@@ -59,12 +59,13 @@ describe.skipIf(!executable)("batched project scan", () => {
 		// animation fixtures, two Level Sequences, the 25-asset Enhanced Input surface, nine native
 		// coverage assets and three Game Text assets, one a user-defined enum) plus three maps,
 		// including Movement Gym, the ten Game Text problem packages and the twelve Game Text identity
-		// packages. Levels use the same classic package container, so enumeration selects them too.
-		expect(scan.summary.scannedAssets).toBe(106);
-		expect(scan.summary.emittedAssets).toBe(106);
+		// packages, plus identity slice 2's nine (two maps, a World Partition external actor and six
+		// assets). Levels use the same classic package container, so enumeration selects them too.
+		expect(scan.summary.scannedAssets).toBe(115);
+		expect(scan.summary.emittedAssets).toBe(115);
 		expect(scan.summary.skippedAssets).toBe(0);
 		expect(scan.failures).toEqual([]);
-		expect(scan.assets).toHaveLength(106);
+		expect(scan.assets).toHaveLength(115);
 		expect(scan.assets.every((entry) => entry.fileBytes > 0)).toBe(true);
 	}, 15_000);
 
@@ -123,11 +124,11 @@ describe.skipIf(!executable)("batched project scan", () => {
 		const scan = await runReader(
 			scanSavedProject({ classes: ["Texture2D"], projectRoot: fixture.root })
 		);
-		expect(scan.summary.scannedAssets).toBe(106);
+		expect(scan.summary.scannedAssets).toBe(115);
 		expect(scan.summary.emittedAssets).toBe(17);
 		// The levels, Level Sequences, saved World Partition actor packages, and every Enhanced Input
 		// asset carry no Texture2D export, so they are ruled out before any decode.
-		expect(scan.summary.skippedAssets).toBe(89);
+		expect(scan.summary.skippedAssets).toBe(98);
 		expect(
 			scan.assets
 				.filter(isFullScanEntry)
@@ -152,8 +153,9 @@ describe.skipIf(!executable)("batched project scan", () => {
 		// Every InputAction and InputMappingContext names TextProperty for its description; the
 		// LevelSequence and Blueprint fixtures name it for localized native graph/channel values, and
 		// the user-defined enum for its display names. All ten Game Text problem packages and
-		// all twelve Game Text identity packages hold text.
-		expect(scan.summary.emittedAssets).toBe(57);
+		// all twelve Game Text identity packages hold text, as do eight of slice 2's nine (not its
+		// World Partition map, whose text is in the external actor).
+		expect(scan.summary.emittedAssets).toBe(65);
 		expect(
 			scan.assets
 				.filter(isFullScanEntry)
@@ -254,7 +256,7 @@ describe.skipIf(!executable)("batched project scan", () => {
 			})
 		);
 		expect(scan.summary.depth).toBe("header");
-		expect(scan.summary.scannedAssets).toBe(106);
+		expect(scan.summary.scannedAssets).toBe(115);
 		// The twelve authoring tables, the localization table, the two Game Text problem tables and
 		// the three Game Text identity tables, each exporting exactly one table.
 		expect(scan.summary.emittedAssets).toBe(18);

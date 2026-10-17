@@ -318,13 +318,15 @@ if (action === "game-text-actions") {
 	);
 	process.stdout.write(
 		`Game Text actions write: ${join(fixtureRoot, "Content/Fixture/GameTextActions")}, ` +
+			`${join(fixtureRoot, "Content/__ExternalActors__/Fixture/GameTextActions")}, ` +
 			`${join(fixtureRoot, "Config/DefaultEditor.ini")}, ${join(fixtureRoot, "Config/Localization")}, ` +
 			`${join(fixtureRoot, "Content/Localization/GameTextActions")}, ${output}\n`
 	);
 	// Only the GameTextActions target's outputs and its generated packages are disposable.
 	for (const generated of [
 		"Content/Localization/GameTextActions",
-		"Content/Fixture/GameTextActions"
+		"Content/Fixture/GameTextActions",
+		"Content/__ExternalActors__/Fixture/GameTextActions"
 	])
 		rmSync(join(fixtureRoot, generated), { recursive: true, force: true });
 	for (const args of gameTextActionsFixtureSteps(projectFile, output))

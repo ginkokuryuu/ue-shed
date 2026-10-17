@@ -211,6 +211,31 @@ runtime text Unreal gathers, apart from pinned gaps.
 | `*_Duplicate`     | Content Browser Duplicate of each; the widget's copy is retyped        |
 | `Branched/*`      | File copy of each; the data asset, a row and the widget are retyped    |
 
+Slice 2 (`Slice2/`, Plan 058 A4) adds the places slice 1 leaves out:
+
+| Assets                      | Where the text lives                                                                |
+| --------------------------- | ----------------------------------------------------------------------------------- |
+| `ST_IdentityTable`          | String Table `IdentityTable` with entries `Welcome` and `Farewell`                  |
+| `DA_IdentityReferences`     | Typed text, a String Table reference and culture-invariant text                     |
+| `BP_IdentityLiterals`       | Print Text literals of each saved kind: typed, culture invariant, table             |
+| `BP_IdentityParent`         | A text variable default                                                             |
+| `BP_IdentityChildInherits`  | A child Blueprint that inherits the parent's default unchanged                      |
+| `BP_IdentityChildOverrides` | A child Blueprint whose Class Defaults retype it                                    |
+| `L_IdentityLevel`           | A TextRender actor in a level                                                       |
+| `L_IdentityWorld`           | A TextRender actor saved as a World Partition external actor (`__ExternalActors__`) |
+
+The slice-2 stage runs after `EditBranch`, and `Evidence` also records the folder's maps and their
+external actor packages. `expected-cases.json` marks slice-2 cases with `"slice": 2`, lists the
+places Unreal does not gather in `notGathered`, and records in `evidenceSlices` which slices each
+engine's evidence covers. Slice 2 has UE 5.7 evidence only; its UE 5.8 evidence is still to be
+recorded. Slice 2 was added to the committed fixture by running only its stage, the gather, reports
+and evidence on UE 5.7, so slice 1's packages and evidence are unchanged.
+
+Not covered yet: C++ `LOCTEXT` (gather-only; the target does not gather text files), UE 5.8's
+renumbered literal types including text with translator notes (covered only by synthetic bytes
+from PR #99), and slice 2 on UE 5.8. Slice 2 found that the graph pin reader did not decode a pin
+holding a String Table reference (FText history 11); it now does, as tagged text properties do.
+
 What UE 5.7 does:
 
 - **A duplicated row and a pasted node keep their ids.** Retyping one copy gives it a new key.
@@ -222,6 +247,15 @@ What UE 5.7 does:
   because `Lantern_Copy` uses the same id in that package.
 - **A compiled literal follows its pin.** The Print Text pin and the compiled BeginPlay bytecode
   hold the same id.
+- **Only typed literals are gathered from bytecode.** A culture-invariant literal is not gathered,
+  and a String Table reference is gathered from the table, as are String Table references in
+  properties. A typed text with the same source as a table entry keeps its own id.
+- **A child Blueprint that inherits a default unchanged gathers nothing for it**; the parent's
+  package gathers it. Retyping it in the child's Class Defaults gives it a new key in the child's
+  package namespace.
+- **Level and World Partition actors are gathered where they are saved.** The external actor's
+  text is gathered from its own package under `__ExternalActors__` (with the map's path as its
+  site), and Unreal's gather picks it up even though the gather paths name only the map's folder.
 
 The reader finds every runtime text Unreal gathers here, including the Print Text literals it
 reads from `ExecuteUbergraph` bytecode; `readerGaps` pins any it misses and is empty. A file-level

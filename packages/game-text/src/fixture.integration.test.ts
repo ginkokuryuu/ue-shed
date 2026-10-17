@@ -32,13 +32,15 @@ describe.skipIf(!executable)("game text fixture corpus", () => {
 			// Game Text identity packages add 16 units and 35 occurrences. Compiled Blueprint bytecode adds
 			// seven Print Text literals in five new ids: two in the sign Blueprint, which its branch copy
 			// shares, and three in its Content Browser duplicate, whose new keys split the shared one.
-			discoveredPackages: 106,
-			inspectedPackages: 106,
+			// Identity slice 2 adds nine packages (eight under Slice2/ and one World Partition
+			// external actor), 17 occurrences and 12 units; two occurrences are culture invariant.
+			discoveredPackages: 115,
+			inspectedPackages: 115,
 			partialPackages: 1,
 			failedPackages: 0,
-			textUnits: 131,
-			textOccurrences: 168,
-			resolvedOccurrences: 167,
+			textUnits: 143,
+			textOccurrences: 185,
+			resolvedOccurrences: 182,
 			unsupportedTextProperties: 0
 		});
 		const holdMatches = searchTextCorpus(corpus, "Hold to skip");

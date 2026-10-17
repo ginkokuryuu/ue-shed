@@ -8,19 +8,36 @@ import { textCorpusFromExtractionEvents } from "./corpus.js";
 import { textCorpusQuery } from "./query.js";
 
 const ROOT = "/Game/Fixture/GameTextActions/";
+// World Partition external actors are saved in their own packages beside the content root.
+const EXTERNAL_ROOT = "/Game/__ExternalActors__/Fixture/GameTextActions/";
 const ENGINES = ["5.7", "5.8"] as const;
 
 const Place = Schema.Struct({ site: Schema.String, source: Schema.String });
+// Slice 1 is PR #99's cases; slice 2 (Plan 058 A4) adds String Tables, compiled literals of each
+// kind, Blueprint inheritance, a level and a World Partition external actor.
+const Slice = Schema.Literals([1, 2]);
 const Cases = Schema.Struct({
 	schemaVersion: Schema.Literal(1),
 	target: Schema.Literal("GameTextActions"),
+	// The newest slice each engine's committed evidence covers.
+	evidenceSlices: Schema.Struct({ "5.7": Slice, "5.8": Slice }),
 	cases: Schema.Array(
 		Schema.Struct({
 			case: Schema.String,
+			slice: Schema.optionalKey(Slice),
 			a: Place,
 			b: Place,
 			id: Schema.Literals(["same", "different"]),
 			packageNamespace: Schema.optionalKey(Schema.Literals(["same", "different"]))
+		})
+	),
+	// Places Unreal does not gather, and why.
+	notGathered: Schema.Array(
+		Schema.Struct({
+			site: Schema.String,
+			source: Schema.String,
+			slice: Slice,
+			reason: Schema.String
 		})
 	),
 	// Places Unreal gathers that the saved-package reader does not read yet, pinned so a change in
@@ -112,10 +129,15 @@ describe("Game Text identity cases in the saved fixture", () => {
 		const evidence = await readEvidence(engine);
 		expect(evidence.engineVersion).toBe(engine);
 
+		const covered = cases.evidenceSlices[engine];
+		const inEvidence = (slice: 1 | 2 | undefined) => (slice ?? 1) <= covered;
+
 		// Typed text never has a user namespace: Unreal keys it with a GUID inside its package's
-		// localization namespace, and the gather strips that namespace from the id.
+		// localization namespace, and the gather strips that namespace from the id. A String
+		// Table's entries keep the table's namespace and keys.
 		for (const entry of evidence.packages) {
 			expect(entry.packageNamespace).toMatch(/^[0-9A-F]{32}$/u);
+			if (/\/ST_[^/]+$/u.test(entry.package)) continue;
 			for (const text of entry.texts.filter((item) => !item.site.includes(".SCS_Node_")))
 				expect([text.namespace, text.key]).toEqual([
 					"",
@@ -123,19 +145,36 @@ describe("Game Text identity cases in the saved fixture", () => {
 				]);
 		}
 
+		// Unreal gathers none of these places.
+		const gatheredPlaces = new Set(
+			evidence.packages.flatMap((entry) =>
+				entry.texts.map((text) => JSON.stringify([text.site, text.source]))
+			)
+		);
+		expect(
+			cases.notGathered
+				.filter((item) => inEvidence(item.slice))
+				.filter((item) =>
+					gatheredPlaces.has(JSON.stringify([ROOT + item.site, item.source]))
+				)
+		).toEqual([]);
+
 		// Every mismatch is listed at once.
 		expect(
-			cases.cases.flatMap((item) => {
-				const a = place(evidence, item.a);
-				const b = place(evidence, item.b);
-				const id = a.namespace === b.namespace && a.key === b.key ? "same" : "different";
-				const packageNamespace =
-					a.packageNamespace === b.packageNamespace ? "same" : "different";
-				return id === item.id &&
-					(item.packageNamespace ?? packageNamespace) === packageNamespace
-					? []
-					: [{ case: item.case, id, packageNamespace }];
-			})
+			cases.cases
+				.filter((item) => inEvidence(item.slice))
+				.flatMap((item) => {
+					const a = place(evidence, item.a);
+					const b = place(evidence, item.b);
+					const id =
+						a.namespace === b.namespace && a.key === b.key ? "same" : "different";
+					const packageNamespace =
+						a.packageNamespace === b.packageNamespace ? "same" : "different";
+					return id === item.id &&
+						(item.packageNamespace ?? packageNamespace) === packageNamespace
+						? []
+						: [{ case: item.case, id, packageNamespace }];
+				})
 		).toEqual([]);
 	});
 
@@ -179,8 +218,9 @@ describe("Game Text identity cases in the saved fixture", () => {
 					const packageName = `/Game/${occurrence.packageFile
 						.replaceAll("\\", "/")
 						.replace(/^Content\//u, "")
-						.replace(/\.uasset$/u, "")}`;
-					if (!packageName.startsWith(ROOT)) continue;
+						.replace(/\.(?:uasset|umap)$/u, "")}`;
+					if (!packageName.startsWith(ROOT) && !packageName.startsWith(EXTERNAL_ROOT))
+						continue;
 					for (const source of [
 						occurrence.source,
 						...(occurrence.copies ?? []).map((copy) => copy.source)
@@ -201,6 +241,32 @@ describe("Game Text identity cases in the saved fixture", () => {
 			);
 			const key = (item: typeof Place.Type) => JSON.stringify([item.site, item.source]);
 			expect([...new Set(missing.map(key))].sort()).toEqual(cases.readerGaps.map(key).sort());
+
+			// Nor does the reader give a place Unreal leaves ungathered a localized id of its own:
+			// any localized text it reads there with that source carries an id Unreal gathered.
+			const gatheredIds = new Set(
+				evidence.packages.flatMap((entry) =>
+					entry.texts.map((text) => JSON.stringify([entry.package, text.key]))
+				)
+			);
+			const invented = cases.notGathered
+				.filter((item) => item.slice <= cases.evidenceSlices["5.7"])
+				.filter((item) => {
+					const packageName = ROOT + item.site.slice(0, item.site.indexOf("."));
+					return [...fromReader].some((entry) => {
+						const [readPackage, readKey, readSource] = Schema.decodeUnknownSync(
+							Schema.fromJsonString(
+								Schema.Tuple([Schema.String, Schema.String, Schema.String])
+							)
+						)(entry);
+						return (
+							readPackage === packageName &&
+							readSource === item.source &&
+							!gatheredIds.has(JSON.stringify([readPackage, readKey]))
+						);
+					});
+				});
+			expect(invented).toEqual([]);
 		}
 	);
 
