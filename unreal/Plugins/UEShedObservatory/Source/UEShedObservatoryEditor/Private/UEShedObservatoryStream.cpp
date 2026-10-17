@@ -229,6 +229,13 @@ struct FUEShedObservatoryStreamService::FCatalogActorEntry
 
 static FUEShedObservatoryStreamService* GStreamServiceInstance = nullptr;
 
+FUEShedObservatoryStreamService* FindObservatoryStreamService()
+{
+	return GStreamServiceInstance;
+}
+
+// Internal callers run only while the module owns the service; Remote Control entry points use
+// FindObservatoryStreamService and report `service_unavailable` instead.
 FUEShedObservatoryStreamService& GetObservatoryStreamService()
 {
 	check(GStreamServiceInstance != nullptr);

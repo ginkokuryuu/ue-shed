@@ -574,6 +574,8 @@ TSharedPtr<FJsonObject> FUEShedCameraAuthoringBridge::InspectSetup()
 }
 TSharedPtr<FJsonObject> FUEShedCameraAuthoringBridge::Execute(const TSharedPtr<FJsonObject> &Q)
 {
+    // An invariant input cannot reach: Remote Control runs function calls on the game thread, and the
+    // other callers are the arrangement panel (Slate) and automation tests, both on the same thread.
     check(IsInGameThread());
     Tick(0);
     double Version = 0;
